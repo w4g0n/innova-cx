@@ -1,0 +1,21 @@
+node_modules/
+__pycache__/
+*.pyc
+whisper-env/
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+whisper-env/
+
+# Env files
+.env
+
+# Runtime data
+uploads/
+transcripts/
