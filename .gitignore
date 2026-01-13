@@ -1,21 +1,95 @@
-node_modules/
-__pycache__/
-*.pyc
-whisper-env/
+# Create/overwrite the .gitignore file
+cat > .gitignore << 'EOF'
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
 
 # Node
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+.npm
+.eslintcache
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
 whisper-env/
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Env files
 .env
+.env.local
+.env.*.local
+*.env
 
 # Runtime data
 uploads/
 transcripts/
+*.log
+
+# AWS
+.aws-credentials
+aws-config/
+*.pem
+
+# Database
+*.sqlite
+*.db
+migrations/versions/
+
+# ML Models
+mlruns/
+models/checkpoints/
+*.h5
+*.pkl
+*.joblib
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+
+# Docker
+docker-compose.override.yml
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+EOF
