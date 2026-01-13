@@ -1,0 +1,52 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: innovacx-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: innovacx_admin
+      POSTGRES_PASSWORD: changeme123
+      POSTGRES_DB: complaints_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - innovacx-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U innovacx_admin -d complaints_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Backend API (FastAPI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: innovacx-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://innovacx_admin:changeme123@postgres:5432/complaints_db
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+    networks:
+      - innovacx-network
+    command: >
+      sh -c "sleep 5 && uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload"
+
+volumes:
+  postgres_data:
+
+networks:
+  innovacx-network:
