@@ -1,5 +1,5 @@
 function Chatbot() {
-  return <h2>Chatbot</h2>;
+  return <h2>Mayed is gay</h2>;
 }
 
 export default Chatbot;
