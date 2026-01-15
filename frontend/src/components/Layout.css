@@ -1,0 +1,10 @@
+.appShell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.appContent {
+  flex: 1;
+  background: var(--screen-bg);
+  padding: 24px;
+}
