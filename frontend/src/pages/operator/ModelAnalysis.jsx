@@ -1,5 +1,10 @@
-function ModelAnalysis() {
-  return <h2>Model Analysis </h2>;
-}
+import Layout from "../../components/Layout";
 
-export default ModelAnalysis;
+export default function ModelAnalysis() {
+  return (
+    <Layout role="operator">
+      <h2>Model Analysis</h2>
+      <p>Paste your Model Analysis screen here.</p>
+    </Layout>
+  );
+}

@@ -1,5 +1,10 @@
-function ViewAllComplaints() {
-  return <h2>View All Complaints</h2>;
-}
+import Layout from "../../components/Layout";
 
-export default ViewAllComplaints;
+export default function EmployeeViewAllComplaints() {
+  return (
+    <Layout role="employee">
+      <h2>My Tickets</h2>
+      <p>Paste My Tickets UI here.</p>
+    </Layout>
+  );
+}

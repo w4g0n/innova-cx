@@ -1,5 +1,10 @@
-function ViewAllEmployees() {
-  return <h2>View All Employees </h2>;
-}
+import Layout from "../../components/Layout";
 
-export default ViewAllEmployees;
+export default function ViewEmployees() {
+  return (
+    <Layout role="manager">
+      <h2>View All Employees</h2>
+      <p>Paste View Employees UI here.</p>
+    </Layout>
+  );
+}

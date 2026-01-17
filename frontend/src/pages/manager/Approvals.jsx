@@ -1,5 +1,10 @@
-function Approvals() {
-  return <h2>Approvals</h2>;
-}
+import Layout from "../../components/Layout";
 
-export default Approvals;
+export default function Approvals() {
+  return (
+    <Layout role="manager">
+      <h2>Approvals</h2>
+      <p>Paste Approvals UI here.</p>
+    </Layout>
+  );
+}
