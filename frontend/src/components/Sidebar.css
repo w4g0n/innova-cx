@@ -1,6 +1,9 @@
 .sidebar {
   width: 280px;
-  min-height: 100vh;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
   background: var(--sidebar-bg);
   color: var(--text-light);
   padding: 22px 18px;
@@ -8,25 +11,23 @@
   flex-direction: column;
 }
 
-
 .sidebar__brand {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-bottom: 18px; 
+  margin-bottom: 18px;
 }
 
 .sidebar__logo {
-  width: 40px;   
+  width: 40px;
   height: 40px;
   object-fit: contain;
 }
 
 .sidebar__title {
-  font-size: 26px; 
+  font-size: 26px;
   font-weight: 600;
 }
-
 
 .sidebar__spacer {
   height: 24px;
@@ -36,6 +37,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow-y: auto;
 }
 
 .sidebar__link {
@@ -43,17 +45,15 @@
   color: white;
 }
 
-/* Pill */
 .sidebar__pill {
   padding: 12px 16px;
   border-radius: 999px;
-  transition: background 0.15s ease, color 0.15s ease;
   display: flex;
   align-items: center;
   gap: 10px;
-
   font-size: 18px;
-  font-weight: 500; 
+  font-weight: 500;
+  transition: background 0.15s ease;
 }
 
 .sidebar__link:hover .sidebar__pill {
@@ -63,18 +63,13 @@
 .sidebar__pill--active {
   background: white;
   color: var(--sidebar-bg);
-  font-weight: 600; 
+  font-weight: 600;
 }
 
 .sidebar__icon {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: currentColor;
-  opacity: 0.95;
 }
 
-/* Bottom */
 .sidebar__bottom {
   margin-top: auto;
   display: flex;
@@ -91,9 +86,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-
-  font-size: 19px;   
-  font-weight: 600;  
+  font-size: 19px;
+  font-weight: 600;
   cursor: pointer;
   opacity: 0.95;
 }
