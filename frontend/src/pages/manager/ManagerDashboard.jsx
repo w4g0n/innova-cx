@@ -1,5 +1,10 @@
-function ManagerDashboard() {
-  return <h2>Manager Dashboard</h2>;
-}
+import Layout from "../../components/Layout";
 
-export default ManagerDashboard;
+export default function ManagerDashboard() {
+  return (
+    <Layout role="manager">
+      <h2>Manager Dashboard</h2>
+      <p>Paste Manager Dashboard UI here.</p>
+    </Layout>
+  );
+}

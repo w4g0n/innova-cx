@@ -8,78 +8,79 @@
   flex-direction: column;
 }
 
+
 .sidebar__brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 28px;
+  gap: 14px;
+  margin-bottom: 18px; 
 }
 
 .sidebar__logo {
-  width: 34px;
-  height: 34px;
+  width: 40px;   
+  height: 40px;
   object-fit: contain;
 }
 
 .sidebar__title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 26px; 
+  font-weight: 600;
 }
 
-.sidebar__notifications {
+
+.sidebar__spacer {
+  height: 24px;
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sidebar__link {
+  display: block;
+  color: white;
+}
+
+/* Pill */
+.sidebar__pill {
+  padding: 12px 16px;
+  border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease;
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 16px;
-  margin-bottom: 16px;
-  opacity: 0.95;
+
+  font-size: 18px;
+  font-weight: 500; 
+}
+
+.sidebar__link:hover .sidebar__pill {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.sidebar__pill--active {
+  background: white;
+  color: var(--sidebar-bg);
+  font-weight: 600; 
 }
 
 .sidebar__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: currentColor;
   opacity: 0.95;
 }
 
-.sidebar__nav {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* NavLink itself */
-.sidebar__link {
-  display: block;
-  color: white;
-}
-
-/* This is the “pill” shape you see in the prototype */
-.sidebar__pill {
-  padding: 12px 16px;
-  border-radius: 999px;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-/* Hover effect for inactive items (lighter purple) */
-.sidebar__link:hover .sidebar__pill {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-/* Active pill: white background */
-.sidebar__pill--active {
-  background: white;
-  color: var(--sidebar-bg);
-}
-
-/* Bottom section pinned to bottom */
+/* Bottom */
 .sidebar__bottom {
   margin-top: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding-bottom: 8px;
+  gap: 16px;
+  padding-bottom: 10px;
 }
 
 .sidebar__bottomBtn {
@@ -90,7 +91,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 16px;
+
+  font-size: 19px;   
+  font-weight: 600;  
   cursor: pointer;
   opacity: 0.95;
 }
