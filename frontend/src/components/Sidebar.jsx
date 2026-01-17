@@ -42,16 +42,13 @@ export default function Sidebar({ role }) {
 
   return (
     <aside className="sidebar">
-      {/* Brand */}
       <div className="sidebar__brand">
         <img className="sidebar__logo" src={logo} alt="InnovaCX Logo" />
         <span className="sidebar__title">InnovaCX</span>
       </div>
 
-      {/* Spacer to push menu down like your prototype */}
       <div className="sidebar__spacer" />
 
-      {/* Menu */}
       <nav className="sidebar__nav">
         {menu.map((item) => (
           <NavLink
@@ -65,12 +62,13 @@ export default function Sidebar({ role }) {
             {({ isActive }) => (
               <div
                 className={
-                  isActive ? "sidebar__pill sidebar__pill--active" : "sidebar__pill"
+                  isActive
+                    ? "sidebar__pill sidebar__pill--active"
+                    : "sidebar__pill"
                 }
               >
                 {item.icon === "bell" && (
-                  <span className="sidebar__icon" aria-hidden="true">
-                    {/* Bell */}
+                  <span className="sidebar__icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                       <path
                         d="M12 22a2.5 2.5 0 0 0 2.45-2H9.55A2.5 2.5 0 0 0 12 22ZM19 17H5c1.6-1.2 2-2.6 2-5.2V10a5 5 0 0 1 10 0v1.8c0 2.6.4 4 2 5.2Z"
@@ -89,11 +87,9 @@ export default function Sidebar({ role }) {
         ))}
       </nav>
 
-      {/* Bottom actions */}
       <div className="sidebar__bottom">
         <button className="sidebar__bottomBtn" type="button">
-          <span className="sidebar__icon" aria-hidden="true">
-            {/* NEW settings icon (cleaner) */}
+          <span className="sidebar__icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path
                 d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
@@ -104,16 +100,14 @@ export default function Sidebar({ role }) {
                 d="M20 12a8.2 8.2 0 0 0-.1-1.2l1.8-1.3-1.8-3.1-2.1.8a8.1 8.1 0 0 0-2.1-1.2L13.5 3h-3L10 5.8A8.1 8.1 0 0 0 7.9 7l-2.1-.8L4 9.3l1.8 1.3A8.2 8.2 0 0 0 5.7 12c0 .4 0 .8.1 1.2L4 14.5l1.8 3.1 2.1-.8a8.1 8.1 0 0 0 2.1 1.2L10.5 21h3l.5-2.8a8.1 8.1 0 0 0 2.1-1.2l2.1.8 1.8-3.1-1.8-1.3c.1-.4.1-.8.1-1.2Z"
                 stroke="currentColor"
                 strokeWidth="1.4"
-                strokeLinejoin="round"
               />
             </svg>
           </span>
           <span>Settings</span>
         </button>
 
-        <button className="sidebar__bottomBtn" type="button" onClick={handleLogout}>
-          <span className="sidebar__icon" aria-hidden="true">
-            {/* Logout */}
+        <button className="sidebar__bottomBtn" onClick={handleLogout}>
+          <span className="sidebar__icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path
                 d="M10 17l5-5-5-5"
@@ -126,13 +120,11 @@ export default function Sidebar({ role }) {
                 d="M15 12H3"
                 stroke="currentColor"
                 strokeWidth="1.8"
-                strokeLinecap="round"
               />
               <path
                 d="M21 4v16"
                 stroke="currentColor"
                 strokeWidth="1.8"
-                strokeLinecap="round"
               />
             </svg>
           </span>
