@@ -1,0 +1,251 @@
+/* MAIN */
+.main-EV-VAC {
+  flex: 1;
+  padding: 28px 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* KPI ROW */
+.kpi-row-EV-VAC {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.kpi-card-EV-VAC {
+  background: #fff;
+  border-radius: 18px;
+  padding: 12px 18px;
+  box-shadow: 0px 10px 25px rgba(60, 0, 102, 0.12);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.kpi-card-EV-VAC:hover {
+  transform: translateY(-3px);
+  box-shadow: 0px 12px 30px rgba(60, 0, 102, 0.2);
+}
+
+.kpi-label-EV-VAC {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.kpi-value-EV-VAC {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #3c0066;
+}
+
+/* SEARCH */
+.search-section-EV-VAC {
+  margin-bottom: 12px;
+}
+
+.search-wrapper-EV-VAC {
+  display: flex;
+  align-items: center;
+  background: #fdf9ff;
+  border-radius: 999px;
+  padding: 10px 16px;
+  border: 1px solid #e5d4ff;
+  transition: box-shadow 0.2s;
+}
+
+.search-wrapper-EV-VAC:focus-within {
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.4);
+}
+
+.search-icon-EV-VAC {
+  margin-right: 6px;
+  color: #a855f7;
+}
+
+.search-input-EV-VAC {
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-size: 14px;
+  color: #111827;
+  outline: none;
+}
+
+/* FILTERS ROW */
+.filters-row-EV-VAC {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+/* FILTER GROUP */
+.filter-group-EV-VAC {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.select-wrapper-EV-VAC {
+  background: #ffffff;
+  border: 2px solid #e5d4ff;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  min-width: 200px;
+  position: relative;
+}
+
+
+.select-wrapper-EV-VAC select {
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 4px 14px;
+  color: #111;
+  appearance: none;
+  cursor: pointer;
+}
+
+/* Purple arrow for select */
+.select-wrapper-EV-VAC::after {
+  content: "▼";
+  font-size: 11px;
+  color: #5b21b6;
+  position: absolute;
+  right: 14px;
+  pointer-events: none;
+}
+
+/* FILTER BUTTON */
+.filter-btn-EV-VAC {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: none;
+  background: #401c51;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.filter-btn-EV-VAC:hover {
+  background: #c8b9cc;
+  transform: translateY(-1px);
+  color: #401c51;
+}
+
+/* TABLE */
+.table-wrapper-EV-VAC {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 18px 22px;
+  box-shadow: 0px 12px 30px rgba(0, 0, 0, 0.06);
+  overflow-x: auto; /* horizontal scroll on small screens */
+}
+
+.complaints-table-EV-VAC {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 700px; /* ensures table doesn't collapse too much */
+}
+
+.complaints-table-EV-VAC th,
+.complaints-table-EV-VAC td {
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.complaints-table-EV-VAC td:nth-child(2) {
+  text-align: left;
+}
+
+.complaints-table-EV-VAC thead th {
+  user-select: none;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #9ca3af;
+  border-bottom: 1px solid #f3e8ff;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.complaints-table-EV-VAC tbody tr:nth-child(even) {
+  background: #fdf9ff;
+}
+
+.complaints-table-EV-VAC tbody tr:hover {
+  background: #f3e8ff;
+  cursor: pointer;
+}
+
+.complaint-link-EV-VAC {
+  color: #7c3aed;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* PRIORITY PILLS */
+.pill-EV-VAC {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 75px;
+  height: 25px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.pill-EV-VAC.critical {
+  background: #ffe6e9;
+  color: #b8001f;
+}
+
+.pill-EV-VAC.high {
+  background: #fff4d6;
+  color: #b45309;
+}
+
+.pill-EV-VAC.medium {
+  background: #e6f4ff;
+  color: #035bb3;
+}
+
+.pill-EV-VAC.low {
+  background: #e7fde7;
+  color: #0d7f3c;
+}
+
+/* ARROW CELL */
+.arrow-cell-EV-VAC {
+  color: #7c3aed;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: right;
+  padding-right: 10px;
+}
+
+/* FOOTER TIMESTAMP */
+.footer-timestamp-EV-VAC {
+  margin-top: 24px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+  padding: 10px 0;
+}
