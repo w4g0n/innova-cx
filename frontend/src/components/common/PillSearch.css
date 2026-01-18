@@ -1,0 +1,29 @@
+.pillSearch {
+  display: flex;
+  align-items: center;
+  background: #fdf9ff;
+  border-radius: 999px;
+  padding: 16px 20px;
+  border: 1px solid #e5d4ff;
+  transition: box-shadow 0.2s;
+  width: 100%;
+}
+
+.pillSearch:focus-within {
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.4);
+}
+
+.pillSearch__icon {
+  margin-right: 10px;
+  color: #a855f7;
+  font-size: 14px;
+}
+
+.pillSearch__input {
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-size: 14px;
+  color: #111827;
+  outline: none;
+}

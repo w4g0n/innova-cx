@@ -1,0 +1,36 @@
+.pillSelect {
+  position: relative;
+  display: inline-flex;
+}
+
+.pillSelect__select {
+  padding: 16px 44px 16px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  outline: none;
+
+  font-size: 17px;
+  font-weight: 650;
+  min-width: 200px;
+
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.pillSelect::after {
+  content: "▼";
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: rgba(17, 17, 17, 0.7);
+  pointer-events: none;
+}
+
+.pillSelect__select:focus {
+  box-shadow: 0 0 0 3px rgba(89, 36, 180, 0.18);
+}

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ManagerDashboard.css";
 
@@ -49,37 +50,39 @@ export default function ManagerDashboard() {
         </p>
 
         <section className="managerBubbleGrid">
-          <a href="/manager/view-complaints" className="managerBubbleCard">
+          <Link to="/manager/complaints" className="managerBubbleCard">
             <span className="managerBubbleLabel">Complaints</span>
             <div className="managerBubbleTitle">View All Complaints</div>
             <div className="managerBubbleMetric">
               Handle assignments and follow up on open tickets.
             </div>
             <div className="managerBubbleLink">Go to complaints →</div>
-          </a>
+          </Link>
 
-          <a href="/manager/view-employees" className="managerBubbleCard">
+          <Link to="/manager/employees" className="managerBubbleCard">
             <span className="managerBubbleLabel">Team</span>
             <div className="managerBubbleTitle">View Employees</div>
-            <div className="managerBubbleMetric">Review workload & auto-generated reports.</div>
+            <div className="managerBubbleMetric">
+              Review workload & auto-generated reports.
+            </div>
             <div className="managerBubbleLink">Go to employees →</div>
-          </a>
+          </Link>
 
-          <a href="/manager/approvals" className="managerBubbleCard">
+          <Link to="/manager/approvals" className="managerBubbleCard">
             <span className="managerBubbleLabel">Approvals</span>
             <div className="managerBubbleTitle">Rescoring & Rerouting</div>
             <div className="managerBubbleMetric">
               Approve or reject scoring and routing changes.
             </div>
             <div className="managerBubbleLink">Go to approvals →</div>
-          </a>
+          </Link>
 
-          <a href="/manager/trends" className="managerBubbleCard">
+          <Link to="/manager/trends" className="managerBubbleCard">
             <span className="managerBubbleLabel">Analytics</span>
             <div className="managerBubbleTitle">Complaint Trends</div>
             <div className="managerBubbleMetric">View insights and trend analysis.</div>
             <div className="managerBubbleLink">View trends →</div>
-          </a>
+          </Link>
         </section>
       </main>
     </Layout>

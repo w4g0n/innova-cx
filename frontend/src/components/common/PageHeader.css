@@ -1,0 +1,35 @@
+.pageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.pageHeader__title {
+  margin: 0;
+  font-size: 38px;
+  font-weight: 750;
+  color: var(--text-dark);
+  letter-spacing: 0.2px;
+}
+
+.pageHeader__subtitle {
+  margin-top: 10px;
+  font-size: 18px;
+  font-weight: 500;
+  color: rgba(17, 17, 17, 0.7);
+  line-height: 1.5;
+}
+
+.pageHeader__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+@media (max-width: 768px) {
+  .pageHeader {
+    flex-direction: column;
+  }
+}

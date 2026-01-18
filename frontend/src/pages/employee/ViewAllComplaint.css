@@ -15,64 +15,9 @@
   margin-bottom: 24px;
 }
 
-.kpi-card-EV-VAC {
-  background: #fff;
-  border-radius: 18px;
-  padding: 12px 18px;
-  box-shadow: 0px 10px 25px rgba(60, 0, 102, 0.12);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.kpi-card-EV-VAC:hover {
-  transform: translateY(-3px);
-  box-shadow: 0px 12px 30px rgba(60, 0, 102, 0.2);
-}
-
-.kpi-label-EV-VAC {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: #6b7280;
-}
-
-.kpi-value-EV-VAC {
-  display: block;
-  margin-top: 6px;
-  font-size: 20px;
-  font-weight: 700;
-  color: #3c0066;
-}
-
 /* SEARCH */
 .search-section-EV-VAC {
   margin-bottom: 12px;
-}
-
-.search-wrapper-EV-VAC {
-  display: flex;
-  align-items: center;
-  background: #fdf9ff;
-  border-radius: 999px;
-  padding: 10px 16px;
-  border: 1px solid #e5d4ff;
-  transition: box-shadow 0.2s;
-}
-
-.search-wrapper-EV-VAC:focus-within {
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.4);
-}
-
-.search-icon-EV-VAC {
-  margin-right: 6px;
-  color: #a855f7;
-}
-
-.search-input-EV-VAC {
-  border: none;
-  background: transparent;
-  width: 100%;
-  font-size: 14px;
-  color: #111827;
-  outline: none;
 }
 
 /* FILTERS ROW */
@@ -92,38 +37,14 @@
   flex-wrap: wrap;
 }
 
-.select-wrapper-EV-VAC {
-  background: #ffffff;
-  border: 2px solid #e5d4ff;
-  border-radius: 16px;
+.search-wrapper-EV-VAC {
   display: flex;
   align-items: center;
-  min-width: 200px;
-  position: relative;
-}
-
-
-.select-wrapper-EV-VAC select {
-  border: none;
-  outline: none;
-  background: transparent;
-  width: 100%;
-  font-size: 15px;
-  font-weight: 500;
-  padding: 4px 14px;
-  color: #111;
-  appearance: none;
-  cursor: pointer;
-}
-
-/* Purple arrow for select */
-.select-wrapper-EV-VAC::after {
-  content: "▼";
-  font-size: 11px;
-  color: #5b21b6;
-  position: absolute;
-  right: 14px;
-  pointer-events: none;
+  background: #fdf9ff;
+  border-radius: 999px;
+  padding: 16px 20px; 
+  border: 1px solid #e5d4ff;
+  transition: box-shadow 0.2s;
 }
 
 /* FILTER BUTTON */
@@ -152,14 +73,14 @@
   border-radius: 24px;
   padding: 18px 22px;
   box-shadow: 0px 12px 30px rgba(0, 0, 0, 0.06);
-  overflow-x: auto; /* horizontal scroll on small screens */
+  overflow-x: auto;
 }
 
 .complaints-table-EV-VAC {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
-  min-width: 700px; /* ensures table doesn't collapse too much */
+  min-width: 700px;
 }
 
 .complaints-table-EV-VAC th,

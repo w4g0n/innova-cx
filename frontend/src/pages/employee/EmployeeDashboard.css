@@ -141,35 +141,6 @@
   background: rgba(64, 28, 81, 0.04);
 }
 
-/* Priority pills */
-.empPill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 750;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.empPill--critical {
-  background: rgba(231, 76, 60, 0.16);
-  color: #a7372b;
-}
-.empPill--high {
-  background: rgba(241, 196, 15, 0.18);
-  color: #8a6d00;
-}
-.empPill--medium {
-  background: rgba(52, 152, 219, 0.16);
-  color: #1f5f86;
-}
-.empPill--low {
-  background: rgba(46, 204, 113, 0.16);
-  color: #1f7a45;
-}
-
 /* Reports panel */
 .empReports {
   display: flex;
