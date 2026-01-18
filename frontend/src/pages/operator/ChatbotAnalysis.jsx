@@ -1,4 +1,3 @@
-import { useState } from "react";
 import Layout from "../../components/Layout";
 import dailyHandled from "./ChatbotAnalysis_Images/dailyHandled.png";
 import accuracyBars from "./ChatbotAnalysis_Images/accuracyBars.png";
@@ -7,8 +6,46 @@ import purpPie from "./ChatbotAnalysis_Images/purpPie.png";
 import respTime from "./ChatbotAnalysis_Images/respTime.png";
 import "./ChatbotAnalysis.css";
 
+import { useState } from "react";
+
 export default function ChatbotAnalysis() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const complaints = [
+    {
+      id: "CX-1021",
+      customer: "Ahmed Ali",
+      category: "Billing",
+      description: "Charged twice for the same invoice.",
+      timestamp: "24 Nov 2025, 16:12",
+      status: "resolved",
+    },
+    {
+      id: "CX-1044",
+      customer: "Sara Khan",
+      category: "Technical",
+      description: "Chatbot unable to process password reset.",
+      timestamp: "24 Nov 2025, 15:47",
+      status: "escalated",
+    },
+    {
+      id: "CX-1050",
+      customer: "Omar Hassan",
+      category: "Account",
+      description: "Incorrect profile information shown.",
+      timestamp: "24 Nov 2025, 14:33",
+      status: "unresolved",
+    },
+  ];
+  
+  const filteredComplaints = complaints.filter((c) => {
+  if (filter === "all") return true;
+  if (filter === "resolved") return c.status === "resolved";
+  if (filter === "unresolved") return c.status === "unresolved";
+  if (filter === "partial") return c.status === "escalated"; // assuming "partially resolved" = "escalated"
+  return true;
+  });
+
 
   return (
     <Layout role="operator">
@@ -156,10 +193,10 @@ export default function ChatbotAnalysis() {
               </div>
 
               <div className="modal-filters">
-                <button className="filter-chip active">All complaints</button>
-                <button className="filter-chip">Resolved only</button>
-                <button className="filter-chip">Unresolved only</button>
-                <button className="filter-chip">Partially resolved</button>
+                <button className={`filter-chip ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All complaints</button>
+                <button className={`filter-chip ${filter === "resolved" ? "active" : ""}`} onClick={() => setFilter("resolved")}>Resolved</button>
+                <button className={`filter-chip ${filter === "unresolved" ? "active" : ""}`} onClick={() => setFilter("unresolved")}>Unresolved</button>
+                <button className={`filter-chip ${filter === "partial" ? "active" : ""}`} onClick={() => setFilter("partial")}>Partially resolved</button>
               </div>
 
               <div className="modal-table-wrapper">
@@ -175,36 +212,18 @@ export default function ChatbotAnalysis() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td>CX-1021</td>
-                      <td>Ahmed Ali</td>
-                      <td>Billing</td>
-                      <td>Charged twice for the same invoice.</td>
-                      <td>24 Nov 2025, 16:12</td>
+                    {filteredComplaints.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.id}</td>
+                      <td>{c.customer}</td>
+                      <td>{c.category}</td>
+                      <td>{c.description}</td>
+                      <td>{c.timestamp}</td>
                       <td>
-                        <span className="status-pill resolved">Resolved</span>
+                        <span className={`status-pill ${c.status}`}>{c.status.charAt(0).toUpperCase() + c.status.slice(1)}</span>
                       </td>
                     </tr>
-                    <tr>
-                      <td>CX-1044</td>
-                      <td>Sara Khan</td>
-                      <td>Technical</td>
-                      <td>Chatbot unable to process password reset.</td>
-                      <td>24 Nov 2025, 15:47</td>
-                      <td>
-                        <span className="status-pill escalated">Escalated</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>CX-1050</td>
-                      <td>Omar Hassan</td>
-                      <td>Account</td>
-                      <td>Incorrect profile information shown.</td>
-                      <td>24 Nov 2025, 14:33</td>
-                      <td>
-                        <span className="status-pill unresolved">Unresolved</span>
-                      </td>
-                    </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
