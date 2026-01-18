@@ -6,6 +6,8 @@
 .appContent {
   flex: 1;
   background: var(--screen-bg);
-  padding: 24px;
+  padding: 28px 34px;
   margin-left: 280px;
+  box-sizing: border-box;
+  width: calc(100% - 280px);
 }

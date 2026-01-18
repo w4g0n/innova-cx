@@ -1,13 +1,18 @@
 :root {
-  --sidebar-bg: #401c51;     
-  --screen-bg: #e5e6ed;     
-  --btn-light: #c8b9cc;      
-  --btn-primary: #5924b4;    
+  --sidebar-bg: #401c51;
+  --screen-bg: #e5e6ed;
+  --btn-light: #c8b9cc;
+  --btn-primary: #5924b4;
   --text-dark: #111;
   --text-light: #ffffff;
-
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
+
+@import "./components/common/PillSelect.css";
+@import "./components/common/KpiCard.css";
+@import "./components/common/PageHeader.css";
+@import "./components/common/PillSearch.css";
+@import "./components/common/FilterPillButton.css";
+@import "./components/common/PriorityPill.css";
 
 * {
   box-sizing: border-box;
@@ -24,11 +29,17 @@ body {
 body {
   background-color: var(--screen-bg);
   color: var(--text-dark);
-  display: block; 
+  display: block;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 18px;
 }
 
-
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   margin: 0;
   font-weight: 600;
 }

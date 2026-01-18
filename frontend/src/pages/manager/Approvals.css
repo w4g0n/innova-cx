@@ -4,26 +4,7 @@
   font-size: 18px;
 }
 
-.mgrHeader {
-  margin-bottom: 18px;
-}
-
-.mgrTitle {
-  font-size: 38px;
-  margin: 0;
-  color: var(--text-dark);
-  font-weight: 750;
-  letter-spacing: 0.2px;
-}
-
-.mgrSubtitle {
-  margin-top: 10px;
-  font-size: 18px;
-  font-weight: 500;
-  color: rgba(17, 17, 17, 0.7);
-  line-height: 1.5;
-}
-
+/* KPI */
 .kpiRow {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -32,72 +13,13 @@
   margin-bottom: 18px;
 }
 
-.kpiCard {
-  background: #fff;
-  border-radius: 18px;
-  padding: 18px 20px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
-}
-
-.kpiLabel {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: rgba(17, 17, 17, 0.6);
-  font-weight: 750;
-}
-
-.kpiValue {
-  display: block;
-  margin-top: 12px;
-  font-size: 26px;
-  font-weight: 900;
-  color: var(--btn-primary);
-}
-
-.kpiCaption {
-  margin-top: 10px;
-  font-size: 15px;
-  font-weight: 500;
-  color: rgba(17, 17, 17, 0.65);
-}
-
+/* Search */
 .searchSection {
   margin-top: 6px;
   margin-bottom: 12px;
 }
 
-.searchWrapper {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(64, 28, 81, 0.06);
-  border-radius: 999px;
-  padding: 12px 16px;
-  border: 1px solid rgba(64, 28, 81, 0.14);
-}
-
-.searchIcon {
-  display: inline-flex;
-  color: var(--btn-primary);
-}
-
-.searchInput {
-  border: none;
-  outline: none;
-  background: transparent;
-  width: 100%;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-dark);
-}
-
-.searchInput::placeholder {
-  color: rgba(17, 17, 17, 0.45);
-  font-weight: 600;
-}
-
+/* Filters */
 .filtersRow {
   display: flex;
   align-items: center;
@@ -113,60 +35,17 @@
   gap: 12px;
 }
 
-.selectWrapper {
-  background: #ffffff;
-  border: 2px solid rgba(0, 0, 0, 0.12);
-  border-radius: 999px;
-  padding: 6px 12px;
+/* IMPORTANT:
+   Unique wrapper ONLY for layout.
+   No border/padding/background so PillSelect is the ONLY styled element.
+*/
+.pillSelectHolder {
   display: flex;
   align-items: center;
   min-width: 190px;
-  position: relative;
 }
 
-.selectWrapper select {
-  border: none;
-  outline: none;
-  background: transparent;
-  width: 100%;
-  font-size: 14px;
-  font-weight: 650;
-  color: var(--text-dark);
-  appearance: none;
-  cursor: pointer;
-}
-
-.selectWrapper::after {
-  content: "▼";
-  font-size: 10px;
-  color: var(--btn-primary);
-  position: absolute;
-  right: 12px;
-  pointer-events: none;
-}
-
-.filterBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 18px;
-  border-radius: 999px;
-  border: none;
-  background: var(--btn-primary);
-  color: #ffffff;
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 750;
-}
-
-.filterBtn:hover {
-  filter: brightness(1.05);
-}
-
-.filterIcon {
-  display: inline-flex;
-}
-
+/* Table */
 .tableWrapper {
   background: #ffffff;
   border-radius: 16px;
@@ -225,6 +104,7 @@
   text-decoration: underline;
 }
 
+/* Status pills */
 .statusPill {
   display: inline-flex;
   align-items: center;
@@ -251,6 +131,7 @@
   color: #a7372b;
 }
 
+/* Actions */
 .actionsCell {
   display: flex;
   align-items: center;
@@ -285,6 +166,7 @@
   font-weight: 650;
 }
 
+/* Responsive */
 @media (max-width: 1200px) {
   .kpiRow {
     grid-template-columns: repeat(2, 1fr);
@@ -297,13 +179,11 @@
     align-items: stretch;
     gap: 12px;
   }
-  .filterBtn {
-    justify-content: center;
-    width: 100%;
-  }
-  .selectWrapper {
+
+  .pillSelectHolder {
     min-width: 100%;
   }
+
   .actionsCell {
     flex-direction: column;
     align-items: stretch;

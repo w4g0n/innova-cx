@@ -1,27 +1,26 @@
 import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
+import PageHeader from "../../components/common/PageHeader";
+import KpiCard from "../../components/common/KpiCard";
+import PriorityPill from "../../components/common/PriorityPill";
 import "./EmployeeDashboard.css";
 
 export default function EmployeeDashboard() {
   return (
     <Layout role="employee">
       <div className="empDash">
-        <header className="empDash__header">
-          <div>
-            <h1 className="empDash__title">Good Morning, Mayed Sharaf</h1>
-            <p className="empDash__subtitle">
-              Here’s your activity and assigned workload.
-            </p>
-          </div>
-        </header>
+        <PageHeader
+          title="Good Morning, Mayed Sharaf"
+          subtitle="Here’s your activity and assigned workload."
+        />
 
         <section className="empDash__kpis">
-          <Kpi value="7" label="Tickets Assigned" />
-          <Kpi value="2" label="In Progress" />
-          <Kpi value="48" label="Resolved This Month" />
-          <Kpi value="2" label="Critical" />
-          <Kpi value="2" label="Overdue" />
-          <Kpi value="1" label="New Today" />
+          <KpiCard label="Tickets Assigned" value="7" />
+          <KpiCard label="In Progress" value="2" />
+          <KpiCard label="Resolved This Month" value="48" />
+          <KpiCard label="Critical" value="2" />
+          <KpiCard label="Overdue" value="2" />
+          <KpiCard label="New Today" value="1" />
         </section>
 
         <section className="empDash__grid">
@@ -47,7 +46,7 @@ export default function EmployeeDashboard() {
                     <td>CX-3201</td>
                     <td>AC not cooling – Office 302</td>
                     <td>
-                      <span className="empPill empPill--critical">Critical</span>
+                      <PriorityPill priority="Critical" />
                     </td>
                     <td>In Progress</td>
                   </tr>
@@ -56,7 +55,7 @@ export default function EmployeeDashboard() {
                     <td>CX-3210</td>
                     <td>Water leak near lobby</td>
                     <td>
-                      <span className="empPill empPill--high">High</span>
+                      <PriorityPill priority="High" />
                     </td>
                     <td>In Progress</td>
                   </tr>
@@ -65,7 +64,7 @@ export default function EmployeeDashboard() {
                     <td>CX-3244</td>
                     <td>Light flickering in corridor</td>
                     <td>
-                      <span className="empPill empPill--medium">Medium</span>
+                      <PriorityPill priority="Medium" />
                     </td>
                     <td>Assigned</td>
                   </tr>
@@ -74,7 +73,7 @@ export default function EmployeeDashboard() {
                     <td>CX-3302</td>
                     <td>Cleaning missed in meeting room</td>
                     <td>
-                      <span className="empPill empPill--low">Low</span>
+                      <PriorityPill priority="Low" />
                     </td>
                     <td>Assigned</td>
                   </tr>
@@ -103,15 +102,6 @@ export default function EmployeeDashboard() {
         </section>
       </div>
     </Layout>
-  );
-}
-
-function Kpi({ value, label }) {
-  return (
-    <div className="empKpi">
-      <span className="empKpi__value">{value}</span>
-      <span className="empKpi__label">{label}</span>
-    </div>
   );
 }
 

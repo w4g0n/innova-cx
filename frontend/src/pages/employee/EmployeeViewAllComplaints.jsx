@@ -1,5 +1,9 @@
 import React, { useState, useMemo } from "react";
 import Layout from "../../components/Layout";
+import PageHeader from "../../components/common/PageHeader";
+import PillSearch from "../../components/common/PillSearch";
+import PillSelect from "../../components/common/PillSelect";
+import KpiCard from "../../components/common/KpiCard";
 import "./ViewAllComplaint.css";
 
 const initialTickets = [
@@ -29,7 +33,6 @@ export default function EmployeeViewAllComplaints() {
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [showDateFilter, setShowDateFilter] = useState(false);
 
-  // --- Sorting ---
   const handleSort = (key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") direction = "desc";
@@ -40,16 +43,15 @@ export default function EmployeeViewAllComplaints() {
     setSortConfig({ key, direction });
   };
 
-  // --- Filtered & Sorted Tickets ---
   const filteredTickets = useMemo(() => {
     let filtered = tickets.filter((t) => {
       const matchesSearch =
         t.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.subject.toLowerCase().includes(searchTerm.toLowerCase());
+
       const matchesStatus = statusFilter === "All Status" || t.status === statusFilter;
       const matchesPriority = priorityFilter === "All Priorities" || t.priority === priorityFilter;
 
-      // Date filter
       let matchesDate = true;
       if (dateRange.from) {
         const [d, m, y] = t.issueDate.split("/").map(Number);
@@ -88,74 +90,77 @@ export default function EmployeeViewAllComplaints() {
     return filtered;
   }, [tickets, searchTerm, statusFilter, priorityFilter, dateRange, sortConfig]);
 
-  // --- KPI Counts ---
-  const kpiCounts = useMemo(() => ({
-    openTickets: filteredTickets.length,
-    assignedToMe: filteredTickets.filter((t) => t.status === "Assigned").length,
-    inProgress: filteredTickets.filter((t) => t.status === "Escalated").length,
-    newTickets: filteredTickets.filter((t) => t.status === "Unassigned").length,
-    highPriority: filteredTickets.filter((t) => t.priority === "High" || t.priority === "Critical").length,
-    overdueTickets: filteredTickets.filter((t) => t.status === "Overdue").length,
-  }), [filteredTickets]);
+  const kpiCounts = useMemo(
+    () => ({
+      openTickets: filteredTickets.length,
+      assignedToMe: filteredTickets.filter((t) => t.status === "Assigned").length,
+      inProgress: filteredTickets.filter((t) => t.status === "Escalated").length,
+      newTickets: filteredTickets.filter((t) => t.status === "Unassigned").length,
+      highPriority: filteredTickets.filter(
+        (t) => t.priority === "High" || t.priority === "Critical"
+      ).length,
+      overdueTickets: filteredTickets.filter((t) => t.status === "Overdue").length,
+    }),
+    [filteredTickets]
+  );
 
   const getSortArrow = (key) => {
     if (sortConfig.key !== key) return "   ↑↓";
     return sortConfig.direction === "asc" ? "   ↑" : sortConfig.direction === "desc" ? "   ↓" : "";
-    
-
   };
 
   return (
     <Layout role="employee">
       <main className="main-EV-VAC">
+        <PageHeader
+          title="Tickets Viewer and Management"
+          subtitle="View, search, sort, and manage all complaints and requests assigned to you."
+        />
 
-        {/* TOP BAR */}
-        <header className="top-bar">
-          <div>
-            <h1 className="page-title">Tickets Viewer and Management</h1>
-            <p className="page-subtitle">
-              View, search, sort, and manage all complaints and requests assigned to you.
-            </p>
-          </div>
-        </header>
-
-
-
-        {/* SEARCH */}
+        {/* SEARCH (now same min-width as PillSelect) */}
         <section className="search-section-EV-VAC">
-          <div className="search-wrapper-EV-VAC">
-            <span className="search-icon-EV-VAC">🔍</span>
-            <input
-              type="text"
-              className="search-input-EV-VAC"
-              placeholder="Search tickets by ID or summary..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
+          <PillSearch
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Search tickets by ID or summary..."
+            ariaLabel="Search tickets"
+            minWidth={200}
+          />
         </section>
 
         {/* FILTERS */}
         <section className="filters-row-EV-VAC">
           <div className="filter-group-EV-VAC">
             <div className="select-wrapper-EV-VAC">
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                <option>All Status</option>
-                <option>Submitted</option>
-                <option>Assigned</option>
-                <option>Escalated</option>
-                <option>Resolved</option>
-              </select>
+              <PillSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                ariaLabel="Filter by status"
+                options={[
+                  { value: "All Status", label: "All Status" },
+                  { value: "Submitted", label: "Submitted" },
+                  { value: "Assigned", label: "Assigned" },
+                  { value: "Escalated", label: "Escalated" },
+                  { value: "Resolved", label: "Resolved" },
+                ]}
+                minWidth={200}
+              />
             </div>
 
             <div className="select-wrapper-EV-VAC">
-              <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
-                <option>All Priorities</option>
-                <option>Low</option>
-                <option>Medium</option>
-                <option>High</option>
-                <option>Critical</option>
-              </select>
+              <PillSelect
+                value={priorityFilter}
+                onChange={setPriorityFilter}
+                ariaLabel="Filter by priority"
+                options={[
+                  { value: "All Priorities", label: "All Priorities" },
+                  { value: "Low", label: "Low" },
+                  { value: "Medium", label: "Medium" },
+                  { value: "High", label: "High" },
+                  { value: "Critical", label: "Critical" },
+                ]}
+                minWidth={200}
+              />
             </div>
           </div>
 
@@ -197,32 +202,14 @@ export default function EmployeeViewAllComplaints() {
           </section>
         )}
 
-        {/* KPI ROW */}
+        {/* KPI ROW (now uses reusable KpiCard) */}
         <section className="kpi-row-EV-VAC">
-          <div className="kpi-card-EV-VAC">
-            <span className="kpi-label-EV-VAC">Open Tickets</span>
-            <span className="kpi-value-EV-VAC">{kpiCounts.openTickets}</span>
-          </div>
-          <div className="kpi-card-EV-VAC">
-            <span className="kpi-label-EV-VAC">Assigned to Me</span>
-            <span className="kpi-value-EV-VAC">{kpiCounts.assignedToMe}</span>
-          </div>
-          <div className="kpi-card-EV-VAC">
-            <span className="kpi-label-EV-VAC">In Progress</span>
-            <span className="kpi-value-EV-VAC">{kpiCounts.inProgress}</span>
-          </div>
-          <div className="kpi-card-EV-VAC">
-            <span className="kpi-label-EV-VAC">New</span>
-            <span className="kpi-value-EV-VAC">{kpiCounts.newTickets}</span>
-          </div>
-          <div className="kpi-card-EV-VAC">
-            <span className="kpi-label-EV-VAC">High Priority</span>
-            <span className="kpi-value-EV-VAC">{kpiCounts.highPriority}</span>
-          </div>
-          <div className="kpi-card-EV-VAC">
-            <span className="kpi-label-EV-VAC">Overdue Tickets</span>
-            <span className="kpi-value-EV-VAC">{kpiCounts.overdueTickets}</span>
-          </div>
+          <KpiCard label="Open Tickets" value={kpiCounts.openTickets} />
+          <KpiCard label="Assigned to Me" value={kpiCounts.assignedToMe} />
+          <KpiCard label="In Progress" value={kpiCounts.inProgress} />
+          <KpiCard label="New" value={kpiCounts.newTickets} />
+          <KpiCard label="High Priority" value={kpiCounts.highPriority} />
+          <KpiCard label="Overdue Tickets" value={kpiCounts.overdueTickets} />
         </section>
 
         {/* TABLE */}

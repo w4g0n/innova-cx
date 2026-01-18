@@ -1,0 +1,21 @@
+.filterPillBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  border: none;
+  background: var(--btn-primary);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.filterPillBtn:hover {
+  filter: brightness(1.05);
+}
+
+.filterPillIcon {
+  display: inline-flex;
+}

@@ -1,5 +1,10 @@
 import { useMemo, useState } from "react";
 import Layout from "../../components/Layout";
+import PageHeader from "../../components/common/PageHeader";
+import PillSearch from "../../components/common/PillSearch";
+import PillSelect from "../../components/common/PillSelect";
+import KpiCard from "../../components/common/KpiCard";
+import FilterPillButton from "../../components/common/FilterPillButton";
 import "./Approvals.css";
 
 export default function Approvals() {
@@ -62,9 +67,7 @@ export default function Approvals() {
         r.ticketId.toLowerCase().includes(q) ||
         r.submittedBy.toLowerCase().includes(q);
 
-      const matchesType =
-        requestType === "All Request Types" || r.type === requestType;
-
+      const matchesType = requestType === "All Request Types" || r.type === requestType;
       const matchesStatus = status === "All Status" || r.status === status;
 
       return matchesQuery && matchesType && matchesStatus;
@@ -82,101 +85,58 @@ export default function Approvals() {
   return (
     <Layout role="manager">
       <div className="mgrApprovals">
-        <header className="mgrHeader">
-          <div>
-            <h1 className="mgrTitle">Approvals</h1>
-            <p className="mgrSubtitle">
-              Approve or reject requests for rescoring and rerouting complaints.
-            </p>
-          </div>
-        </header>
+        <PageHeader
+          title="Approvals"
+          subtitle="Approve or reject requests for rescoring and rerouting complaints."
+        />
 
         <section className="kpiRow">
-          <div className="kpiCard">
-            <span className="kpiLabel">Total Requests</span>
-            <span className="kpiValue">{totals.total}</span>
-            <span className="kpiCaption">All approval requests</span>
-          </div>
-
-          <div className="kpiCard">
-            <span className="kpiLabel">Pending</span>
-            <span className="kpiValue">{totals.pending}</span>
-            <span className="kpiCaption">Awaiting decision</span>
-          </div>
-
-          <div className="kpiCard">
-            <span className="kpiLabel">Approved</span>
-            <span className="kpiValue">{totals.approved}</span>
-            <span className="kpiCaption">Approved by manager</span>
-          </div>
-
-          <div className="kpiCard">
-            <span className="kpiLabel">Rejected</span>
-            <span className="kpiValue">{totals.rejected}</span>
-            <span className="kpiCaption">Rejected by manager</span>
-          </div>
+          <KpiCard label="Total Requests" value={totals.total} caption="All approval requests" />
+          <KpiCard label="Pending" value={totals.pending} caption="Awaiting decision" />
+          <KpiCard label="Approved" value={totals.approved} caption="Approved by manager" />
+          <KpiCard label="Rejected" value={totals.rejected} caption="Rejected by manager" />
         </section>
 
         <section className="searchSection">
-          <div className="searchWrapper">
-            <span className="searchIcon" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                />
-                <path
-                  d="M16.5 16.5 21 21"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </span>
-            <input
-              className="searchInput"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search approval requests by ID, ticket, or employee..."
-            />
-          </div>
+          <PillSearch
+            value={query}
+            onChange={setQuery}
+            placeholder="Search approval requests by ID, ticket, or employee..."
+          />
         </section>
 
         <section className="filtersRow">
           <div className="filtersLeft">
-            <div className="selectWrapper">
-              <select
+            {/* IMPORTANT: renamed wrapper to avoid global .selectWrapper collisions */}
+            <div className="pillSelectHolder">
+              <PillSelect
                 value={requestType}
-                onChange={(e) => setRequestType(e.target.value)}
-              >
-                <option>All Request Types</option>
-                <option>Rescoring</option>
-                <option>Rerouting</option>
-              </select>
+                onChange={setRequestType}
+                ariaLabel="Filter by request type"
+                options={[
+                  { value: "All Request Types", label: "All Request Types" },
+                  { value: "Rescoring", label: "Rescoring" },
+                  { value: "Rerouting", label: "Rerouting" },
+                ]}
+              />
             </div>
 
-            <div className="selectWrapper">
-              <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option>All Status</option>
-                <option>Pending</option>
-                <option>Approved</option>
-                <option>Rejected</option>
-              </select>
+            <div className="pillSelectHolder">
+              <PillSelect
+                value={status}
+                onChange={setStatus}
+                ariaLabel="Filter by status"
+                options={[
+                  { value: "All Status", label: "All Status" },
+                  { value: "Pending", label: "Pending" },
+                  { value: "Approved", label: "Approved" },
+                  { value: "Rejected", label: "Rejected" },
+                ]}
+              />
             </div>
           </div>
 
-          <button className="filterBtn" type="button">
-            <span className="filterIcon">
-              <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M3 4h18l-7 8v6l-4 2v-8L3 4z"
-                  fill="currentColor"
-                />
-              </svg>
-            </span>
-            Filters
-          </button>
+          <FilterPillButton onClick={() => {}} />
         </section>
 
         <section className="tableWrapper">
