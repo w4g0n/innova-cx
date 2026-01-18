@@ -1,7 +1,7 @@
 """
-Audio Analysis Pipeline - FIXED VERSION THAT ACTUALLY RUNS
+Audio Analysis Pipeline 
 ==========================================================
-This version will actually process your audio file!
+
 """
 
 import numpy as np
