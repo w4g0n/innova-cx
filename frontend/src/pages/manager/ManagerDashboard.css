@@ -4,61 +4,18 @@
   box-sizing: border-box;
 }
 
-.managerMain {
-  flex: 1;
-  padding: 24px 28px;
+.mgrDashboard {
   width: 100%;
-}
-
-.managerHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.managerTitle {
-  font-size: 22px;
-  font-weight: 700;
-  color: #111827;
-  margin: 0;
-}
-
-.managerSubtitle {
-  margin-top: 4px;
-  font-size: 14px;
-  color: #6b7280;
+  max-width: none;
 }
 
 .managerKpiRow {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 16px;
+  margin-top: 18px;  
   margin-bottom: 24px;
   width: 100%;
-}
-
-.managerKpiCard {
-  background: #fff;
-  border-radius: 18px;
-  padding: 12px 18px;
-  min-height: 75px;
-  box-shadow: 0px 10px 25px rgba(60, 0, 102, 0.12);
-}
-
-.managerKpiLabel {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #6b7280;
-}
-
-.managerKpiValue {
-  display: block;
-  margin-top: 6px;
-  font-size: 20px;
-  font-weight: 700;
-  color: #3c0066;
 }
 
 .managerIntro {
@@ -96,7 +53,7 @@
 .managerBubbleTitle {
   font-size: 17px;
   font-weight: 600;
-  color: #3c0066;
+  color: var(--btn-primary);
 }
 
 .managerBubbleMetric {
@@ -124,7 +81,7 @@
 }
 
 @media (max-width: 768px) {
-  .managerMain {
-    padding: 20px;
+  .managerBubbleGrid {
+    grid-template-columns: 1fr;
   }
 }

@@ -4,26 +4,6 @@
   font-size: 18px;
 }
 
-.mgrHeader {
-  margin-bottom: 18px;
-}
-
-.mgrTitle {
-  font-size: 38px;
-  margin: 0;
-  color: var(--text-dark);
-  font-weight: 750;
-  letter-spacing: 0.2px;
-}
-
-.mgrSubtitle {
-  margin-top: 10px;
-  font-size: 18px;
-  font-weight: 500;
-  color: rgba(17, 17, 17, 0.7);
-  line-height: 1.5;
-}
-
 /* FILTERS ABOVE KPIs */
 .filtersRow {
   display: flex;
@@ -40,97 +20,19 @@
   gap: 12px;
 }
 
-.selectWrapper {
-  background: #ffffff;
-  border: 2px solid rgba(0, 0, 0, 0.12);
-  border-radius: 999px;
-  padding: 2px 6px;
+/* Layout-only wrapper for PillSelect */
+.pillSelectHolder {
   display: flex;
   align-items: center;
-  min-width: 160px;
-  position: relative;
+  min-width: 190px;
 }
 
-.selectWrapper select {
-  border: none;
-  outline: none;
-  background: transparent;
-  width: 100%;
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--text-dark);
-  appearance: none;
-  cursor: pointer;
-}
-
-.selectWrapper::after {
-  content: "▼";
-  font-size: 12px;
-  color: var(--btn-primary);
-  position: absolute;
-  right: 20px;
-  pointer-events: none;
-}
-
-.filterBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 20px;
-  border-radius: 999px;
-  border: none;
-  background: var(--btn-primary);
-  color: #ffffff;
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 750;
-}
-
-.filterBtn:hover {
-  filter: brightness(1.05);
-}
-
-.filterIcon {
-  display: inline-flex;
-}
-
-/* KPI ROW */
+/* KPI ROW - layout only */
 .kpiRow {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 22px;
   margin-bottom: 22px;
-}
-
-.kpiCard {
-  background: #fff;
-  border-radius: 18px;
-  padding: 18px 20px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
-}
-
-.kpiLabel {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: rgba(17, 17, 17, 0.6);
-  font-weight: 750;
-}
-
-.kpiValue {
-  display: block;
-  margin-top: 12px;
-  font-size: 26px;
-  font-weight: 900;
-  color: var(--btn-primary);
-}
-
-.kpiCaption {
-  margin-top: 10px;
-  font-size: 15px;
-  font-weight: 500;
-  color: rgba(17, 17, 17, 0.65);
 }
 
 /* CHARTS GRID */
@@ -322,9 +224,11 @@
     align-items: stretch;
     gap: 12px;
   }
-  .filterBtn {
-    justify-content: center;
+
+  .pillSelectHolder {
+    min-width: 100%;
   }
+
   .kpiRow {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -334,10 +238,12 @@
   .kpiRow {
     grid-template-columns: 1fr;
   }
+
   .categoryRow {
     grid-template-columns: 1fr;
     row-gap: 8px;
   }
+
   .categoryValue {
     text-align: left;
   }
