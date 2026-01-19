@@ -2,47 +2,25 @@ import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ManagerDashboard.css";
 
+import PageHeader from "../../components/common/PageHeader";
+import KpiCard from "../../components/common/KpiCard";
+
 export default function ManagerDashboard() {
   return (
     <Layout role="manager">
-      <main className="managerMain">
-        <header className="managerHeader">
-          <div>
-            <h1 className="managerTitle">Patrick Mukala - Facilities Management</h1>
-            <p className="managerSubtitle">Quick overview of your department’s activity.</p>
-          </div>
-        </header>
+      <div className="mgrDashboard">
+        <PageHeader
+          title="Patrick Mukala - Facilities Management"
+          subtitle="Quick overview of your department’s activity."
+        />
 
         <section className="managerKpiRow">
-          <div className="managerKpiCard">
-            <span className="managerKpiLabel">Open Complaints</span>
-            <span className="managerKpiValue">42</span>
-          </div>
-
-          <div className="managerKpiCard">
-            <span className="managerKpiLabel">Unassigned</span>
-            <span className="managerKpiValue">7</span>
-          </div>
-
-          <div className="managerKpiCard">
-            <span className="managerKpiLabel">In Progress</span>
-            <span className="managerKpiValue">18</span>
-          </div>
-
-          <div className="managerKpiCard">
-            <span className="managerKpiLabel">Resolved Today</span>
-            <span className="managerKpiValue">9</span>
-          </div>
-
-          <div className="managerKpiCard">
-            <span className="managerKpiLabel">Active Employees</span>
-            <span className="managerKpiValue">12</span>
-          </div>
-
-          <div className="managerKpiCard">
-            <span className="managerKpiLabel">Pending Approvals</span>
-            <span className="managerKpiValue">3</span>
-          </div>
+          <KpiCard label="Open Complaints" value={42} />
+          <KpiCard label="Unassigned" value={7} />
+          <KpiCard label="In Progress" value={18} />
+          <KpiCard label="Resolved Today" value={9} />
+          <KpiCard label="Active Employees" value={12} />
+          <KpiCard label="Pending Approvals" value={3} />
         </section>
 
         <p className="managerIntro">
@@ -84,7 +62,7 @@ export default function ManagerDashboard() {
             <div className="managerBubbleLink">View trends →</div>
           </Link>
         </section>
-      </main>
+      </div>
     </Layout>
   );
 }
