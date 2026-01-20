@@ -1,7 +1,11 @@
 import Layout from "../../components/Layout";
 import "./OperatorDashboard.css";
+import PillSelect from "../../components/common/PillSelect";
+import { useNavigate } from "react-router-dom";
 
 export default function OperatorDashboard() {
+  const navigate = useNavigate();
+
   return (
     <Layout role="operator">
       <div className="opDash">
@@ -15,20 +19,30 @@ export default function OperatorDashboard() {
           </div>
 
           <div className="top-actions">
-            <div className="select-wrapper">
-              <select defaultValue="Last 1 hour">
-                <option>Last 30 minutes</option>
-                <option>Last 1 hour</option>
-                <option>Today</option>
-                <option>Last 7 days</option>
-              </select>
+            {/* Time Range Dropdown (UI only) */}
+            <div className="opDashSelect">
+              <PillSelect
+                value={"Last 1 hour"}
+                onChange={() => {}}
+                ariaLabel="Filter by time range"
+                options={[
+                  { label: "Last 30 minutes", value: "Last 30 minutes" },
+                  { label: "Last 1 hour", value: "Last 1 hour" },
+                  { label: "Today", value: "Today" },
+                  { label: "Last 7 days", value: "Last 7 days" },
+                ]}
+              />
             </div>
 
+            {/* Export button (keep icon + text, but pill style) */}
             <button
-              className="export-btn"
+              className="export-pill-btn"
               onClick={() => alert("Export will be connected later (demo).")}
+              type="button"
             >
-              <span className="export-icon">⭳</span>
+              <span className="export-icon" aria-hidden="true">
+                ⭳
+              </span>
               Export
             </button>
           </div>
@@ -256,7 +270,7 @@ export default function OperatorDashboard() {
                 </div>
                 <button
                   className="link-btn"
-                  onClick={() => alert("Later: link to Model Analysis")}
+                  onClick={() => navigate("/operator/model-analysis")}
                 >
                   View details
                 </button>

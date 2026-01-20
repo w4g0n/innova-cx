@@ -1,8 +1,14 @@
-// src/pages/manager/ManagerViewAllComplaints.jsx
 import { useMemo, useState } from "react";
 import Layout from "../../components/Layout";
 import { Link } from "react-router-dom";
 import "./ManagerViewAllComplaints.css";
+
+import PageHeader from "../../components/common/PageHeader";
+import PillSearch from "../../components/common/PillSearch";
+import PillSelect from "../../components/common/PillSelect";
+import KpiCard from "../../components/common/KpiCard";
+import FilterPillButton from "../../components/common/FilterPillButton";
+import PriorityPill from "../../components/common/PriorityPill";
 
 export default function ManagerViewComplaints() {
   const rows = [
@@ -92,12 +98,10 @@ export default function ManagerViewComplaints() {
     },
   ];
 
-  // ✅ NEW: state (no layout changes)
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [priorityFilter, setPriorityFilter] = useState("All Priorities");
 
-  // ✅ NEW: filtered rows (no layout changes)
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -118,7 +122,6 @@ export default function ManagerViewComplaints() {
     });
   }, [rows, search, statusFilter, priorityFilter]);
 
-  // (optional) KPIs from filtered list:
   const kpis = useMemo(() => {
     const list = filteredRows;
     const unassigned = list.filter((r) => r.status === "Unassigned").length;
@@ -132,7 +135,7 @@ export default function ManagerViewComplaints() {
       critical,
       overdue,
       inProgress,
-      resolvedToday: 0, // (keep as-is for now unless you have data)
+      resolvedToday: 0,
     };
   }, [filteredRows]);
 
@@ -145,85 +148,68 @@ export default function ManagerViewComplaints() {
   return (
     <Layout role="manager">
       <main className="mv-main">
+        <section className="mv-header">
+          <PageHeader
+            title="View All Complaints"
+            subtitle="Monitor all complaints, filter by status/priority, and open tickets for details."
+          />
+        </section>
+
         <section className="mv-kpiRow">
-          <div className="mv-kpiCard">
-            <span className="mv-kpiLabel">Open Tickets</span>
-            <span className="mv-kpiValue">{kpis.openTickets}</span>
-          </div>
-          <div className="mv-kpiCard">
-            <span className="mv-kpiLabel">Unassigned</span>
-            <span className="mv-kpiValue">{kpis.unassigned}</span>
-          </div>
-          <div className="mv-kpiCard">
-            <span className="mv-kpiLabel">Critical Priority</span>
-            <span className="mv-kpiValue">{kpis.critical}</span>
-          </div>
-          <div className="mv-kpiCard">
-            <span className="mv-kpiLabel">Overdue</span>
-            <span className="mv-kpiValue">{kpis.overdue}</span>
-          </div>
-          <div className="mv-kpiCard">
-            <span className="mv-kpiLabel">In Progress</span>
-            <span className="mv-kpiValue">{kpis.inProgress}</span>
-          </div>
-          <div className="mv-kpiCard">
-            <span className="mv-kpiLabel">Resolved Today</span>
-            <span className="mv-kpiValue">{kpis.resolvedToday}</span>
-          </div>
+          <KpiCard label="Open Tickets" value={kpis.openTickets} />
+          <KpiCard label="Unassigned" value={kpis.unassigned} />
+          <KpiCard label="Critical Priority" value={kpis.critical} />
+          <KpiCard label="Overdue" value={kpis.overdue} />
+          <KpiCard label="In Progress" value={kpis.inProgress} />
+          <KpiCard label="Resolved Today" value={kpis.resolvedToday} />
         </section>
 
         <section className="mv-searchSection">
-          <div className="mv-searchWrapper">
-            <span className="mv-searchIcon">🔍</span>
-            <input
-              type="text"
-              className="mv-searchInput"
-              placeholder="Search tickets by ID or summary..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          <PillSearch
+            value={search}
+            onChange={setSearch}
+            placeholder="Search tickets by ID or summary..."
+          />
         </section>
 
         <section className="mv-filtersRow">
           <div className="mv-filterGroup">
-            <div className="mv-selectWrapper">
-              <select
+            <div className="mv-select">
+              <PillSelect
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option>All Status</option>
-                <option>Submitted</option>
-                <option>Assigned</option>
-                <option>Escalated</option>
-                <option>Resolved</option>
-                <option>Unassigned</option>
-                <option>Overdue</option>
-              </select>
+                onChange={setStatusFilter}
+                ariaLabel="Filter by status"
+                options={[
+                  { label: "All Status", value: "All Status" },
+                  { label: "Submitted", value: "Submitted" },
+                  { label: "Assigned", value: "Assigned" },
+                  { label: "Escalated", value: "Escalated" },
+                  { label: "Resolved", value: "Resolved" },
+                  { label: "Unassigned", value: "Unassigned" },
+                  { label: "Overdue", value: "Overdue" },
+                ]}
+              />
             </div>
 
-            <div className="mv-selectWrapper">
-              <select
+            <div className="mv-select">
+              <PillSelect
                 value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
-              >
-                <option>All Priorities</option>
-                <option>Low</option>
-                <option>Medium</option>
-                <option>High</option>
-                <option>Critical</option>
-              </select>
+                onChange={setPriorityFilter}
+                ariaLabel="Filter by priority"
+                options={[
+                  { label: "All Priorities", value: "All Priorities" },
+                  { label: "Low", value: "Low" },
+                  { label: "Medium", value: "Medium" },
+                  { label: "High", value: "High" },
+                  { label: "Critical", value: "Critical" },
+                ]}
+              />
             </div>
           </div>
 
-          {/* Keeping your button style exactly.
-              We’ll make it useful: Reset filters. */}
-          <button className="mv-filterBtn" type="button" onClick={handleReset}>
-            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 4h18l-7 8v6l-4 2v-8L3 4z" fill="currentColor" />
-            </svg>
-            Reset
-          </button>
+          <div className="mv-reset">
+            <FilterPillButton onClick={handleReset} label="Reset" />
+          </div>
         </section>
 
         <section className="mv-tableWrapper">
@@ -246,13 +232,16 @@ export default function ManagerViewComplaints() {
               {filteredRows.map((r) => (
                 <tr key={r.id}>
                   <td>
-                    <Link className="mv-complaintLink" to={`/manager/complaints/${r.id}`}>
+                    <Link
+                      className="mv-complaintLink"
+                      to={`/manager/complaints/${r.id}`}
+                    >
                       {r.id}
                     </Link>
                   </td>
                   <td className="mv-subjectCell">{r.subject}</td>
                   <td>
-                    <span className={`mv-pill mv-${r.priority}`}>{r.priorityText}</span>
+                    <PriorityPill priority={r.priorityText} />
                   </td>
                   <td>{r.status}</td>
                   <td>{r.assignee}</td>
@@ -267,10 +256,9 @@ export default function ManagerViewComplaints() {
                 </tr>
               ))}
 
-              {/* Optional: if nothing matches */}
               {filteredRows.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ padding: "18px", textAlign: "center" }}>
+                  <td colSpan={9} className="mv-empty">
                     No tickets match your search/filters.
                   </td>
                 </tr>

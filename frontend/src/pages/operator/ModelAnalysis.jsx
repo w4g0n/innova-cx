@@ -7,46 +7,68 @@ import resolSugg from "./ChatbotAnalysis_Images/M-Resolsugg.png";
 import resolEff from "./ChatbotAnalysis_Images/M-ResolutionEff.png";
 import "./ModelAnalysis.css";
 
+import PageHeader from "../../components/common/PageHeader";
+import PillSelect from "../../components/common/PillSelect";
+import { useNavigate } from "react-router-dom";
+
 export default function ModelAnalysis() {
+  const navigate = useNavigate();
+
+  const openComplaint = (ticketId) => {
+    navigate(`/operator/complaints/${ticketId}`);
+  };
+
   return (
     <Layout role="operator">
       <div className="modelAnalysis">
         <header className="top-bar">
           <div>
-            <h1 className="page-title">Model Performance Dashboard</h1>
-            <p className="page-subtitle">
-              Routing and priority scoring accuracy for model-driven complaint handling.
-            </p>
+            <PageHeader
+              title="Model Performance Dashboard"
+              subtitle="Routing and priority scoring accuracy for model-driven complaint handling."
+            />
           </div>
 
           <div className="top-actions">
-            <div className="select-wrapper">
-              <select defaultValue="Last 7 days">
-                <option>Last 7 days</option>
-                <option>Last 30 days</option>
-                <option>This quarter</option>
-              </select>
+            <div className="modelSelect">
+              <PillSelect
+                value={"Last 7 days"}
+                onChange={() => {}}
+                ariaLabel="Filter by time range"
+                options={[
+                  { label: "Last 7 days", value: "Last 7 days" },
+                  { label: "Last 30 days", value: "Last 30 days" },
+                  { label: "This quarter", value: "This quarter" },
+                ]}
+              />
             </div>
 
-            <div className="select-wrapper">
-              <select defaultValue="All departments">
-                <option>All departments</option>
-                <option>Billing</option>
-                <option>Technical Support</option>
-                <option>Facilities</option>
-                <option>Leasing</option>
-              </select>
+            <div className="modelSelect">
+              <PillSelect
+                value={"All departments"}
+                onChange={() => {}}
+                ariaLabel="Filter by department"
+                options={[
+                  { label: "All departments", value: "All departments" },
+                  { label: "Billing", value: "Billing" },
+                  { label: "Technical Support", value: "Technical Support" },
+                  { label: "Facilities", value: "Facilities" },
+                  { label: "Leasing", value: "Leasing" },
+                ]}
+              />
             </div>
 
             <button
               className="toggle-btn"
               onClick={() => alert("Filter toggle will be connected later (demo).")}
+              type="button"
             >
               Show misrouted / rescored
             </button>
           </div>
         </header>
 
+        {/* KPI ROW (keep original structure/content) */}
         <section className="kpi-row">
           <article className="kpi-card">
             <div className="kpi-top">
@@ -112,7 +134,11 @@ export default function ModelAnalysis() {
               How often the model chose the correct department.
             </p>
             <div className="chart-inner">
-              <img className="chart-img" src={routingAcc} alt="Routing Accuracy by Department" />
+              <img
+                className="chart-img"
+                src={routingAcc}
+                alt="Routing Accuracy by Department"
+              />
             </div>
           </article>
 
@@ -122,13 +148,26 @@ export default function ModelAnalysis() {
               Distribution of accepted vs manually rerouted complaints.
             </p>
             <div className="chart-inner chart-inner--short">
-              <img className="chart-img" src={reroutedComp} alt="Rerouted complaints donut chart" />
+              <img
+                className="chart-img"
+                src={reroutedComp}
+                alt="Rerouted complaints donut chart"
+              />
             </div>
 
             <ul className="mini-legend">
-              <li><span className="dot dot-purple" />Accepted model routing</li>
-              <li><span className="dot dot-blue" />Rerouted by employee</li>
-              <li><span className="dot dot-grey" />Pending review</li>
+              <li>
+                <span className="dot dot-purple" />
+                Accepted model routing
+              </li>
+              <li>
+                <span className="dot dot-blue" />
+                Rerouted by employee
+              </li>
+              <li>
+                <span className="dot dot-grey" />
+                Pending review
+              </li>
             </ul>
           </article>
         </section>
@@ -140,7 +179,11 @@ export default function ModelAnalysis() {
               How often each priority level (1–5) is confirmed by employees.
             </p>
             <div className="chart-inner">
-              <img className="chart-img" src={prioAcc} alt="Priority accuracy by score bar chart" />
+              <img
+                className="chart-img"
+                src={prioAcc}
+                alt="Priority accuracy by score bar chart"
+              />
             </div>
           </article>
 
@@ -150,12 +193,22 @@ export default function ModelAnalysis() {
               Where employees changed the model’s priority score.
             </p>
             <div className="chart-inner chart-inner--short">
-              <img className="chart-img" src={rescoredComp} alt="Rescored complaints chart" />
+              <img
+                className="chart-img"
+                src={rescoredComp}
+                alt="Rescored complaints chart"
+              />
             </div>
 
             <ul className="mini-legend">
-              <li><span className="dot dot-purple" />Accepted scores</li>
-              <li><span className="dot dot-lavender" />Adjusted scores</li>
+              <li>
+                <span className="dot dot-purple" />
+                Accepted scores
+              </li>
+              <li>
+                <span className="dot dot-lavender" />
+                Adjusted scores
+              </li>
             </ul>
           </article>
         </section>
@@ -167,7 +220,11 @@ export default function ModelAnalysis() {
               How often employees apply or lightly edit the model’s suggested resolution.
             </p>
             <div className="chart-inner">
-              <img className="chart-img" src={resolSugg} alt="Resolution suggestion adoption rate chart" />
+              <img
+                className="chart-img"
+                src={resolSugg}
+                alt="Resolution suggestion adoption rate chart"
+              />
             </div>
           </article>
 
@@ -177,12 +234,22 @@ export default function ModelAnalysis() {
               Outcomes where the model’s suggested resolution was used.
             </p>
             <div className="chart-inner chart-inner--short">
-              <img className="chart-img" src={resolEff} alt="Resolution effectiveness donut chart" />
+              <img
+                className="chart-img"
+                src={resolEff}
+                alt="Resolution effectiveness donut chart"
+              />
             </div>
 
             <ul className="mini-legend">
-              <li><span className="dot dot-purple" />Resolved on first contact</li>
-              <li><span className="dot dot-lavender" />Follow-up needed</li>
+              <li>
+                <span className="dot dot-purple" />
+                Resolved on first contact
+              </li>
+              <li>
+                <span className="dot dot-lavender" />
+                Follow-up needed
+              </li>
             </ul>
           </article>
         </section>
@@ -211,11 +278,23 @@ export default function ModelAnalysis() {
                   <td>CX-10482</td>
                   <td>24 Nov 2025 – 10:14</td>
                   <td>Tenant</td>
-                  <td><span className="route-change">Model: Facilities → Final: Facilities</span></td>
-                  <td><span className="priority-change">3 → 5</span></td>
-                  <td><span className="reason-pill reason-critical">Under-scored urgency</span></td>
                   <td>
-                    <button className="link-btn" onClick={() => alert("Open complaint (demo).")}>
+                    <span className="route-change">
+                      Model: Facilities → Final: Facilities
+                    </span>
+                  </td>
+                  <td>
+                    <span className="priority-change">3 → 5</span>
+                  </td>
+                  <td>
+                    <span className="reason-pill reason-critical">Under-scored urgency</span>
+                  </td>
+                  <td>
+                    <button
+                      className="link-btn"
+                      onClick={() => openComplaint("CX-10482")}
+                      type="button"
+                    >
                       Open complaint
                     </button>
                   </td>
@@ -225,11 +304,23 @@ export default function ModelAnalysis() {
                   <td>CX-10431</td>
                   <td>24 Nov 2025 – 09:02</td>
                   <td>Tenant</td>
-                  <td><span className="route-change">Model: Billing → Final: Leasing</span></td>
-                  <td><span className="priority-change">2 → 3</span></td>
-                  <td><span className="reason-pill reason-policy">Policy exception</span></td>
                   <td>
-                    <button className="link-btn" onClick={() => alert("Open complaint (demo).")}>
+                    <span className="route-change">
+                      Model: Billing → Final: Leasing
+                    </span>
+                  </td>
+                  <td>
+                    <span className="priority-change">2 → 3</span>
+                  </td>
+                  <td>
+                    <span className="reason-pill reason-policy">Policy exception</span>
+                  </td>
+                  <td>
+                    <button
+                      className="link-btn"
+                      onClick={() => openComplaint("CX-10431")}
+                      type="button"
+                    >
                       Open complaint
                     </button>
                   </td>
@@ -239,11 +330,23 @@ export default function ModelAnalysis() {
                   <td>CX-10398</td>
                   <td>23 Nov 2025 – 16:41</td>
                   <td>Vendor</td>
-                  <td><span className="route-change">Model: Technical → Final: Facilities</span></td>
-                  <td><span className="priority-change">4 → 4</span></td>
-                  <td><span className="reason-pill reason-routing">Wrong department</span></td>
                   <td>
-                    <button className="link-btn" onClick={() => alert("Open complaint (demo).")}>
+                    <span className="route-change">
+                      Model: Technical → Final: Facilities
+                    </span>
+                  </td>
+                  <td>
+                    <span className="priority-change">4 → 4</span>
+                  </td>
+                  <td>
+                    <span className="reason-pill reason-routing">Wrong department</span>
+                  </td>
+                  <td>
+                    <button
+                      className="link-btn"
+                      onClick={() => openComplaint("CX-10398")}
+                      type="button"
+                    >
                       Open complaint
                     </button>
                   </td>

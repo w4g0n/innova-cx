@@ -6,9 +6,9 @@ import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import KpiCard from "../../components/common/KpiCard";
 
-import "./ViewEmployees.css";
+import "./ManagerViewEmployees.css";
 
-export default function ViewEmployees() {
+export default function ManagerViewEmployees() {
   const employees = [
     { name: "Ahmed Hassan", id: "EMP-1023", role: "Senior Technician", completed: 34, inProgress: 3 },
     { name: "Maria Lopez", id: "EMP-1078", role: "Technician", completed: 28, inProgress: 5 },
@@ -26,12 +26,13 @@ export default function ViewEmployees() {
     const q = query.trim().toLowerCase();
     if (!q) return employees;
 
-    return employees.filter((e) => (
-      e.name.toLowerCase().includes(q) ||
-      e.id.toLowerCase().includes(q) ||
-      e.role.toLowerCase().includes(q)
-    ));
-  }, [query]);
+    return employees.filter(
+      (e) =>
+        e.name.toLowerCase().includes(q) ||
+        e.id.toLowerCase().includes(q) ||
+        e.role.toLowerCase().includes(q)
+    );
+  }, [employees, query]);
 
   const kpiEmployees = employees.length;
   const kpiCompleted = employees.reduce((sum, e) => sum + e.completed, 0);
@@ -55,7 +56,6 @@ export default function ViewEmployees() {
           subtitle="Search employees and access their auto-generated reports."
         />
 
-        {/* KPI ROW (now reusable cards) */}
         <section className="ve-kpiRow">
           <KpiCard label="Employees" value={kpiEmployees} />
           <KpiCard label="Tickets Completed" value={kpiCompleted} />
@@ -65,9 +65,7 @@ export default function ViewEmployees() {
           <KpiCard label="Lowest Performer" value={lowestPerformer?.name} />
         </section>
 
-        {/* Search (reusable pill) */}
         <section className="ve-searchRow">
-          {/* wrapper is layout-only ✅ (no borders/backgrounds) */}
           <PillSearch
             value={query}
             onChange={setQuery}
@@ -75,7 +73,6 @@ export default function ViewEmployees() {
           />
         </section>
 
-        {/* Table */}
         <section className="ve-tableWrapper">
           <table className="ve-table">
             <thead>
