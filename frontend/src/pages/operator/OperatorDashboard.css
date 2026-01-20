@@ -32,16 +32,11 @@
   align-items: center;
 }
 
-.select-wrapper select {
-  padding: 14px 18px;
-  border-radius: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: #fff;
-  outline: none;
-  font-size: 15px;
+.opDashSelect {
+  min-width: 210px;
 }
 
-.export-btn {
+.export-pill-btn {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -49,16 +44,18 @@
   border-radius: 999px;
   border: none;
   background: var(--btn-primary);
-  color: white;
-  font-weight: 650;
-  font-size: 15px;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 750;
 }
 
-.export-btn:hover {
+.export-pill-btn:hover {
   filter: brightness(1.05);
 }
 
 .export-icon {
+  display: inline-flex;
   font-size: 16px;
 }
 

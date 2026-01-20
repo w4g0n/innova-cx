@@ -22,7 +22,7 @@ import Approvals from "./pages/manager/Approvals";
 import ComplaintTrends from "./pages/manager/ComplaintTrends";
 import ManagerDashboard from "./pages/manager/ManagerDashboard";
 import ManagerViewAllComplaints from "./pages/manager/ManagerViewAllComplaints";
-import ViewEmployees from "./pages/manager/ViewEmployees";
+import ViewEmployees from "./pages/manager/ManagerViewEmployees";
 
 // Operator
 import OperatorNotifications from "./pages/operator/OperatorNotifications";

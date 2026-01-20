@@ -2,15 +2,17 @@ import Layout from "../../components/Layout";
 import dailyHandled from "./ChatbotAnalysis_Images/dailyHandled.png";
 import accuracyBars from "./ChatbotAnalysis_Images/accuracyBars.png";
 import pieChart from "./ChatbotAnalysis_Images/piechart.png";
-import purpPie from "./ChatbotAnalysis_Images/purpPie.png";
 import respTime from "./ChatbotAnalysis_Images/respTime.png";
 import "./ChatbotAnalysis.css";
 
 import { useState } from "react";
+import PageHeader from "../../components/common/PageHeader";
+import PillSelect from "../../components/common/PillSelect";
 
 export default function ChatbotAnalysis() {
   const [modalOpen, setModalOpen] = useState(false);
   const [filter, setFilter] = useState("all");
+
   const complaints = [
     {
       id: "CX-1021",
@@ -37,44 +39,49 @@ export default function ChatbotAnalysis() {
       status: "unresolved",
     },
   ];
-  
-  const filteredComplaints = complaints.filter((c) => {
-  if (filter === "all") return true;
-  if (filter === "resolved") return c.status === "resolved";
-  if (filter === "unresolved") return c.status === "unresolved";
-  if (filter === "partial") return c.status === "escalated"; // assuming "partially resolved" = "escalated"
-  return true;
-  });
 
+  const filteredComplaints = complaints.filter((c) => {
+    if (filter === "all") return true;
+    if (filter === "resolved") return c.status === "resolved";
+    if (filter === "unresolved") return c.status === "unresolved";
+    if (filter === "partial") return c.status === "escalated"; // assuming "partially resolved" = "escalated"
+    return true;
+  });
 
   return (
     <Layout role="operator">
       <main className="main">
-      {/* TOP BAR */}
+        {/* TOP BAR */}
         <header className="top-bar">
           <div>
-            <h1 className="page-title">Chatbot Performance Analytics</h1>
-            <p className="page-subtitle">
-              Real-time insights into speed, accuracy, and resolution quality.
-            </p>
+            <PageHeader
+              title="Chatbot Performance Analytics"
+              subtitle="Real-time insights into speed, accuracy, and resolution quality."
+            />
           </div>
 
           <div className="top-actions">
-            <div className="select-wrapper">
-              <select>
-                <option>Today</option>
-                <option selected>Week</option>
-                <option>Month</option>
-                <option>Year</option>
-              </select>
+            <div className="chatbotSelect">
+              <PillSelect
+                value={"Week"}
+                onChange={() => {}}
+                ariaLabel="Filter by time range"
+                options={[
+                  { label: "Today", value: "Today" },
+                  { label: "Week", value: "Week" },
+                  { label: "Month", value: "Month" },
+                  { label: "Year", value: "Year" },
+                ]}
+              />
             </div>
-            <button className="purple-btn" onClick={() => setModalOpen(true)}>
+
+            <button className="purple-btn" onClick={() => setModalOpen(true)} type="button">
               View handled Complaints
             </button>
           </div>
         </header>
 
-        {/* KPI CARDS */}
+        {/* KPI CARDS (keep business logic + text exactly the same) */}
         <section className="kpi-row">
           <article className="kpi-card">
             <div className="kpi-top">
@@ -187,16 +194,40 @@ export default function ChatbotAnalysis() {
             <div className="modal">
               <div className="modal-header">
                 <h2>All Complaints</h2>
-                <button className="close-btn" onClick={() => setModalOpen(false)}>
+                <button className="close-btn" onClick={() => setModalOpen(false)} type="button">
                   Close
                 </button>
               </div>
 
               <div className="modal-filters">
-                <button className={`filter-chip ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All complaints</button>
-                <button className={`filter-chip ${filter === "resolved" ? "active" : ""}`} onClick={() => setFilter("resolved")}>Resolved</button>
-                <button className={`filter-chip ${filter === "unresolved" ? "active" : ""}`} onClick={() => setFilter("unresolved")}>Unresolved</button>
-                <button className={`filter-chip ${filter === "partial" ? "active" : ""}`} onClick={() => setFilter("partial")}>Partially resolved</button>
+                <button
+                  className={`filter-chip ${filter === "all" ? "active" : ""}`}
+                  onClick={() => setFilter("all")}
+                  type="button"
+                >
+                  All complaints
+                </button>
+                <button
+                  className={`filter-chip ${filter === "resolved" ? "active" : ""}`}
+                  onClick={() => setFilter("resolved")}
+                  type="button"
+                >
+                  Resolved
+                </button>
+                <button
+                  className={`filter-chip ${filter === "unresolved" ? "active" : ""}`}
+                  onClick={() => setFilter("unresolved")}
+                  type="button"
+                >
+                  Unresolved
+                </button>
+                <button
+                  className={`filter-chip ${filter === "partial" ? "active" : ""}`}
+                  onClick={() => setFilter("partial")}
+                  type="button"
+                >
+                  Partially resolved
+                </button>
               </div>
 
               <div className="modal-table-wrapper">
@@ -213,23 +244,25 @@ export default function ChatbotAnalysis() {
                   </thead>
                   <tbody>
                     {filteredComplaints.map((c) => (
-                    <tr key={c.id}>
-                      <td>{c.id}</td>
-                      <td>{c.customer}</td>
-                      <td>{c.category}</td>
-                      <td>{c.description}</td>
-                      <td>{c.timestamp}</td>
-                      <td>
-                        <span className={`status-pill ${c.status}`}>{c.status.charAt(0).toUpperCase() + c.status.slice(1)}</span>
-                      </td>
-                    </tr>
+                      <tr key={c.id}>
+                        <td>{c.id}</td>
+                        <td>{c.customer}</td>
+                        <td>{c.category}</td>
+                        <td>{c.description}</td>
+                        <td>{c.timestamp}</td>
+                        <td>
+                          <span className={`status-pill ${c.status}`}>
+                            {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+                          </span>
+                        </td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
-      )}
+        )}
       </main>
     </Layout>
   );

@@ -1,67 +1,23 @@
-/* src/pages/manager/ManagerViewAllComplaints.css */
-
 .mv-main {
   flex: 1;
-  padding: 24px 28px;
+  padding: 0;    
   width: 100%;
+}
+
+.mv-header {
+  margin-bottom: 14px;
 }
 
 .mv-kpiRow {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
   width: 100%;
-}
-
-.mv-kpiCard {
-  background: #fff;
-  border-radius: 18px;
-  padding: 12px 18px;
-  min-height: 75px;
-  box-shadow: 0px 10px 25px rgba(60, 0, 102, 0.12);
-}
-
-.mv-kpiLabel {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #6b7280;
-}
-
-.mv-kpiValue {
-  display: block;
-  margin-top: 6px;
-  font-size: 20px;
-  font-weight: 700;
-  color: #3c0066;
 }
 
 .mv-searchSection {
   margin-bottom: 12px;
-}
-
-.mv-searchWrapper {
-  display: flex;
-  align-items: center;
-  background: #fdf9ff;
-  border-radius: 999px;
-  padding: 10px 16px;
-  border: 1px solid #e5d4ff;
-}
-
-.mv-searchIcon {
-  margin-right: 6px;
-  color: #a855f7;
-}
-
-.mv-searchInput {
-  border: none;
-  outline: none;
-  background: transparent;
-  width: 100%;
-  font-size: 14px;
-  color: #111827;
 }
 
 .mv-filtersRow {
@@ -75,58 +31,17 @@
 
 .mv-filterGroup {
   display: flex;
-  gap: 18px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
-.mv-selectWrapper {
-  background: #ffffff;
-  border: 2px solid #e5d4ff;
-  border-radius: 16px;
-  padding: 8px 14px;
+.mv-select {
+  min-width: 200px;
+}
+
+.mv-reset {
   display: flex;
   align-items: center;
-  min-width: 200px;
-  position: relative;
-}
-
-.mv-selectWrapper select {
-  border: none;
-  outline: none;
-  background: transparent;
-  width: 100%;
-  font-size: 15px;
-  font-weight: 500;
-  color: #111;
-  appearance: none;
-  cursor: pointer;
-}
-
-.mv-selectWrapper::after {
-  content: "▼";
-  font-size: 11px;
-  color: #5b21b6;
-  position: absolute;
-  right: 14px;
-  pointer-events: none;
-}
-
-.mv-filterBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 18px;
-  border-radius: 999px;
-  border: none;
-  background: #7c3aed;
-  color: #ffffff;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.mv-filterBtn:hover {
-  opacity: 0.95;
 }
 
 .mv-tableWrapper {
@@ -156,8 +71,7 @@
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: #9ca3af;
-  text-align: center;
-  border-bottom: 1px solid #f3e8ff;
+  border-bottom: 1px solid rgba(89, 36, 180, 0.12);
   white-space: nowrap;
 }
 
@@ -166,7 +80,7 @@
 }
 
 .mv-table tbody tr:hover {
-  background: #f3e8ff;
+  background: rgba(89, 36, 180, 0.06);
 }
 
 .mv-subjectCell {
@@ -174,7 +88,7 @@
 }
 
 .mv-complaintLink {
-  color: #7c3aed;
+  color: var(--btn-primary);
   font-weight: 700;
   text-decoration: none;
 }
@@ -183,42 +97,11 @@
   text-decoration: underline;
 }
 
-.mv-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 78px;
-  height: 26px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.mv-critical {
-  background: #ffe6e9;
-  color: #b8001f;
-}
-
-.mv-high {
-  background: #fff4d6;
-  color: #b45309;
-}
-
-.mv-medium {
-  background: #e6f4ff;
-  color: #035bb3;
-}
-
-.mv-low {
-  background: #e7fde7;
-  color: #0d7f3c;
-}
-
 .mv-actionBtn {
   padding: 8px 14px;
   border-radius: 999px;
   border: none;
-  background: #7c3aed;
+  background: var(--btn-primary);
   color: #ffffff;
   font-size: 12px;
   font-weight: 700;
@@ -228,6 +111,11 @@
 
 .mv-actionBtn:hover {
   opacity: 0.95;
+}
+
+.mv-empty {
+  padding: 18px;
+  text-align: center;
 }
 
 .mv-footerTimestamp {
@@ -249,11 +137,7 @@
     padding: 20px;
   }
 
-  .mv-filterGroup {
-    width: 100%;
-  }
-
-  .mv-selectWrapper {
+  .mv-select {
     min-width: 180px;
   }
 }
