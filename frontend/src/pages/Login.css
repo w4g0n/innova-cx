@@ -1,0 +1,226 @@
+/* Uses your React palette feel:
+   Primary: #6C21D9
+   Background: soft lavender
+   Surface: white
+*/
+
+.loginBg {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 40px 16px;
+  background: linear-gradient(135deg, #8d63ff 0%, #2a1149 100%);
+  background-attachment: fixed;
+}
+
+/* Main container */
+.loginWrapper {
+  width: min(980px, 100%);
+  height: 560px;
+  display: flex;
+  overflow: hidden;
+  border-radius: 44px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+  background: #2a1149;
+}
+
+/* Left panel */
+.loginLeft {
+  width: 50%;
+  position: relative;
+  background: linear-gradient(135deg, #2a1149 0%, #3d1f63 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loginOverlay {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 30% 50%, rgba(167, 127, 255, 0.35), transparent 55%),
+    radial-gradient(circle at 70% 30%, rgba(120, 60, 220, 0.25), transparent 55%),
+    radial-gradient(circle at 50% 80%, rgba(200, 160, 255, 0.18), transparent 55%);
+  opacity: 0.9;
+}
+
+.loginLeftContent {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  padding: 0 64px;
+  color: #ffffff;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateY(-10px);
+}
+
+.welcomeTitle {
+  font-size: 44px;
+  font-weight: 800;
+  margin: 0 0 14px 0;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+}
+
+.welcomeSub {
+  font-size: 16px;
+  opacity: 0.92;
+  max-width: 340px;
+  margin: 0 0 26px 0;
+  text-align: center;
+}
+
+.markWrap {
+  margin-top: 8px;
+}
+
+.novaMark {
+  width: 170px;
+  height: auto;
+  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.35));
+}
+
+/* Right panel (form) */
+.loginRight {
+  width: 50%;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 44px 52px;
+}
+
+.loginHeader {
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.loginTitle {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  color: #2a1149;
+  letter-spacing: -0.3px;
+}
+
+/* Form */
+.loginForm {
+  width: 100%;
+  max-width: 360px;
+}
+
+.field {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #2a1149;
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 999px;
+  border: 1px solid #d9d9d9;
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input::placeholder {
+  color: #8f8f8f;
+}
+
+.input:focus {
+  border-color: #6c21d9;
+  box-shadow: 0 0 0 4px rgba(108, 33, 217, 0.12);
+}
+
+.forgotLink {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 6px 0 18px;
+  font-size: 13px;
+  color: #6c21d9;
+  text-align: right;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.loginBtn {
+  width: 100%;
+  padding: 12px 0;
+  border: none;
+  border-radius: 999px;
+  background: #6c21d9; /* primary */
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.loginBtn:hover {
+  background: #5a1bb5;
+  transform: translateY(-1px);
+}
+
+.demoHint {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: #6b6b6b;
+  line-height: 1.35;
+}
+
+/* Responsive */
+@media (max-width: 860px) {
+  .loginWrapper {
+    height: auto;
+    flex-direction: column;
+    border-radius: 28px;
+  }
+
+  .loginLeft,
+  .loginRight {
+    width: 100%;
+  }
+
+  .loginLeftContent {
+    padding: 42px 28px;
+    transform: none;
+  }
+
+  .welcomeTitle {
+    font-size: 36px;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .loginRight {
+    padding: 34px 24px 40px;
+  }
+}
+
+
+.novaLogo {
+  width: 200px;         
+  height: auto;
+  margin-top: 18px;
+  opacity: 0.9;
+  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.25));
+}

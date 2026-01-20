@@ -1,31 +1,118 @@
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import logo from "../assets/nova-logo.png";
+import "./login.css";
+
+/**
+ * Temporary role resolver for demo purposes.
+ * Replace later with real backend authentication.
+ */
+function resolveRoleFromEmail(email) {
+  const e = (email || "").toLowerCase().trim();
+
+  if (e.includes("manager")) return "manager";
+  if (e.includes("operator")) return "operator";
+  if (e.includes("employee")) return "employee";
+
+  return "customer";
+}
 
 export default function Login() {
   const navigate = useNavigate();
 
-  const loginAs = (role) => {
-    localStorage.setItem("user", JSON.stringify({ role }));
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-    // Customer should start on landing page
+  const role = useMemo(() => resolveRoleFromEmail(email), [email]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    localStorage.setItem(
+      "user",
+      JSON.stringify({
+        role,
+        email,
+      })
+    );
+
     if (role === "customer") {
       navigate("/customer");
       return;
     }
 
-    // Others go to their dashboards
     navigate(`/${role}`);
   };
 
   return (
-    <div style={{ padding: 40 }}>
-      <h2>Login</h2>
-      <p style={{ marginTop: 10 }}>Choose a view:</p>
+    <div className="loginBg">
+      <div className="loginWrapper">
+        {/* LEFT PANEL */}
+        <section className="loginLeft">
+          <div className="loginOverlay" />
 
-      <div style={{ marginTop: 20, display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <button onClick={() => loginAs("customer")}>Customer</button>
-        <button onClick={() => loginAs("employee")}>Employee</button>
-        <button onClick={() => loginAs("operator")}>Operator</button>
-        <button onClick={() => loginAs("manager")}>Manager</button>
+          <div className="loginLeftContent">
+            <h1 className="welcomeTitle">Welcome back!</h1>
+            <p className="welcomeSub">
+              Sign-in using your given credentials.
+            </p>
+
+            <div className="markWrap">
+              <img
+                src={logo}
+                alt="InnovaCX logo"
+                className="novaLogo"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* RIGHT PANEL */}
+        <section className="loginRight">
+          <div className="loginHeader">
+            <h2 className="loginTitle">Log In To InnovaCX</h2>
+          </div>
+
+          <form className="loginForm" onSubmit={handleSubmit}>
+            <div className="field">
+              <label className="label">Email</label>
+              <input
+                className="input"
+                type="email"
+                placeholder="Enter your Email here"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label className="label">Password</label>
+              <input
+                className="input"
+                type="password"
+                placeholder="Enter your Password here"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <button
+              type="button"
+              className="forgotLink"
+              onClick={() => alert("Forgot password flow goes here")}
+            >
+              Forgot password?
+            </button>
+
+            <button type="submit" className="loginBtn">
+              Log In
+            </button>
+
+            
+          </form>
+        </section>
       </div>
     </div>
   );
