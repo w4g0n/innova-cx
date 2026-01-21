@@ -1,0 +1,209 @@
+.custTicketDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Shared primary button style (matches FilterPillButton color) */
+.primaryPillBtn {
+  border: none;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 750;
+  cursor: pointer;
+  background: var(--btn-primary);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter 0.15s ease, transform 0.12s ease;
+  white-space: nowrap;
+}
+
+.primaryPillBtn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.primaryPillBtn:active {
+  transform: translateY(0);
+}
+
+.ticketCard,
+.updatesCard,
+.ticketEmpty {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(20, 20, 20, 0.06);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.06);
+}
+
+.ticketTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.ticketTopLeft {
+  min-width: 0;
+  flex: 1;
+}
+
+.ticketMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(20, 20, 20, 0.65);
+  margin-bottom: 8px;
+}
+
+.ticketId {
+  font-weight: 900;
+  color: rgba(20, 20, 20, 0.88);
+}
+
+.ticketType {
+  font-weight: 700;
+}
+
+.dot {
+  opacity: 0.7;
+}
+
+.ticketTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+  color: rgba(20, 20, 20, 0.92);
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.ticketBadges {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.badgeBlock {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badgeLabel {
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(20, 20, 20, 0.6);
+}
+
+.badgeValue {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(20, 20, 20, 0.85);
+}
+
+.ticketDivider {
+  height: 1px;
+  margin: 14px 0;
+  background: rgba(20, 20, 20, 0.08);
+}
+
+.sectionTitle {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: 900;
+  color: rgba(20, 20, 20, 0.85);
+}
+
+.ticketDesc {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(20, 20, 20, 0.7);
+  line-height: 1.45;
+}
+
+/* Updates */
+.updatesList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.updateRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.updateDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-top: 5px;
+  background: rgba(20, 20, 20, 0.25);
+}
+
+.updateContent {
+  min-width: 0;
+}
+
+.updateDate {
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(20, 20, 20, 0.6);
+  margin-bottom: 2px;
+}
+
+.updateText {
+  font-size: 14px;
+  color: rgba(20, 20, 20, 0.75);
+  line-height: 1.4;
+}
+
+/* Status pill (lightweight, layout-only) */
+.statusPill {
+  font-weight: 800;
+}
+
+.status-Open {
+  color: #8b2cf5;
+}
+
+.status-InProgress {
+  color: #b65a00;
+}
+
+.status-Resolved {
+  color: #1f7a3a;
+}
+
+/* Empty state */
+.ticketEmptyTitle {
+  margin: 0 0 6px 0;
+  font-size: 16px;
+  font-weight: 900;
+  color: rgba(20, 20, 20, 0.9);
+}
+
+.ticketEmptySub {
+  margin: 0 0 14px 0;
+  font-size: 13px;
+  color: rgba(20, 20, 20, 0.65);
+  line-height: 1.4;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .ticketTop {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

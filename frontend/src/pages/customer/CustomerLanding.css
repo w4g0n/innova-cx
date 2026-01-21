@@ -1,0 +1,277 @@
+.custLanding {
+  width: 100%;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* HERO */
+.custHero {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.custHero__left {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 18px 18px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.custHero__headline {
+  font-size: 22px;
+  font-weight: 750;
+  color: #111827;
+  margin: 0 0 8px;
+}
+
+.custHero__text {
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(17, 17, 17, 0.7);
+  margin: 0 0 14px;
+}
+
+.custHero__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+/* Primary button (matches FilterPillButton color system) */
+.primaryPillBtn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: var(--btn-primary);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(89, 36, 180, 0.22);
+  transition: filter 0.15s ease, transform 0.12s ease;
+}
+
+.primaryPillBtn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.primaryPillBtn:active {
+  transform: translateY(0);
+}
+
+/* Secondary */
+.custSecondaryBtn {
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: #ffffff;
+  color: var(--btn-primary);
+  border: 1px solid rgba(89, 36, 180, 0.35);
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.custSecondaryBtn:hover {
+  background: rgba(89, 36, 180, 0.06);
+}
+
+.custMetaRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.custMeta {
+  background: rgba(64, 28, 81, 0.04);
+  border: 1px solid rgba(64, 28, 81, 0.08);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.custMeta__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(17, 17, 17, 0.55);
+  font-weight: 750;
+}
+
+.custMeta__value {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 750;
+  color: #111827;
+}
+
+/* RIGHT SIDE PROMO */
+.custHero__right {
+  display: flex;
+}
+
+.custPromoCard {
+  width: 100%;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.custPromoCard__top {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.custBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 750;
+  background: rgba(89, 36, 180, 0.12);
+  color: var(--btn-primary);
+  border: 1px solid rgba(89, 36, 180, 0.18);
+}
+
+.custChatMock {
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(229, 230, 237, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custBubble {
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.custBubble--bot {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  color: rgba(17, 17, 17, 0.85);
+  align-self: flex-start;
+}
+
+.custBubble--user {
+  background: rgba(89, 36, 180, 0.12);
+  border: 1px solid rgba(89, 36, 180, 0.16);
+  color: #2b1247;
+  align-self: flex-end;
+}
+
+.custOptionRow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.custOption {
+  width: 100%;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 750;
+  color: #111827;
+  text-align: left;
+}
+
+.custOption:hover {
+  background: rgba(89, 36, 180, 0.06);
+  border-color: rgba(89, 36, 180, 0.18);
+}
+
+/* INFO GRID */
+.custGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.custInfoCard {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.custInfoTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 6px;
+}
+
+.custInfoText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(17, 17, 17, 0.7);
+}
+
+/* HELP BAR */
+.custHelpBar {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 14px 16px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.custHelpTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.custHelpText {
+  font-size: 13px;
+  color: rgba(17, 17, 17, 0.7);
+  margin-top: 2px;
+}
+
+.custHelpBar__right {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* RESPONSIVE */
+@media (max-width: 1100px) {
+  .custHero {
+    grid-template-columns: 1fr;
+  }
+  .custGrid {
+    grid-template-columns: 1fr;
+  }
+  .custMetaRow {
+    grid-template-columns: 1fr;
+  }
+}

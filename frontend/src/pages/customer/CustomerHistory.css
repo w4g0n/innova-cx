@@ -1,0 +1,195 @@
+.custHistory {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* KPI row */
+.historyKpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+/* Filters row (layout-only wrappers) */
+.historyFilters {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.historySearch {
+  flex: 1;
+  min-width: 260px;
+}
+
+/* List */
+.historyList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.historyCard {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(20, 20, 20, 0.06);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.06);
+}
+
+/* Clickable behavior */
+.historyCard--click {
+  cursor: pointer;
+}
+
+.historyCard--click:focus {
+  outline: 3px solid rgba(108, 33, 217, 0.18);
+  outline-offset: 2px;
+}
+
+.historyCardLeft {
+  min-width: 0;
+  flex: 1;
+}
+
+.historyMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(20, 20, 20, 0.65);
+  margin-bottom: 8px;
+}
+
+.historyId {
+  font-weight: 800;
+  color: rgba(20, 20, 20, 0.85);
+}
+
+.historyDot {
+  opacity: 0.7;
+}
+
+.historyType {
+  font-weight: 600;
+}
+
+.historyStatus {
+  font-weight: 700;
+}
+
+/* Simple status accents (no heavy overrides) */
+.status-Open {
+  color: #8b2cf5;
+}
+.status-InProgress {
+  color: #b65a00;
+}
+.status-Resolved {
+  color: #1f7a3a;
+}
+
+.historyTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: rgba(20, 20, 20, 0.9);
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.historyFooter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: rgba(20, 20, 20, 0.65);
+}
+
+.historyDate {
+  font-weight: 600;
+}
+
+.historyPriorityWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.historyPriorityLabel {
+  font-weight: 700;
+}
+
+.historyCardRight {
+  display: flex;
+  align-items: center;
+}
+
+/* Buttons must match FilterPillButton color */
+.primaryPillBtn {
+  border: none;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 750;
+  cursor: pointer;
+  background: var(--btn-primary);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter 0.15s ease, transform 0.12s ease;
+  white-space: nowrap;
+}
+
+.primaryPillBtn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.primaryPillBtn:active {
+  transform: translateY(0);
+}
+
+.historyEmpty {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 18px;
+  border: 1px solid rgba(20, 20, 20, 0.06);
+}
+
+.historyEmptyTitle {
+  margin: 0 0 6px 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: rgba(20, 20, 20, 0.9);
+}
+
+.historyEmptySub {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(20, 20, 20, 0.65);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .historyKpis {
+    grid-template-columns: 1fr;
+  }
+
+  .historyCard {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .historyCardRight {
+    justify-content: flex-end;
+  }
+}
