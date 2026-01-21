@@ -3,10 +3,6 @@ import { useNavigate } from "react-router-dom";
 import logo from "../assets/nova-logo.png";
 import "./login.css";
 
-/**
- * Temporary role resolver for demo purposes.
- * Replace later with real backend authentication.
- */
 function resolveRoleFromEmail(email) {
   const e = (email || "").toLowerCase().trim();
 
@@ -47,27 +43,19 @@ export default function Login() {
   return (
     <div className="loginBg">
       <div className="loginWrapper">
-        {/* LEFT PANEL */}
         <section className="loginLeft">
           <div className="loginOverlay" />
 
           <div className="loginLeftContent">
             <h1 className="welcomeTitle">Welcome back!</h1>
-            <p className="welcomeSub">
-              Sign-in using your given credentials.
-            </p>
+            <p className="welcomeSub">Sign-in using your given credentials.</p>
 
             <div className="markWrap">
-              <img
-                src={logo}
-                alt="InnovaCX logo"
-                className="novaLogo"
-              />
+              <img src={logo} alt="InnovaCX logo" className="novaLogo" />
             </div>
           </div>
         </section>
 
-        {/* RIGHT PANEL */}
         <section className="loginRight">
           <div className="loginHeader">
             <h2 className="loginTitle">Log In To InnovaCX</h2>
@@ -101,7 +89,7 @@ export default function Login() {
             <button
               type="button"
               className="forgotLink"
-              onClick={() => alert("Forgot password flow goes here")}
+              onClick={() => navigate("/forgot-password")}
             >
               Forgot password?
             </button>
@@ -109,8 +97,6 @@ export default function Login() {
             <button type="submit" className="loginBtn">
               Log In
             </button>
-
-            
           </form>
         </section>
       </div>
