@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/nova-logo.png";
-import "./login.css";
+import "./Login.css";
 
 function resolveRoleFromEmail(email) {
   const e = (email || "").toLowerCase().trim();
@@ -33,7 +33,7 @@ export default function Login() {
     );
 
     if (role === "customer") {
-      navigate("/customer");
+      navigate("/customer/dashboard");
       return;
     }
 

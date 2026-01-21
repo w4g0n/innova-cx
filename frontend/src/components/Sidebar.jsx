@@ -8,8 +8,10 @@ export default function Sidebar({ role }) {
   const menus = {
     customer: [
       { label: "Notifications", to: "/customer/notifications", icon: "bell" },
-      { label: "Dashboard", to: "/customer", end: true },
+      { label: "Home", to: "/customer/dashboard", end: true },
       { label: "Chatbot", to: "/customer/chatbot" },
+      { label: "History", to: "/customer/history" },
+      { label: "Fill a Form", to: "/customer/fill-form" },
     ],
     employee: [
       { label: "Notifications", to: "/employee/notifications", icon: "bell" },
@@ -116,16 +118,8 @@ export default function Sidebar({ role }) {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              <path
-                d="M15 12H3"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              />
-              <path
-                d="M21 4v16"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              />
+              <path d="M15 12H3" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M21 4v16" stroke="currentColor" strokeWidth="1.8" />
             </svg>
           </span>
           <span>Logout</span>
