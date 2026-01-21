@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
 import ProtectedRoute from "./auth/ProtectedRoute";
 
 // Customer
@@ -36,6 +37,7 @@ export default function App() {
       <Routes>
         {/* Public */}
         <Route path="/" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/customer" element={<CustomerLanding />} />
 
         {/* Customer (protected) */}
