@@ -1,14 +1,54 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./TicketDetails.css";
 
 export default function ComplaintDetails() {
+  const { id } = useParams(); // Get ticket ID from URL
+  const [ticket, setTicket] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [modalType, setModalType] = useState(null); // "reroute", "rescore", "escalate", "resolve"
 
   const closeModal = () => setModalType(null);
 
+  // Fetch all tickets and filter by ID
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+
+    const fetchTickets = async () => {
+      try {
+        const res = await fetch(
+          `https://7634c816-eb5c-4638-b90c-dc17b4c1eee7.mock.pstmn.io/api/employee/tickets/api/employee/tickets`
+        );
+        if (!res.ok) throw new Error("Failed to fetch tickets data");
+        const data = await res.json();
+
+        // Assume your API returns { tickets: [...] }
+        const allTickets = data.tickets || data;
+
+        // Find ticket by ID from URL
+        const foundTicket = allTickets.find((t) => t.ticketId === id);
+
+        if (!foundTicket) throw new Error("Ticket not found");
+
+        setTicket(foundTicket);
+      } catch (err) {
+        console.error(err);
+        setError(err.message || "Could not load ticket details.");
+        setTicket(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTickets();
+  }, [id]);
+
+  // Modal component
   const Modal = ({ type }) => {
-    if (!type) return null;
+    if (!type || !ticket) return null;
 
     const titles = {
       reroute: "Reroute Ticket",
@@ -17,7 +57,12 @@ export default function ComplaintDetails() {
       resolve: "Resolve Ticket",
     };
 
-    const submitText = type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
+    const submitText =
+      type === "resolve"
+        ? "Resolve"
+        : type === "escalate"
+        ? "Escalate"
+        : "Submit";
 
     const renderBody = () => {
       switch (type) {
@@ -26,13 +71,13 @@ export default function ComplaintDetails() {
             <>
               <label>New Department</label>
               <div className="select-wrapper modal-dropdown">
-              <select>
-                <option>Select Department</option>
-                <option>Maintenance</option>
-                <option>IT Support</option>
-                <option>Cleaning</option>
-                <option>Security</option>
-              </select>
+                <select>
+                  <option>Select Department</option>
+                  <option>Maintenance</option>
+                  <option>IT Support</option>
+                  <option>Cleaning</option>
+                  <option>Security</option>
+                </select>
               </div>
               <label>Reason for rerouting</label>
               <textarea className="modal-textarea" placeholder="Explain why this ticket should be rerouted..." />
@@ -43,15 +88,15 @@ export default function ComplaintDetails() {
             <>
               <label>New Priority</label>
               <div className="select-wrapper modal-dropdown">
-              <select>
-                <option>Low</option>
-                <option>Medium</option>
-                <option>High</option>
-                <option>Critical</option>
-              </select>
+                <select>
+                  <option>Low</option>
+                  <option>Medium</option>
+                  <option>High</option>
+                  <option>Critical</option>
+                </select>
               </div>
               <label>Reason for rescoring</label>
-              <textarea class="modal-textarea" placeholder="Explain why the model’s score should be adjusted..." />
+              <textarea className="modal-textarea" placeholder="Explain why the model’s score should be adjusted..." />
             </>
           );
         case "escalate":
@@ -59,15 +104,15 @@ export default function ComplaintDetails() {
             <>
               <label>Escalation Level</label>
               <div className="select-wrapper modal-dropdown">
-              <select>
-                <option>Select Level</option>
-                <option>Supervisor</option>
-                <option>Department Head</option>
-                <option>Management</option>
-              </select>
+                <select>
+                  <option>Select Level</option>
+                  <option>Supervisor</option>
+                  <option>Department Head</option>
+                  <option>Management</option>
+                </select>
               </div>
               <label>Reason for Escalation</label>
-              <textarea placeholder="Explain why this ticket must be escalated..." />
+              <textarea className="modal-textarea" placeholder="Explain why this ticket must be escalated..." />
               <label>Additional Notes (optional)</label>
               <textarea className="modal-textarea" placeholder="Any extra context..." />
             </>
@@ -76,17 +121,14 @@ export default function ComplaintDetails() {
           return (
             <>
               <label>Model’s Suggested Resolution</label>
-              <div className="model-suggestion">
-                Send a technician to reset the AC unit, clean or replace filters, inspect the compressor for overheating,
-                and schedule a follow-up check within 24 hours to confirm stable cooling.
-              </div>
+              <div className="model-suggestion">{ticket.modelSuggestion}</div>
               <label>Suggested Resolution</label>
               <textarea className="modal-textarea" placeholder="Describe the final resolution provided..." />
               <label>Steps Taken to Resolve</label>
               <textarea className="modal-textarea" placeholder="List the steps taken to resolve this issue..." />
               <label>Attachments (optional)</label>
-              <div class="modal-upload-box">
-              <input type="file" multiple />
+              <div className="modal-upload-box">
+                <input type="file" multiple />
               </div>
             </>
           );
@@ -97,7 +139,7 @@ export default function ComplaintDetails() {
 
     return (
       <div className="modal-overlay" onClick={closeModal}>
-        <div className={`modal-card ${type === "escalate" ? "modal-red" : ""}`} onClick={e => e.stopPropagation()}>
+        <div className={`modal-card ${type === "escalate" ? "modal-red" : ""}`} onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
             <h2>{titles[type]}</h2>
             <span className="modal-close" onClick={closeModal}>✕</span>
@@ -112,19 +154,22 @@ export default function ComplaintDetails() {
     );
   };
 
+  // Loading or error states
+  if (loading) return <Layout role="employee"><main className="main">Loading ticket details...</main></Layout>;
+  if (error) return <Layout role="employee"><main className="main">{error}</main></Layout>;
+  if (!ticket) return null;
+
   return (
     <Layout role="employee">
-      {/* MAIN CONTENT */}
       <main className="main">
-
         {/* HEADER */}
         <div className="details-header">
           <div className="header-left">
             <button className="back-btn" onClick={() => window.history.back()}>← Back</button>
-            <h1 className="ticket-title">Ticket ID: CX-1122</h1>
+            <h1 className="ticket-title">Ticket ID: {ticket.ticketId}</h1>
             <div className="status-row">
-              <span className="header-pill critical-pill">Critical</span>
-              <span className="header-pill status-pill">Submitted</span>
+              <span className={`header-pill ${ticket.priority.toLowerCase()}-pill`}>{ticket.priority}</span>
+              <span className="header-pill status-pill">{ticket.status}</span>
             </div>
           </div>
           <div className="header-actions">
@@ -138,57 +183,46 @@ export default function ComplaintDetails() {
         <section className="card-section">
           <h2 className="section-title">Summary</h2>
           <div className="summary-grid">
-            <div><span className="label">Issue Date:</span> 18/11/2025</div>
-            <div><span className="label">Mean Time To Respond:</span> 6 Hours</div>
-            <div><span className="label">Mean Time To Resolve:</span> 30 Minutes</div>
-            <div><span className="label">Submitted By:</span> John Smith</div>
-            <div><span className="label">Contact:</span> +971 50 123 4567</div>
-            <div><span className="label">Location:</span> Building A, Floor 3</div>
+            <div><span className="label">Issue Date:</span> {ticket.issueDate}</div>
+            <div><span className="label">Mean Time To Respond:</span> {ticket.metrics.meanTimeToRespond}</div>
+            <div><span className="label">Mean Time To Resolve:</span> {ticket.metrics.meanTimeToResolve}</div>
+            <div><span className="label">Submitted By:</span> {ticket.submittedBy.name}</div>
+            <div><span className="label">Contact:</span> {ticket.submittedBy.contact}</div>
+            <div><span className="label">Location:</span> {ticket.submittedBy.location}</div>
           </div>
         </section>
 
         {/* DETAILS */}
         <section className="details-grid">
-
           <div className="card-section">
             <h2 className="section-title">Complaint Details</h2>
-            <div className="subject">Air conditioning not working</div>
-            <p className="description">
-              The AC unit in the main office stopped cooling around 11 AM. Room temperature rose significantly, affecting employees. Issue may be related to compressor or electrical supply.
-            </p>
+            <div className="subject">{ticket.description.subject}</div>
+            <p className="description">{ticket.description.details}</p>
             <div className="attachments">
-              <div className="attachment-thumb">IMG 1</div>
-              <div className="attachment-thumb">IMG 2</div>
+              {ticket.attachments.map((att, i) => (
+                <div key={i} className="attachment-thumb">{att}</div>
+              ))}
             </div>
           </div>
 
           <div className="card-section">
             <h2 className="section-title">Steps Taken</h2>
-            <div className="step">
-              <div className="step-title">Step 1</div>
-              <div className="step-text">
-                Technician assigned: Ahmed Khan<br />
-                Time: 18/11/2025 – 10:15 AM<br />
-                Notes: Technician informed and en route.
+            {ticket.stepsTaken.map((step) => (
+              <div key={step.step} className="step">
+                <div className="step-title">Step {step.step}</div>
+                <div className="step-text">
+                  Technician assigned: {step.technician}<br />
+                  Time: {step.time}<br />
+                  Notes: {step.notes}
+                </div>
               </div>
-            </div>
-            <div className="step">
-              <div className="step-title">Step 2</div>
-              <div className="step-text">
-                Technician arrived on-site<br />
-                Time: 18/11/2025 – 10:45 AM<br />
-                Notes: Compressor overheating.
-              </div>
-            </div>
+            ))}
           </div>
-
         </section>
-
       </main>
 
       {/* MODAL */}
       <Modal type={modalType} />
-
     </Layout>
   );
 }

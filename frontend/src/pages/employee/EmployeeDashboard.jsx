@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -6,21 +7,64 @@ import PriorityPill from "../../components/common/PriorityPill";
 import "./EmployeeDashboard.css";
 
 export default function EmployeeDashboard() {
+  const [employee, setEmployee] = useState(null);
+  const [kpis, setKpis] = useState({});
+  const [tickets, setTickets] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const baseUrl = "https://7634c816-eb5c-4638-b90c-dc17b4c1eee7.mock.pstmn.io";
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch Dashboard
+        const dashRes = await fetch(`${baseUrl}/api/employee/dashboard`, {
+          headers: { Authorization: "Bearer employee-demo-token" },
+        });
+        const dashData = await dashRes.json();
+        setEmployee(dashData.employee);
+        setKpis(dashData.kpis);
+
+        // Fetch Open Tickets
+        const ticketRes = await fetch(`${baseUrl}/api/employee/tickets/open`, {
+          headers: { Authorization: "Bearer employee-demo-token" },
+        });
+        const ticketData = await ticketRes.json();
+        setTickets(ticketData.tickets);
+
+        // Fetch Reports
+        const reportRes = await fetch(`${baseUrl}/api/employee/reports`, {
+          headers: { Authorization: "Bearer employee-demo-token" },
+        });
+        const reportData = await reportRes.json();
+        setReports(reportData.reports);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (loading) return <Layout role="employee"><main>Loading...</main></Layout>;
+
   return (
     <Layout role="employee">
       <div className="empDash">
         <PageHeader
-          title="Good Morning, Mayed Sharaf"
+          title={`Good Morning, ${employee.full_name}`}
           subtitle="Here’s your activity and assigned workload."
         />
 
         <section className="empDash__kpis">
-          <KpiCard label="Tickets Assigned" value="7" />
-          <KpiCard label="In Progress" value="2" />
-          <KpiCard label="Resolved This Month" value="48" />
-          <KpiCard label="Critical" value="2" />
-          <KpiCard label="Overdue" value="2" />
-          <KpiCard label="New Today" value="1" />
+          <KpiCard label="Tickets Assigned" value={kpis.ticketsAssigned} />
+          <KpiCard label="In Progress" value={kpis.inProgress} />
+          <KpiCard label="Resolved This Month" value={kpis.resolvedThisMonth} />
+          <KpiCard label="Critical" value={kpis.critical} />
+          <KpiCard label="Overdue" value={kpis.overdue} />
+          <KpiCard label="New Today" value={kpis.newToday} />
         </section>
 
         <section className="empDash__grid">
@@ -42,41 +86,14 @@ export default function EmployeeDashboard() {
                 </thead>
 
                 <tbody>
-                  <tr>
-                    <td>CX-3201</td>
-                    <td>AC not cooling – Office 302</td>
-                    <td>
-                      <PriorityPill priority="Critical" />
-                    </td>
-                    <td>In Progress</td>
-                  </tr>
-
-                  <tr>
-                    <td>CX-3210</td>
-                    <td>Water leak near lobby</td>
-                    <td>
-                      <PriorityPill priority="High" />
-                    </td>
-                    <td>In Progress</td>
-                  </tr>
-
-                  <tr>
-                    <td>CX-3244</td>
-                    <td>Light flickering in corridor</td>
-                    <td>
-                      <PriorityPill priority="Medium" />
-                    </td>
-                    <td>Assigned</td>
-                  </tr>
-
-                  <tr>
-                    <td>CX-3302</td>
-                    <td>Cleaning missed in meeting room</td>
-                    <td>
-                      <PriorityPill priority="Low" />
-                    </td>
-                    <td>Assigned</td>
-                  </tr>
+                  {tickets.map((t) => (
+                    <tr key={t.ticketId}>
+                      <td>{t.ticketId}</td>
+                      <td>{t.subject}</td>
+                      <td><PriorityPill priority={t.priority} /></td>
+                      <td>{t.status}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -94,10 +111,9 @@ export default function EmployeeDashboard() {
               Monthly summaries auto-generated for you.
             </p>
 
-            <ReportItem month="October 2025" />
-            <ReportItem month="September 2025" />
-            <ReportItem month="August 2025" />
-            <ReportItem month="July 2025" />
+            {reports.map((r) => (
+              <ReportItem key={r.month} month={r.label} />
+            ))}
           </aside>
         </section>
       </div>
