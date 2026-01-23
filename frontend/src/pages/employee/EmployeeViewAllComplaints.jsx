@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
@@ -24,7 +25,23 @@ const initialTickets = [
   { id: "CX-4878", subject: "Lighting issue in parking lot", priority: "Low", status: "Unassigned", issueDate: "10/11/2025", responseTime: "6 Hours", resolutionTime: "2 Days" }
 ];
 
+// SORT HELPERS
+const priorityOrder = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+const statusOrder = { Unassigned: 1, Assigned: 2, Escalated: 3, Overdue: 4, Resolved: 5 };
+
+const timeToMinutes = (value) => {
+  if (!value) return 0;
+  const [num, unit] = value.split(" ");
+  const n = Number(num);
+  if (unit.startsWith("Minute")) return n;
+  if (unit.startsWith("Hour")) return n * 60;
+  if (unit.startsWith("Day")) return n * 1440;
+  return 0;
+};
+
 export default function EmployeeViewAllComplaints() {
+  const navigate = useNavigate();
+
   const [tickets] = useState(initialTickets);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
@@ -55,15 +72,11 @@ export default function EmployeeViewAllComplaints() {
       let matchesDate = true;
       if (dateRange.from) {
         const [d, m, y] = t.issueDate.split("/").map(Number);
-        const issue = new Date(y, m - 1, d);
-        const from = new Date(dateRange.from);
-        if (issue < from) matchesDate = false;
+        if (new Date(y, m - 1, d) < new Date(dateRange.from)) matchesDate = false;
       }
       if (dateRange.to && matchesDate) {
         const [d, m, y] = t.issueDate.split("/").map(Number);
-        const issue = new Date(y, m - 1, d);
-        const to = new Date(dateRange.to);
-        if (issue > to) matchesDate = false;
+        if (new Date(y, m - 1, d) > new Date(dateRange.to)) matchesDate = false;
       }
 
       return matchesSearch && matchesStatus && matchesPriority && matchesDate;
@@ -71,14 +84,31 @@ export default function EmployeeViewAllComplaints() {
 
     if (sortConfig.key) {
       filtered.sort((a, b) => {
-        let aVal = a[sortConfig.key];
-        let bVal = b[sortConfig.key];
+        let aVal, bVal;
 
-        if (sortConfig.key === "issueDate") {
-          const [dA, mA, yA] = aVal.split("/").map(Number);
-          const [dB, mB, yB] = bVal.split("/").map(Number);
-          aVal = new Date(yA, mA - 1, dA);
-          bVal = new Date(yB, mB - 1, dB);
+        switch (sortConfig.key) {
+          case "priority":
+            aVal = priorityOrder[a.priority];
+            bVal = priorityOrder[b.priority];
+            break;
+          case "status":
+            aVal = statusOrder[a.status];
+            bVal = statusOrder[b.status];
+            break;
+          case "issueDate":
+            const [dA, mA, yA] = a.issueDate.split("/").map(Number);
+            const [dB, mB, yB] = b.issueDate.split("/").map(Number);
+            aVal = new Date(yA, mA - 1, dA);
+            bVal = new Date(yB, mB - 1, dB);
+            break;
+          case "responseTime":
+          case "resolutionTime":
+            aVal = timeToMinutes(a[sortConfig.key]);
+            bVal = timeToMinutes(b[sortConfig.key]);
+            break;
+          default:
+            aVal = a[sortConfig.key];
+            bVal = b[sortConfig.key];
         }
 
         if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
@@ -90,23 +120,18 @@ export default function EmployeeViewAllComplaints() {
     return filtered;
   }, [tickets, searchTerm, statusFilter, priorityFilter, dateRange, sortConfig]);
 
-  const kpiCounts = useMemo(
-    () => ({
-      openTickets: filteredTickets.length,
-      assignedToMe: filteredTickets.filter((t) => t.status === "Assigned").length,
-      inProgress: filteredTickets.filter((t) => t.status === "Escalated").length,
-      newTickets: filteredTickets.filter((t) => t.status === "Unassigned").length,
-      highPriority: filteredTickets.filter(
-        (t) => t.priority === "High" || t.priority === "Critical"
-      ).length,
-      overdueTickets: filteredTickets.filter((t) => t.status === "Overdue").length,
-    }),
-    [filteredTickets]
-  );
+  const kpiCounts = useMemo(() => ({
+    openTickets: filteredTickets.length,
+    assignedToMe: filteredTickets.filter((t) => t.status === "Assigned").length,
+    inProgress: filteredTickets.filter((t) => t.status === "Escalated").length,
+    newTickets: filteredTickets.filter((t) => t.status === "Unassigned").length,
+    highPriority: filteredTickets.filter((t) => t.priority === "High" || t.priority === "Critical").length,
+    overdueTickets: filteredTickets.filter((t) => t.status === "Overdue").length,
+  }), [filteredTickets]);
 
   const getSortArrow = (key) => {
     if (sortConfig.key !== key) return "   ↑↓";
-    return sortConfig.direction === "asc" ? "   ↑" : sortConfig.direction === "desc" ? "   ↓" : "";
+    return sortConfig.direction === "asc" ? "   ↑" : "   ↓";
   };
 
   return (
@@ -117,92 +142,59 @@ export default function EmployeeViewAllComplaints() {
           subtitle="View, search, sort, and manage all complaints and requests assigned to you."
         />
 
-        {/* SEARCH (now same min-width as PillSelect) */}
+        {/* SEARCH */}
         <section className="search-section-EV-VAC">
           <PillSearch
             value={searchTerm}
             onChange={setSearchTerm}
             placeholder="Search tickets by ID or summary..."
-            ariaLabel="Search tickets"
-            minWidth={200}
           />
         </section>
 
         {/* FILTERS */}
         <section className="filters-row-EV-VAC">
           <div className="filter-group-EV-VAC">
-            <div className="select-wrapper-EV-VAC">
-              <PillSelect
-                value={statusFilter}
-                onChange={setStatusFilter}
-                ariaLabel="Filter by status"
-                options={[
-                  { value: "All Status", label: "All Status" },
-                  { value: "Submitted", label: "Submitted" },
-                  { value: "Assigned", label: "Assigned" },
-                  { value: "Escalated", label: "Escalated" },
-                  { value: "Resolved", label: "Resolved" },
-                ]}
-                minWidth={200}
-              />
-            </div>
-
-            <div className="select-wrapper-EV-VAC">
-              <PillSelect
-                value={priorityFilter}
-                onChange={setPriorityFilter}
-                ariaLabel="Filter by priority"
-                options={[
-                  { value: "All Priorities", label: "All Priorities" },
-                  { value: "Low", label: "Low" },
-                  { value: "Medium", label: "Medium" },
-                  { value: "High", label: "High" },
-                  { value: "Critical", label: "Critical" },
-                ]}
-                minWidth={200}
-              />
-            </div>
+            <PillSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: "All Status", label: "All Status" },
+                { value: "Unassigned", label: "Unassigned" },
+                { value: "Assigned", label: "Assigned" },
+                { value: "Escalated", label: "Escalated" },
+                { value: "Resolved", label: "Resolved" },
+                { value: "Overdue", label: "Overdue" },
+              ]}
+            />
+            <PillSelect
+              value={priorityFilter}
+              onChange={setPriorityFilter}
+              options={[
+                { value: "All Priorities", label: "All Priorities" },
+                { value: "Low", label: "Low" },
+                { value: "Medium", label: "Medium" },
+                { value: "High", label: "High" },
+                { value: "Critical", label: "Critical" },
+              ]}
+            />
           </div>
 
-          <button
-            className="filter-btn-EV-VAC"
-            onClick={() => setShowDateFilter(!showDateFilter)}
-          >
+          <button className="filter-btn-EV-VAC" onClick={() => setShowDateFilter(!showDateFilter)}>
             Filters
           </button>
         </section>
 
-        {/* Date Range Picker */}
+        {/* DATE FILTER */}
         {showDateFilter && (
           <section className="filters-row-EV-VAC">
             <div className="filter-group-EV-VAC">
-              <label>
-                From:{" "}
-                <input
-                  type="date"
-                  value={dateRange.from}
-                  onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
-                />
-              </label>
-              <label>
-                To:{" "}
-                <input
-                  type="date"
-                  value={dateRange.to}
-                  onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
-                />
-              </label>
-              <button
-                className="filter-btn-EV-VAC"
-                onClick={() => setDateRange({ from: "", to: "" })}
-              >
-                Reset Dates
-              </button>
+              <input type="date" value={dateRange.from} onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })} />
+              <input type="date" value={dateRange.to} onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })} />
             </div>
           </section>
         )}
 
-        {/* KPI ROW (now uses reusable KpiCard) */}
+        {/* KPI */}
         <section className="kpi-row-EV-VAC">
           <KpiCard label="Open Tickets" value={kpiCounts.openTickets} />
           <KpiCard label="Assigned to Me" value={kpiCounts.assignedToMe} />
@@ -227,7 +219,7 @@ export default function EmployeeViewAllComplaints() {
                   { key: "resolutionTime", label: "Resolution Time" },
                   { key: null, label: "" },
                 ].map((col) => (
-                  <th key={col.key || col.label} onClick={() => col.key && handleSort(col.key)}>
+                  <th key={col.label} onClick={() => col.key && handleSort(col.key)}>
                     {col.label}
                     {col.key && getSortArrow(col.key)}
                   </th>
@@ -238,25 +230,19 @@ export default function EmployeeViewAllComplaints() {
             <tbody>
               {filteredTickets.map((t) => (
                 <tr key={t.id}>
-                  <td className="complaint-link-EV-VAC">{t.id}</td>
+                  <td className="complaint-link-EV-VAC clickable" onClick={() => navigate(`/employee/details/${t.id}`)}>{t.id}</td>
                   <td>{t.subject}</td>
-                  <td>
-                    <span className={`pill-EV-VAC ${t.priority.toLowerCase()}`}>{t.priority}</span>
-                  </td>
+                  <td><span className={`pill-EV-VAC ${t.priority.toLowerCase()}`}>{t.priority}</span></td>
                   <td>{t.status}</td>
                   <td>{t.issueDate}</td>
                   <td>{t.responseTime}</td>
                   <td>{t.resolutionTime}</td>
-                  <td className="arrow-cell-EV-VAC">➜</td>
+                  <td className="arrow-cell-EV-VAC clickable" onClick={() => navigate(`/employee/details/${t.id}`)}>➜</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </section>
-
-        <div className="footer-timestamp-EV-VAC">
-          <span id="timestamp">20/11/2025 – 14:32</span>
-        </div>
       </main>
     </Layout>
   );
