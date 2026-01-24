@@ -43,7 +43,6 @@ export default function EmployeeViewAllComplaints() {
     })
       .then((res) => res.json())
       .then((data) => {
-        // Some mock responses have tickets nested, handle that
         setTickets(data.tickets || []);
       })
       .catch((err) => console.error("Error loading tickets JSON:", err));

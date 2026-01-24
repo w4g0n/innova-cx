@@ -1,0 +1,80 @@
+{
+  "filters": {
+    "range": "last_30_days",
+    "department": "all"
+  },
+  "kpis": {
+    "routingAccuracyPct": 93,
+    "routingAccuracyChangePct": 3,
+    "rerouteRatePct": 7,
+    "rerouteRateChangePct": -2,
+    "priorityAccuracyPct": 88,
+    "priorityAccuracyChangePct": 1,
+    "rescoreRatePct": 12,
+    "rescoreRateChangePct": 3
+  },
+  "charts": {
+    "routingAccuracyByDepartment": {
+      "type": "bar",
+      "labels": ["Billing", "Technical Support", "Facilities", "Leasing"],
+      "values": [95, 91, 94, 92]
+    },
+    "reroutedComplaints": {
+      "type": "donut",
+      "segments": [
+        { "label": "Accepted model routing", "value": 73 },
+        { "label": "Rerouted by employee", "value": 7 },
+        { "label": "Pending review", "value": 20 }
+      ]
+    },
+    "priorityAccuracyByScore": {
+      "type": "bar",
+      "labels": ["1", "2", "3", "4", "5"],
+      "values": [90, 87, 86, 89, 88]
+    },
+    "rescoredComplaints": {
+      "type": "stacked",
+      "labels": ["Accepted scores", "Adjusted scores"],
+      "values": [88, 12]
+    },
+    "resolutionSuggestionAdoption": {
+      "type": "bar",
+      "labels": ["Accepted", "Edited", "Not used"],
+      "values": [61, 21, 18]
+    },
+    "resolutionEffectiveness": {
+      "type": "donut",
+      "segments": [
+        { "label": "Resolved on first contact", "value": 67 },
+        { "label": "Follow-up needed", "value": 33 }
+      ]
+    }
+  },
+  "reviewCases": [
+    {
+      "ticketId": "CX-10482",
+      "timestamp": "2025-11-24T10:14:00Z",
+      "customerType": "Tenant",
+      "routing": { "model": "Facilities", "final": "Facilities" },
+      "priority": { "model": 3, "final": 5 },
+      "reason": "Under-scored urgency"
+    },
+    {
+      "ticketId": "CX-10431",
+      "timestamp": "2025-11-24T09:02:00Z",
+      "customerType": "Tenant",
+      "routing": { "model": "Billing", "final": "Leasing" },
+      "priority": { "model": 2, "final": 3 },
+      "reason": "Policy exception"
+    },
+    {
+      "ticketId": "CX-10398",
+      "timestamp": "2025-11-23T16:41:00Z",
+      "customerType": "Vendor",
+      "routing": { "model": "Technical", "final": "Facilities" },
+      "priority": { "model": 4, "final": 4 },
+      "reason": "Wrong department"
+    }
+  ],
+  "lastUpdatedAt": "2026-01-12T17:20:00Z"
+}

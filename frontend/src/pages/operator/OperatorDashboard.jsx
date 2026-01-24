@@ -1,10 +1,52 @@
-import Layout from "../../components/Layout";
-import "./OperatorDashboard.css";
-import PillSelect from "../../components/common/PillSelect";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Layout from "../../components/Layout";
+import PillSelect from "../../components/common/PillSelect";
+import operatorDashboardData from "../../mock-data/operatorDashboard.json"; // <-- local JSON
+import "./OperatorDashboard.css";
+import { PDFDownloadLink } from "@react-pdf/renderer";
+import OperatorDashboardPDF from "./OperatorDashboardPDF.jsx";
+
 
 export default function OperatorDashboard() {
   const navigate = useNavigate();
+  const [range, setRange] = useState("last_1_hour");
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Load local JSON instead of fetching from API
+  useEffect(() => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // For demonstration, we can filter by "range" if your JSON has timestamps
+      // Otherwise, just load all data
+      setData(operatorDashboardData);
+    } catch (err) {
+      setError("Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  }, [range]);
+
+  if (loading) {
+    return (
+      <Layout role="operator">
+        <div className="opDash">Loading system dashboard…</div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout role="operator">
+        <div className="opDash error">⚠️ {error}</div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout role="operator">
@@ -19,313 +61,192 @@ export default function OperatorDashboard() {
           </div>
 
           <div className="top-actions">
-            {/* Time Range Dropdown (UI only) */}
             <div className="opDashSelect">
               <PillSelect
-                value={"Last 1 hour"}
-                onChange={() => {}}
+                value={range}
+                onChange={setRange}
                 ariaLabel="Filter by time range"
                 options={[
-                  { label: "Last 30 minutes", value: "Last 30 minutes" },
-                  { label: "Last 1 hour", value: "Last 1 hour" },
-                  { label: "Today", value: "Today" },
-                  { label: "Last 7 days", value: "Last 7 days" },
+                  { label: "Last 30 minutes", value: "last_30_min" },
+                  { label: "Last 1 hour", value: "last_1_hour" },
+                  { label: "Today", value: "today" },
+                  { label: "Last 7 days", value: "last_7_days" },
                 ]}
               />
             </div>
 
-            {/* Export button (keep icon + text, but pill style) */}
-            <button
-              className="export-pill-btn"
-              onClick={() => alert("Export will be connected later (demo).")}
-              type="button"
+            <PDFDownloadLink
+              document={<OperatorDashboardPDF data={data} range={range} />}
+              fileName={`operator-dashboard-${new Date().toISOString().slice(0,10)}.pdf`}
             >
-              <span className="export-icon" aria-hidden="true">
-                ⭳
-              </span>
-              Export
-            </button>
+              {({ loading }) => (
+                <button className="export-pill-btn" type="button">
+                  {loading ? "Preparing PDF…" : "⭳ Export"}
+                </button>
+              )}
+            </PDFDownloadLink>
           </div>
         </header>
 
-        {/* ROW 1: GLOBAL SYSTEM HEALTH */}
+        {/* CORE SERVICES */}
         <section className="cards-row">
           <article className="card">
             <h2 className="card-title">Core Services Status</h2>
             <p className="card-subtitle">Real-time health of critical components.</p>
 
             <div className="status-grid">
-              <div className="status-item">
-                <div className="status-label">Complaint Ingestion</div>
-                <span className="status-pill status-ok">Healthy</span>
-                <p className="status-note">No backlog detected.</p>
-              </div>
-
-              <div className="status-item">
-                <div className="status-label">Routing Engine (Model)</div>
-                <span className="status-pill status-ok">Running</span>
-                <p className="status-note">Latency within normal range.</p>
-              </div>
-
-              <div className="status-item">
-                <div className="status-label">Chatbot Service</div>
-                <span className="status-pill status-warning">Degraded</span>
-                <p className="status-note">Increased fallback to human agents.</p>
-              </div>
-
-              <div className="status-item">
-                <div className="status-label">Database & Storage</div>
-                <span className="status-pill status-ok">Connected</span>
-                <p className="status-note">Last backup completed at 03:00.</p>
-              </div>
-
-              <div className="status-item">
-                <div className="status-label">Notification Services</div>
-                <span className="status-pill status-ok">Operational</span>
-                <p className="status-note">Email & SMS queues processing normally.</p>
-              </div>
-
-              <div className="status-item">
-                <div className="status-label">User Credentials</div>
-                <span className="status-pill status-ok">Connected</span>
-                <p className="status-note">Connection is stable.</p>
-              </div>
+              {data.coreServices.map((svc) => (
+                <div key={svc.name} className="status-item">
+                  <div className="status-label">{svc.name}</div>
+                  <span className={`status-pill status-${svc.severity}`}>
+                    {svc.status}
+                  </span>
+                  <p className="status-note">{svc.note}</p>
+                </div>
+              ))}
             </div>
           </article>
 
+          {/* ERROR & FALLBACK */}
           <article className="card narrow-card">
             <h2 className="card-title">Error & Fallback Overview</h2>
-            <p className="card-subtitle">Abnormal behaviour in the last hour.</p>
 
             <div className="mini-kpi-column">
-              <div className="mini-kpi">
-                <span className="mini-kpi-label">System errors</span>
-                <span className="mini-kpi-value">3</span>
-                <span className="mini-kpi-trend mini-kpi-normal">
-                  Within normal range
-                </span>
-              </div>
-
-              <div className="mini-kpi">
-                <span className="mini-kpi-label">Chatbot → Human fallbacks</span>
-                <span className="mini-kpi-value">7</span>
-                <span className="mini-kpi-trend mini-kpi-warning">
-                  Slightly elevated
-                </span>
-              </div>
-
-              <div className="mini-kpi">
-                <span className="mini-kpi-label">Routing failures</span>
-                <span className="mini-kpi-value">1</span>
-                <span className="mini-kpi-trend mini-kpi-critical">Needs review</span>
-              </div>
+              <MiniKpi
+                label="System errors"
+                {...data.errorFallbackOverview.systemErrors}
+              />
+              <MiniKpi
+                label="Chatbot → Human fallbacks"
+                {...data.errorFallbackOverview.chatbotToHumanFallbacks}
+              />
+              <MiniKpi
+                label="Routing failures"
+                {...data.errorFallbackOverview.routingFailures}
+                critical
+              />
             </div>
           </article>
         </section>
 
-        {/* ROW 2: INTEGRATIONS & PIPELINE */}
+        {/* INTEGRATIONS */}
         <section className="cards-row">
           <article className="card">
             <h2 className="card-title">Integrations Status</h2>
-            <p className="card-subtitle">Connectivity to external systems.</p>
 
             <ul className="integration-list">
-              <li className="integration-item">
-                <div>
-                  <div className="integration-name">CRM / Ticketing</div>
-                  <div className="integration-note">All events syncing correctly.</div>
-                </div>
-                <span className="status-pill status-ok">Connected</span>
-              </li>
-
-              <li className="integration-item">
-                <div>
-                  <div className="integration-name">Identity / SSO</div>
-                  <div className="integration-note">
-                    No failed logins due to provider issues.
+              {data.integrations.map((i) => (
+                <li key={i.name} className="integration-item">
+                  <div>
+                    <div className="integration-name">{i.name}</div>
+                    <div className="integration-note">{i.note}</div>
                   </div>
-                </div>
-                <span className="status-pill status-ok">OK</span>
-              </li>
-
-              <li className="integration-item">
-                <div>
-                  <div className="integration-name">Audio Transcriber</div>
-                  <div className="integration-note">Fully functional.</div>
-                </div>
-                <span className="status-pill status-ok">OK</span>
-              </li>
+                  <span className={`status-pill status-${i.severity}`}>
+                    {i.status}
+                  </span>
+                </li>
+              ))}
             </ul>
           </article>
 
+          {/* QUEUES */}
           <article className="card">
             <h2 className="card-title">Pipeline & Queue Health</h2>
-            <p className="card-subtitle">Flow of complaints through the system.</p>
 
             <div className="queue-grid">
-              <div className="queue-item">
-                <div className="queue-label">Ingestion queue</div>
-                <div className="queue-value">0</div>
-                <div className="queue-note">No stuck records.</div>
-              </div>
-
-              <div className="queue-item">
-                <div className="queue-label">Model processing queue</div>
-                <div className="queue-value">3</div>
-                <div className="queue-note">Within expected range.</div>
-              </div>
-
-              <div className="queue-item">
-                <div className="queue-label">Notification queue</div>
-                <div className="queue-value">27</div>
-                <div className="queue-note queue-note-warning">
-                  Higher than typical; monitor.
+              {data.queues.map((q) => (
+                <div key={q.name} className="queue-item">
+                  <div className="queue-label">{q.name}</div>
+                  <div className="queue-value">{q.value}</div>
+                  <div
+                    className={`queue-note ${
+                      q.severity === "warning" ? "queue-note-warning" : ""
+                    }`}
+                  >
+                    {q.note}
+                  </div>
                 </div>
-              </div>
-
-              <div className="queue-item">
-                <div className="queue-label">Audit / logging pipeline</div>
-                <div className="queue-value">Healthy</div>
-                <div className="queue-note">All events captured.</div>
-              </div>
+              ))}
             </div>
           </article>
         </section>
 
-        {/* ROW 3: INCIDENT FEED */}
+        {/* EVENTS */}
         <section className="card full-width-card">
           <h2 className="card-title">Incident & Event Feed</h2>
-          <p className="card-subtitle">
-            Recent system-level events for operator awareness.
-          </p>
 
           <ul className="event-feed">
-            <li className="event-item event-critical">
-              <span className="event-dot"></span>
-              <div className="event-content">
-                <div className="event-header">
-                  <span className="event-title">Chatbot service latency spike</span>
-                  <span className="event-time">10:02</span>
+            {data.eventFeed.map((e, idx) => (
+              <li key={idx} className={`event-item event-${e.severity}`}>
+                <span className="event-dot" />
+                <div className="event-content">
+                  <div className="event-header">
+                    <span className="event-title">{e.title}</span>
+                    <span className="event-time">{e.time}</span>
+                  </div>
+                  <p className="event-description">{e.description}</p>
                 </div>
-                <p className="event-description">
-                  Response times exceeded threshold; temporary failover to human
-                  agents activated.
-                </p>
-              </div>
-            </li>
-
-            <li className="event-item event-warning">
-              <span className="event-dot"></span>
-              <div className="event-content">
-                <div className="event-header">
-                  <span className="event-title">Routing error rate above baseline</span>
-                  <span className="event-time">09:47</span>
-                </div>
-                <p className="event-description">
-                  Error rate at 2.5% vs typical 0.5% for the last 15 minutes.
-                </p>
-              </div>
-            </li>
-
-            <li className="event-item event-info">
-              <span className="event-dot"></span>
-              <div className="event-content">
-                <div className="event-header">
-                  <span className="event-title">Routing model v1.3 deployed</span>
-                  <span className="event-time">09:30</span>
-                </div>
-                <p className="event-description">
-                  New version activated for all departments; rollback to v1.2 available.
-                </p>
-              </div>
-            </li>
-
-            <li className="event-item event-info">
-              <span className="event-dot"></span>
-              <div className="event-content">
-                <div className="event-header">
-                  <span className="event-title">Nightly database backup completed</span>
-                  <span className="event-time">03:00</span>
-                </div>
-                <p className="event-description">
-                  Backup finished successfully; restore point created for the last 24
-                  hours.
-                </p>
-              </div>
-            </li>
+              </li>
+            ))}
           </ul>
         </section>
 
-        {/* ROW 4: VERSIONS & SAFETY */}
+        {/* VERSIONS & SAFETY */}
         <section className="cards-row">
           <article className="card">
             <h2 className="card-title">AI & Chatbot Versions</h2>
-            <p className="card-subtitle">What is currently live in production.</p>
 
             <ul className="version-list">
-              <li className="version-item">
-                <div>
-                  <div className="version-name">Routing model</div>
-                  <div className="version-meta">v1.3 · Deployed 24 Nov 2025</div>
-                </div>
-                <button
-                  className="link-btn"
-                  onClick={() => navigate("/operator/model-analysis")}
-                >
-                  View details
-                </button>
-              </li>
-
-              <li className="version-item">
-                <div>
-                  <div className="version-name">Priority scoring model</div>
-                  <div className="version-meta">v2.1 · Deployed 20 Nov 2025</div>
-                </div>
-                <button className="link-btn" onClick={() => alert("Demo only")}>
-                  View details
-                </button>
-              </li>
-
-              <li className="version-item">
-                <div>
-                  <div className="version-name">Chatbot NLU</div>
-                  <div className="version-meta">build 5.4 · Deployed 22 Nov 2025</div>
-                </div>
-                <button className="link-btn" onClick={() => alert("Demo only")}>
-                  View details
-                </button>
-              </li>
+              {data.versions.map((v) => (
+                <li key={v.component} className="version-item">
+                  <div>
+                    <div className="version-name">{v.component}</div>
+                    <div className="version-meta">
+                      {v.version} · Deployed {v.deployedAt}
+                    </div>
+                  </div>
+                  <button
+                    className="link-btn"
+                    onClick={() => navigate("/operator/model-analysis")}
+                  >
+                    View details
+                  </button>
+                </li>
+              ))}
             </ul>
           </article>
 
           <article className="card">
             <h2 className="card-title">Safety & Maintenance</h2>
-            <p className="card-subtitle">Configuration and scheduled jobs.</p>
 
             <ul className="safety-list">
-              <li className="safety-item">
-                <span className="safety-label">PII anonymization</span>
-                <span className="status-pill status-ok">Enabled</span>
-              </li>
-
-              <li className="safety-item">
-                <span className="safety-label">Logging level</span>
-                <span className="config-pill">Standard</span>
-              </li>
-
-              <li className="safety-item">
-                <span className="safety-label">Admin-only changes</span>
-                <span className="status-pill status-ok">Enforced</span>
-              </li>
-
-              <li className="safety-item">
-                <span className="safety-label">Next maintenance window</span>
-                <span className="config-pill">Sunday · 02:00–03:00</span>
-              </li>
+              {Object.entries(data.safetyMaintenance).map(([k, v]) => (
+                <li key={k} className="safety-item">
+                  <span className="safety-label">{k}</span>
+                  <span className="config-pill">{v}</span>
+                </li>
+              ))}
             </ul>
           </article>
         </section>
       </div>
     </Layout>
+  );
+}
+
+// Mini KPI component
+function MiniKpi({ label, count, trendLabel, critical }) {
+  return (
+    <div className="mini-kpi">
+      <span className="mini-kpi-label">{label}</span>
+      <span className="mini-kpi-value">{count}</span>
+      <span
+        className={`mini-kpi-trend ${
+          critical ? "mini-kpi-critical" : "mini-kpi-normal"
+        }`}
+      >
+        {trendLabel}
+      </span>
+    </div>
   );
 }

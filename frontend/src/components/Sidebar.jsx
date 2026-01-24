@@ -44,13 +44,13 @@ export default function Sidebar({ role }) {
 
   return (
     <aside className="sidebar">
+      {/* BRAND BLOCK */}
       <div className="sidebar__brand">
-        <img className="sidebar__logo" src={logo} alt="InnovaCX Logo" />
+        <img src={logo} alt="InnovaCX Logo" className="sidebar__logo" />
         <span className="sidebar__title">InnovaCX</span>
       </div>
 
-      <div className="sidebar__spacer" />
-
+      {/* NAV */}
       <nav className="sidebar__nav">
         {menu.map((item) => (
           <NavLink
@@ -58,43 +58,38 @@ export default function Sidebar({ role }) {
             to={item.to}
             end={item.end}
             className={({ isActive }) =>
-              isActive ? "sidebar__link sidebar__link--active" : "sidebar__link"
+              isActive
+                ? "sidebar__link sidebar__link--active"
+                : "sidebar__link"
             }
           >
-            {({ isActive }) => (
-              <div
-                className={
-                  isActive
-                    ? "sidebar__pill sidebar__pill--active"
-                    : "sidebar__pill"
-                }
-              >
-                {item.icon === "bell" && (
-                  <span className="sidebar__icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <path
-                        d="M12 22a2.5 2.5 0 0 0 2.45-2H9.55A2.5 2.5 0 0 0 12 22ZM19 17H5c1.6-1.2 2-2.6 2-5.2V10a5 5 0 0 1 10 0v1.8c0 2.6.4 4 2 5.2Z"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                )}
-                <span>{item.label}</span>
-              </div>
-            )}
+            <div className="sidebar__pill">
+              {item.icon === "bell" && (
+                <span className="sidebar__icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M12 22a2.5 2.5 0 0 0 2.45-2H9.55A2.5 2.5 0 0 0 12 22ZM19 17H5c1.6-1.2 2-2.6 2-5.2V10a5 5 0 0 1 10 0v1.8c0 2.6.4 4 2 5.2Z"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+              )}
+              <span>{item.label}</span>
+            </div>
           </NavLink>
         ))}
       </nav>
 
+      {/* BOTTOM */}
       <div className="sidebar__bottom">
         <button className="sidebar__bottomBtn" type="button">
           <span className="sidebar__icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path
-                d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
+                d="M12 15.5a3.5 3.5 0 1 0 0-7"
                 stroke="currentColor"
                 strokeWidth="1.8"
               />
