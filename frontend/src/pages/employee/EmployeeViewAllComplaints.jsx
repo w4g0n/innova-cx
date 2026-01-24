@@ -56,7 +56,7 @@ export default function EmployeeViewAllComplaints() {
   const filteredTickets = useMemo(() => {
     let filtered = tickets.filter((t) => {
       const matchesSearch =
-        t.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.ticketId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.subject?.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesStatus = statusFilter === "All Status" || t.status === statusFilter;
@@ -210,7 +210,7 @@ export default function EmployeeViewAllComplaints() {
             <thead>
               <tr>
                 {[
-                  { key: "id", label: "Ticket ID" },
+                  { key: "ticketId", label: "Ticket ID" },
                   { key: "subject", label: "Subject" },
                   { key: "priority", label: "Priority" },
                   { key: "status", label: "Status" },
@@ -227,9 +227,9 @@ export default function EmployeeViewAllComplaints() {
             </thead>
             <tbody>
               {filteredTickets.map((t) => (
-                <tr key={t.id}>
-                  <td className="complaint-link-EV-VAC clickable" onClick={() => navigate(`/employee/details/${t.id}`)}>
-                    {t.id}
+                <tr key={t.ticketId}>
+                  <td className="complaint-link-EV-VAC clickable" onClick={() => navigate(`/employee/details/${t.ticketId}`)}>
+                    {t.ticketId}
                   </td>
                   <td>{t.subject}</td>
                   <td><span className={`pill-EV-VAC ${t.priority?.toLowerCase()}`}>{t.priority}</span></td>
@@ -237,7 +237,7 @@ export default function EmployeeViewAllComplaints() {
                   <td>{t.issue_date}</td>
                   <td>{t.response_time}</td>
                   <td>{t.resolution_time}</td>
-                  <td className="arrow-cell-EV-VAC clickable" onClick={() => navigate(`/employee/details/${t.id}`)}>➜</td>
+                  <td className="arrow-cell-EV-VAC clickable" onClick={() => navigate(`/employee/details/${t.ticketId}`)}>➜</td>
                 </tr>
               ))}
             </tbody>
