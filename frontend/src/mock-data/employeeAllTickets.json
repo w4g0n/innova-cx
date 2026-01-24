@@ -1,0 +1,424 @@
+{
+  "tickets": [
+    {
+      "id": "CX-1101",
+      "subject": "Air conditioning not working",
+      "priority": "Critical",
+      "status": "Submitted",
+      "issue_date": "01/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "John Smith",
+        "location": "Building A, Floor 1",
+        "description": "The AC unit stopped cooling."
+      }
+    },
+    {
+      "id": "CX-1102",
+      "subject": "Printer malfunction",
+      "priority": "High",
+      "status": "In Progress",
+      "issue_date": "02/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Jane Doe",
+        "location": "Building B, Floor 2",
+        "description": "Printer keeps jamming."
+      }
+    },
+    {
+      "id": "CX-1103",
+      "subject": "Light flickering",
+      "priority": "Medium",
+      "status": "Assigned",
+      "issue_date": "03/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Ali Khan",
+        "location": "Building C, Hallway 3",
+        "description": "Corridor light flickers intermittently."
+      }
+    },
+    {
+      "id": "CX-1104",
+      "subject": "Wi-Fi not connecting",
+      "priority": "High",
+      "status": "Overdue",
+      "issue_date": "04/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Sara Lee",
+        "location": "Building D, Floor 4",
+        "description": "Wi-Fi cannot connect on multiple devices."
+      }
+    },
+    {
+      "id": "CX-1105",
+      "subject": "Water leakage",
+      "priority": "Critical",
+      "status": "Escalated",
+      "issue_date": "05/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Tom Brown",
+        "location": "Building A, Basement",
+        "description": "Pipe leak causing water accumulation."
+      }
+    },
+    {
+      "id": "CX-1106",
+      "subject": "Projector not turning on",
+      "priority": "Low",
+      "status": "Resolved",
+      "issue_date": "06/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Emily White",
+        "location": "Conference Room 1",
+        "description": "Projector fails to start."
+      }
+    },
+    {
+      "id": "CX-1107",
+      "subject": "Coffee machine broken",
+      "priority": "Medium",
+      "status": "Assigned",
+      "issue_date": "07/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Mark Green",
+        "location": "Pantry",
+        "description": "Coffee machine does not brew coffee."
+      }
+    },
+    {
+      "id": "CX-1108",
+      "subject": "Door lock issue",
+      "priority": "High",
+      "status": "Submitted",
+      "issue_date": "08/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Nina Patel",
+        "location": "Building C, Room 12",
+        "description": "Door lock is jammed."
+      }
+    },
+    {
+      "id": "CX-1109",
+      "subject": "Smoke detector beeping",
+      "priority": "Medium",
+      "status": "In Progress",
+      "issue_date": "09/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Samir Ali",
+        "location": "Building B, Floor 3",
+        "description": "Smoke detector beeping continuously."
+      }
+    },
+    {
+      "id": "CX-1110",
+      "subject": "Elevator stuck",
+      "priority": "Critical",
+      "status": "Escalated",
+      "issue_date": "10/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Linda Roy",
+        "location": "Building A, Elevator 2",
+        "description": "Elevator stopped between floors."
+      }
+    },
+    {
+      "id": "CX-1111",
+      "subject": "Heating not working",
+      "priority": "High",
+      "status": "Assigned",
+      "issue_date": "11/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "John Smith",
+        "location": "Building D, Floor 1",
+        "description": "Radiators not heating rooms."
+      }
+    },
+    {
+      "id": "CX-1112",
+      "subject": "AC leaking water",
+      "priority": "Critical",
+      "status": "Overdue",
+      "issue_date": "12/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Jane Doe",
+        "location": "Building B, Floor 2",
+        "description": "Water dripping from AC unit."
+      }
+    },
+    {
+      "id": "CX-1113",
+      "subject": "Network slow",
+      "priority": "Medium",
+      "status": "Submitted",
+      "issue_date": "13/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Ali Khan",
+        "location": "Floor 5",
+        "description": "Internet speed is unusually slow."
+      }
+    },
+    {
+      "id": "CX-1114",
+      "subject": "Projector remote missing",
+      "priority": "Low",
+      "status": "Resolved",
+      "issue_date": "14/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Sara Lee",
+        "location": "Conference Room 2",
+        "description": "Projector remote cannot be found."
+      }
+    },
+    {
+      "id": "CX-1115",
+      "subject": "Broken chair",
+      "priority": "Low",
+      "status": "Assigned",
+      "issue_date": "15/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Tom Brown",
+        "location": "Office 101",
+        "description": "Chair base broken."
+      }
+    },
+    {
+      "id": "CX-1116",
+      "subject": "Monitor flickering",
+      "priority": "Medium",
+      "status": "In Progress",
+      "issue_date": "16/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Emily White",
+        "location": "Floor 2, Desk 5",
+        "description": "Monitor screen flickers intermittently."
+      }
+    },
+    {
+      "id": "CX-1117",
+      "subject": "Cafeteria fridge not cooling",
+      "priority": "High",
+      "status": "Submitted",
+      "issue_date": "17/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Mark Green",
+        "location": "Cafeteria",
+        "description": "Fridge temperature too high."
+      }
+    },
+    {
+      "id": "CX-1118",
+      "subject": "Bathroom sink clogged",
+      "priority": "Medium",
+      "status": "Assigned",
+      "issue_date": "18/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Nina Patel",
+        "location": "Floor 3 Bathroom",
+        "description": "Sink water drains slowly."
+      }
+    },
+    {
+      "id": "CX-1119",
+      "subject": "Fire alarm false trigger",
+      "priority": "High",
+      "status": "Escalated",
+      "issue_date": "19/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Samir Ali",
+        "location": "Building C, Floor 1",
+        "description": "Fire alarm triggered accidentally."
+      }
+    },
+    {
+      "id": "CX-1120",
+      "subject": "Broken window",
+      "priority": "Medium",
+      "status": "Resolved",
+      "issue_date": "20/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Linda Roy",
+        "location": "Office 202",
+        "description": "Window pane shattered."
+      }
+    },
+    {
+      "id": "CX-1121",
+      "subject": "Light bulb out",
+      "priority": "Low",
+      "status": "Submitted",
+      "issue_date": "21/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "John Smith",
+        "location": "Hallway 1",
+        "description": "Bulb needs replacement."
+      }
+    },
+    {
+      "id": "CX-1122",
+      "subject": "AC making noise",
+      "priority": "High",
+      "status": "Assigned",
+      "issue_date": "22/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Jane Doe",
+        "location": "Building D, Floor 2",
+        "description": "Loud noise from AC unit."
+      }
+    },
+    {
+      "id": "CX-1123",
+      "subject": "Keyboard not working",
+      "priority": "Medium",
+      "status": "In Progress",
+      "issue_date": "23/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Ali Khan",
+        "location": "Desk 7",
+        "description": "Keyboard keys unresponsive."
+      }
+    },
+    {
+      "id": "CX-1124",
+      "subject": "Door sensor malfunction",
+      "priority": "High",
+      "status": "Escalated",
+      "issue_date": "24/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Sara Lee",
+        "location": "Main Entrance",
+        "description": "Door sensor triggers incorrectly."
+      }
+    },
+    {
+      "id": "CX-1125",
+      "subject": "Elevator alarm",
+      "priority": "Critical",
+      "status": "Overdue",
+      "issue_date": "25/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Tom Brown",
+        "location": "Elevator 1",
+        "description": "Elevator alarm keeps ringing."
+      }
+    },
+    {
+      "id": "CX-1126",
+      "subject": "Broken projector screen",
+      "priority": "Low",
+      "status": "Resolved",
+      "issue_date": "26/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Emily White",
+        "location": "Conference Room 3",
+        "description": "Screen has tears."
+      }
+    },
+    {
+      "id": "CX-1127",
+      "subject": "Parking gate not opening",
+      "priority": "High",
+      "status": "Assigned",
+      "issue_date": "27/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Mark Green",
+        "location": "Main Parking",
+        "description": "Gate motor malfunctioning."
+      }
+    },
+    {
+      "id": "CX-1128",
+      "subject": "Ceiling leak",
+      "priority": "Critical",
+      "status": "Submitted",
+      "issue_date": "28/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Nina Patel",
+        "location": "Building B, Floor 4",
+        "description": "Water dripping from ceiling."
+      }
+    },
+    {
+      "id": "CX-1129",
+      "subject": "Fire extinguisher missing",
+      "priority": "Medium",
+      "status": "In Progress",
+      "issue_date": "29/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Samir Ali",
+        "location": "Floor 1",
+        "description": "Extinguisher not in place."
+      }
+    },
+    {
+      "id": "CX-1130",
+      "subject": "AC filter dirty",
+      "priority": "Low",
+      "status": "Resolved",
+      "issue_date": "30/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Linda Roy",
+        "location": "Building C, Floor 3",
+        "description": "AC filter needs cleaning."
+      }
+    }
+  ]
+}

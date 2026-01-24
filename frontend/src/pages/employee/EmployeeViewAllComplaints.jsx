@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
+import ticketsData from "../../mock-data/employeeAllTickets.json";
 import "./ViewAllComplaint.css";
 
 // SORT ORDER HELPERS
@@ -34,18 +35,13 @@ export default function EmployeeViewAllComplaints() {
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [showDateFilter, setShowDateFilter] = useState(false);
 
-  // FETCH TICKETS FROM POSTMAN MOCK SERVER
+  // Load tickets from local JSON on mount
   useEffect(() => {
-    fetch("https://7634c816-eb5c-4638-b90c-dc17b4c1eee7.mock.pstmn.io/tickets/overview", {
-      headers: {
-        "Authorization": "Bearer employee-demo-token"
-      }
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        setTickets(data.tickets || []);
-      })
-      .catch((err) => console.error("Error loading tickets JSON:", err));
+    try {
+      setTickets(ticketsData.tickets || []);
+    } catch (err) {
+      console.error("Error loading local tickets JSON:", err);
+    }
   }, []);
 
   // SORT HANDLER
@@ -184,8 +180,16 @@ export default function EmployeeViewAllComplaints() {
         {showDateFilter && (
           <section className="filters-row-EV-VAC">
             <div className="filter-group-EV-VAC">
-              <input type="date" value={dateRange.from} onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })} />
-              <input type="date" value={dateRange.to} onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })} />
+              <input
+                type="date"
+                value={dateRange.from}
+                onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
+              />
+              <input
+                type="date"
+                value={dateRange.to}
+                onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
+              />
             </div>
           </section>
         )}
