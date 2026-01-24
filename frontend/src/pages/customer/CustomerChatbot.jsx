@@ -28,13 +28,21 @@ export default function CustomerChatbot() {
       .join(" ");
   }, [user]);
 
-  const [stage, setStage] = useState("start"); // start | inquiry | complaintChoice
+  const [stage, setStage] = useState("start");
+  const [hasChosenType, setHasChosenType] = useState(false);
+
   const [messages, setMessages] = useState([
     {
       id: "m1",
       from: "bot",
       text: `Hi ${nameFromEmail}! I’m Nova. How can I help you today?`,
       ts: Date.now(),
+    },
+    {
+      id: "m2",
+      from: "bot",
+      text: "Would you like to file a complaint or do you have an inquiry?",
+      ts: Date.now() + 1,
     },
   ]);
 
@@ -69,6 +77,8 @@ export default function CustomerChatbot() {
   };
 
   const handleSelect = (type) => {
+    setHasChosenType(true);
+
     if (type === "complaint") {
       pushUser("I want to raise a complaint.");
       pushBot(
@@ -83,10 +93,6 @@ export default function CustomerChatbot() {
       pushBot("Sure — tell me your question and I’ll try to help right away.");
       setStage("inquiry");
       return;
-    }
-
-    if (type === "form") {
-      goToForm();
     }
   };
 
@@ -131,77 +137,50 @@ export default function CustomerChatbot() {
         <div className="custChatTop">
           <PageHeader title="Chatbot" subtitle="Chat with Nova or submit a form anytime." />
 
-          <button
-            type="button"
-            className="softPillBtn"
-            onClick={() => goToForm()}
-          >
-            Fill a form instead
-          </button>
+          <div className="custChatTopActions">
+            <button
+              type="button"
+              className="softPillBtn"
+              onClick={() => navigate("/customer")}
+            >
+              Back to Home
+            </button>
+
+            <button type="button" className="softPillBtn" onClick={() => goToForm()}>
+              Fill a form instead
+            </button>
+          </div>
         </div>
 
-        <section className="custChatShell">
-          <div className="custChatIntro">
-            <div className="custChatIntro__title">Quick options</div>
-            <div className="custChatIntro__sub">
-              Choose one to get started — you can still type your own message anytime.
-            </div>
+        <section className="custChatShellV2">
+          <div className="custChatPanelV2">
+            {!hasChosenType && (
+              <div className="custQuickTop">
+                <div className="custQuickTopHint">Choose one to get started:</div>
+                <div className="custQuickTopBtns">
+                  <button
+                    type="button"
+                    className="custQuickBtn"
+                    onClick={() => handleSelect("complaint")}
+                  >
+                    Complaint
+                  </button>
+                  <button
+                    type="button"
+                    className="custQuickBtn"
+                    onClick={() => handleSelect("inquiry")}
+                  >
+                    Inquiry
+                  </button>
+                </div>
+              </div>
+            )}
 
-            <div className="custChatOptions">
-              <button
-                type="button"
-                className="custOptionCard"
-                onClick={() => handleSelect("complaint")}
-              >
-                <div className="custOptionCard__top">
-                  <span className="custOptionDot" />
-                  <span className="custOptionCard__title">Raise a Complaint</span>
-                </div>
-                <div className="custOptionCard__text">
-                  Report an issue and we’ll route it to the right team.
-                </div>
-              </button>
-
-              <button
-                type="button"
-                className="custOptionCard"
-                onClick={() => handleSelect("inquiry")}
-              >
-                <div className="custOptionCard__top">
-                  <span className="custOptionDot custOptionDot--blue" />
-                  <span className="custOptionCard__title">Raise an Inquiry</span>
-                </div>
-                <div className="custOptionCard__text">
-                  Ask a question — Nova will try to resolve it instantly.
-                </div>
-              </button>
-
-              <button
-                type="button"
-                className="custOptionCard"
-                onClick={() => handleSelect("form")}
-              >
-                <div className="custOptionCard__top">
-                  <span className="custOptionDot custOptionDot--green" />
-                  <span className="custOptionCard__title">Fill a Form</span>
-                </div>
-                <div className="custOptionCard__text">
-                  Skip chat and submit a tracked complaint/inquiry (text or audio).
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div className="custChatPanel">
             <div className="custChatList" ref={listRef}>
               {messages.map((m) => (
                 <div
                   key={m.id}
-                  className={
-                    m.from === "user"
-                      ? "custMsg custMsg--user"
-                      : "custMsg custMsg--bot"
-                  }
+                  className={m.from === "user" ? "custMsg custMsg--user" : "custMsg custMsg--bot"}
                 >
                   <div className="custMsg__bubble">{m.text}</div>
                 </div>

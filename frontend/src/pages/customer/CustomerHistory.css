@@ -24,6 +24,13 @@
   min-width: 260px;
 }
 
+/* ✅ Reset button wrapper (layout only) */
+.historyReset {
+  display: inline-flex;
+  align-items: center;
+  /* keeps it visually to the right of the selects */
+}
+
 /* List */
 .historyList {
   display: flex;

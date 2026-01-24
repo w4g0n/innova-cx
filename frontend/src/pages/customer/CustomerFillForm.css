@@ -14,15 +14,16 @@
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-/* Top grid */
-.custFormTopGrid {
+.custFormAutoGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
-  margin-bottom: 14px;
 }
 
-/* Main grid */
+.custFormSpacer {
+  height: 18px;
+}
+
 .custFormGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -47,6 +48,12 @@
   letter-spacing: 0.08em;
 }
 
+.custLabel--small {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  opacity: 0.9;
+}
+
 .custInput {
   border-radius: 14px;
   padding: 12px 12px;
@@ -56,16 +63,32 @@
   background: #ffffff;
 }
 
+.custInput--compact {
+  padding: 11px 12px;
+  border-radius: 999px;
+}
+
 .custInput:disabled {
   background: rgba(229, 230, 237, 0.45);
   color: rgba(17, 17, 17, 0.65);
 }
 
-/* Wrapper is layout-only for PillSelect */
 .custPillHolder {
   display: flex;
   align-items: center;
   min-width: 190px;
+}
+
+.custFieldRow {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.custField--inline {
+  flex: 0 0 auto;
 }
 
 /* Mode toggles */
@@ -125,20 +148,27 @@
   font-size: 14px;
   font-weight: 900;
   color: #111827;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
 }
 
-.custAudioSub {
-  font-size: 13px;
-  color: rgba(17, 17, 17, 0.7);
-  line-height: 1.45;
-  margin-bottom: 12px;
+.custAudioRowCompact {
+  display: grid;
+  grid-template-columns: 220px 260px;
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.custAudioWeightCompact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .custRecordBtn {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
   border-radius: 999px;
   padding: 11px 14px;
   border: 1px solid rgba(89, 36, 180, 0.22);
@@ -147,6 +177,7 @@
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
+  height: 44px;
 }
 
 .custRecordBtn:hover {
@@ -158,11 +189,10 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 10px;
   flex-wrap: wrap;
 }
 
-/* Soft + Primary system pills */
 .softPillBtn {
   border-radius: 999px;
   padding: 11px 14px;
@@ -195,8 +225,13 @@
 
 /* Responsive */
 @media (max-width: 1100px) {
-  .custFormTopGrid {
+  .custFormAutoGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .custAudioRowCompact {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 }
 

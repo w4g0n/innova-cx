@@ -8,7 +8,6 @@ export default function Sidebar({ role }) {
   const menus = {
     customer: [
       { label: "Notifications", to: "/customer/notifications", icon: "bell" },
-      { label: "Home", to: "/customer/dashboard", end: true },
       { label: "Chatbot", to: "/customer/chatbot" },
       { label: "History", to: "/customer/history" },
       { label: "Fill a Form", to: "/customer/fill-form" },

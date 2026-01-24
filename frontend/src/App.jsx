@@ -1,9 +1,9 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Suspense, lazy } from "react";
 
 import ProtectedRoute from "./auth/ProtectedRoute";
 
-// Lazily loaded pages (prevents whole app from blanking if one page has an error)
+// Lazily loaded pages
 const Login = lazy(() => import("./pages/Login"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 
@@ -57,9 +57,7 @@ export default function App() {
     <BrowserRouter>
       <Suspense
         fallback={
-          <div style={{ padding: 20, fontFamily: "system-ui" }}>
-            Loading…
-          </div>
+          <div style={{ padding: 20, fontFamily: "system-ui" }}>Loading…</div>
         }
       >
         <Routes>
@@ -67,18 +65,23 @@ export default function App() {
           <Route path="/" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
 
-          {/* Customer public landing (if you want it public) */}
-          <Route path="/customer" element={<CustomerLanding />} />
-
-          {/* Customer (protected) */}
+          {/* Customer landing (PROTECTED) */}
           <Route
-            path="/customer/dashboard"
+            path="/customer"
             element={
               <ProtectedRoute role="customer">
                 <CustomerLanding />
               </ProtectedRoute>
             }
           />
+
+          {/* Backward-compatible route (if anything still links to /customer/dashboard) */}
+          <Route
+            path="/customer/dashboard"
+            element={<Navigate to="/customer" replace />}
+          />
+
+          {/* Customer (protected) */}
           <Route
             path="/customer/chatbot"
             element={
