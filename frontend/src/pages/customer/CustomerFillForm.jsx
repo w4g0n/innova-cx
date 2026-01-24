@@ -29,33 +29,54 @@ export default function CustomerFillForm() {
       .join(" ");
   }, [email]);
 
+  const [timestamp] = useState(() => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
+      d.getHours()
+    )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  });
+
+  const tenantTier = useMemo(() => {
+    const e = email.toLowerCase();
+    const n = nameFromEmail.toLowerCase();
+    if (e.includes("vip") || e.includes("premium") || n.includes("vip")) return "Gold";
+    if (e.includes("standard") || e.includes("silver")) return "Silver";
+    return "Bronze";
+  }, [email, nameFromEmail]);
+
+  // Provided
   const [type, setType] = useState("Complaint");
   const [mode, setMode] = useState("Text");
-  const [category, setCategory] = useState("General");
+  const [category, setCategory] = useState("Tenant Support");
+  const [assetType, setAssetType] = useState("Office");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [audioWeight, setAudioWeight] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const t = params.get("type");
-
-    if (t === "Complaint" || t === "Inquiry") {
-      setType(t);
-    }
+    if (t === "Complaint" || t === "Inquiry") setType(t);
   }, [location.search]);
 
   const submit = (e) => {
     e.preventDefault();
 
     const payload = {
+      // Auto
       name: nameFromEmail,
       email,
+      timestamp,
+      tenant_tier: tenantTier,
+
+      // Provided
       type,
-      mode,
       category,
+      asset_type: assetType,
       subject,
-      message: mode === "Text" ? message : "(audio demo)",
-      createdAt: new Date().toISOString(),
+      details: mode === "Text" ? message : "(audio demo)",
+      audio_weight: mode === "Audio" && audioWeight.trim() ? audioWeight.trim() : null,
     };
 
     console.log("FORM SUBMIT (demo):", payload);
@@ -63,9 +84,11 @@ export default function CustomerFillForm() {
 
     setSubject("");
     setMessage("");
-    setCategory("General");
+    setCategory("Tenant Support");
+    setAssetType("Office");
     setType("Complaint");
     setMode("Text");
+    setAudioWeight("");
   };
 
   return (
@@ -77,9 +100,10 @@ export default function CustomerFillForm() {
         />
 
         <form className="custFormCard" onSubmit={submit}>
-          <div className="custFormTopGrid">
+          {/* Auto fields */}
+          <div className="custFormAutoGrid">
             <div className="custField">
-              <label className="custLabel">Name</label>
+              <label className="custLabel">User</label>
               <input className="custInput" value={nameFromEmail} disabled />
             </div>
 
@@ -89,63 +113,63 @@ export default function CustomerFillForm() {
             </div>
 
             <div className="custField">
-              <label className="custLabel">Type</label>
-              <div className="custPillHolder">
-                <PillSelect
-                  value={type}
-                  onChange={setType}
-                  ariaLabel="Select request type"
-                  options={[
-                    { value: "Complaint", label: "Complaint" },
-                    { value: "Inquiry", label: "Inquiry" },
-                  ]}
-                />
-              </div>
+              <label className="custLabel">Timestamp</label>
+              <input className="custInput" value={timestamp} disabled />
             </div>
 
             <div className="custField">
-              <label className="custLabel">Input Mode</label>
-              <div className="custModeRow">
-                <button
-                  type="button"
-                  className={
-                    mode === "Text"
-                      ? "custModeBtn custModeBtn--active"
-                      : "custModeBtn"
-                  }
-                  onClick={() => setMode("Text")}
-                >
-                  Text
-                </button>
-                <button
-                  type="button"
-                  className={
-                    mode === "Audio"
-                      ? "custModeBtn custModeBtn--active"
-                      : "custModeBtn"
-                  }
-                  onClick={() => setMode("Audio")}
-                >
-                  Audio
-                </button>
-              </div>
+              <label className="custLabel">Tenant Tier</label>
+              <input className="custInput" value={tenantTier} disabled />
             </div>
           </div>
 
+          <div className="custFormSpacer" />
+
+          {/* Provided fields */}
           <div className="custFormGrid">
+            <div className="custFieldRow custField--span2">
+              <div className="custField custField--inline">
+                <label className="custLabel">Type</label>
+                <div className="custPillHolder">
+                  <PillSelect
+                    value={type}
+                    onChange={setType}
+                    ariaLabel="Select request type"
+                    options={[
+                      { value: "Complaint", label: "Complaint" },
+                      { value: "Inquiry", label: "Inquiry" },
+                    ]}
+                  />
+                </div>
+              </div>
+
+              <div className="custField custField--inline">
+                <label className="custLabel">Category</label>
+                <div className="custPillHolder">
+                  <PillSelect
+                    value={category}
+                    onChange={setCategory}
+                    ariaLabel="Select category"
+                    options={[
+                      { value: "Tenant Support", label: "Tenant Support" },
+                      { value: "Leasing Inquiry", label: "Leasing Inquiry" },
+                    ]}
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="custField">
-              <label className="custLabel">Category</label>
+              <label className="custLabel">Asset Type</label>
               <div className="custPillHolder">
                 <PillSelect
-                  value={category}
-                  onChange={setCategory}
-                  ariaLabel="Select category"
+                  value={assetType}
+                  onChange={setAssetType}
+                  ariaLabel="Select asset type"
                   options={[
-                    { value: "General", label: "General" },
-                    { value: "Billing", label: "Billing" },
-                    { value: "Facilities", label: "Facilities" },
-                    { value: "Security", label: "Security" },
-                    { value: "Technical", label: "Technical" },
+                    { value: "Office", label: "Office" },
+                    { value: "Warehouse", label: "Warehouse" },
+                    { value: "Retail Store", label: "Retail Store" },
                   ]}
                 />
               </div>
@@ -157,9 +181,33 @@ export default function CustomerFillForm() {
                 className="custInput"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="Short summary (e.g., Air conditioning not working)"
+                placeholder="Short summary (e.g., Access card not working)"
                 required
               />
+            </div>
+
+            <div className="custField custField--span2">
+              <label className="custLabel">Details input</label>
+              <div className="custModeRow">
+                <button
+                  type="button"
+                  className={
+                    mode === "Text" ? "custModeBtn custModeBtn--active" : "custModeBtn"
+                  }
+                  onClick={() => setMode("Text")}
+                >
+                  Text
+                </button>
+                <button
+                  type="button"
+                  className={
+                    mode === "Audio" ? "custModeBtn custModeBtn--active" : "custModeBtn"
+                  }
+                  onClick={() => setMode("Audio")}
+                >
+                  Audio
+                </button>
+              </div>
             </div>
 
             {mode === "Text" ? (
@@ -170,11 +218,11 @@ export default function CustomerFillForm() {
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Describe what happened. Include time/location if possible."
-                  rows={6}
+                  rows={7}
                   required
                 />
                 <div className="custHint">
-                  Tip: If this is urgent, include any safety risk or business impact.
+                  Tip: If urgent, include safety risk or business impact.
                 </div>
               </div>
             ) : (
@@ -182,20 +230,33 @@ export default function CustomerFillForm() {
                 <label className="custLabel">Audio</label>
 
                 <div className="custAudioBox">
-                  <div className="custAudioTitle">Record audio (demo)</div>
-                  <div className="custAudioSub">
-                    This will use the mic + transcript confirmation next step (X / ✓ like ChatGPT).
+                  <div className="custAudioTitle">Record audio</div>
+
+                  <div className="custAudioRowCompact">
+                    <button
+                      type="button"
+                      className="custRecordBtn"
+                      onClick={() => alert("Audio recording + transcript UI is next step (demo).")}
+                    >
+                      Start recording
+                    </button>
+
+                    <div className="custAudioWeightCompact">
+                      <label className="custLabel custLabel--small">
+                        Audio weight (optional)
+                      </label>
+                      <input
+                        className="custInput custInput--compact"
+                        value={audioWeight}
+                        onChange={(e) => setAudioWeight(e.target.value)}
+                        placeholder="e.g., 0.7"
+                      />
+                    </div>
                   </div>
 
-                  <button
-                    type="button"
-                    className="custRecordBtn"
-                    onClick={() =>
-                      alert("Audio recording + transcript UI is next step (demo).")
-                    }
-                  >
-                    Start recording
-                  </button>
+                  <div className="custHint">
+                    If provided, audio weight helps prioritize audio-based details (demo field).
+                  </div>
                 </div>
               </div>
             )}

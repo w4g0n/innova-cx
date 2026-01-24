@@ -6,6 +6,7 @@ import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import PriorityPill from "../../components/common/PriorityPill";
+import FilterPillButton from "../../components/common/FilterPillButton";
 import "./CustomerHistory.css";
 
 export default function CustomerHistory() {
@@ -96,11 +97,6 @@ export default function CustomerHistory() {
         <PageHeader
           title="History"
           subtitle="Review your past inquiries and complaints."
-          actions={
-            <button className="primaryPillBtn" type="button" onClick={clearFilters}>
-              Clear
-            </button>
-          }
         />
 
         <div className="historyKpis">
@@ -133,6 +129,10 @@ export default function CustomerHistory() {
             options={["All", "Open", "In Progress", "Resolved"]}
             minWidth={180}
           />
+          
+          <div className="historyReset">
+            <FilterPillButton onClick={clearFilters} label="Reset" />
+          </div>
         </div>
 
         <section className="historyList">

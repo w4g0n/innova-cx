@@ -1,3 +1,7 @@
+:root {
+  --nova-purple: #401c51;
+}
+
 .custChatPage {
   width: 100%;
   max-width: none;
@@ -14,14 +18,21 @@
   flex-wrap: wrap;
 }
 
-/* Soft pill (secondary action using system color) */
+.custChatTopActions {
+  display: inline-flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Soft pill */
 .softPillBtn {
   border: none;
   border-radius: 999px;
   padding: 10px 14px;
-  background: rgba(89, 36, 180, 0.12);
-  color: var(--btn-primary);
-  border: 1px solid rgba(89, 36, 180, 0.18);
+  background: rgba(64, 28, 81, 0.12);
+  color: var(--nova-purple);
+  border: 1px solid rgba(64, 28, 81, 0.18);
   font-size: 13px;
   font-weight: 750;
   cursor: pointer;
@@ -29,15 +40,15 @@
 }
 
 .softPillBtn:hover {
-  background: rgba(89, 36, 180, 0.16);
+  background: rgba(64, 28, 81, 0.16);
 }
 
-/* Primary pill (shared system style) */
+/* Primary pill */
 .primaryPillBtn {
   border: none;
   border-radius: 999px;
   padding: 11px 16px;
-  background: var(--btn-primary);
+  background: var(--nova-purple);
   color: #ffffff;
   font-size: 13px;
   font-weight: 850;
@@ -54,96 +65,13 @@
   transform: translateY(0);
 }
 
-/* Shell: left options + right chat panel */
-.custChatShell {
-  display: grid;
-  grid-template-columns: 0.95fr 1.05fr;
-  gap: 14px;
-  align-items: stretch;
+/* new shell */
+.custChatShellV2 {
+  display: block;
 }
 
-/* Left: quick options */
-.custChatIntro {
-  background: #ffffff;
-  border-radius: 18px;
-  padding: 16px;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.06);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.custChatIntro__title {
-  font-size: 14px;
-  font-weight: 850;
-  color: #111827;
-}
-
-.custChatIntro__sub {
-  font-size: 13px;
-  color: rgba(17, 17, 17, 0.7);
-  line-height: 1.45;
-}
-
-.custChatOptions {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-
-.custOptionCard {
-  text-align: left;
-  width: 100%;
-  border-radius: 16px;
-  padding: 12px;
-  background: rgba(64, 28, 81, 0.04);
-  border: 1px solid rgba(64, 28, 81, 0.10);
-  cursor: pointer;
-  transition: 0.15s ease;
-}
-
-.custOptionCard:hover {
-  background: rgba(89, 36, 180, 0.08);
-  border-color: rgba(89, 36, 180, 0.18);
-}
-
-.custOptionCard__top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-
-.custOptionDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(89, 36, 180, 0.85);
-}
-
-.custOptionDot--blue {
-  background: rgba(52, 152, 219, 0.95);
-}
-
-.custOptionDot--green {
-  background: rgba(46, 204, 113, 0.95);
-}
-
-.custOptionCard__title {
-  font-size: 13px;
-  font-weight: 850;
-  color: #111827;
-}
-
-.custOptionCard__text {
-  font-size: 13px;
-  line-height: 1.45;
-  color: rgba(17, 17, 17, 0.7);
-}
-
-/* Right: chat panel */
-.custChatPanel {
+/* panel */
+.custChatPanelV2 {
   background: #ffffff;
   border-radius: 18px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.06);
@@ -151,9 +79,44 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-height: 520px;
+  min-height: 600px;
 }
 
+.custQuickTop {
+  padding: 12px 14px;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.custQuickTopHint {
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(17, 17, 17, 0.65);
+  margin-bottom: 8px;
+}
+
+.custQuickTopBtns {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.custQuickBtn {
+  border: 1px solid rgba(64, 28, 81, 0.28);
+  background: #ffffff;
+  color: var(--nova-purple);
+  font-weight: 850;
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.custQuickBtn:hover {
+  background: rgba(64, 28, 81, 0.08);
+}
+
+/* chat list */
 .custChatList {
   flex: 1;
   overflow: auto;
@@ -189,12 +152,12 @@
 }
 
 .custMsg--user .custMsg__bubble {
-  background: rgba(89, 36, 180, 0.12);
-  border-color: rgba(89, 36, 180, 0.16);
+  background: rgba(64, 28, 81, 0.12);
+  border-color: rgba(64, 28, 81, 0.16);
   color: #2b1247;
 }
 
-/* Composer */
+/* composer */
 .custComposer {
   display: flex;
   gap: 10px;
@@ -208,9 +171,9 @@
   width: 40px;
   height: 40px;
   border-radius: 999px;
-  border: 1px solid rgba(89, 36, 180, 0.22);
-  background: rgba(89, 36, 180, 0.08);
-  color: var(--btn-primary);
+  border: 1px solid rgba(64, 28, 81, 0.22);
+  background: rgba(64, 28, 81, 0.08);
+  color: var(--nova-purple);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -218,7 +181,7 @@
 }
 
 .custMicBtn:hover {
-  background: rgba(89, 36, 180, 0.12);
+  background: rgba(64, 28, 81, 0.12);
 }
 
 .custInput {
@@ -232,16 +195,12 @@
 }
 
 .custInput:focus {
-  border-color: rgba(89, 36, 180, 0.35);
-  box-shadow: 0 0 0 3px rgba(89, 36, 180, 0.10);
+  border-color: rgba(64, 28, 81, 0.35);
+  box-shadow: 0 0 0 3px rgba(64, 28, 81, 0.10);
 }
 
-/* Responsive */
-@media (max-width: 1100px) {
-  .custChatShell {
-    grid-template-columns: 1fr;
-  }
-  .custChatPanel {
-    min-height: 520px;
+@media (max-width: 900px) {
+  .custChatPanelV2 {
+    min-height: 560px;
   }
 }
