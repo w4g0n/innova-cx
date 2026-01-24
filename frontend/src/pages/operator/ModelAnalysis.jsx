@@ -1,55 +1,139 @@
-import Layout from "../../components/Layout";
-import routingAcc from "./ChatbotAnalysis_Images/M-routingaccuracybydeptCROP.png";
-import reroutedComp from "./ChatbotAnalysis_Images/M-reroutedcomp.png";
-import prioAcc from "./ChatbotAnalysis_Images/M-prioACCbAR.png";
-import rescoredComp from "./ChatbotAnalysis_Images/M-rescoredcomplain.png";
-import resolSugg from "./ChatbotAnalysis_Images/M-Resolsugg.png";
-import resolEff from "./ChatbotAnalysis_Images/M-ResolutionEff.png";
-import "./ModelAnalysis.css";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
+import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
-import { useNavigate } from "react-router-dom";
+
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+
+import "./ModelAnalysis.css";
+
+// Import local JSON
+import operatorModelAnalysis from "../../mock-data/operatorModelAnalysis.json";
+
+const PURPLE = "#401c51";
+const LIGHT_PURPLE = "#9b71a3";
+const LIGHT_GREY = "#cfc3d7";
+const GREEN = "#28a745";
+const ORANGE = "#fd7e14";
+const RED = "#dc3545";
 
 export default function ModelAnalysis() {
   const navigate = useNavigate();
+
+  const [data, setData] = useState(null);
+  const [timeFilter, setTimeFilter] = useState("last30days");
+  const [deptFilter, setDeptFilter] = useState("all");
+
+  useEffect(() => {
+    let filteredData = operatorModelAnalysis;
+
+    if (deptFilter !== "all") {
+      filteredData = {
+        ...filteredData,
+        reviewCases: filteredData.reviewCases.filter(
+          (c) => c.department === deptFilter
+        ),
+      };
+    }
+
+    setData(filteredData);
+  }, [timeFilter, deptFilter]);
 
   const openComplaint = (ticketId) => {
     navigate(`/operator/complaints/${ticketId}`);
   };
 
+  if (!data)
+  return (
+    <Layout role="operator">
+      <div className="modelAnalysis loading-container">
+        <div className="spinner"></div>
+      </div>
+    </Layout>
+  );
+
+
+  const { kpis, charts: rawCharts, reviewCases } = data;
+
+  const charts = {
+    routingAccuracyByDepartment:
+      rawCharts?.routingAccuracyByDepartment?.labels.map((label, idx) => ({
+        department: label,
+        accuracy: rawCharts.routingAccuracyByDepartment.values[idx],
+        totalComplaints:
+          rawCharts.routingAccuracyByDepartment.values[idx] * 1, // Placeholder; replace with actual count if available
+      })) || [],
+    reroutedComplaints:
+      rawCharts?.reroutedComplaints?.segments.map((s) => ({
+        label: s.label,
+        value: s.value,
+      })) || [],
+    priorityAccuracyByScore:
+      rawCharts?.priorityAccuracyByScore?.labels.map((label, idx) => ({
+        score: label,
+        accuracy: rawCharts.priorityAccuracyByScore.values[idx],
+      })) || [],
+    rescoredComplaints:
+      rawCharts?.rescoredComplaints?.labels.map((label, idx) => ({
+        label,
+        value: rawCharts.rescoredComplaints.values[idx],
+      })) || [],
+    resolutionSuggestionAdoption:
+      rawCharts?.resolutionSuggestionAdoption?.labels.map((label, idx) => ({
+        label,
+        value: rawCharts.resolutionSuggestionAdoption.values[idx],
+      })) || [],
+    resolutionEffectiveness:
+      rawCharts?.resolutionEffectiveness?.segments.map((s) => ({
+        label: s.label,
+        value: s.value,
+      })) || [],
+  };
+
+  const pieColors = [PURPLE, LIGHT_PURPLE, LIGHT_GREY, GREEN, ORANGE, RED];
+  const renderPieLabel = ({ percent }) => `${(percent * 100).toFixed(0)}%`;
+
   return (
     <Layout role="operator">
       <div className="modelAnalysis">
         <header className="top-bar">
-          <div>
-            <PageHeader
-              title="Model Performance Dashboard"
-              subtitle="Routing and priority scoring accuracy for model-driven complaint handling."
-            />
-          </div>
-
+          <PageHeader
+            title="Model Performance Dashboard"
+            subtitle="Routing and priority scoring accuracy for model-driven complaint handling."
+          />
           <div className="top-actions">
             <div className="modelSelect">
               <PillSelect
-                value={"Last 7 days"}
-                onChange={() => {}}
+                value={timeFilter}
+                onChange={setTimeFilter}
                 ariaLabel="Filter by time range"
                 options={[
-                  { label: "Last 7 days", value: "Last 7 days" },
-                  { label: "Last 30 days", value: "Last 30 days" },
-                  { label: "This quarter", value: "This quarter" },
+                  { label: "Last 7 days", value: "last7days" },
+                  { label: "Last 30 days", value: "last30days" },
+                  { label: "This quarter", value: "quarter" },
                 ]}
               />
             </div>
-
             <div className="modelSelect">
               <PillSelect
-                value={"All departments"}
-                onChange={() => {}}
+                value={deptFilter}
+                onChange={setDeptFilter}
                 ariaLabel="Filter by department"
                 options={[
-                  { label: "All departments", value: "All departments" },
+                  { label: "All departments", value: "all" },
                   { label: "Billing", value: "Billing" },
                   { label: "Technical Support", value: "Technical Support" },
                   { label: "Facilities", value: "Facilities" },
@@ -57,209 +141,187 @@ export default function ModelAnalysis() {
                 ]}
               />
             </div>
-
-            <button
-              className="toggle-btn"
-              onClick={() => alert("Filter toggle will be connected later (demo).")}
-              type="button"
-            >
-              Show misrouted / rescored
-            </button>
           </div>
         </header>
 
-        {/* KPI ROW (keep original structure/content) */}
+        {/* KPI ROW */}
         <section className="kpi-row">
-          <article className="kpi-card">
-            <div className="kpi-top">
-              <span className="kpi-label">Routing Accuracy</span>
-              <span className="kpi-pill">Target ≥ 90%</span>
-            </div>
-            <div className="kpi-main">
-              <span className="kpi-value">93%</span>
-              <span className="kpi-change kpi-positive">+3% vs last period</span>
-            </div>
-            <p className="kpi-subtext">
-              Percentage of complaints routed to the correct department.
-            </p>
-          </article>
-
-          <article className="kpi-card">
-            <div className="kpi-top">
-              <span className="kpi-label">Reroute Rate</span>
-              <span className="kpi-pill kpi-pill-blue">Lower is better</span>
-            </div>
-            <div className="kpi-main">
-              <span className="kpi-value">7%</span>
-              <span className="kpi-change kpi-positive">-2% vs last period</span>
-            </div>
-            <p className="kpi-subtext">
-              Complaints manually rerouted after the model’s decision.
-            </p>
-          </article>
-
-          <article className="kpi-card">
-            <div className="kpi-top">
-              <span className="kpi-label">Priority Scoring Accuracy</span>
-              <span className="kpi-pill">Target ≥ 85%</span>
-            </div>
-            <div className="kpi-main">
-              <span className="kpi-value">88%</span>
-              <span className="kpi-change kpi-neutral">+1% vs last period</span>
-            </div>
-            <p className="kpi-subtext">
-              Model’s 1–5 priority score matches the final human score.
-            </p>
-          </article>
-
-          <article className="kpi-card">
-            <div className="kpi-top">
-              <span className="kpi-label">Rescore Rate</span>
-              <span className="kpi-pill kpi-pill-grey">Monitor</span>
-            </div>
-            <div className="kpi-main">
-              <span className="kpi-value">12%</span>
-              <span className="kpi-change kpi-negative">+3% vs last period</span>
-            </div>
-            <p className="kpi-subtext">
-              Complaints where operators changed the model’s priority score.
-            </p>
-          </article>
+          {[{
+            label: "Routing Accuracy",
+            value: kpis.routingAccuracyPct,
+            change: kpis.routingAccuracyChangePct,
+            pill: "Target ≥ 90%",
+            subtext: "Percentage of complaints routed correctly.",
+          },{
+            label: "Reroute Rate",
+            value: kpis.rerouteRatePct,
+            change: kpis.rerouteRateChangePct,
+            pill: "Lower is better",
+            subtext: "Complaints manually rerouted after model decision.",
+          },{
+            label: "Priority Accuracy",
+            value: kpis.priorityAccuracyPct,
+            change: kpis.priorityAccuracyChangePct,
+            pill: "Target ≥ 85%",
+            subtext: "Model priority vs final human score.",
+          },{
+            label: "Rescore Rate",
+            value: kpis.rescoreRatePct,
+            change: kpis.rescoreRateChangePct,
+            pill: "Monitor",
+            subtext: "Operators changed the model’s score.",
+          }].map((kpi, i) => (
+            <article key={i} className="kpi-card">
+              <div className="kpi-top">
+                <span className="kpi-label">{kpi.label}</span>
+                <span className="kpi-pill">{kpi.pill}</span>
+              </div>
+              <div className="kpi-main">
+                <span className="kpi-value">{kpi.value}%</span>
+                <span
+                  className={`kpi-change ${
+                    kpi.change > 0 ? "kpi-positive" : kpi.change < 0 ? "kpi-negative" : "kpi-neutral"
+                  }`}
+                >
+                  {kpi.change > 0 ? "+" : ""}
+                  {kpi.change}% vs last period
+                </span>
+              </div>
+              <p className="kpi-subtext">{kpi.subtext}</p>
+            </article>
+          ))}
         </section>
 
+        {/* ROUTING ACCURACY BLOCKS */}
         <section className="cards-row">
           <article className="card">
             <h2 className="card-title">Routing Accuracy by Department</h2>
-            <p className="card-subtitle">
-              How often the model chose the correct department.
-            </p>
-            <div className="chart-inner">
-              <img
-                className="chart-img"
-                src={routingAcc}
-                alt="Routing Accuracy by Department"
-              />
+            <div className="routing-blocks">
+              {charts.routingAccuracyByDepartment.map((d) => (
+                <div key={d.department} className="routing-block">
+                  {/* Department label and percentage side by side */}
+                  <div className="routing-label-row">
+                    <span className="routing-label">{d.department}</span>
+                    <span className="accuracy-text">{d.accuracy}%</span>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="progress-bar">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${d.accuracy}%` }}
+                    ></div>
+                  </div>
+
+                  {/* Total complaints below */}
+                  <div className="total-complaints">{d.totalComplaints} complaints</div>
+                </div>
+              ))}
             </div>
           </article>
 
+          {/* REROUTED COMPLAINTS PIE */}
           <article className="card">
             <h2 className="card-title">Rerouted Complaints</h2>
-            <p className="card-subtitle">
-              Distribution of accepted vs manually rerouted complaints.
-            </p>
             <div className="chart-inner chart-inner--short">
-              <img
-                className="chart-img"
-                src={reroutedComp}
-                alt="Rerouted complaints donut chart"
-              />
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={charts.reroutedComplaints}
+                    dataKey="value"
+                    nameKey="label"
+                    innerRadius={50}
+                    outerRadius={80}
+                    stroke="none"
+                    label={renderPieLabel}
+                  >
+                    {charts.reroutedComplaints.map((entry, index) => (
+                      <Cell key={index} fill={pieColors[index % pieColors.length]} />
+                    ))}
+                  </Pie>
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
-
-            <ul className="mini-legend">
-              <li>
-                <span className="dot dot-purple" />
-                Accepted model routing
-              </li>
-              <li>
-                <span className="dot dot-blue" />
-                Rerouted by employee
-              </li>
-              <li>
-                <span className="dot dot-grey" />
-                Pending review
-              </li>
-            </ul>
           </article>
         </section>
 
+        {/* PRIORITY ACCURACY BY SCORE */}
         <section className="cards-row">
           <article className="card">
             <h2 className="card-title">Priority Accuracy by Score</h2>
-            <p className="card-subtitle">
-              How often each priority level (1–5) is confirmed by employees.
-            </p>
             <div className="chart-inner">
-              <img
-                className="chart-img"
-                src={prioAcc}
-                alt="Priority accuracy by score bar chart"
-              />
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={charts.priorityAccuracyByScore}>
+                  <XAxis dataKey="score" stroke={PURPLE} tick={{ fill: PURPLE }} />
+                  <YAxis stroke={PURPLE} tick={{ fill: PURPLE }} />
+                  <Tooltip />
+                  <Bar dataKey="accuracy" fill={PURPLE} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </article>
 
+          {/* RESCORED COMPLAINTS */}
           <article className="card">
             <h2 className="card-title">Rescored Complaints</h2>
-            <p className="card-subtitle">
-              Where employees changed the model’s priority score.
-            </p>
             <div className="chart-inner chart-inner--short">
-              <img
-                className="chart-img"
-                src={rescoredComp}
-                alt="Rescored complaints chart"
-              />
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={charts.rescoredComplaints}>
+                  <XAxis dataKey="label" stroke={PURPLE} tick={{ fill: PURPLE }} />
+                  <YAxis stroke={PURPLE} tick={{ fill: PURPLE }} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill={PURPLE} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-
-            <ul className="mini-legend">
-              <li>
-                <span className="dot dot-purple" />
-                Accepted scores
-              </li>
-              <li>
-                <span className="dot dot-lavender" />
-                Adjusted scores
-              </li>
-            </ul>
           </article>
         </section>
 
+        {/* RESOLUTION SUGGESTION & EFFECTIVENESS */}
         <section className="cards-row">
           <article className="card">
-            <h2 className="card-title">Resolution Suggestion Adoption Rate</h2>
-            <p className="card-subtitle">
-              How often employees apply or lightly edit the model’s suggested resolution.
-            </p>
+            <h2 className="card-title">Resolution Suggestion Adoption</h2>
             <div className="chart-inner">
-              <img
-                className="chart-img"
-                src={resolSugg}
-                alt="Resolution suggestion adoption rate chart"
-              />
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={charts.resolutionSuggestionAdoption}>
+                  <XAxis dataKey="label" stroke={PURPLE} tick={{ fill: PURPLE }} />
+                  <YAxis stroke={PURPLE} tick={{ fill: PURPLE }} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill={PURPLE} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </article>
 
           <article className="card">
             <h2 className="card-title">Resolution Effectiveness</h2>
-            <p className="card-subtitle">
-              Outcomes where the model’s suggested resolution was used.
-            </p>
             <div className="chart-inner chart-inner--short">
-              <img
-                className="chart-img"
-                src={resolEff}
-                alt="Resolution effectiveness donut chart"
-              />
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={charts.resolutionEffectiveness}
+                    dataKey="value"
+                    nameKey="label"
+                    innerRadius={50}
+                    outerRadius={80}
+                    stroke="none"
+                    label={renderPieLabel}
+                  >
+                    {charts.resolutionEffectiveness.map((entry, index) => (
+                      <Cell key={index} fill={pieColors[index % pieColors.length]} />
+                    ))}
+                  </Pie>
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
-
-            <ul className="mini-legend">
-              <li>
-                <span className="dot dot-purple" />
-                Resolved on first contact
-              </li>
-              <li>
-                <span className="dot dot-lavender" />
-                Follow-up needed
-              </li>
-            </ul>
           </article>
         </section>
 
+        {/* TABLE */}
         <section className="card table-card">
           <h2 className="card-title">Cases Requiring Review</h2>
-          <p className="card-subtitle">
-            Sampled complaints where routing or priority was overridden by employees.
-          </p>
-
           <div className="table-wrapper">
             <table className="review-table">
               <thead>
@@ -274,83 +336,35 @@ export default function ModelAnalysis() {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>CX-10482</td>
-                  <td>24 Nov 2025 – 10:14</td>
-                  <td>Tenant</td>
-                  <td>
-                    <span className="route-change">
-                      Model: Facilities → Final: Facilities
-                    </span>
-                  </td>
-                  <td>
-                    <span className="priority-change">3 → 5</span>
-                  </td>
-                  <td>
-                    <span className="reason-pill reason-critical">Under-scored urgency</span>
-                  </td>
-                  <td>
-                    <button
-                      className="link-btn"
-                      onClick={() => openComplaint("CX-10482")}
-                      type="button"
-                    >
-                      Open complaint
-                    </button>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td>CX-10431</td>
-                  <td>24 Nov 2025 – 09:02</td>
-                  <td>Tenant</td>
-                  <td>
-                    <span className="route-change">
-                      Model: Billing → Final: Leasing
-                    </span>
-                  </td>
-                  <td>
-                    <span className="priority-change">2 → 3</span>
-                  </td>
-                  <td>
-                    <span className="reason-pill reason-policy">Policy exception</span>
-                  </td>
-                  <td>
-                    <button
-                      className="link-btn"
-                      onClick={() => openComplaint("CX-10431")}
-                      type="button"
-                    >
-                      Open complaint
-                    </button>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td>CX-10398</td>
-                  <td>23 Nov 2025 – 16:41</td>
-                  <td>Vendor</td>
-                  <td>
-                    <span className="route-change">
-                      Model: Technical → Final: Facilities
-                    </span>
-                  </td>
-                  <td>
-                    <span className="priority-change">4 → 4</span>
-                  </td>
-                  <td>
-                    <span className="reason-pill reason-routing">Wrong department</span>
-                  </td>
-                  <td>
-                    <button
-                      className="link-btn"
-                      onClick={() => openComplaint("CX-10398")}
-                      type="button"
-                    >
-                      Open complaint
-                    </button>
-                  </td>
-                </tr>
+                {reviewCases.map((c) => (
+                  <tr key={c.ticketId}>
+                    <td>{c.ticketId}</td>
+                    <td>{new Date(c.timestamp).toLocaleString()}</td>
+                    <td>{c.customerType}</td>
+                    <td>
+                      <span className="route-change">
+                        Model: {c.routing.model} → Final: {c.routing.final}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="priority-change">
+                        {c.priority.model} → {c.priority.final}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="reason-pill">{c.reason}</span>
+                    </td>
+                    <td>
+                      <button
+                        className="link-btn"
+                        onClick={() => openComplaint(c.ticketId)}
+                        type="button"
+                      >
+                        Open complaint
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

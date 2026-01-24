@@ -1,22 +1,13 @@
-/* MAIN */
-.main {
-  flex: 1;
-  padding: 0;          
-  display: flex;
-  flex-direction: column;
-  gap: 12px;           
-}
-
-
-/* TOP BAR */
+/* ===========================
+   TOP BAR
+=========================== */
 .top-bar {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 22px;
-  margin-bottom: 0;  
+  flex-wrap: wrap;
 }
-
 
 .page-title {
   font-size: 38px;
@@ -63,31 +54,9 @@
   filter: brightness(1.05);
 }
 
-.select-wrapper {
-  position: relative;
-}
-
-.select-wrapper select {
-  appearance: none;
-  padding: 12px 40px 12px 18px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: #ffffff;
-  font-size: 15px;
-  color: rgba(17, 17, 17, 0.85);
-  cursor: pointer;
-}
-
-.select-wrapper::after {
-  content: "▾";
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
-  color: var(--btn-primary);
-}
-
+/* ===========================
+   KPI CARDS
+=========================== */
 .kpi-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -101,10 +70,10 @@
   padding: 22px 24px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   box-shadow: 0px 10px 25px rgba(60, 0, 102, 0.12);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .kpi-card:hover {
@@ -168,13 +137,16 @@
   color: rgba(17, 17, 17, 0.7);
 }
 
-/* GENERIC CARD */
+/* ===========================
+   GENERIC CARD
+=========================== */
 .card {
   background: #ffffff;
   border-radius: 16px;
   padding: 18px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+  margin-bottom: 15px;
 }
 
 .card-title {
@@ -190,7 +162,9 @@
   color: rgba(17, 17, 17, 0.65);
 }
 
-
+/* ===========================
+   CHARTS
+=========================== */
 .charts-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -198,12 +172,29 @@
 }
 
 .chart-inner {
-  margin-top: 4px;
-  padding: 10px;
+  margin-top: 16px;
+  padding: 20px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #fdf9ff, #f3e8ff);
-  border: 1px dashed #e0caff;
-  overflow: hidden; 
+  background: #e5e6ed;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+
+  /* Center charts and allow natural height */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: visible;
+  height: auto;
+}
+
+/* Prevent selection on chart elements */
+.chart-inner * {
+  user-select: none;   /* Prevent selection */
+}
+
+/* Remove focus outline from chart container */
+.chart-inner:focus,
+.chart-inner *:focus {
+  outline: none;
 }
 
 .chart-inner img {
@@ -214,6 +205,19 @@
   object-fit: contain;
 }
 
+/* Pie chart label font */
+.recharts-label {
+  font-size: 12px;
+}
+
+/* Legend text */
+.recharts-legend-item text {
+  font-size: 13px;
+}
+
+/* ===========================
+   ALERTS
+=========================== */
 .alerts-card {
   width: 100%;
 }
@@ -253,7 +257,9 @@
   border-color: rgba(29, 78, 216, 0.18);
 }
 
-
+/* ===========================
+   MODAL
+=========================== */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -327,7 +333,7 @@
 }
 
 .modal-table-wrapper {
-  max-height: 320px;
+  max-height: 400px;
   overflow: auto;
   border-radius: 12px;
   border: 1px solid rgba(0, 0, 0, 0.08);
@@ -384,7 +390,9 @@
   color: #1d4ed8;
 }
 
-/* RESPONSIVE */
+/* ===========================
+   RESPONSIVE
+=========================== */
 @media (max-width: 1200px) {
   .kpi-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
