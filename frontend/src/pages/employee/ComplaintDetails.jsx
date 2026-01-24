@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
+import ticketsData from "../../mock-data/employeeAllTickets.json"; // Local JSON import
 import "./TicketDetails.css";
 
 export default function ComplaintDetails() {
@@ -12,38 +13,22 @@ export default function ComplaintDetails() {
 
   const closeModal = () => setModalType(null);
 
-  // Fetch all tickets and filter by ID
+  // Load ticket from local JSON
   useEffect(() => {
     setLoading(true);
     setError(null);
-
-    const fetchTickets = async () => {
-      try {
-        const res = await fetch(
-          `https://7634c816-eb5c-4638-b90c-dc17b4c1eee7.mock.pstmn.io/api/employee/tickets/api/employee/tickets`
-        );
-        if (!res.ok) throw new Error("Failed to fetch tickets data");
-        const data = await res.json();
-
-        // Assume your API returns { tickets: [...] }
-        const allTickets = data.tickets || data;
-
-        // Find ticket by ID from URL
-        const foundTicket = allTickets.find((t) => t.ticketId === id);
-
-        if (!foundTicket) throw new Error("Ticket not found");
-
-        setTicket(foundTicket);
-      } catch (err) {
-        console.error(err);
-        setError(err.message || "Could not load ticket details.");
-        setTicket(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTickets();
+    try {
+      const allTickets = ticketsData.tickets || [];
+      const foundTicket = allTickets.find((t) => t.ticketId === id || t.id === id);
+      if (!foundTicket) throw new Error("Ticket not found");
+      setTicket(foundTicket);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Could not load ticket details.");
+      setTicket(null);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   // Modal component
@@ -80,7 +65,10 @@ export default function ComplaintDetails() {
                 </select>
               </div>
               <label>Reason for rerouting</label>
-              <textarea className="modal-textarea" placeholder="Explain why this ticket should be rerouted..." />
+              <textarea
+                className="modal-textarea"
+                placeholder="Explain why this ticket should be rerouted..."
+              />
             </>
           );
         case "rescore":
@@ -96,7 +84,10 @@ export default function ComplaintDetails() {
                 </select>
               </div>
               <label>Reason for rescoring</label>
-              <textarea className="modal-textarea" placeholder="Explain why the model’s score should be adjusted..." />
+              <textarea
+                className="modal-textarea"
+                placeholder="Explain why the model’s score should be adjusted..."
+              />
             </>
           );
         case "escalate":
@@ -112,9 +103,15 @@ export default function ComplaintDetails() {
                 </select>
               </div>
               <label>Reason for Escalation</label>
-              <textarea className="modal-textarea" placeholder="Explain why this ticket must be escalated..." />
+              <textarea
+                className="modal-textarea"
+                placeholder="Explain why this ticket must be escalated..."
+              />
               <label>Additional Notes (optional)</label>
-              <textarea className="modal-textarea" placeholder="Any extra context..." />
+              <textarea
+                className="modal-textarea"
+                placeholder="Any extra context..."
+              />
             </>
           );
         case "resolve":
@@ -123,9 +120,15 @@ export default function ComplaintDetails() {
               <label>Model’s Suggested Resolution</label>
               <div className="model-suggestion">{ticket.modelSuggestion}</div>
               <label>Suggested Resolution</label>
-              <textarea className="modal-textarea" placeholder="Describe the final resolution provided..." />
+              <textarea
+                className="modal-textarea"
+                placeholder="Describe the final resolution provided..."
+              />
               <label>Steps Taken to Resolve</label>
-              <textarea className="modal-textarea" placeholder="List the steps taken to resolve this issue..." />
+              <textarea
+                className="modal-textarea"
+                placeholder="List the steps taken to resolve this issue..."
+              />
               <label>Attachments (optional)</label>
               <div className="modal-upload-box">
                 <input type="file" multiple />
@@ -139,15 +142,26 @@ export default function ComplaintDetails() {
 
     return (
       <div className="modal-overlay" onClick={closeModal}>
-        <div className={`modal-card ${type === "escalate" ? "modal-red" : ""}`} onClick={(e) => e.stopPropagation()}>
+        <div
+          className={`modal-card ${type === "escalate" ? "modal-red" : ""}`}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="modal-header">
             <h2>{titles[type]}</h2>
-            <span className="modal-close" onClick={closeModal}>✕</span>
+            <span className="modal-close" onClick={closeModal}>
+              ✕
+            </span>
           </div>
           <div className="modal-body">{renderBody()}</div>
           <div className="modal-footer">
-            <button className="modal-btn cancel" onClick={closeModal}>Cancel</button>
-            <button className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}>{submitText}</button>
+            <button className="modal-btn cancel" onClick={closeModal}>
+              Cancel
+            </button>
+            <button
+              className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
+            >
+              {submitText}
+            </button>
           </div>
         </div>
       </div>
@@ -155,8 +169,18 @@ export default function ComplaintDetails() {
   };
 
   // Loading or error states
-  if (loading) return <Layout role="employee"><main className="main">Loading ticket details...</main></Layout>;
-  if (error) return <Layout role="employee"><main className="main">{error}</main></Layout>;
+  if (loading)
+    return (
+      <Layout role="employee">
+        <main className="main">Loading ticket details...</main>
+      </Layout>
+    );
+  if (error)
+    return (
+      <Layout role="employee">
+        <main className="main">{error}</main>
+      </Layout>
+    );
   if (!ticket) return null;
 
   return (
@@ -165,17 +189,27 @@ export default function ComplaintDetails() {
         {/* HEADER */}
         <div className="details-header">
           <div className="header-left">
-            <button className="back-btn" onClick={() => window.history.back()}>← Back</button>
+            <button className="back-btn" onClick={() => window.history.back()}>
+              ← Back
+            </button>
             <h1 className="ticket-title">Ticket ID: {ticket.ticketId}</h1>
             <div className="status-row">
-              <span className={`header-pill ${ticket.priority.toLowerCase()}-pill`}>{ticket.priority}</span>
+              <span className={`header-pill ${ticket.priority.toLowerCase()}-pill`}>
+                {ticket.priority}
+              </span>
               <span className="header-pill status-pill">{ticket.status}</span>
             </div>
           </div>
           <div className="header-actions">
-            <button className="btn-outline" onClick={() => setModalType("rescore")}>Rescore</button>
-            <button className="btn-outline" onClick={() => setModalType("reroute")}>Reroute</button>
-            <button className="btn-primary" onClick={() => setModalType("resolve")}>Resolve</button>
+            <button className="btn-outline" onClick={() => setModalType("rescore")}>
+              Rescore
+            </button>
+            <button className="btn-outline" onClick={() => setModalType("reroute")}>
+              Reroute
+            </button>
+            <button className="btn-primary" onClick={() => setModalType("resolve")}>
+              Resolve
+            </button>
           </div>
         </div>
 
@@ -183,12 +217,29 @@ export default function ComplaintDetails() {
         <section className="card-section">
           <h2 className="section-title">Summary</h2>
           <div className="summary-grid">
-            <div><span className="label">Issue Date:</span> {ticket.issueDate}</div>
-            <div><span className="label">Mean Time To Respond:</span> {ticket.metrics.meanTimeToRespond}</div>
-            <div><span className="label">Mean Time To Resolve:</span> {ticket.metrics.meanTimeToResolve}</div>
-            <div><span className="label">Submitted By:</span> {ticket.submittedBy.name}</div>
-            <div><span className="label">Contact:</span> {ticket.submittedBy.contact}</div>
-            <div><span className="label">Location:</span> {ticket.submittedBy.location}</div>
+            <div>
+              <span className="label">Issue Date:</span> {ticket.issueDate}
+            </div>
+            <div>
+              <span className="label">Mean Time To Respond:</span>{" "}
+              {ticket.metrics?.meanTimeToRespond}
+            </div>
+            <div>
+              <span className="label">Mean Time To Resolve:</span>{" "}
+              {ticket.metrics?.meanTimeToResolve}
+            </div>
+            <div>
+              <span className="label">Submitted By:</span> {ticket.submittedBy?.name}
+            </div>
+            <div>
+              <span className="label">Contact:</span> {ticket.submittedBy?.contact}
+            </div>
+            <div>
+              <span className="label">Location:</span> {ticket.submittedBy?.location}
+            </div>
+            <div>
+              <span className="label">Description:</span> {ticket.description?.details}
+            </div>
           </div>
         </section>
 
@@ -196,28 +247,32 @@ export default function ComplaintDetails() {
         <section className="details-grid">
           <div className="card-section">
             <h2 className="section-title">Complaint Details</h2>
-            <div className="subject">{ticket.description.subject}</div>
-            <p className="description">{ticket.description.details}</p>
-            <div className="attachments">
-              {ticket.attachments.map((att, i) => (
-                <div key={i} className="attachment-thumb">{att}</div>
-              ))}
-            </div>
+            <div className="subject">{ticket.description?.subject}</div>
+            <p className="description">{ticket.description?.details}</p>
+            {ticket.attachments && ticket.attachments.length > 0 && (
+              <div className="attachments">
+                {ticket.attachments.map((att, i) => (
+                  <div key={i} className="attachment-thumb">{att}</div>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="card-section">
-            <h2 className="section-title">Steps Taken</h2>
-            {ticket.stepsTaken.map((step) => (
-              <div key={step.step} className="step">
-                <div className="step-title">Step {step.step}</div>
-                <div className="step-text">
-                  Technician assigned: {step.technician}<br />
-                  Time: {step.time}<br />
-                  Notes: {step.notes}
+          {ticket.stepsTaken && ticket.stepsTaken.length > 0 && (
+            <div className="card-section">
+              <h2 className="section-title">Steps Taken</h2>
+              {ticket.stepsTaken.map((step) => (
+                <div key={step.step} className="step">
+                  <div className="step-title">Step {step.step}</div>
+                  <div className="step-text">
+                    Technician assigned: {step.technician}<br />
+                    Time: {step.time}<br />
+                    Notes: {step.notes}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
       </main>
 
