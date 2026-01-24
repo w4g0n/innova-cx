@@ -4,6 +4,9 @@ import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import PriorityPill from "../../components/common/PriorityPill";
+import employeeDashboard from "../../mock-data/employeeDashboard.json";
+import employeeOpenTickets from "../../mock-data/employeeOpenTickets.json";
+import employeeMonthlyReports from "../../mock-data/employeeMonthlyReports.json";
 import "./EmployeeDashboard.css";
 
 export default function EmployeeDashboard() {
@@ -13,51 +16,35 @@ export default function EmployeeDashboard() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const baseUrl = "https://7634c816-eb5c-4638-b90c-dc17b4c1eee7.mock.pstmn.io";
-
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch Dashboard
-        const dashRes = await fetch(`${baseUrl}/api/employee/dashboard`, {
-          headers: { Authorization: "Bearer employee-demo-token" },
-        });
-        const dashData = await dashRes.json();
-        setEmployee(dashData.employee);
-        setKpis(dashData.kpis);
-
-        // Fetch Open Tickets
-        const ticketRes = await fetch(`${baseUrl}/api/employee/tickets/open`, {
-          headers: { Authorization: "Bearer employee-demo-token" },
-        });
-        const ticketData = await ticketRes.json();
-        setTickets(ticketData.tickets);
-
-        // Fetch Reports
-        const reportRes = await fetch(`${baseUrl}/api/employee/reports`, {
-          headers: { Authorization: "Bearer employee-demo-token" },
-        });
-        const reportData = await reportRes.json();
-        setReports(reportData.reports);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+    try {
+      // Set local JSON data directly
+      setEmployee(employeeDashboard.employee);
+      setKpis(employeeDashboard.kpis);
+      setTickets(employeeOpenTickets.tickets);
+      setReports(employeeMonthlyReports.reports);
+    } catch (err) {
+      console.error("Error loading local JSON data:", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  if (loading) return <Layout role="employee"><main>Loading...</main></Layout>;
-
+  if (loading)
+    return (
+      <Layout role="employee">
+        <main>Loading...</main>
+      </Layout>
+    );
   return (
     <Layout role="employee">
       <div className="empDash">
         <PageHeader
-          title={`Good Morning, ${employee.full_name}`}
+          title={`Good Morning, ${employee.name}`}
           subtitle="Here’s your activity and assigned workload."
         />
 
+        {/* KPI Section */}
         <section className="empDash__kpis">
           <KpiCard label="Tickets Assigned" value={kpis.ticketsAssigned} />
           <KpiCard label="In Progress" value={kpis.inProgress} />
@@ -67,7 +54,9 @@ export default function EmployeeDashboard() {
           <KpiCard label="New Today" value={kpis.newToday} />
         </section>
 
+        {/* Dashboard Grid */}
         <section className="empDash__grid">
+          {/* Open Tickets */}
           <article className="empCard">
             <h2 className="empCard__title">Open Tickets Assigned to Me</h2>
             <p className="empCard__subtitle">
@@ -84,7 +73,6 @@ export default function EmployeeDashboard() {
                     <th>Status</th>
                   </tr>
                 </thead>
-
                 <tbody>
                   {tickets.map((t) => (
                     <tr key={t.ticketId}>
@@ -105,6 +93,7 @@ export default function EmployeeDashboard() {
             </div>
           </article>
 
+          {/* Reports Section */}
           <aside className="empCard empReports">
             <h2 className="empCard__title">Reports</h2>
             <p className="empCard__subtitle">
@@ -121,6 +110,7 @@ export default function EmployeeDashboard() {
   );
 }
 
+// Report Card Component
 function ReportItem({ month }) {
   return (
     <div className="empReportCard">
