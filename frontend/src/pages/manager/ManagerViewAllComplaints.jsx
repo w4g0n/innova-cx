@@ -11,7 +11,20 @@ import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
 
 export default function ManagerViewComplaints() {
-  const rows = [
+  const employees = [
+    "Ahmed Hassan",
+    "Maria Lopez",
+    "Omar Ali",
+    "Sara Ahmed",
+    "Bilal Khan",
+    "Fatima Noor",
+    "Yousef Karim",
+    "Khalid Musa",
+  ];
+
+  const departments = ["IT", "Facilities", "Security", "HR", "Admin"];
+
+  const [rows, setRows] = useState([
     {
       id: "CX-1122",
       subject: "Air conditioning not working",
@@ -96,27 +109,104 @@ export default function ManagerViewComplaints() {
       resolveTime: "3 Days",
       action: "Reassign",
     },
-  ];
+  ]);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [priorityFilter, setPriorityFilter] = useState("All Priorities");
+
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [activeTicketId, setActiveTicketId] = useState(null);
+  const [originalAssignee, setOriginalAssignee] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState("");
+
+  const [openMenuFor, setOpenMenuFor] = useState(null);
+
+  const toggleMenu = (ticketId) => {
+    setOpenMenuFor((prev) => (prev === ticketId ? null : ticketId));
+  };
+
+  const closeMenu = () => setOpenMenuFor(null);
+
+  const handleReroute = (ticketId, dept) => {
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === ticketId
+          ? { ...r, status: "Unassigned", assignee: "—", action: "Assign", reroutedTo: dept }
+          : r
+      )
+    );
+    closeMenu();
+  };
+
+  const cancelReroute = (ticketId) => {
+    setRows((prev) =>
+      prev.map((r) => (r.id === ticketId ? { ...r, reroutedTo: undefined } : r))
+    );
+    closeMenu();
+  };
+
+  const openAssignModal = (ticketId, currentAssignee) => {
+    const initial = currentAssignee && currentAssignee !== "—" ? currentAssignee : "";
+    setActiveTicketId(ticketId);
+    setOriginalAssignee(initial);
+    setSelectedEmployee(initial);
+    setIsAssignOpen(true);
+    closeMenu();
+  };
+
+  const closeAssignModal = () => {
+    setIsAssignOpen(false);
+    setActiveTicketId(null);
+    setOriginalAssignee("");
+    setSelectedEmployee("");
+  };
+
+  const clearSelection = () => setSelectedEmployee("");
+
+  const confirmAssignment = () => {
+    if (!activeTicketId) return;
+
+    if (!selectedEmployee) {
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === activeTicketId
+            ? { ...r, assignee: "—", status: "Unassigned", action: "Assign" }
+            : r
+        )
+      );
+      closeAssignModal();
+      return;
+    }
+
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== activeTicketId) return r;
+        const nextStatus = r.status === "Unassigned" ? "Assigned" : r.status;
+        return {
+          ...r,
+          assignee: selectedEmployee,
+          status: nextStatus,
+          action: "Reassign",
+          reroutedTo: undefined,
+        };
+      })
+    );
+
+    closeAssignModal();
+  };
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
 
     return rows.filter((r) => {
       const matchesSearch =
-        q === "" ||
-        r.id.toLowerCase().includes(q) ||
-        r.subject.toLowerCase().includes(q);
+        q === "" || r.id.toLowerCase().includes(q) || r.subject.toLowerCase().includes(q);
 
-      const matchesStatus =
-        statusFilter === "All Status" || r.status === statusFilter;
+      const matchesStatus = statusFilter === "All Status" || r.status === statusFilter;
 
       const matchesPriority =
-        priorityFilter === "All Priorities" ||
-        r.priorityText === priorityFilter;
+        priorityFilter === "All Priorities" || r.priorityText === priorityFilter;
 
       return matchesSearch && matchesStatus && matchesPriority;
     });
@@ -147,7 +237,7 @@ export default function ManagerViewComplaints() {
 
   return (
     <Layout role="manager">
-      <main className="mv-main">
+      <main className="mv-main" onClick={closeMenu}>
         <section className="mv-header">
           <PageHeader
             title="View All Complaints"
@@ -225,40 +315,124 @@ export default function ManagerViewComplaints() {
                 <th>RESPOND TIME</th>
                 <th>RESOLVE TIME</th>
                 <th>ACTION</th>
+                <th className="mv-moreHeader" aria-label="More actions column" />
               </tr>
             </thead>
 
             <tbody>
-              {filteredRows.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <Link
-                      className="mv-complaintLink"
-                      to={`/manager/complaints/${r.id}`}
-                    >
-                      {r.id}
-                    </Link>
-                  </td>
-                  <td className="mv-subjectCell">{r.subject}</td>
-                  <td>
-                    <PriorityPill priority={r.priorityText} />
-                  </td>
-                  <td>{r.status}</td>
-                  <td>{r.assignee}</td>
-                  <td>{r.issueDate}</td>
-                  <td>{r.respondTime}</td>
-                  <td>{r.resolveTime}</td>
-                  <td>
-                    <button className="mv-actionBtn" type="button">
-                      {r.action}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filteredRows.map((r, idx) => {
+                const showMore = r.status === "Unassigned";
+                const showCancelReroute = Boolean(r.reroutedTo);
+                const openUp = idx >= filteredRows.length - 2;
+
+                return (
+                  <tr key={r.id}>
+                    <td className="mv-cellTight">
+                      <Link
+                        className="mv-complaintLink"
+                        to={`/manager/complaints/${r.id}`}
+                        state={{ ticket: r }}
+                      >
+                        {r.id}
+                      </Link>
+                    </td>
+
+                    <td className="mv-subjectCell mv-cellGrow">{r.subject}</td>
+
+                    <td className="mv-cellTight">
+                      <PriorityPill priority={r.priorityText} />
+                    </td>
+
+                    <td className="mv-cellTight">
+                      <span
+                        className={`mv-statusPill ${
+                          r.status === "Overdue" ? "mv-statusPill--overdue" : ""
+                        }`}
+                      >
+                        {r.status}
+                      </span>
+                    </td>
+
+                    <td className="mv-cellMid">
+                      <div className="mv-assigneeCell">
+                        <div className="mv-ellipsis">{r.assignee}</div>
+                        {r.reroutedTo && r.assignee === "—" && (
+                          <span className="mv-reroutePill">Rerouted: {r.reroutedTo}</span>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="mv-cellTight">{r.issueDate}</td>
+                    <td className="mv-cellTight">{r.respondTime}</td>
+                    <td className="mv-cellTight">{r.resolveTime}</td>
+
+                    <td className="mv-cellTight" onClick={(e) => e.stopPropagation()}>
+                      <div className="mv-actionCell">
+                        <button
+                          className="mv-actionBtn"
+                          type="button"
+                          onClick={() => openAssignModal(r.id, r.assignee)}
+                        >
+                          {r.action}
+                        </button>
+                      </div>
+                    </td>
+
+                    <td className="mv-cellTight" onClick={(e) => e.stopPropagation()}>
+                      <div className="mv-moreCell">
+                        {showMore ? (
+                          <>
+                            <button
+                              type="button"
+                              className="mv-moreBtn"
+                              aria-label="More actions"
+                              onClick={() => toggleMenu(r.id)}
+                            >
+                              ⋯
+                            </button>
+
+                            {openMenuFor === r.id && (
+                              <div className={`mv-menu ${openUp ? "mv-menu--up" : ""}`}>
+                                <div className="mv-menuTitle">Reroute to</div>
+
+                                {departments.map((d) => (
+                                  <button
+                                    key={d}
+                                    type="button"
+                                    className="mv-menuItem"
+                                    onClick={() => handleReroute(r.id, d)}
+                                  >
+                                    <span className="mv-menuDot" />
+                                    {d}
+                                  </button>
+                                ))}
+
+                                {showCancelReroute && (
+                                  <button
+                                    type="button"
+                                    className="mv-menuCancelReroute"
+                                    onClick={() => cancelReroute(r.id)}
+                                  >
+                                    Cancel reroute
+                                  </button>
+                                )}
+
+                                
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="mv-morePlaceholder" aria-hidden="true" />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {filteredRows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="mv-empty">
+                  <td colSpan={10} className="mv-empty">
                     No tickets match your search/filters.
                   </td>
                 </tr>
@@ -267,7 +441,61 @@ export default function ManagerViewComplaints() {
           </table>
         </section>
 
-        <div className="mv-footerTimestamp">20/11/2025 – 14:32</div>
+        {isAssignOpen && (
+          <div className="mv-modalOverlay" onClick={closeAssignModal} role="presentation">
+            <div
+              className="mv-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="mv-modalHeader">
+                <h3 className="mv-modalTitle">Assign Ticket</h3>
+                <button className="mv-modalClose" type="button" onClick={closeAssignModal}>
+                  ✕
+                </button>
+              </div>
+
+              <p className="mv-modalSub">
+                Select an employee to assign <span className="mv-modalTicket">{activeTicketId}</span>
+              </p>
+
+              <div className="mv-employeeList">
+                {employees.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    className={`mv-employeeItem ${
+                      selectedEmployee === name ? "mv-employeeItem--selected" : ""
+                    }`}
+                    onClick={() => setSelectedEmployee(name)}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mv-modalActions">
+                <button className="mv-modalClear" type="button" onClick={clearSelection}>
+                  Unassign / Clear
+                </button>
+
+                <button className="mv-modalCancel" type="button" onClick={closeAssignModal}>
+                  Cancel
+                </button>
+
+                <button
+                  className="mv-modalConfirm"
+                  type="button"
+                  disabled={selectedEmployee === originalAssignee}
+                  onClick={confirmAssignment}
+                >
+                  {selectedEmployee ? "Confirm Assignment" : "Confirm Unassign"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </Layout>
   );

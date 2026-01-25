@@ -10,7 +10,7 @@ export default function ManagerDashboard() {
     <Layout role="manager">
       <div className="mgrDashboard">
         <PageHeader
-          title="Patrick Mukala - Facilities Management"
+          title="Dr. Farhad - Facilities Management"
           subtitle="Quick overview of your department’s activity."
         />
 

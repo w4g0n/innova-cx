@@ -22,6 +22,7 @@ import Approvals from "./pages/manager/Approvals";
 import ComplaintTrends from "./pages/manager/ComplaintTrends";
 import ManagerDashboard from "./pages/manager/ManagerDashboard";
 import ManagerViewAllComplaints from "./pages/manager/ManagerViewAllComplaints";
+import ManagerComplaintDetails from "./pages/manager/ManagerComplaintDetails";
 import ViewEmployees from "./pages/manager/ManagerViewEmployees";
 
 // Operator
@@ -120,6 +121,14 @@ export default function App() {
           element={
             <ProtectedRoute role="manager">
               <ManagerViewAllComplaints />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manager/complaints/:id"
+          element={
+            <ProtectedRoute role="manager">
+              <ManagerComplaintDetails />
             </ProtectedRoute>
           }
         />

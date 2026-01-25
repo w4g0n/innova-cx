@@ -1,0 +1,330 @@
+.mvd-main {
+  flex: 1;
+  padding: 0;
+  width: 100%;
+}
+
+.mvd-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.mvd-back {
+  background: none;
+  border: none;
+  font-size: 15px;
+  cursor: pointer;
+  color: #3c0066;
+  margin-bottom: 6px;
+}
+
+.mvd-title {
+  font-size: 26px;
+  margin: 0;
+  font-weight: 800;
+}
+
+.mvd-pills {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.mvd-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  border: 1px solid rgba(89, 36, 180, 0.14);
+  background: rgba(89, 36, 180, 0.08);
+  color: #3f2a6e;
+  white-space: nowrap;
+}
+
+.mvd-pill--critical {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.25);
+  color: #b91c1c;
+}
+
+.mvd-pill--high {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #92400e;
+}
+
+.mvd-pill--medium {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.22);
+  color: #1d4ed8;
+}
+
+.mvd-pill--low {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.22);
+  color: #065f46;
+}
+
+.mvd-pill--status {
+  background: #e9d5ff;
+  color: #5b21b6;
+  border-color: rgba(124, 58, 237, 0.25);
+}
+
+.mvd-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mvd-outline {
+  padding: 8px 16px;
+  border-radius: 16px;
+  border: 2px solid #7c3aed;
+  background: #fff;
+  color: #7c3aed;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mvd-primary {
+  padding: 10px 18px;
+  border-radius: 16px;
+  border: none;
+  background: #7c3aed;
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.mvd-card {
+  background: #fff;
+  border-radius: 22px;
+  padding: 22px;
+  margin-bottom: 18px;
+  box-shadow: 0px 12px 30px rgba(0, 0, 0, 0.06);
+}
+
+.mvd-sectionTitle {
+  margin: 0 0 14px;
+  font-size: 18px;
+  font-weight: 900;
+  color: #3c0066;
+}
+
+.mvd-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 22px;
+}
+
+.mvd-label {
+  font-weight: 800;
+  color: #6b7280;
+}
+
+.mvd-twoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.mvd-subject {
+  font-size: 18px;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.mvd-desc {
+  margin: 0;
+  color: #444;
+  line-height: 1.55;
+}
+
+.mvd-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mvd-activityItem {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.mvd-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #7c3aed;
+  margin-top: 6px;
+}
+
+.mvd-activityTitle {
+  font-weight: 900;
+  margin-bottom: 2px;
+}
+
+.mvd-activityText {
+  color: #6b7280;
+  font-weight: 700;
+}
+
+.mvd-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 18px;
+}
+
+.mvd-modalCard {
+  background: #fff;
+  width: min(540px, 100%);
+  padding: 22px;
+  border-radius: 22px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.14);
+}
+
+.mvd-modalRed {
+  border-top: 6px solid #c1121f;
+}
+
+.mvd-modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.mvd-modalTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+  color: #3c0066;
+}
+
+.mvd-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  background: rgba(89, 36, 180, 0.08);
+  color: #3f2a6e;
+  font-weight: 900;
+}
+
+.mvd-modalBody label {
+  display: block;
+  font-weight: 900;
+  margin: 12px 0 6px;
+  color: #333;
+}
+
+.mvd-modalDropdown {
+  background: #fff;
+  border: 2px solid #e5d4ff;
+  border-radius: 20px;
+  padding: 10px 16px;
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.mvd-modalDropdown select {
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  font-size: 14px;
+  font-weight: 800;
+  color: #3c0066;
+  appearance: none;
+  cursor: pointer;
+  padding-right: 26px;
+}
+
+.mvd-modalDropdown::after {
+  content: "▼";
+  font-size: 12px;
+  color: #7c3aed;
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.mvd-modalTextarea {
+  width: 100%;
+  height: 110px;
+  resize: none;
+  padding: 12px;
+  border-radius: 12px;
+  border: 2px solid #e5d4ff;
+  font-size: 14px;
+  outline: none;
+}
+
+.mvd-modalTextareaSmall {
+  height: 70px;
+}
+
+.mvd-uploadBox {
+  margin-top: 6px;
+  background: #f3e8ff;
+  border: 2px dashed #c7a3ff;
+  border-radius: 14px;
+  padding: 16px;
+  text-align: center;
+}
+
+.mvd-modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.mvd-btn {
+  padding: 10px 18px;
+  border-radius: 16px;
+  cursor: pointer;
+  font-weight: 900;
+  border: none;
+}
+
+.mvd-btnCancel {
+  background: #f3e8ff;
+  color: #5b21b6;
+}
+
+.mvd-btnSubmit {
+  background: #7c3aed;
+  color: #fff;
+}
+
+.mvd-btnEscalate {
+  background: #c1121f;
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .mvd-twoCol {
+    grid-template-columns: 1fr;
+  }
+  .mvd-grid {
+    grid-template-columns: 1fr;
+  }
+}
