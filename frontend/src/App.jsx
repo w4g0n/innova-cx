@@ -32,14 +32,7 @@ const EmployeeViewAllComplaints = lazy(() =>
   import("./pages/employee/EmployeeViewAllComplaints")
 );
 
-// Manager
-import ManagerNotifications from "./pages/manager/ManagerNotifications";
-import Approvals from "./pages/manager/Approvals";
-import ComplaintTrends from "./pages/manager/ComplaintTrends";
-import ManagerDashboard from "./pages/manager/ManagerDashboard";
-import ManagerViewAllComplaints from "./pages/manager/ManagerViewAllComplaints";
-import ManagerComplaintDetails from "./pages/manager/ManagerComplaintDetails";
-import ViewEmployees from "./pages/manager/ManagerViewEmployees";
+// Manager (✅ keep ONLY lazy versions)
 const ManagerNotifications = lazy(() =>
   import("./pages/manager/ManagerNotifications")
 );
@@ -48,6 +41,9 @@ const ComplaintTrends = lazy(() => import("./pages/manager/ComplaintTrends"));
 const ManagerDashboard = lazy(() => import("./pages/manager/ManagerDashboard"));
 const ManagerViewAllComplaints = lazy(() =>
   import("./pages/manager/ManagerViewAllComplaints")
+);
+const ManagerComplaintDetails = lazy(() =>
+  import("./pages/manager/ManagerComplaintDetails")
 );
 const ViewEmployees = lazy(() => import("./pages/manager/ManagerViewEmployees"));
 
@@ -172,64 +168,7 @@ export default function App() {
             }
           />
 
-        {/* Manager (protected) */}
-        <Route
-          path="/manager"
-          element={
-            <ProtectedRoute role="manager">
-              <ManagerDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/manager/complaints"
-          element={
-            <ProtectedRoute role="manager">
-              <ManagerViewAllComplaints />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/manager/complaints/:id"
-          element={
-            <ProtectedRoute role="manager">
-              <ManagerComplaintDetails />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/manager/employees"
-          element={
-            <ProtectedRoute role="manager">
-              <ViewEmployees />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/manager/approvals"
-          element={
-            <ProtectedRoute role="manager">
-              <Approvals />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/manager/trends"
-          element={
-            <ProtectedRoute role="manager">
-              <ComplaintTrends />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/manager/notifications"
-          element={
-            <ProtectedRoute role="manager">
-              <ManagerNotifications />
-            </ProtectedRoute>
-          }
-        />
-          {/* Manager (protected) */}
+          {/* Manager (protected) ✅ only once */}
           <Route
             path="/manager"
             element={
@@ -243,6 +182,14 @@ export default function App() {
             element={
               <ProtectedRoute role="manager">
                 <ManagerViewAllComplaints />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/manager/complaints/:id"
+            element={
+              <ProtectedRoute role="manager">
+                <ManagerComplaintDetails />
               </ProtectedRoute>
             }
           />
