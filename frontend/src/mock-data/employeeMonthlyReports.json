@@ -1,0 +1,8 @@
+{
+  "reports": [
+    { "month": "2025-10", "label": "October 2025" },
+    { "month": "2025-09", "label": "September 2025" },
+    { "month": "2025-08", "label": "August 2025" },
+    { "month": "2025-07", "label": "July 2025" }
+  ]
+}

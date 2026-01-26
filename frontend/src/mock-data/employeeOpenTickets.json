@@ -1,0 +1,74 @@
+{
+  "tickets": [
+    {
+      "ticketId": "CX-1101",
+      "subject": "Air conditioning not working",
+      "priority": "Critical",
+      "status": "Submitted",
+      "issue_date": "01/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "John Smith",
+        "location": "Building A, Floor 1",
+        "description": "The AC unit stopped cooling."
+      }
+    },
+    {
+      "ticketId": "CX-1103",
+      "subject": "Light flickering",
+      "priority": "Medium",
+      "status": "Assigned",
+      "issue_date": "03/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Ali Khan",
+        "location": "Building C, Hallway 3",
+        "description": "Corridor light flickers intermittently."
+      }
+    },
+    {
+      "ticketId": "CX-1104",
+      "subject": "Wi-Fi not connecting",
+      "priority": "High",
+      "status": "Overdue",
+      "issue_date": "04/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Sara Lee",
+        "location": "Building D, Floor 4",
+        "description": "Wi-Fi cannot connect on multiple devices."
+      }
+    },
+    {
+      "ticketId": "CX-1107",
+      "subject": "Coffee machine broken",
+      "priority": "Medium",
+      "status": "Assigned",
+      "issue_date": "07/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Mark Green",
+        "location": "Pantry",
+        "description": "Coffee machine does not brew coffee."
+      }
+    },
+    {
+      "ticketId": "CX-1119",
+      "subject": "Fire alarm false trigger",
+      "priority": "High",
+      "status": "Escalated",
+      "issue_date": "19/01/2025",
+      "response_time": "",
+      "resolution_time": "",
+      "details": {
+        "submittedBy": "Samir Ali",
+        "location": "Building C, Floor 1",
+        "description": "Fire alarm triggered accidentally."
+      }
+    }
+  ]
+}

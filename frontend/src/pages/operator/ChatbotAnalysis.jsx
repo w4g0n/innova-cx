@@ -1,18 +1,67 @@
 import Layout from "../../components/Layout";
-import dailyHandled from "./ChatbotAnalysis_Images/dailyHandled.png";
-import accuracyBars from "./ChatbotAnalysis_Images/accuracyBars.png";
-import pieChart from "./ChatbotAnalysis_Images/piechart.png";
-import respTime from "./ChatbotAnalysis_Images/respTime.png";
 import "./ChatbotAnalysis.css";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
+
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 
 export default function ChatbotAnalysis() {
   const [modalOpen, setModalOpen] = useState(false);
   const [filter, setFilter] = useState("all");
 
+  // Chart Colors
+  const pieColors = ["#401c51", "#9b71a3", "#cfc3d7"];
+  const barColors = ["#401c51", "#9b71a3"];
+
+  // Sample dynamic chart data (replace with Postman mock/dummy API)
+  const responseTimeData = [
+    { day: "Mon", value: 2.4 },
+    { day: "Tue", value: 2.6 },
+    { day: "Wed", value: 2.9 },
+    { day: "Thu", value: 3.1 },
+    { day: "Fri", value: 2.8 },
+    { day: "Sat", value: 2.7 },
+    { day: "Sun", value: 2.8 },
+  ];
+
+  const resolutionStatusData = [
+    { name: "Fully resolved", value: 88 },
+    { name: "Partially resolved", value: 7 },
+    { name: "Escalated", value: 5 },
+  ];
+
+  const accuracyData = [
+    { category: "Billing", value: 95 },
+    { category: "Technical", value: 91 },
+    { category: "Visas", value: 94 },
+    { category: "Account", value: 92 },
+  ];
+
+  const dailyHandledData = [
+    { day: "Mon", handled: 480, resolved: 420 },
+    { day: "Tue", handled: 510, resolved: 450 },
+    { day: "Wed", handled: 495, resolved: 435 },
+    { day: "Thu", handled: 520, resolved: 460 },
+    { day: "Fri", handled: 505, resolved: 445 },
+    { day: "Sat", handled: 470, resolved: 410 },
+    { day: "Sun", handled: 482, resolved: 425 },
+  ];
+
+  // Sample complaints
   const complaints = [
     {
       id: "CX-1021",
@@ -44,7 +93,7 @@ export default function ChatbotAnalysis() {
     if (filter === "all") return true;
     if (filter === "resolved") return c.status === "resolved";
     if (filter === "unresolved") return c.status === "unresolved";
-    if (filter === "partial") return c.status === "escalated"; // assuming "partially resolved" = "escalated"
+    if (filter === "partial") return c.status === "escalated";
     return true;
   });
 
@@ -53,12 +102,10 @@ export default function ChatbotAnalysis() {
       <main className="main">
         {/* TOP BAR */}
         <header className="top-bar">
-          <div>
-            <PageHeader
-              title="Chatbot Performance Analytics"
-              subtitle="Real-time insights into speed, accuracy, and resolution quality."
-            />
-          </div>
+          <PageHeader
+            title="Chatbot Performance Analytics"
+            subtitle="Real-time insights into speed, accuracy, and resolution quality."
+          />
 
           <div className="top-actions">
             <div className="chatbotSelect">
@@ -75,13 +122,17 @@ export default function ChatbotAnalysis() {
               />
             </div>
 
-            <button className="purple-btn" onClick={() => setModalOpen(true)} type="button">
+            <button
+              className="purple-btn"
+              onClick={() => setModalOpen(true)}
+              type="button"
+            >
               View handled Complaints
             </button>
           </div>
         </header>
 
-        {/* KPI CARDS (keep business logic + text exactly the same) */}
+        {/* KPI CARDS */}
         <section className="kpi-row">
           <article className="kpi-card">
             <div className="kpi-top">
@@ -120,58 +171,98 @@ export default function ChatbotAnalysis() {
           </article>
         </section>
 
-        {/* CHARTS ROW 1 */}
+        {/* CHARTS ROW */}
         <section className="charts-row">
+          {/* Response Time Line Chart */}
           <article className="card">
             <h2 className="card-title">Response Time Trend</h2>
             <p className="card-subtitle">
-              Average response time by hour for the selected period.
+              Average response time by day for the selected period.
             </p>
             <div className="chart-inner">
-              <img src={respTime} alt="Response time trend chart" />
+              <LineChart width={650} height={350} data={responseTimeData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="day" tick={{ textAnchor: "middle" }} />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="value" stroke="#401c51" strokeWidth={3} dot={true} />
+              </LineChart>
             </div>
           </article>
 
+          {/* Resolution Status Pie Chart */}
           <article className="card">
             <h2 className="card-title">Inquiry Resolution Status</h2>
             <p className="card-subtitle">
               Distribution of fully resolved, partially resolved, and escalated cases.
             </p>
             <div className="chart-inner">
-              <img src={pieChart} alt="Inquiry resolution status pie chart" />
+              <PieChart width={650} height={350}>
+                <Pie
+                  data={resolutionStatusData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={120}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  isAnimationActive={true}
+                >
+                  {resolutionStatusData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />
+                  ))}
+                </Pie>
+                <Legend verticalAlign="bottom" />
+                <Tooltip />
+              </PieChart>
             </div>
           </article>
         </section>
 
-        {/* CHARTS ROW 2 */}
+        {/* Charts Row 2 */}
         <section className="charts-row">
+          {/* Accuracy Bar Chart */}
           <article className="card">
             <h2 className="card-title">Accuracy by Category</h2>
             <p className="card-subtitle">
               Chatbot classification accuracy across key inquiry types.
             </p>
             <div className="chart-inner">
-              <img src={accuracyBars} alt="Accuracy by category bar chart" />
+              <BarChart width={650} height={350} data={accuracyData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="category" tick={{ textAnchor: "middle" }} />
+                <YAxis />
+                <Tooltip />
+                <Legend verticalAlign="bottom" />
+                <Bar dataKey="value" fill="#401c51" isAnimationActive={true} />
+              </BarChart>
             </div>
           </article>
 
+          {/* Daily Handled vs Resolved */}
           <article className="card">
             <h2 className="card-title">Daily Handled vs Resolved</h2>
             <p className="card-subtitle">
               Comparison of total inquiries received vs. fully resolved each day.
             </p>
             <div className="chart-inner">
-              <img src={dailyHandled} alt="Daily handled vs resolved chart" />
+              <BarChart width={650} height={350} data={dailyHandledData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="day" tick={{ textAnchor: "middle" }} />
+                <YAxis />
+                <Tooltip />
+                <Legend verticalAlign="bottom" />
+                <Bar dataKey="handled" fill="#401c51" isAnimationActive={true} />
+                <Bar dataKey="resolved" fill="#9b71a3" isAnimationActive={true}/>
+              </BarChart>
             </div>
           </article>
         </section>
 
-        {/* ACTIVE ALERTS */}
+        {/* Alerts */}
         <section className="card alerts-card">
           <h2 className="card-title">Active Alerts</h2>
-          <p className="card-subtitle">
-            Real-time signals for performance drops or achievements.
-          </p>
           <ul className="alerts-list">
             <li className="alert-item alert-warning">
               Response time increased by 12% between 4–6 PM today.
@@ -185,12 +276,9 @@ export default function ChatbotAnalysis() {
           </ul>
         </section>
 
-        {/* MODAL */}
+        {/* Modal */}
         {modalOpen && (
-          <div
-            className="modal-backdrop show"
-            onClick={(e) => e.target === e.currentTarget && setModalOpen(false)}
-          >
+          <div className="modal-backdrop show" onClick={(e) => e.target === e.currentTarget && setModalOpen(false)}>
             <div className="modal">
               <div className="modal-header">
                 <h2>All Complaints</h2>
@@ -200,34 +288,10 @@ export default function ChatbotAnalysis() {
               </div>
 
               <div className="modal-filters">
-                <button
-                  className={`filter-chip ${filter === "all" ? "active" : ""}`}
-                  onClick={() => setFilter("all")}
-                  type="button"
-                >
-                  All complaints
-                </button>
-                <button
-                  className={`filter-chip ${filter === "resolved" ? "active" : ""}`}
-                  onClick={() => setFilter("resolved")}
-                  type="button"
-                >
-                  Resolved
-                </button>
-                <button
-                  className={`filter-chip ${filter === "unresolved" ? "active" : ""}`}
-                  onClick={() => setFilter("unresolved")}
-                  type="button"
-                >
-                  Unresolved
-                </button>
-                <button
-                  className={`filter-chip ${filter === "partial" ? "active" : ""}`}
-                  onClick={() => setFilter("partial")}
-                  type="button"
-                >
-                  Partially resolved
-                </button>
+                <button className={`filter-chip ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All complaints</button>
+                <button className={`filter-chip ${filter === "resolved" ? "active" : ""}`} onClick={() => setFilter("resolved")}>Resolved</button>
+                <button className={`filter-chip ${filter === "unresolved" ? "active" : ""}`} onClick={() => setFilter("unresolved")}>Unresolved</button>
+                <button className={`filter-chip ${filter === "partial" ? "active" : ""}`} onClick={() => setFilter("partial")}>Partially resolved</button>
               </div>
 
               <div className="modal-table-wrapper">
