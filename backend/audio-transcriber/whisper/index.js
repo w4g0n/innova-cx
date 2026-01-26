@@ -1,61 +1,81 @@
 import express from "express";
 import multer from "multer";
-import fs from "fs";
 import cors from "cors";
-import OpenAI from "openai";
+import { spawn } from "child_process";
+import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-import "dotenv/config";
-import { execFile } from "child_process";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
 
-app.use(express.static(path.join(__dirname, "whisper-frontend")));
+// ------------------------------------
+// Upload config
+// ------------------------------------
+const UPLOAD_DIR = "uploads";
+const upload = multer({ dest: UPLOAD_DIR });
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "whisper-frontend", "index.html"));
-});
-
-const upload = multer({ dest: "uploads/" });
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-app.post("/transcribe", upload.single("audio"), async (req, res) => {
-  console.log("🔥 /transcribe HIT");
-
-  if (!req.file) return res.sendStatus(400);
+// ------------------------------------
+// Routes
+// ------------------------------------
+app.post("/transcribe", upload.single("audio"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No audio file provided" });
+  }
 
   const audioPath = req.file.path;
-  const outFile = `transcripts/transcript-${Date.now()}.txt`;
 
-  execFile(
-    "python3",
-    ["transcribe.py", audioPath],
-    (error, stdout, stderr) => {
-      if (error) {
-        console.error("❌ Whisper error:", stderr);
-        return res.sendStatus(500);
+  console.log("🎙️ Received audio:", audioPath);
+
+  const py = spawn("python3", ["analyze.py", audioPath]);
+
+  let stdout = "";
+  let stderr = "";
+
+  py.stdout.on("data", (data) => {
+    stdout += data.toString();
+  });
+
+  py.stderr.on("data", (data) => {
+    stderr += data.toString();
+  });
+
+  py.on("close", (code) => {
+    // Always cleanup uploaded file
+    try {
+      if (fs.existsSync(audioPath)) {
+        fs.unlinkSync(audioPath);
       }
-
-      if (!fs.existsSync("transcripts")) {
-        fs.mkdirSync("transcripts");
-      }
-
-      fs.writeFileSync(outFile, stdout, "utf8");
-      //fs.unlinkSync(audioPath);
-
-      console.log("✅ Transcript written:", outFile);
-      res.sendStatus(204);
+    } catch (err) {
+      console.warn("⚠️ Failed to cleanup audio file:", err.message);
     }
-  );
+
+    if (code !== 0 || stderr) {
+      console.error("🐍 Python error:");
+      console.error(stderr || `Exited with code ${code}`);
+      return res.status(500).json({ error: "Audio processing failed" });
+    }
+
+    let result;
+    try {
+      result = JSON.parse(stdout);
+    } catch (err) {
+      console.error("❌ Invalid Python output:");
+      console.error(stdout);
+      return res.status(500).json({ error: "Invalid analyzer output" });
+    }
+
+    console.log("🎧 Audio score:", result.audio_score);
+
+    return res.json({
+      transcript: result.transcript,
+    });
+  });
 });
 
-app.listen(3001, () => {
-  console.log("✅ Server running on 3001");
+// ------------------------------------
+// Server
+// ------------------------------------
+const PORT = 3001;
+app.listen(PORT, () => {
+  console.log(`✅ Whisper service running on http://localhost:${PORT}`);
 });

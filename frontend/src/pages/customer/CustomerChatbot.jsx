@@ -8,6 +8,16 @@ export default function CustomerChatbot() {
   const navigate = useNavigate();
   const listRef = useRef(null);
 
+  // ===============================
+  // Whisper / Audio state
+  // ===============================
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const [isRecording, setIsRecording] = useState(false);
+
+  // ===============================
+  // User info
+  // ===============================
   const user = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("user") || "{}");
@@ -28,8 +38,12 @@ export default function CustomerChatbot() {
       .join(" ");
   }, [user]);
 
+  // ===============================
+  // Chat state
+  // ===============================
   const [stage, setStage] = useState("start");
   const [hasChosenType, setHasChosenType] = useState(false);
+  const [text, setText] = useState("");
 
   const [messages, setMessages] = useState([
     {
@@ -46,14 +60,15 @@ export default function CustomerChatbot() {
     },
   ]);
 
-  const [text, setText] = useState("");
-
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [messages]);
 
+  // ===============================
+  // Helpers
+  // ===============================
   const pushUser = (t) => {
     setMessages((prev) => [
       ...prev,
@@ -76,6 +91,9 @@ export default function CustomerChatbot() {
     navigate("/customer/fill-form");
   };
 
+  // ===============================
+  // Selection logic
+  // ===============================
   const handleSelect = (type) => {
     setHasChosenType(true);
 
@@ -92,12 +110,15 @@ export default function CustomerChatbot() {
       pushUser("I want to raise an inquiry.");
       pushBot("Sure — tell me your question and I’ll try to help right away.");
       setStage("inquiry");
-      return;
     }
   };
 
+  // ===============================
+  // Send message (FINAL TEXT ONLY)
+  // ===============================
   const handleSend = (e) => {
     e.preventDefault();
+
     const t = text.trim();
     if (!t) return;
 
@@ -105,14 +126,14 @@ export default function CustomerChatbot() {
     setText("");
 
     if (stage === "complaintChoice") {
-      const lower = t.toLowerCase();
-      if (lower.includes("form")) {
+      if (t.toLowerCase().includes("form")) {
         pushBot("No problem — taking you to the complaint form now.");
         setTimeout(() => goToForm("Complaint"), 350);
         return;
       }
+
       pushBot(
-        "Okay — please describe the complaint in one or two sentences. Include any key details (location, time, what happened)."
+        "Okay — please describe the complaint in one or two sentences. Include any key details."
       );
       setStage("start");
       return;
@@ -120,7 +141,7 @@ export default function CustomerChatbot() {
 
     if (stage === "inquiry") {
       pushBot(
-        "Thanks — for this demo, I’ll log your inquiry and suggest using the form if you want a tracked ticket. Would you like to submit a form?"
+        "Thanks — for this demo, I’ll log your inquiry and suggest using the form if you want a tracked ticket."
       );
       setStage("start");
       return;
@@ -131,6 +152,50 @@ export default function CustomerChatbot() {
     );
   };
 
+  // ===============================
+  // Mic / Whisper integration
+  // ===============================
+  const handleMicClick = async () => {
+    if (!isRecording) {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      chunksRef.current = [];
+      const recorder = new MediaRecorder(stream, {
+        mimeType: "audio/mp4"
+      });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/mp4" });
+
+        const formData = new FormData();
+        formData.append("audio", blob, "mic.mp4");
+
+        const res = await fetch("http://localhost:3001/transcribe", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        setText(data.transcript); // editable draft
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      return;
+    }
+
+    mediaRecorderRef.current.stop();
+    setIsRecording(false);
+  };
+
+  // ===============================
+  // JSX
+  // ===============================
   return (
     <Layout role="customer">
       <div className="custChatPage">
@@ -138,15 +203,10 @@ export default function CustomerChatbot() {
           <PageHeader title="Chatbot" subtitle="Chat with Nova or submit a form anytime." />
 
           <div className="custChatTopActions">
-            <button
-              type="button"
-              className="softPillBtn"
-              onClick={() => navigate("/customer")}
-            >
+            <button className="softPillBtn" onClick={() => navigate("/customer")}>
               Back to Home
             </button>
-
-            <button type="button" className="softPillBtn" onClick={() => goToForm()}>
+            <button className="softPillBtn" onClick={() => goToForm()}>
               Fill a form instead
             </button>
           </div>
@@ -158,18 +218,10 @@ export default function CustomerChatbot() {
               <div className="custQuickTop">
                 <div className="custQuickTopHint">Choose one to get started:</div>
                 <div className="custQuickTopBtns">
-                  <button
-                    type="button"
-                    className="custQuickBtn"
-                    onClick={() => handleSelect("complaint")}
-                  >
+                  <button className="custQuickBtn" onClick={() => handleSelect("complaint")}>
                     Complaint
                   </button>
-                  <button
-                    type="button"
-                    className="custQuickBtn"
-                    onClick={() => handleSelect("inquiry")}
-                  >
+                  <button className="custQuickBtn" onClick={() => handleSelect("inquiry")}>
                     Inquiry
                   </button>
                 </div>
@@ -178,10 +230,7 @@ export default function CustomerChatbot() {
 
             <div className="custChatList" ref={listRef}>
               {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={m.from === "user" ? "custMsg custMsg--user" : "custMsg custMsg--bot"}
-                >
+                <div key={m.id} className={`custMsg custMsg--${m.from}`}>
                   <div className="custMsg__bubble">{m.text}</div>
                 </div>
               ))}
@@ -190,44 +239,28 @@ export default function CustomerChatbot() {
             <form className="custComposer" onSubmit={handleSend}>
               <button
                 type="button"
-                className="custMicBtn"
-                onClick={() => alert("Mic UI is next step (demo).")}
-                aria-label="Use microphone"
-                title="Use microphone (demo)"
+                className={`custMicBtn ${isRecording ? "recording" : ""}`}
+                onClick={handleMicClick}
+                aria-label="Record audio"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M19 11a7 7 0 0 1-14 0"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M12 18v3"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M8 21h8"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
+                  <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M12 18v3" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M8 21h8" stroke="currentColor" strokeWidth="1.8" />
                 </svg>
               </button>
 
-              <input
+              <textarea
                 className="custInput"
                 value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Type your message…"
+                rows={1}
+                placeholder="Type or speak your message…"
+                onChange={(e) => {
+                  setText(e.target.value);
+                  e.target.style.height = "auto";
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
               />
 
               <button type="submit" className="primaryPillBtn">

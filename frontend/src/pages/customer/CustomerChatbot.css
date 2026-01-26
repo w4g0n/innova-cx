@@ -204,3 +204,16 @@
     min-height: 560px;
   }
 }
+
+.custMicBtn {
+  background: #f2f2f2;
+  color: #444;
+  border: 1px solid #ccc;
+}
+
+.custMicBtn.recording {
+  background: #d32f2f;
+  color: white;
+  border-color: #d32f2f;
+}
+

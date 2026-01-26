@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -8,6 +8,9 @@ import "./CustomerFillForm.css";
 export default function CustomerFillForm() {
   const location = useLocation();
 
+  // ===============================
+  // User info
+  // ===============================
   const user = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("user") || "{}");
@@ -29,54 +32,45 @@ export default function CustomerFillForm() {
       .join(" ");
   }, [email]);
 
-  const [timestamp] = useState(() => {
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
-      d.getHours()
-    )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  });
-
-  const tenantTier = useMemo(() => {
-    const e = email.toLowerCase();
-    const n = nameFromEmail.toLowerCase();
-    if (e.includes("vip") || e.includes("premium") || n.includes("vip")) return "Gold";
-    if (e.includes("standard") || e.includes("silver")) return "Silver";
-    return "Bronze";
-  }, [email, nameFromEmail]);
-
-  // Provided
+  // ===============================
+  // Form state
+  // ===============================
   const [type, setType] = useState("Complaint");
   const [mode, setMode] = useState("Text");
-  const [category, setCategory] = useState("Tenant Support");
   const [assetType, setAssetType] = useState("Office");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
-  const [audioWeight, setAudioWeight] = useState("");
 
+  // ===============================
+  // Whisper / Audio state
+  // ===============================
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+
+  // ===============================
+  // Prefill type from chatbot
+  // ===============================
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const t = params.get("type");
     if (t === "Complaint" || t === "Inquiry") setType(t);
   }, [location.search]);
 
+  // ===============================
+  // Submit
+  // ===============================
   const submit = (e) => {
     e.preventDefault();
 
     const payload = {
-      // Auto
       name: nameFromEmail,
       email,
-      timestamp,
-      tenant_tier: tenantTier,
-
-      // Provided
       type,
-      category,
       asset_type: assetType,
       subject,
-      details: mode === "Text" ? message : "(audio demo)",
-      audio_weight: mode === "Audio" && audioWeight.trim() ? audioWeight.trim() : null,
+      details: message,
     };
 
     console.log("FORM SUBMIT (demo):", payload);
@@ -84,19 +78,64 @@ export default function CustomerFillForm() {
 
     setSubject("");
     setMessage("");
-    setCategory("Tenant Support");
     setAssetType("Office");
     setType("Complaint");
     setMode("Text");
-    setAudioWeight("");
   };
 
+  // ===============================
+  // Mic / Whisper logic
+  // ===============================
+  const handleMicClick = async () => {
+    if (!isRecording) {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      chunksRef.current = [];
+      const recorder = new MediaRecorder(stream, {
+        mimeType: "audio/mp4"
+      });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        setIsTranscribing(true);
+
+        const blob = new Blob(chunksRef.current, { type: "audio/mp4" });
+
+        const formData = new FormData();
+        formData.append("audio", blob, "mic.mp4");
+
+        const res = await fetch("http://localhost:3001/transcribe", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        setMessage(data.transcript); // editable transcript
+        setIsTranscribing(false);
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      return;
+    }
+
+    mediaRecorderRef.current.stop();
+    setIsRecording(false);
+  };
+
+  // ===============================
+  // JSX
+  // ===============================
   return (
     <Layout role="customer">
       <div className="custFormPage">
         <PageHeader
           title="Fill a Form"
-          subtitle="Submit a complaint or inquiry using text or audio. Your details are auto-filled."
+          subtitle="Submit a complaint or inquiry using text or audio."
         />
 
         <form className="custFormCard" onSubmit={submit}>
@@ -111,51 +150,24 @@ export default function CustomerFillForm() {
               <label className="custLabel">Email</label>
               <input className="custInput" value={email || "—"} disabled />
             </div>
-
-            <div className="custField">
-              <label className="custLabel">Timestamp</label>
-              <input className="custInput" value={timestamp} disabled />
-            </div>
-
-            <div className="custField">
-              <label className="custLabel">Tenant Tier</label>
-              <input className="custInput" value={tenantTier} disabled />
-            </div>
           </div>
 
           <div className="custFormSpacer" />
 
           {/* Provided fields */}
           <div className="custFormGrid">
-            <div className="custFieldRow custField--span2">
-              <div className="custField custField--inline">
-                <label className="custLabel">Type</label>
-                <div className="custPillHolder">
-                  <PillSelect
-                    value={type}
-                    onChange={setType}
-                    ariaLabel="Select request type"
-                    options={[
-                      { value: "Complaint", label: "Complaint" },
-                      { value: "Inquiry", label: "Inquiry" },
-                    ]}
-                  />
-                </div>
-              </div>
-
-              <div className="custField custField--inline">
-                <label className="custLabel">Category</label>
-                <div className="custPillHolder">
-                  <PillSelect
-                    value={category}
-                    onChange={setCategory}
-                    ariaLabel="Select category"
-                    options={[
-                      { value: "Tenant Support", label: "Tenant Support" },
-                      { value: "Leasing Inquiry", label: "Leasing Inquiry" },
-                    ]}
-                  />
-                </div>
+            <div className="custField custField--inline">
+              <label className="custLabel">Type</label>
+              <div className="custPillHolder">
+                <PillSelect
+                  value={type}
+                  onChange={setType}
+                  ariaLabel="Select request type"
+                  options={[
+                    { value: "Complaint", label: "Complaint" },
+                    { value: "Inquiry", label: "Inquiry" },
+                  ]}
+                />
               </div>
             </div>
 
@@ -191,18 +203,14 @@ export default function CustomerFillForm() {
               <div className="custModeRow">
                 <button
                   type="button"
-                  className={
-                    mode === "Text" ? "custModeBtn custModeBtn--active" : "custModeBtn"
-                  }
+                  className={mode === "Text" ? "custModeBtn custModeBtn--active" : "custModeBtn"}
                   onClick={() => setMode("Text")}
                 >
                   Text
                 </button>
                 <button
                   type="button"
-                  className={
-                    mode === "Audio" ? "custModeBtn custModeBtn--active" : "custModeBtn"
-                  }
+                  className={mode === "Audio" ? "custModeBtn custModeBtn--active" : "custModeBtn"}
                   onClick={() => setMode("Audio")}
                 >
                   Audio
@@ -210,68 +218,44 @@ export default function CustomerFillForm() {
               </div>
             </div>
 
-            {mode === "Text" ? (
-              <div className="custField custField--span2">
-                <label className="custLabel">Details</label>
-                <textarea
-                  className="custTextarea"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Describe what happened. Include time/location if possible."
-                  rows={7}
-                  required
-                />
-                <div className="custHint">
-                  Tip: If urgent, include safety risk or business impact.
-                </div>
-              </div>
-            ) : (
-              <div className="custField custField--span2">
-                <label className="custLabel">Audio</label>
+            <div className="custField custField--span2">
+              <label className="custLabel">Details</label>
 
-                <div className="custAudioBox">
-                  <div className="custAudioTitle">Record audio</div>
+              {mode === "Audio" && (
+                <button
+                  type="button"
+                  className={`custMicBtn ${isRecording ? "recording" : ""}`}
+                  onClick={handleMicClick}
+                  disabled={isTranscribing}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M12 18v3" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M8 21h8" stroke="currentColor" strokeWidth="1.8" />
+                  </svg>
+                </button>
+              )}
 
-                  <div className="custAudioRowCompact">
-                    <button
-                      type="button"
-                      className="custRecordBtn"
-                      onClick={() => alert("Audio recording + transcript UI is next step (demo).")}
-                    >
-                      Start recording
-                    </button>
+              {isTranscribing && <div className="custHint">Transcribing audio…</div>}
 
-                    <div className="custAudioWeightCompact">
-                      <label className="custLabel custLabel--small">
-                        Audio weight (optional)
-                      </label>
-                      <input
-                        className="custInput custInput--compact"
-                        value={audioWeight}
-                        onChange={(e) => setAudioWeight(e.target.value)}
-                        placeholder="e.g., 0.7"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="custHint">
-                    If provided, audio weight helps prioritize audio-based details (demo field).
-                  </div>
-                </div>
-              </div>
-            )}
+              <textarea
+                className="custTextarea"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Describe what happened. Include time/location if possible."
+                rows={7}
+                required
+              />
+            </div>
           </div>
 
           <div className="custFormActions">
-            <button
-              type="button"
-              className="softPillBtn"
-              onClick={() => window.history.back()}
-            >
+            <button type="button" className="softPillBtn" onClick={() => window.history.back()}>
               Cancel
             </button>
 
-            <button type="submit" className="primaryPillBtn">
+            <button type="submit" className="primaryPillBtn" disabled={isTranscribing}>
               Submit
             </button>
           </div>

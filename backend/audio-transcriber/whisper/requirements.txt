@@ -1,0 +1,6 @@
+faster-whisper
+webrtcvad
+numpy
+flask
+soundfile
+librosa

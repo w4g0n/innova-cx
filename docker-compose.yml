@@ -1,5 +1,4 @@
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:14-alpine
     container_name: innovacx-db
@@ -12,7 +11,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./database:/docker-entrypoint-initdb.d
     ports:
-      - "5432:5432"
+      - "5433:5432"
     networks:
       - innovacx-network
     healthcheck:
@@ -21,29 +20,35 @@ services:
       timeout: 5s
       retries: 10
 
-  # Backend API (FastAPI)
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     container_name: innovacx-backend
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://innovacx_admin:changeme123@postgres:5432/complaints_db
-      PYTHONUNBUFFERED: 1
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ./backend:/app
-      - /app/__pycache__
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
-        restart: true
     networks:
       - innovacx-network
     command: >
-      sh -c "sleep 5 && uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload"
+      uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  whisper:
+    profiles:
+      - audio
+    build: ./backend/audio-transcriber/whisper
+    container_name: innovacx-whisper
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    networks:
+      - innovacx-network
 
 volumes:
   postgres_data:
