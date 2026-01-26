@@ -33,6 +33,13 @@ const EmployeeViewAllComplaints = lazy(() =>
 );
 
 // Manager
+import ManagerNotifications from "./pages/manager/ManagerNotifications";
+import Approvals from "./pages/manager/Approvals";
+import ComplaintTrends from "./pages/manager/ComplaintTrends";
+import ManagerDashboard from "./pages/manager/ManagerDashboard";
+import ManagerViewAllComplaints from "./pages/manager/ManagerViewAllComplaints";
+import ManagerComplaintDetails from "./pages/manager/ManagerComplaintDetails";
+import ViewEmployees from "./pages/manager/ManagerViewEmployees";
 const ManagerNotifications = lazy(() =>
   import("./pages/manager/ManagerNotifications")
 );
@@ -165,6 +172,63 @@ export default function App() {
             }
           />
 
+        {/* Manager (protected) */}
+        <Route
+          path="/manager"
+          element={
+            <ProtectedRoute role="manager">
+              <ManagerDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manager/complaints"
+          element={
+            <ProtectedRoute role="manager">
+              <ManagerViewAllComplaints />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manager/complaints/:id"
+          element={
+            <ProtectedRoute role="manager">
+              <ManagerComplaintDetails />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manager/employees"
+          element={
+            <ProtectedRoute role="manager">
+              <ViewEmployees />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manager/approvals"
+          element={
+            <ProtectedRoute role="manager">
+              <Approvals />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manager/trends"
+          element={
+            <ProtectedRoute role="manager">
+              <ComplaintTrends />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manager/notifications"
+          element={
+            <ProtectedRoute role="manager">
+              <ManagerNotifications />
+            </ProtectedRoute>
+          }
+        />
           {/* Manager (protected) */}
           <Route
             path="/manager"
