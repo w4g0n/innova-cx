@@ -262,6 +262,7 @@ export default function ManagerViewComplaints() {
           />
         </section>
 
+        {/* ✅ Reset now sits next to the dropdowns */}
         <section className="mv-filtersRow">
           <div className="mv-filterGroup">
             <div className="mv-select">
@@ -295,10 +296,10 @@ export default function ManagerViewComplaints() {
                 ]}
               />
             </div>
-          </div>
 
-          <div className="mv-reset">
-            <FilterPillButton onClick={handleReset} label="Reset" />
+            <div className="mv-reset">
+              <FilterPillButton onClick={handleReset} label="Reset" />
+            </div>
           </div>
         </section>
 
@@ -416,8 +417,6 @@ export default function ManagerViewComplaints() {
                                     Cancel reroute
                                   </button>
                                 )}
-
-                                
                               </div>
                             )}
                           </>

@@ -18,7 +18,7 @@ export default function ComplaintTrends() {
     setPriority("All Priorities");
   };
 
-  // ✅ Demo dataset (so the UI actually changes with filters)
+  // Demo dataset (so the UI actually changes with filters)
   // Keys match your dropdown values exactly.
   const data = useMemo(
     () => ({
@@ -391,7 +391,7 @@ export default function ComplaintTrends() {
               { label: "Jul", value: 101 },
               { label: "Aug", value: 118 },
               { label: "Sep", value: 132 },
-              { label: "Oct", value: 0 }, // placeholder bar to keep layout consistent if you want
+              { label: "Oct", value: 0 }, // placeholder bar to keep layout consistent
             ],
             categories: [
               { name: "HVAC / Temperature", pct: 31 },
@@ -436,7 +436,6 @@ export default function ComplaintTrends() {
     []
   );
 
-  // ✅ Safe lookup with fallback to defaults
   const view = useMemo(() => {
     const byTime = data[timeRange] || data["This Month"];
     const byDept = byTime[department] || byTime["All Departments"];
@@ -508,9 +507,9 @@ export default function ComplaintTrends() {
                 ]}
               />
             </div>
-          </div>
 
-          <FilterPillButton onClick={resetFilters} label="Reset" />
+            <FilterPillButton onClick={resetFilters} label="Reset" />
+          </div>
         </section>
 
         <section className="kpiRow">

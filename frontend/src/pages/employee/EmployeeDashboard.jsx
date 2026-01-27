@@ -9,6 +9,33 @@ import employeeOpenTickets from "../../mock-data/employeeOpenTickets.json";
 import employeeMonthlyReports from "../../mock-data/employeeMonthlyReports.json";
 import "./EmployeeDashboard.css";
 
+function monthKeyToReportId(monthKey) {
+  if (!monthKey || typeof monthKey !== "string") return "";
+  const match = monthKey.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return "";
+
+  const year = match[1];
+  const mm = match[2];
+
+  const map = {
+    "01": "jan",
+    "02": "feb",
+    "03": "mar",
+    "04": "apr",
+    "05": "may",
+    "06": "jun",
+    "07": "jul",
+    "08": "aug",
+    "09": "sep",
+    "10": "oct",
+    "11": "nov",
+    "12": "dec",
+  };
+
+  const abbr = map[mm];
+  return abbr ? `${abbr}-${year}` : "";
+}
+
 export default function EmployeeDashboard() {
   const [employee, setEmployee] = useState(null);
   const [kpis, setKpis] = useState({});
@@ -36,6 +63,7 @@ export default function EmployeeDashboard() {
         <main>Loading...</main>
       </Layout>
     );
+
   return (
     <Layout role="employee">
       <div className="empDash">
@@ -78,7 +106,9 @@ export default function EmployeeDashboard() {
                     <tr key={t.ticketId}>
                       <td>{t.ticketId}</td>
                       <td>{t.subject}</td>
-                      <td><PriorityPill priority={t.priority} /></td>
+                      <td>
+                        <PriorityPill priority={t.priority} />
+                      </td>
                       <td>{t.status}</td>
                     </tr>
                   ))}
@@ -101,7 +131,11 @@ export default function EmployeeDashboard() {
             </p>
 
             {reports.map((r) => (
-              <ReportItem key={r.month} month={r.label} />
+              <ReportItem
+                key={r.month || r.label}
+                month={r.label}
+                reportId={monthKeyToReportId(r.month)} 
+              />
             ))}
           </aside>
         </section>
@@ -111,12 +145,16 @@ export default function EmployeeDashboard() {
 }
 
 // Report Card Component
-function ReportItem({ month }) {
+function ReportItem({ month, reportId }) {
   return (
     <div className="empReportCard">
       <div className="empReportCard__month">{month}</div>
       <div className="empReportCard__desc">Performance Summary</div>
-      <Link className="empReportCard__link" to="/employee/reports">
+
+      <Link
+        className="empReportCard__link"
+        to={`/employee/reports?report=${encodeURIComponent(reportId)}`}
+      >
         View report →
       </Link>
     </div>

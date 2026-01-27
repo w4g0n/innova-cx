@@ -5,22 +5,52 @@ import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
+import FilterPillButton from "../../components/common/FilterPillButton";
+import PriorityPill from "../../components/common/PriorityPill";
 import ticketsData from "../../mock-data/employeeAllTickets.json";
 import "./ViewAllComplaint.css";
 
 // SORT ORDER HELPERS
 const priorityOrder = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-const statusOrder = { Unassigned: 1, Assigned: 2, Escalated: 3, Overdue: 4, Resolved: 5 };
+const statusOrder = {
+  Unassigned: 1,
+  Assigned: 2,
+  Escalated: 3,
+  Overdue: 4,
+  Resolved: 5,
+};
 
 // Convert time strings like "30 Minutes" or "6 Hours" to minutes
 const timeToMinutes = (value) => {
   if (!value) return 0;
-  const [num, unit] = value.split(" ");
+  const [num, unit] = String(value).split(" ");
   const n = Number(num);
-  if (unit.startsWith("Minute")) return n;
-  if (unit.startsWith("Hour")) return n * 60;
-  if (unit.startsWith("Day")) return n * 1440;
+  if (Number.isNaN(n)) return 0;
+  if (unit?.startsWith("Minute")) return n;
+  if (unit?.startsWith("Hour")) return n * 60;
+  if (unit?.startsWith("Day")) return n * 1440;
   return 0;
+};
+
+// Convert "YYYY-MM-DD" or "DD/MM/YYYY" to Date safely
+const toDate = (raw) => {
+  if (!raw) return null;
+
+  // ISO: 2025-11-18
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, m, d] = raw.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  // Slash: 18/11/2025
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [d, m, y] = raw.split("/").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  // Fallback
+  const dt = new Date(raw);
+  return Number.isNaN(dt.getTime()) ? null : dt;
 };
 
 export default function EmployeeViewAllComplaints() {
@@ -44,32 +74,59 @@ export default function EmployeeViewAllComplaints() {
     }
   }, []);
 
+  // ✅ Normalize data so the table columns are always populated
+  const normalizedTickets = useMemo(() => {
+    return (tickets || []).map((t) => {
+      const issueDateRaw = t.issueDate ?? t.issue_date ?? t.createdAt ?? "";
+      const responseTimeRaw =
+        t.metrics?.meanTimeToRespond ?? t.response_time ?? t.responseTime ?? "";
+      const resolutionTimeRaw =
+        t.metrics?.meanTimeToResolve ??
+        t.resolution_time ??
+        t.resolutionTime ??
+        "";
+
+      return {
+        ...t,
+        _issueDateRaw: issueDateRaw,
+        _responseTimeRaw: responseTimeRaw,
+        _resolutionTimeRaw: resolutionTimeRaw,
+      };
+    });
+  }, [tickets]);
+
   // SORT HANDLER
   const handleSort = (key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") direction = "desc";
-    else if (sortConfig.key === key && sortConfig.direction === "desc") key = null, direction = null;
+    else if (sortConfig.key === key && sortConfig.direction === "desc") {
+      key = null;
+      direction = null;
+    }
     setSortConfig({ key, direction });
   };
 
   // FILTER & SORTED TICKETS
   const filteredTickets = useMemo(() => {
-    let filtered = tickets.filter((t) => {
-      const matchesSearch =
-        t.ticketId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.subject?.toLowerCase().includes(searchTerm.toLowerCase());
+    const q = (searchTerm ?? "").toString().toLowerCase().trim();
 
+    let filtered = normalizedTickets.filter((t) => {
+      const id = (t.ticketId ?? "").toString().toLowerCase();
+      const subj = (t.subject ?? "").toString().toLowerCase();
+
+      const matchesSearch = !q || id.includes(q) || subj.includes(q);
       const matchesStatus = statusFilter === "All Status" || t.status === statusFilter;
-      const matchesPriority = priorityFilter === "All Priorities" || t.priority === priorityFilter;
+      const matchesPriority =
+        priorityFilter === "All Priorities" || t.priority === priorityFilter;
 
       let matchesDate = true;
-      if (dateRange.from) {
-        const [d, m, y] = t.issue_date?.split("/").map(Number) || [];
-        if (new Date(y, m - 1, d) < new Date(dateRange.from)) matchesDate = false;
+      const ticketDate = toDate(t._issueDateRaw);
+
+      if (dateRange.from && ticketDate) {
+        if (ticketDate < new Date(dateRange.from)) matchesDate = false;
       }
-      if (dateRange.to && matchesDate) {
-        const [d, m, y] = t.issue_date?.split("/").map(Number) || [];
-        if (new Date(y, m - 1, d) > new Date(dateRange.to)) matchesDate = false;
+      if (dateRange.to && matchesDate && ticketDate) {
+        if (ticketDate > new Date(dateRange.to)) matchesDate = false;
       }
 
       return matchesSearch && matchesStatus && matchesPriority && matchesDate;
@@ -78,26 +135,33 @@ export default function EmployeeViewAllComplaints() {
     if (sortConfig.key) {
       filtered.sort((a, b) => {
         let aVal, bVal;
+
         switch (sortConfig.key) {
           case "priority":
             aVal = priorityOrder[a.priority] || 0;
             bVal = priorityOrder[b.priority] || 0;
             break;
+
           case "status":
             aVal = statusOrder[a.status] || 0;
             bVal = statusOrder[b.status] || 0;
             break;
+
           case "issueDate":
-            const [dA, mA, yA] = a.issue_date?.split("/").map(Number) || [];
-            const [dB, mB, yB] = b.issue_date?.split("/").map(Number) || [];
-            aVal = new Date(yA, mA - 1, dA);
-            bVal = new Date(yB, mB - 1, dB);
+            aVal = toDate(a._issueDateRaw) || new Date(0);
+            bVal = toDate(b._issueDateRaw) || new Date(0);
             break;
+
           case "responseTime":
-          case "resolutionTime":
-            aVal = timeToMinutes(a[sortConfig.key]);
-            bVal = timeToMinutes(b[sortConfig.key]);
+            aVal = timeToMinutes(a._responseTimeRaw);
+            bVal = timeToMinutes(b._responseTimeRaw);
             break;
+
+          case "resolutionTime":
+            aVal = timeToMinutes(a._resolutionTimeRaw);
+            bVal = timeToMinutes(b._resolutionTimeRaw);
+            break;
+
           default:
             aVal = a[sortConfig.key];
             bVal = b[sortConfig.key];
@@ -110,17 +174,22 @@ export default function EmployeeViewAllComplaints() {
     }
 
     return filtered;
-  }, [tickets, searchTerm, statusFilter, priorityFilter, dateRange, sortConfig]);
+  }, [normalizedTickets, searchTerm, statusFilter, priorityFilter, dateRange, sortConfig]);
 
   // KPI COUNTS
-  const kpiCounts = useMemo(() => ({
-    openTickets: filteredTickets.length,
-    assignedToMe: filteredTickets.filter((t) => t.status === "Assigned").length,
-    inProgress: filteredTickets.filter((t) => t.status === "Escalated").length,
-    newTickets: filteredTickets.filter((t) => t.status === "Unassigned").length,
-    highPriority: filteredTickets.filter((t) => t.priority === "High" || t.priority === "Critical").length,
-    overdueTickets: filteredTickets.filter((t) => t.status === "Overdue").length,
-  }), [filteredTickets]);
+  const kpiCounts = useMemo(
+    () => ({
+      openTickets: filteredTickets.length,
+      assignedToMe: filteredTickets.filter((t) => t.status === "Assigned").length,
+      inProgress: filteredTickets.filter((t) => t.status === "Escalated").length,
+      newTickets: filteredTickets.filter((t) => t.status === "Unassigned").length,
+      highPriority: filteredTickets.filter(
+        (t) => t.priority === "High" || t.priority === "Critical"
+      ).length,
+      overdueTickets: filteredTickets.filter((t) => t.status === "Overdue").length,
+    }),
+    [filteredTickets]
+  );
 
   const getSortArrow = (key) => {
     if (sortConfig.key !== key) return "   ↑↓";
@@ -139,7 +208,11 @@ export default function EmployeeViewAllComplaints() {
         <section className="search-section-EV-VAC">
           <PillSearch
             value={searchTerm}
-            onChange={setSearchTerm}
+            // ✅ Works whether PillSearch sends (value) OR (event)
+            onChange={(v) => {
+              if (typeof v === "string") setSearchTerm(v);
+              else setSearchTerm(v?.target?.value ?? "");
+            }}
             placeholder="Search tickets by ID or summary..."
           />
         </section>
@@ -170,10 +243,10 @@ export default function EmployeeViewAllComplaints() {
                 { value: "Critical", label: "Critical" },
               ]}
             />
+
+            {/* Filters button next to dropdowns */}
+            <FilterPillButton onClick={() => setShowDateFilter(!showDateFilter)} />
           </div>
-          <button className="filter-btn-EV-VAC" onClick={() => setShowDateFilter(!showDateFilter)}>
-            Filters
-          </button>
         </section>
 
         {/* DATE FILTER */}
@@ -217,27 +290,45 @@ export default function EmployeeViewAllComplaints() {
                   { key: "issueDate", label: "Issue Date" },
                   { key: "responseTime", label: "Response Time" },
                   { key: "resolutionTime", label: "Resolution Time" },
-                  { key: null, label: "" }
+                  { key: null, label: "" },
                 ].map((col) => (
                   <th key={col.label} onClick={() => col.key && handleSort(col.key)}>
-                    {col.label}{col.key && getSortArrow(col.key)}
+                    {col.label}
+                    {col.key && getSortArrow(col.key)}
                   </th>
                 ))}
               </tr>
             </thead>
+
             <tbody>
               {filteredTickets.map((t) => (
                 <tr key={t.ticketId}>
-                  <td className="complaint-link-EV-VAC clickable" onClick={() => navigate(`/employee/details/${t.ticketId}`)}>
+                  <td
+                    className="complaint-link-EV-VAC clickable"
+                    onClick={() => navigate(`/employee/details/${t.ticketId}`)}
+                  >
                     {t.ticketId}
                   </td>
+
                   <td>{t.subject}</td>
-                  <td><span className={`pill-EV-VAC ${t.priority?.toLowerCase()}`}>{t.priority}</span></td>
+
+                  {/* ✅ FIX: PriorityPill expects prop name "priority" */}
+                  <td>
+                    <PriorityPill priority={t.priority} />
+                  </td>
+
                   <td>{t.status}</td>
-                  <td>{t.issue_date}</td>
-                  <td>{t.response_time}</td>
-                  <td>{t.resolution_time}</td>
-                  <td className="arrow-cell-EV-VAC clickable" onClick={() => navigate(`/employee/details/${t.ticketId}`)}>➜</td>
+
+                  <td>{t._issueDateRaw}</td>
+                  <td>{t._responseTimeRaw}</td>
+                  <td>{t._resolutionTimeRaw}</td>
+
+                  <td
+                    className="arrow-cell-EV-VAC clickable"
+                    onClick={() => navigate(`/employee/details/${t.ticketId}`)}
+                  >
+                    ➜
+                  </td>
                 </tr>
               ))}
             </tbody>
