@@ -82,6 +82,12 @@ export default function Approvals() {
     return { total, pending, approved, rejected };
   }, [rows]);
 
+  const handleReset = () => {
+    setQuery("");
+    setRequestType("All Request Types");
+    setStatus("All Status");
+  };
+
   return (
     <Layout role="manager">
       <div className="mgrApprovals">
@@ -107,7 +113,6 @@ export default function Approvals() {
 
         <section className="filtersRow">
           <div className="filtersLeft">
-            {/* IMPORTANT: renamed wrapper to avoid global .selectWrapper collisions */}
             <div className="pillSelectHolder">
               <PillSelect
                 value={requestType}
@@ -134,9 +139,11 @@ export default function Approvals() {
                 ]}
               />
             </div>
-          </div>
 
-          <FilterPillButton onClick={() => {}} />
+            <FilterPillButton onClick={handleReset} label="Reset">
+              Reset
+            </FilterPillButton>
+          </div>
         </section>
 
         <section className="tableWrapper">

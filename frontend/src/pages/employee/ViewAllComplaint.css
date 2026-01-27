@@ -1,7 +1,8 @@
 /* MAIN */
+/* Keep page-level spacing controlled by global layout */
 .main-EV-VAC {
   flex: 1;
-  padding: 28px 34px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -24,7 +25,7 @@
 .filters-row-EV-VAC {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 18px;
@@ -35,36 +36,7 @@
   display: flex;
   gap: 18px;
   flex-wrap: wrap;
-}
-
-.search-wrapper-EV-VAC {
-  display: flex;
   align-items: center;
-  background: #fdf9ff;
-  border-radius: 999px;
-  padding: 16px 20px; 
-  border: 1px solid #e5d4ff;
-  transition: box-shadow 0.2s;
-}
-
-/* FILTER BUTTON */
-.filter-btn-EV-VAC {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 18px;
-  border-radius: 999px;
-  border: none;
-  background: #401c51;
-  color: #ffffff;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.2s;
-}
-
-.filter-btn-EV-VAC:hover {
-  background: #c8b9cc;
-  transform: translateY(-1px);
-  color: #401c51;
 }
 
 /* TABLE */
@@ -117,40 +89,6 @@
   font-weight: 600;
   cursor: pointer;
   text-decoration: underline;
-}
-
-/* PRIORITY PILLS */
-.pill-EV-VAC {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 75px;
-  height: 25px;
-  border-radius: 16px;
-  font-size: 13px;
-  font-weight: 600;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.pill-EV-VAC.critical {
-  background: #ffe6e9;
-  color: #b8001f;
-}
-
-.pill-EV-VAC.high {
-  background: #fff4d6;
-  color: #b45309;
-}
-
-.pill-EV-VAC.medium {
-  background: #e6f4ff;
-  color: #035bb3;
-}
-
-.pill-EV-VAC.low {
-  background: #e7fde7;
-  color: #0d7f3c;
 }
 
 /* ARROW CELL */
