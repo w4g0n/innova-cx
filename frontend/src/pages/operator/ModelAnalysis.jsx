@@ -26,9 +26,6 @@ import operatorModelAnalysis from "../../mock-data/operatorModelAnalysis.json";
 const PURPLE = "#401c51";
 const LIGHT_PURPLE = "#9b71a3";
 const LIGHT_GREY = "#cfc3d7";
-const GREEN = "#28a745";
-const ORANGE = "#fd7e14";
-const RED = "#dc3545";
 
 export default function ModelAnalysis() {
   const navigate = useNavigate();
