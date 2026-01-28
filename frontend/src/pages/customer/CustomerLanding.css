@@ -646,3 +646,104 @@ body {
   .hero-content h1 { font-size: 42px; }
   .clusters { padding: 60px 16px; }
 }
+
+/* ================= CHAT OPEN ANIMATION (ADD ONLY) ================= */
+
+/* Closed state (default) */
+.novaWidget {
+  opacity: 0;
+  transform: scale(0.6) translateY(40px);
+  transform-origin: bottom right;
+  pointer-events: none;
+}
+
+/* Opened state */
+.novaWidget.open {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+}
+
+/* Smooth transition */
+.novaWidget {
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Optional polish: launcher press feedback */
+.novaWidgetLauncher {
+  transition: transform 0.2s ease;
+}
+
+.novaWidgetLauncher:active {
+  transform: scale(0.92);
+}
+
+/* ================= CHAT ANIMATION ENHANCEMENTS (ADD ONLY) ================= */
+
+/* --- Widget open motion polish --- */
+.novaWidget.open {
+  animation: novaOpen 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes novaOpen {
+  0% {
+    opacity: 0;
+    transform: scale(0.55) translateY(50px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.04) translateY(-6px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* --- Smooth fullscreen expand --- */
+.novaWidget.expanded {
+  transition:
+    width 0.45s cubic-bezier(0.25, 1, 0.5, 1),
+    height 0.45s cubic-bezier(0.25, 1, 0.5, 1),
+    bottom 0.45s ease,
+    right 0.45s ease;
+}
+
+/* --- Chat bubble entrance animation --- */
+.novaMsg {
+  animation: bubbleIn 0.35s ease-out;
+}
+
+@keyframes bubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* --- Bot typing dots smoother motion --- */
+@keyframes typingBounce {
+  0% { transform: translateY(0); opacity: 0.3; }
+  30% { transform: translateY(-4px); opacity: 1; }
+  60% { transform: translateY(0); opacity: 0.6; }
+  100% { opacity: 0.3; }
+}
+
+/* --- Launcher gentle attention pulse (very subtle) --- */
+.novaWidgetLauncher {
+  animation: launcherPulse 3.5s ease-in-out infinite;
+}
+
+@keyframes launcherPulse {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  50% {
+    box-shadow: 0 6px 18px rgba(155, 113, 163, 0.45);
+  }
+}

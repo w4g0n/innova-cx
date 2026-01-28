@@ -9,7 +9,6 @@ export default function CustomerLanding() {
     { title: "Social", desc: "Restaurants, cafes & amenities" },
   ];
 
-  // ---------- CHAT STATE ----------
   const listRef = useRef(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -18,6 +17,7 @@ export default function CustomerLanding() {
   const [hasChosenType, setHasChosenType] = useState(false);
   const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const user = useMemo(() => {
     try {
@@ -44,7 +44,6 @@ export default function CustomerLanding() {
     const id1 = `bot-${Date.now()}`;
     const id2 = `bot-${Date.now() + 1}`;
     setMessages([{ id: id1, from: "bot", text: "", typing: true }]);
-
     setTimeout(() => {
       setMessages([
         { id: id1, from: "bot", text: `Hi ${nameFromEmail}! I’m Nova. How can I help you today?`, typing: false },
@@ -134,80 +133,76 @@ export default function CustomerLanding() {
   };
 
   return (
-    <div>
-      {/* NAVBAR */}
-      <nav className="navbar">
-        <div className="logo"><img src={dccLogo} alt="Dubai CommerCity" /></div>
-        <ul className="nav-links">
-          <li><a href="#">Our Facilities</a></li>
-          <li><a href="#">Digital Ecosystem</a></li>
-          <li><a href="#">About</a></li>
-          <li><a href="#">Newsroom</a></li>
-          <li><a href="#">Contact</a></li>
-        </ul>
-        <button className="btn-primary">Set up a Business</button>
-      </nav>
+    <div className="customer-landing-page">
 
-      {/* HERO */}
-      <section className="hero">
-        <div className="hero-content">
-          <div className="hero-title-wrapper">
-            <h1 className="hero-title">
-              <span className="hero-static">We are</span>
-            </h1>
-            <div className="hero-dynamic">
-              <div className="hero-dynamic-inner">
-                <span>Dubai CommerCity</span>
-                <span>Leading Business Hub</span>
-                <span>Driving Digital Commerce</span>
-                {/* Repeat if needed for continuous scroll */}
+      {/* --- MAIN CONTENT --- */}
+      <div className="main-content">
+        {/* NAVBAR */}
+        <nav className="navbar">
+          <div className="logo"><img src={dccLogo} alt="Dubai CommerCity" /></div>
+          <ul className="nav-links">
+            <li><a href="#">Our Facilities</a></li>
+            <li><a href="#">Digital Ecosystem</a></li>
+            <li><a href="#">About</a></li>
+            <li><a href="#">Newsroom</a></li>
+            <li><a href="#">Contact</a></li>
+          </ul>
+          <button className="btn-primary">Set up a Business</button>
+        </nav>
+
+        {/* HERO */}
+        <section className="hero">
+          <div className="hero-content">
+            <div className="hero-title-wrapper">
+              <h1 className="hero-title"><span className="hero-static">We are</span></h1>
+              <div className="hero-dynamic">
+                <div className="hero-dynamic-inner">
+                  <span>Dubai CommerCity</span>
+                  <span>Leading Business Hub</span>
+                  <span>Driving Digital Commerce</span>
+                </div>
               </div>
+              <div className="hero-line" />
             </div>
-            <div className="hero-line" />
+            <div className="hero-body">
+              <button className="btn-hero">Learn More</button>
+              <p className="hero-desc">
+                Dubai CommerCity is the first and leading free zone dedicated exclusively 
+                to digital commerce in the Middle East Africa and South Asia (MEASA) region
+              </p>
+            </div>
           </div>
+        </section>
 
-          <div className="hero-body">
-            <button className="btn-hero">Learn More</button>
-            <p className="hero-desc">
-              Dubai CommerCity is the first and leading free zone dedicated exclusively 
-              to digital commerce in the Middle East Africa and South Asia (MEASA) region
-            </p>
+        {/* CLUSTERS */}
+        <section className="clusters">
+          {clusters.map((c, i) => (
+            <div key={i} className="cluster-card">
+              <h3>{c.title}</h3>
+              <p>{c.desc}</p>
+            </div>
+          ))}
+        </section>
+
+        {/* FOOTER */}
+        <footer className="footer">
+          <p>© 2026 Dubai CommerCity</p>
+          <div className="footer-links">
+            <span>Privacy Policy</span>
+            <span>Terms of Use</span>
+            <span>Contact</span>
           </div>
-        </div>
-      </section>
+        </footer>
+      </div>
 
-      {/* CLUSTERS */}
-      <section className="clusters">
-        {clusters.map((c, i) => (
-          <div key={i} className="cluster-card">
-            <h3>{c.title}</h3>
-            <p>{c.desc}</p>
-          </div>
-        ))}
-      </section>
-
-      {/* FOOTER */}
-      <footer className="footer">
-        <p>© 2026 Dubai CommerCity</p>
-        <div className="footer-links">
-          <span>Privacy Policy</span>
-          <span>Terms of Use</span>
-          <span>Contact</span>
-        </div>
-      </footer>
-
-      {/* CHAT LAUNCHER */}
+      {/* --- CHAT WIDGET --- */}
       {!isOpen && (
         <button className="novaWidgetLauncher" onClick={() => setIsOpen(true)}>
-          <span className="novaWidgetDot" />
-          Chat with Nova
+          <span className="novaWidgetDot" /> Chat with Nova
         </button>
       )}
-
-      {/* CHAT WIDGET */}
       {isOpen && (
-        <div className={`novaWidget ${isExpanded ? "expanded" : ""}`}>
-          {/* HEADER */}
+        <div className={`novaWidget ${isExpanded ? "expanded" : ""} open`}>
           <div className="novaWidgetHeader">
             <div className="novaWidgetHeaderLeft">
               <div className="novaAvatar" />
@@ -236,7 +231,6 @@ export default function CustomerLanding() {
             </div>
           </div>
 
-          {/* BODY */}
           <div className="novaWidgetBody">
             <div className="novaChatList" ref={listRef}>
               {messages.map((m) => (
@@ -246,7 +240,6 @@ export default function CustomerLanding() {
                   </div>
                 </div>
               ))}
-
               {!hasChosenType && stage === "chooseType" && (
                 <div className="novaQuickRow">
                   <button onClick={() => handleSelect("complaint")}>Complaint</button>
@@ -254,20 +247,12 @@ export default function CustomerLanding() {
                 </div>
               )}
             </div>
-
-            {/* COMPOSER */}
             {hasChosenType && (
               <form className="novaComposer" onSubmit={handleSend}>
-                <input
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Type a message…"
-                />
+                <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" />
                 <button type="submit">Send</button>
               </form>
             )}
-
-            {/* CLOSE CONFIRM MODAL */}
             {showCloseConfirm && (
               <div className="novaCloseModal">
                 <div className="novaCloseModalContent">
