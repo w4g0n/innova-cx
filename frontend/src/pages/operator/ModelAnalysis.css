@@ -1,24 +1,27 @@
-/* Spinner container centered */
 .loading-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 300px; /* adjust as needed */
+  height: 300px; 
 }
 
-/* Spinner style */
+
 .spinner {
   width: 50px;
   height: 50px;
-  border: 6px solid #e5e6ed;   /* light grey background */
-  border-top: 6px solid #401c51; /* purple top */
+  border: 6px solid #e5e6ed;
+  border-top: 6px solid #401c51; 
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .routing-label-row {
@@ -64,7 +67,6 @@
   transition: width 0.6s ease;
 }
 
-
 .chart-inner * {
   user-select: none;
 }
@@ -79,7 +81,6 @@
   font-size: 16px;
 }
 
-/* ================= TOP BAR ================= */
 
 .top-bar {
   display: flex;
@@ -109,28 +110,14 @@
   flex-wrap: wrap;
 }
 
-/* Layout-only wrapper for reusable PillSelect */
 .modelSelect {
   min-width: 210px;
 }
 
-/* Toggle button — same role as dashboard actions */
-.toggle-btn {
-  padding: 12px 20px;
-  border-radius: 999px;
-  border: none;
-  background: var(--btn-primary);
-  color: white;
-  font-size: 15px;
-  font-weight: 650;
-  cursor: pointer;
+.modelReset {
+  display: flex;
+  align-items: center;
 }
-
-.toggle-btn:hover {
-  filter: brightness(1.05);
-}
-
-/* ================= KPI ROW ================= */
 
 .kpi-row {
   display: grid;
@@ -151,7 +138,6 @@
   }
 }
 
-/* KPI cards: keep original content/layout, but use reusable KpiCard look */
 .kpi-card {
   background: #ffffff;
   border-radius: 18px;
@@ -243,8 +229,6 @@
   color: rgba(17, 17, 17, 0.65);
 }
 
-/* ================= CARD ROWS ================= */
-
 .cards-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -277,9 +261,6 @@
   font-size: 15px;
   color: rgba(17, 17, 17, 0.65);
 }
-
-/* ================= CHART / PANEL AREAS ================= */
-/* KEEP EXACT IMAGE FITTING (unchanged) */
 
 .chart-inner {
   padding: 10px;
@@ -352,8 +333,6 @@
   border-radius: 12px;
 }
 
-/* ================= LEGENDS ================= */
-
 .mini-legend {
   list-style: none;
   padding: 0;
@@ -392,13 +371,11 @@
   background: rgba(89, 36, 180, 0.35);
 }
 
-/* ================= TABLE ================= */
 
 .table-card {
   margin-top: 16px;
 }
 
-/* Lighter container like dashboard cards */
 .table-wrapper {
   margin-top: 10px;
   border-radius: 14px;
@@ -423,7 +400,6 @@
   vertical-align: middle;
 }
 
-/* Header — softer, like dashboard */
 .review-table thead th {
   background: rgba(0, 0, 0, 0.04);
   text-transform: uppercase;
@@ -433,7 +409,6 @@
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-/* Rows — very light zebra, dashboard style */
 .review-table tbody tr:nth-child(even) {
   background: rgba(0, 0, 0, 0.02);
 }
@@ -476,7 +451,6 @@
   color: #8a6d00;
 }
 
-/* Action button — matches dashboard links */
 .link-btn {
   padding: 8px 14px;
   border-radius: 999px;

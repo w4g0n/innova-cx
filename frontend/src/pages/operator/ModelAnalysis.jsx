@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
+import FilterPillButton from "../../components/common/FilterPillButton";
 
 import {
   BarChart,
@@ -20,12 +21,14 @@ import {
 
 import "./ModelAnalysis.css";
 
-// Import local JSON
 import operatorModelAnalysis from "../../mock-data/operatorModelAnalysis.json";
 
 const PURPLE = "#401c51";
 const LIGHT_PURPLE = "#9b71a3";
 const LIGHT_GREY = "#cfc3d7";
+const GREEN = "#22c55e";
+const ORANGE = "#f59e0b";
+const RED = "#ef4444";
 
 export default function ModelAnalysis() {
   const navigate = useNavigate();
@@ -49,19 +52,24 @@ export default function ModelAnalysis() {
     setData(filteredData);
   }, [timeFilter, deptFilter]);
 
+  const resetFilters = () => {
+    setTimeFilter("last30days");
+    setDeptFilter("all");
+  };
+
   const openComplaint = (ticketId) => {
     navigate(`/operator/complaints/${ticketId}`);
   };
 
-  if (!data)
-  return (
-    <Layout role="operator">
-      <div className="modelAnalysis loading-container">
-        <div className="spinner"></div>
-      </div>
-    </Layout>
-  );
-
+  if (!data) {
+    return (
+      <Layout role="operator">
+        <div className="modelAnalysis loading-container">
+          <div className="spinner"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   const { kpis, charts: rawCharts, reviewCases } = data;
 
@@ -70,8 +78,7 @@ export default function ModelAnalysis() {
       rawCharts?.routingAccuracyByDepartment?.labels.map((label, idx) => ({
         department: label,
         accuracy: rawCharts.routingAccuracyByDepartment.values[idx],
-        totalComplaints:
-          rawCharts.routingAccuracyByDepartment.values[idx] * 1, // Placeholder; replace with actual count if available
+        totalComplaints: rawCharts.routingAccuracyByDepartment.values[idx] * 1,
       })) || [],
     reroutedComplaints:
       rawCharts?.reroutedComplaints?.segments.map((s) => ({
@@ -111,6 +118,7 @@ export default function ModelAnalysis() {
             title="Model Performance Dashboard"
             subtitle="Routing and priority scoring accuracy for model-driven complaint handling."
           />
+
           <div className="top-actions">
             <div className="modelSelect">
               <PillSelect
@@ -124,6 +132,7 @@ export default function ModelAnalysis() {
                 ]}
               />
             </div>
+
             <div className="modelSelect">
               <PillSelect
                 value={deptFilter}
@@ -138,36 +147,45 @@ export default function ModelAnalysis() {
                 ]}
               />
             </div>
+
+            {/* ✅ Swapped to the same reset pill used in ManagerViewAllComplaints */}
+            <div className="modelReset">
+              <FilterPillButton onClick={resetFilters} label="Reset" />
+            </div>
           </div>
         </header>
 
-        {/* KPI ROW */}
         <section className="kpi-row">
-          {[{
-            label: "Routing Accuracy",
-            value: kpis.routingAccuracyPct,
-            change: kpis.routingAccuracyChangePct,
-            pill: "Target ≥ 90%",
-            subtext: "Percentage of complaints routed correctly.",
-          },{
-            label: "Reroute Rate",
-            value: kpis.rerouteRatePct,
-            change: kpis.rerouteRateChangePct,
-            pill: "Lower is better",
-            subtext: "Complaints manually rerouted after model decision.",
-          },{
-            label: "Priority Accuracy",
-            value: kpis.priorityAccuracyPct,
-            change: kpis.priorityAccuracyChangePct,
-            pill: "Target ≥ 85%",
-            subtext: "Model priority vs final human score.",
-          },{
-            label: "Rescore Rate",
-            value: kpis.rescoreRatePct,
-            change: kpis.rescoreRateChangePct,
-            pill: "Monitor",
-            subtext: "Operators changed the model’s score.",
-          }].map((kpi, i) => (
+          {[
+            {
+              label: "Routing Accuracy",
+              value: kpis.routingAccuracyPct,
+              change: kpis.routingAccuracyChangePct,
+              pill: "Target ≥ 90%",
+              subtext: "Percentage of complaints routed correctly.",
+            },
+            {
+              label: "Reroute Rate",
+              value: kpis.rerouteRatePct,
+              change: kpis.rerouteRateChangePct,
+              pill: "Lower is better",
+              subtext: "Complaints manually rerouted after model decision.",
+            },
+            {
+              label: "Priority Accuracy",
+              value: kpis.priorityAccuracyPct,
+              change: kpis.priorityAccuracyChangePct,
+              pill: "Target ≥ 85%",
+              subtext: "Model priority vs final human score.",
+            },
+            {
+              label: "Rescore Rate",
+              value: kpis.rescoreRatePct,
+              change: kpis.rescoreRateChangePct,
+              pill: "Monitor",
+              subtext: "Operators changed the model’s score.",
+            },
+          ].map((kpi, i) => (
             <article key={i} className="kpi-card">
               <div className="kpi-top">
                 <span className="kpi-label">{kpi.label}</span>
@@ -177,7 +195,11 @@ export default function ModelAnalysis() {
                 <span className="kpi-value">{kpi.value}%</span>
                 <span
                   className={`kpi-change ${
-                    kpi.change > 0 ? "kpi-positive" : kpi.change < 0 ? "kpi-negative" : "kpi-neutral"
+                    kpi.change > 0
+                      ? "kpi-positive"
+                      : kpi.change < 0
+                      ? "kpi-negative"
+                      : "kpi-neutral"
                   }`}
                 >
                   {kpi.change > 0 ? "+" : ""}
@@ -189,20 +211,17 @@ export default function ModelAnalysis() {
           ))}
         </section>
 
-        {/* ROUTING ACCURACY BLOCKS */}
         <section className="cards-row">
           <article className="card">
             <h2 className="card-title">Routing Accuracy by Department</h2>
             <div className="routing-blocks">
               {charts.routingAccuracyByDepartment.map((d) => (
                 <div key={d.department} className="routing-block">
-                  {/* Department label and percentage side by side */}
                   <div className="routing-label-row">
                     <span className="routing-label">{d.department}</span>
                     <span className="accuracy-text">{d.accuracy}%</span>
                   </div>
 
-                  {/* Progress bar */}
                   <div className="progress-bar">
                     <div
                       className="progress-fill"
@@ -210,14 +229,14 @@ export default function ModelAnalysis() {
                     ></div>
                   </div>
 
-                  {/* Total complaints below */}
-                  <div className="total-complaints">{d.totalComplaints} complaints</div>
+                  <div className="total-complaints">
+                    {d.totalComplaints} complaints
+                  </div>
                 </div>
               ))}
             </div>
           </article>
 
-          {/* REROUTED COMPLAINTS PIE */}
           <article className="card">
             <h2 className="card-title">Rerouted Complaints</h2>
             <div className="chart-inner chart-inner--short">
@@ -233,7 +252,10 @@ export default function ModelAnalysis() {
                     label={renderPieLabel}
                   >
                     {charts.reroutedComplaints.map((entry, index) => (
-                      <Cell key={index} fill={pieColors[index % pieColors.length]} />
+                      <Cell
+                        key={index}
+                        fill={pieColors[index % pieColors.length]}
+                      />
                     ))}
                   </Pie>
                   <Legend />
@@ -243,7 +265,6 @@ export default function ModelAnalysis() {
           </article>
         </section>
 
-        {/* PRIORITY ACCURACY BY SCORE */}
         <section className="cards-row">
           <article className="card">
             <h2 className="card-title">Priority Accuracy by Score</h2>
@@ -259,7 +280,6 @@ export default function ModelAnalysis() {
             </div>
           </article>
 
-          {/* RESCORED COMPLAINTS */}
           <article className="card">
             <h2 className="card-title">Rescored Complaints</h2>
             <div className="chart-inner chart-inner--short">
@@ -275,7 +295,6 @@ export default function ModelAnalysis() {
           </article>
         </section>
 
-        {/* RESOLUTION SUGGESTION & EFFECTIVENESS */}
         <section className="cards-row">
           <article className="card">
             <h2 className="card-title">Resolution Suggestion Adoption</h2>
@@ -306,7 +325,10 @@ export default function ModelAnalysis() {
                     label={renderPieLabel}
                   >
                     {charts.resolutionEffectiveness.map((entry, index) => (
-                      <Cell key={index} fill={pieColors[index % pieColors.length]} />
+                      <Cell
+                        key={index}
+                        fill={pieColors[index % pieColors.length]}
+                      />
                     ))}
                   </Pie>
                   <Legend />
@@ -316,7 +338,6 @@ export default function ModelAnalysis() {
           </article>
         </section>
 
-        {/* TABLE */}
         <section className="card table-card">
           <h2 className="card-title">Cases Requiring Review</h2>
           <div className="table-wrapper">

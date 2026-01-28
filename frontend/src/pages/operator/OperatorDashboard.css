@@ -36,29 +36,6 @@
   min-width: 210px;
 }
 
-.export-pill-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 18px;
-  border-radius: 999px;
-  border: none;
-  background: var(--btn-primary);
-  color: #ffffff;
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 750;
-}
-
-.export-pill-btn:hover {
-  filter: brightness(1.05);
-}
-
-.export-icon {
-  display: inline-flex;
-  font-size: 16px;
-}
-
 .cards-row {
   display: grid;
   grid-template-columns: 1.6fr 1fr;
