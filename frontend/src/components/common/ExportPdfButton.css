@@ -1,0 +1,52 @@
+.exportPdfBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  /* 🔽 reduced padding to match PillSelect / FilterPillButton */
+  padding: 10px 16px;
+  height: 44px;
+
+  border-radius: 999px;
+  background: var(--btn-primary);
+  color: #ffffff;
+
+  font-size: 15px;
+  font-weight: 700;
+
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.exportPdfBtn:hover {
+  filter: brightness(1.05);
+}
+
+.exportPdfBtn.isLoading {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+/* Icon */
+.exportPdfIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Kill ALL anchor styling from PDFDownloadLink */
+.exportPdfLink {
+  display: inline-flex;
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.exportPdfLink:visited {
+  color: inherit;
+}

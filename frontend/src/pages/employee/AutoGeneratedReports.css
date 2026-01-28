@@ -4,21 +4,6 @@
   font-size: 18px;
 }
 
-.downloadBtn {
-  padding: 16px 22px;
-  border-radius: 999px;
-  border: none;
-  background: var(--btn-primary);
-  color: #fff;
-  font-size: 17px;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.downloadBtn:hover {
-  filter: brightness(1.05);
-}
-
 .kpiRow {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

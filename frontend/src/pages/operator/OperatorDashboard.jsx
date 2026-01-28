@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PillSelect from "../../components/common/PillSelect";
-import operatorDashboardData from "../../mock-data/operatorDashboard.json"; // <-- local JSON
+import ExportPdfButton from "../../components/common/ExportPdfButton";
+import operatorDashboardData from "../../mock-data/operatorDashboard.json";
 import "./OperatorDashboard.css";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import OperatorDashboardPDF from "./OperatorDashboardPDF.jsx";
-
 
 export default function OperatorDashboard() {
   const navigate = useNavigate();
@@ -16,14 +16,10 @@ export default function OperatorDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load local JSON instead of fetching from API
   useEffect(() => {
     try {
       setLoading(true);
       setError(null);
-
-      // For demonstration, we can filter by "range" if your JSON has timestamps
-      // Otherwise, just load all data
       setData(operatorDashboardData);
     } catch (err) {
       setError("Failed to load dashboard data");
@@ -76,13 +72,16 @@ export default function OperatorDashboard() {
             </div>
 
             <PDFDownloadLink
+              className="exportPdfLink"
               document={<OperatorDashboardPDF data={data} range={range} />}
-              fileName={`operator-dashboard-${new Date().toISOString().slice(0,10)}.pdf`}
+              fileName={`operator-dashboard-${new Date()
+                .toISOString()
+                .slice(0, 10)}.pdf`}
             >
               {({ loading }) => (
-                <button className="export-pill-btn" type="button">
-                  {loading ? "Preparing PDF…" : "⭳ Export"}
-                </button>
+                <span className={`exportPdfBtn ${loading ? "isLoading" : ""}`}>
+                  <ExportPdfButton loading={loading} />
+                </span>
               )}
             </PDFDownloadLink>
           </div>
@@ -107,7 +106,6 @@ export default function OperatorDashboard() {
             </div>
           </article>
 
-          {/* ERROR & FALLBACK */}
           <article className="card narrow-card">
             <h2 className="card-title">Error & Fallback Overview</h2>
 
@@ -129,7 +127,6 @@ export default function OperatorDashboard() {
           </article>
         </section>
 
-        {/* INTEGRATIONS */}
         <section className="cards-row">
           <article className="card">
             <h2 className="card-title">Integrations Status</h2>
@@ -149,7 +146,6 @@ export default function OperatorDashboard() {
             </ul>
           </article>
 
-          {/* QUEUES */}
           <article className="card">
             <h2 className="card-title">Pipeline & Queue Health</h2>
 
@@ -171,7 +167,6 @@ export default function OperatorDashboard() {
           </article>
         </section>
 
-        {/* EVENTS */}
         <section className="card full-width-card">
           <h2 className="card-title">Incident & Event Feed</h2>
 
@@ -191,7 +186,6 @@ export default function OperatorDashboard() {
           </ul>
         </section>
 
-        {/* VERSIONS & SAFETY */}
         <section className="cards-row">
           <article className="card">
             <h2 className="card-title">AI & Chatbot Versions</h2>
@@ -234,7 +228,6 @@ export default function OperatorDashboard() {
   );
 }
 
-// Mini KPI component
 function MiniKpi({ label, count, trendLabel, critical }) {
   return (
     <div className="mini-kpi">
