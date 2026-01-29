@@ -50,6 +50,18 @@ services:
     networks:
       - innovacx-network
 
+  chatbot:
+    profiles:
+      - chatbot
+    build: ./chatbot
+    container_name: innovacx-chatbot
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./chatbot/data:/app/data
+    networks:
+      - innovacx-network
+
 volumes:
   postgres_data:
 
