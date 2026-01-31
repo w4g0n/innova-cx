@@ -11,3 +11,9 @@
   box-sizing: border-box;
   width: calc(100% - 280px);
 }
+
+.appShell--noSidebar .appContent,
+.appContent--noSidebar {
+  margin-left: 0;
+  width: 100%;
+}

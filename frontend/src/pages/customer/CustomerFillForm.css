@@ -6,6 +6,15 @@
   gap: 14px;
 }
 
+/* ✅ embedded mode tweaks (layout only) */
+.custFormPage--embedded {
+  gap: 12px;
+}
+
+.custFormPage--embedded .custFormCard {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.06);
+}
+
 .custFormCard {
   background: #ffffff;
   border-radius: 18px;
@@ -48,12 +57,6 @@
   letter-spacing: 0.08em;
 }
 
-.custLabel--small {
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  opacity: 0.9;
-}
-
 .custInput {
   border-radius: 14px;
   padding: 12px 12px;
@@ -61,11 +64,6 @@
   outline: none;
   font-size: 14px;
   background: #ffffff;
-}
-
-.custInput--compact {
-  padding: 11px 12px;
-  border-radius: 999px;
 }
 
 .custInput:disabled {
@@ -77,14 +75,6 @@
   display: flex;
   align-items: center;
   min-width: 190px;
-}
-
-.custFieldRow {
-  display: flex;
-  gap: 14px;
-  align-items: flex-end;
-  justify-content: flex-start;
-  flex-wrap: wrap;
 }
 
 .custField--inline {
@@ -114,7 +104,6 @@
   color: var(--btn-primary);
 }
 
-/* Textarea */
 .custTextarea {
   border-radius: 14px;
   padding: 12px 12px;
@@ -136,55 +125,6 @@
   color: rgba(17, 17, 17, 0.62);
 }
 
-/* Audio box */
-.custAudioBox {
-  border-radius: 16px;
-  padding: 14px;
-  background: rgba(64, 28, 81, 0.04);
-  border: 1px solid rgba(64, 28, 81, 0.10);
-}
-
-.custAudioTitle {
-  font-size: 14px;
-  font-weight: 900;
-  color: #111827;
-  margin-bottom: 10px;
-}
-
-.custAudioRowCompact {
-  display: grid;
-  grid-template-columns: 220px 260px;
-  gap: 14px;
-  align-items: end;
-  margin-bottom: 10px;
-}
-
-.custAudioWeightCompact {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.custRecordBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  padding: 11px 14px;
-  border: 1px solid rgba(89, 36, 180, 0.22);
-  background: rgba(89, 36, 180, 0.10);
-  color: var(--btn-primary);
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
-  height: 44px;
-}
-
-.custRecordBtn:hover {
-  background: rgba(89, 36, 180, 0.14);
-}
-
-/* Actions */
 .custFormActions {
   display: flex;
   justify-content: flex-end;
@@ -223,15 +163,9 @@
   filter: brightness(1.05);
 }
 
-/* Responsive */
 @media (max-width: 1100px) {
   .custFormAutoGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .custAudioRowCompact {
-    grid-template-columns: 1fr;
-    align-items: start;
   }
 }
 
@@ -248,6 +182,10 @@
   background: #f2f2f2;
   color: #444;
   border: 1px solid #ccc;
+  border-radius: 999px;
+  padding: 10px 12px;
+  cursor: pointer;
+  margin-bottom: 10px;
 }
 
 .custMicBtn.recording {
