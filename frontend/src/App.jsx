@@ -18,6 +18,7 @@ const CustomerFillForm = lazy(() => import("./pages/customer/CustomerFillForm"))
 const CustomerTicketDetails = lazy(() =>
   import("./pages/customer/CustomerTicketDetails")
 );
+const CustomerSettings = lazy(() => import("./pages/customer/CustomerSettings"));
 
 // Employee
 const EmployeeNotifications = lazy(() =>
@@ -32,7 +33,7 @@ const EmployeeViewAllComplaints = lazy(() =>
   import("./pages/employee/EmployeeViewAllComplaints")
 );
 
-// Manager (✅ keep ONLY lazy versions)
+// Manager
 const ManagerNotifications = lazy(() =>
   import("./pages/manager/ManagerNotifications")
 );
@@ -126,6 +127,15 @@ export default function App() {
             }
           />
 
+          <Route
+            path="/customer/settings"
+            element={
+              <ProtectedRoute role="customer">
+                <CustomerSettings />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Employee (protected) */}
           <Route
             path="/employee"
@@ -168,7 +178,7 @@ export default function App() {
             }
           />
 
-          {/* Manager (protected) ✅ only once */}
+          {/* Manager (protected) */}
           <Route
             path="/manager"
             element={
