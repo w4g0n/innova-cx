@@ -476,3 +476,495 @@ FROM ticket_sla s;
 -- ============================================================
 -- End of schema
 -- ============================================================
+
+-- ============================================================
+-- 17) KPI & ANALYTICS VIEWS
+-- (Read-only views for dashboards, reports, and analytics)
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- 1) Ticket-level KPI view
+-- Purpose:
+-- - Per-ticket analytics
+-- - SLA tracking
+-- - Resolution time calculations
+-- ------------------------------------------------------------
+CREATE OR REPLACE VIEW v_ticket_kpis AS
+SELECT
+  t.ticket_id,
+  t.department,
+  t.priority,
+  t.status,
+
+  t.submitted_at,
+  t.resolved_at,
+
+  -- Resolution time in hours
+  CASE
+    WHEN t.resolved_at IS NOT NULL
+    THEN EXTRACT(EPOCH FROM (t.resolved_at - t.submitted_at)) / 3600
+    ELSE NULL
+  END AS resolution_hours,
+
+  -- SLA flags
+  (s.respond_breached_at IS NOT NULL) AS respond_sla_breached,
+  (s.resolve_breached_at IS NOT NULL) AS resolve_sla_breached,
+
+  -- Overall SLA breach flag
+  (
+    s.respond_breached_at IS NOT NULL
+    OR s.resolve_breached_at IS NOT NULL
+  ) AS sla_breached
+
+FROM ticket t
+LEFT JOIN ticket_sla s ON s.ticket_id = t.ticket_id;
+
+
+-- ------------------------------------------------------------
+-- 2) Employee KPI view
+-- Purpose:
+-- - Employee performance dashboards
+-- - SLA + escalation tracking
+-- ------------------------------------------------------------
+CREATE OR REPLACE VIEW v_employee_kpis AS
+SELECT
+  e.employee_id,
+  e.full_name,
+  e.department_id,
+
+  COUNT(t.ticket_id) AS tickets_handled,
+
+  COUNT(t.ticket_id)
+    FILTER (WHERE t.status = 'resolved') AS tickets_resolved,
+
+  -- Average resolution time (hours)
+  AVG(
+    EXTRACT(EPOCH FROM (t.resolved_at - t.submitted_at)) / 3600
+  ) FILTER (WHERE t.resolved_at IS NOT NULL) AS avg_resolution_hours,
+
+  -- SLA breaches count
+  COUNT(s.ticket_id)
+    FILTER (
+      WHERE s.respond_breached_at IS NOT NULL
+         OR s.resolve_breached_at IS NOT NULL
+    ) AS sla_breaches,
+
+  -- Escalation count
+  COUNT(h.ticket_id)
+    FILTER (WHERE h.status = 'escalated') AS escalations
+
+FROM employee e
+LEFT JOIN ticket t ON t.employee_id = e.employee_id
+LEFT JOIN ticket_sla s ON s.ticket_id = t.ticket_id
+LEFT JOIN ticket_status_history h ON h.ticket_id = t.ticket_id
+
+GROUP BY e.employee_id, e.full_name, e.department_id;
+
+
+-- ------------------------------------------------------------
+-- 3) Department KPI view
+-- Purpose:
+-- - Department-level dashboards
+-- - Management overview
+-- ------------------------------------------------------------
+CREATE OR REPLACE VIEW v_department_kpis AS
+SELECT
+  t.department,
+
+  COUNT(*) AS total_tickets,
+
+  COUNT(*)
+    FILTER (WHERE t.status = 'resolved') AS resolved_tickets,
+
+  -- Resolution rate (%)
+  ROUND(
+    COUNT(*) FILTER (WHERE t.status = 'resolved')::NUMERIC
+    / NULLIF(COUNT(*), 0) * 100,
+    2
+  ) AS resolution_rate_percent,
+
+  -- Average resolution time (hours)
+  AVG(
+    EXTRACT(EPOCH FROM (t.resolved_at - t.submitted_at)) / 3600
+  ) FILTER (WHERE t.resolved_at IS NOT NULL) AS avg_resolution_hours,
+
+  -- SLA breaches
+  COUNT(s.ticket_id)
+    FILTER (
+      WHERE s.respond_breached_at IS NOT NULL
+         OR s.resolve_breached_at IS NOT NULL
+    ) AS sla_breaches
+
+FROM ticket t
+LEFT JOIN ticket_sla s ON s.ticket_id = t.ticket_id
+
+GROUP BY t.department;
+
+-- ------------------------------------------------------------
+-- 4) Monthly employee KPI view
+-- Purpose:
+-- - Feeds employee_performance_report table
+-- - Used for monthly snapshots
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE VIEW v_employee_monthly_kpis AS
+SELECT
+  e.employee_id,
+  TO_CHAR(t.submitted_at, 'YYYY-MM') AS report_month,
+
+  COUNT(t.ticket_id) AS tickets_handled,
+
+  COUNT(t.ticket_id)
+    FILTER (WHERE t.status = 'resolved') AS tickets_resolved,
+
+  AVG(
+    EXTRACT(EPOCH FROM (t.resolved_at - t.submitted_at)) / 3600
+  ) FILTER (WHERE t.resolved_at IS NOT NULL) AS avg_resolution_hours,
+
+  COUNT(s.ticket_id)
+    FILTER (
+      WHERE s.respond_breached_at IS NOT NULL
+         OR s.resolve_breached_at IS NOT NULL
+    ) AS sla_breaches
+
+FROM employee e
+LEFT JOIN ticket t ON t.employee_id = e.employee_id
+LEFT JOIN ticket_sla s ON s.ticket_id = t.ticket_id
+
+GROUP BY e.employee_id, report_month;
+
+-- ============================================================
+-- End of KPI Views
+-- ============================================================
+
+-- INSERTING PART
+
+SET search_path TO cms;
+
+-- ============================================================
+-- 1) DEPARTMENTS
+-- ============================================================
+INSERT INTO department (department_id, name) VALUES
+('DPT-IT', 'IT Support'),
+('DPT-NET', 'Network'),
+('DPT-BILL', 'Billing'),
+('DPT-CS', 'Customer Service'),
+('DPT-OPS', 'Operations')
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 2) USERS
+-- ============================================================
+INSERT INTO "user" (user_id, full_name, phone_e164, company) VALUES
+('USR-001', 'Ahmed Al Mansoori', '+971501111111', 'Emirates Tech'),
+('USR-002', 'Sara Khaled', '+971502222222', 'Dubai Holdings'),
+('USR-003', 'Omar Hassan', '+971503333333', 'Etisalat'),
+('USR-004', 'Laila Noor', '+971504444444', 'Careem')
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 3) EMPLOYEES
+-- ============================================================
+INSERT INTO employee (employee_id, department_id, full_name, email, role) VALUES
+('EMP-101', 'DPT-IT', 'Yousef Ali', 'yousef@company.com', 'Technician'),
+('EMP-102', 'DPT-NET', 'Mona Farouk', 'mona@company.com', 'Engineer'),
+('EMP-103', 'DPT-BILL', 'Khalid Saeed', 'khalid@company.com', 'Billing Officer'),
+('EMP-104', 'DPT-CS', 'Lina Saleh', 'lina@company.com', 'Supervisor'),
+('EMP-200', 'DPT-CS', 'Hassan Nabil', 'hassan@company.com', 'Manager')
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 4) APP ACCOUNTS
+-- ============================================================
+INSERT INTO app_account (
+  account_id, linked_user_id, linked_employee_id,
+  email, password_hash, role
+) VALUES
+('ACC-U1', 'USR-001', NULL, 'ahmed@gmail.com', 'hash123', 'user'),
+('ACC-U2', 'USR-002', NULL, 'sara@gmail.com', 'hash123', 'user'),
+('ACC-U3', 'USR-003', NULL, 'omar@gmail.com', 'hash123', 'user'),
+
+('ACC-E1', NULL, 'EMP-101', 'yousef@company.com', 'hash123', 'employee'),
+('ACC-E2', NULL, 'EMP-102', 'mona@company.com', 'hash123', 'employee'),
+('ACC-M1', NULL, 'EMP-200', 'hassan@company.com', 'hash123', 'manager')
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 5) PASSWORD RESET TOKENS
+-- ============================================================
+INSERT INTO password_reset_token (
+  reset_id, account_id, token_hash, expires_at
+) VALUES
+(
+  'RST-001', 'ACC-U1', 'resettokenhash',
+  NOW() + INTERVAL '30 minutes'
+)
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 6) TICKETS
+-- ============================================================
+INSERT INTO ticket (
+  ticket_id, user_id, employee_id,
+  subject, title, description,
+  channel, department, priority, status,
+  submitted_at, last_updated_at, resolved_at
+) VALUES
+(
+  'CX-1001', 'USR-001', 'EMP-101',
+  'Internet Issue', 'No Internet Access',
+  'Internet disconnected since morning.',
+  'chatbot', 'IT Support', 'High', 'resolved',
+  NOW() - INTERVAL '3 days',
+  NOW() - INTERVAL '1 day',
+  NOW() - INTERVAL '1 day'
+),
+(
+  'CX-1002', 'USR-002', 'EMP-103',
+  'Billing Error', 'Wrong Invoice Amount',
+  'Extra charge on last invoice.',
+  'text', 'Billing', 'Medium', 'in_progress',
+  NOW() - INTERVAL '2 days',
+  NOW() - INTERVAL '6 hours',
+  NULL
+),
+(
+  'CX-1003', 'USR-003', NULL,
+  'Network Speed', 'Slow Internet Speed',
+  'Connection speed is very slow.',
+  'audio', 'Network', 'Low', 'submitted',
+  NOW() - INTERVAL '5 hours',
+  NOW() - INTERVAL '5 hours',
+  NULL
+)
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 7) SLA
+-- ============================================================
+INSERT INTO ticket_sla (
+  ticket_id, respond_due_at, resolve_due_at,
+  respond_breached_at, resolve_breached_at
+) VALUES
+(
+  'CX-1001',
+  NOW() - INTERVAL '2 days',
+  NOW() - INTERVAL '1 day',
+  NULL,
+  NULL
+),
+(
+  'CX-1002',
+  NOW() - INTERVAL '12 hours',
+  NOW() + INTERVAL '1 day',
+  NOW() - INTERVAL '2 hours',
+  NULL
+),
+(
+  'CX-1003',
+  NOW() + INTERVAL '4 hours',
+  NOW() + INTERVAL '2 days',
+  NULL,
+  NULL
+)
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 8) STATUS HISTORY
+-- ============================================================
+INSERT INTO ticket_status_history (history_id, ticket_id, status) VALUES
+('HIS-001', 'CX-1001', 'submitted'),
+('HIS-002', 'CX-1001', 'assigned'),
+('HIS-003', 'CX-1001', 'resolved'),
+
+('HIS-004', 'CX-1002', 'submitted'),
+('HIS-005', 'CX-1002', 'in_progress'),
+
+('HIS-006', 'CX-1003', 'submitted')
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 9) ASSIGNMENT HISTORY
+-- ============================================================
+INSERT INTO ticket_assignment_history (
+  assignment_id, ticket_id, employee_id, assigned_by, note
+) VALUES
+(
+  'ASN-001', 'CX-1001', 'EMP-101', 'EMP-200',
+  'Auto-assigned by AI routing'
+),
+(
+  'ASN-002', 'CX-1002', 'EMP-103', 'EMP-200',
+  'Manual assignment by manager'
+)
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 10) WORK LOGS
+-- ============================================================
+INSERT INTO ticket_work_log (
+  worklog_id, ticket_id, employee_id, step_no, note
+) VALUES
+(
+  'WLG-001', 'CX-1001', 'EMP-101', 1,
+  'Checked router and network configuration'
+),
+(
+  'WLG-002', 'CX-1001', 'EMP-101', 2,
+  'Restarted modem and confirmed connectivity'
+)
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 11) ATTACHMENTS
+-- ============================================================
+INSERT INTO ticket_attachment (
+  attachment_id, ticket_id, file_name, content_type,
+  size_bytes, duration_seconds, storage_key
+) VALUES
+(
+  'ATT-001', 'CX-1003', 'voice_complaint.webm',
+  'audio/webm', 204800, 45, 'tickets/CX-1003/audio1.webm'
+)
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 12) NOTIFICATIONS
+-- ============================================================
+INSERT INTO notification_log (
+  notification_id, ticket_id, channel, status, sent_at
+) VALUES
+(
+  'NTF-001', 'CX-1001', 'email', 'sent', NOW() - INTERVAL '2 days'
+),
+(
+  'NTF-002', 'CX-1002', 'sms', 'failed', NULL
+)
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 13) AI RESULTS
+-- ============================================================
+INSERT INTO ticket_ai_result (
+  ai_ticket_id, ticket_id, predicted_department_id,
+  model_version, predicted_priority,
+  confidence_score, priority_to_respond, priority_to_resolve
+) VALUES
+(
+  'AIR-001', 'CX-1001', 'DPT-IT',
+  'v1.2.0', 'High', 0.94, 1, 2
+),
+(
+  'AIR-002', 'CX-1003', 'DPT-NET',
+  'v1.2.0', 'Low', 0.78, 3, 4
+)
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 14) APPROVAL REQUESTS
+-- ============================================================
+INSERT INTO approval_request (
+  request_id, ticket_id, request_type,
+  current_value, requested_value,
+  submitted_by_employee_id, status
+) VALUES
+(
+  'REQ-001', 'CX-1002', 'rescore',
+  'Medium', 'High',
+  'EMP-103', 'pending'
+)
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 15) ISSUE REPORTS
+-- ============================================================
+INSERT INTO issue_report (
+  report_id, ticket_id, details
+) VALUES
+(
+  'RPT-001', 'CX-1002',
+  'Customer dissatisfied with invoice explanation'
+)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO ticket_issue_report (
+  report_id, ticket_id, submitted_by_user_id,
+  issue_text
+) VALUES
+(
+  'RPT-002', 'CX-1003', 'USR-003',
+  'Internet speed unacceptable during work hours'
+)
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 16) CHATBOT DATA
+-- ============================================================
+INSERT INTO chat_conversation (
+  conversation_id, user_id, context
+) VALUES
+(
+  'CONV-001', 'USR-001',
+  '{"intent":"internet_issue","location":"Dubai"}'
+)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO chat_message (
+  message_id, conversation_id, role, text
+) VALUES
+(
+  'MSG-001', 'CONV-001', 'user',
+  'My internet is not working'
+),
+(
+  'MSG-002', 'CONV-001', 'bot',
+  'I have created a ticket for you.'
+)
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 17) PERFORMANCE REPORTS (from KPI view)
+-- ============================================================
+INSERT INTO employee_performance_report (
+  report_id, employee_id, report_month, overall_rating
+)
+SELECT
+  'RPT-EMP-2026-01-EMP-101',
+  employee_id,
+  report_month,
+  88
+FROM v_employee_monthly_kpis
+WHERE employee_id = 'EMP-101'
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 18) PERFORMANCE NOTES
+-- ============================================================
+INSERT INTO performance_note (
+  note_id, report_id, note_text, created_by
+) VALUES
+(
+  'NOTE-001',
+  'RPT-EMP-2026-01-EMP-101',
+  'Excellent SLA adherence and customer communication.',
+  'EMP-200'
+)
+ON CONFLICT DO NOTHING;
+
