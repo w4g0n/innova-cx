@@ -80,8 +80,8 @@ docker exec -it innovacx-backend bash
 Host:     localhost
 Port:     5432
 Database: complaints_db
-Username: innovacx_admin
-Password: changeme123
+Username: (see your .env file)
+Password: (see your .env file)
 ```
 
 ---

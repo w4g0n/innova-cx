@@ -106,8 +106,8 @@ We created a **containerized development environment** with:
 Host: localhost
 Port: 5432
 Database: complaints_db
-Username: innovacx_admin
-Password: changeme123
+Username: (see your .env file)
+Password: (see your .env file)
 ```
 
 ### 2. FastAPI Backend Container
@@ -355,8 +355,8 @@ Use any PostgreSQL client:
 Host: localhost
 Port: 5432
 Database: complaints_db
-Username: innovacx_admin
-Password: changeme123
+Username: (see your .env file)
+Password: (see your .env file)
 ```
 
 #### Option 2: Inside Container
@@ -456,7 +456,7 @@ docker ps
 **Check connection string:**
 ```python
 # In code, should be:
-DATABASE_URL = "postgresql://innovacx_admin:changeme123@postgres:5432/complaints_db"
+DATABASE_URL = "postgresql://<POSTGRES_USER>:<POSTGRES_PASSWORD>@postgres:5432/<POSTGRES_DB>"
 # Note: Use 'postgres' as host, NOT 'localhost'
 ```
 
@@ -809,8 +809,8 @@ curl http://localhost:8000
 - **5432** - PostgreSQL Database
   - Host: localhost
   - Database: complaints_db
-  - User: innovacx_admin
-  - Password: changeme123
+  - User: (see your .env file)
+  - Password: (see your .env file)
 
 ---
 

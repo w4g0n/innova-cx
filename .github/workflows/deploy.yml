@@ -1,0 +1,55 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: me-central-1
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/innovacx-backend:$IMAGE_TAG -t $ECR_REGISTRY/innovacx-backend:latest ./backend
+          docker push $ECR_REGISTRY/innovacx-backend:$IMAGE_TAG
+          docker push $ECR_REGISTRY/innovacx-backend:latest
+
+      - name: Build and push whisper
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/innovacx-whisper:$IMAGE_TAG -t $ECR_REGISTRY/innovacx-whisper:latest ./backend/audio-transcriber/whisper
+          docker push $ECR_REGISTRY/innovacx-whisper:$IMAGE_TAG
+          docker push $ECR_REGISTRY/innovacx-whisper:latest
+
+      - name: Build and push chatbot
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/innovacx-chatbot:$IMAGE_TAG -t $ECR_REGISTRY/innovacx-chatbot:latest ./chatbot
+          docker push $ECR_REGISTRY/innovacx-chatbot:$IMAGE_TAG
+          docker push $ECR_REGISTRY/innovacx-chatbot:latest
