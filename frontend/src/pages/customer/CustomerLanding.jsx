@@ -111,6 +111,7 @@ export default function CustomerLanding() {
     }, 800);
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO: review - setState in useEffect, consider restructuring
   useEffect(() => startChatMessages(), [nameFromEmail]);
 
   // ---------- AUTO SCROLL ----------

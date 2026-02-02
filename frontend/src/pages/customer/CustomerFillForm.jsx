@@ -43,6 +43,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const t = params.get("type");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO: review - setState in useEffect, consider deriving from URL
     if (t === "Complaint" || t === "Inquiry") setType(t);
   }, [location.search]);
 

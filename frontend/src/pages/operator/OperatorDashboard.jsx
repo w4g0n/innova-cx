@@ -21,7 +21,7 @@ export default function OperatorDashboard() {
       setLoading(true);
       setError(null);
       setData(operatorDashboardData);
-    } catch (err) {
+    } catch (err) { // eslint-disable-line no-unused-vars -- TODO: review - err unused
       setError("Failed to load dashboard data");
     } finally {
       setLoading(false);

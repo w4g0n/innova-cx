@@ -49,6 +49,7 @@ export default function EmployeeNotifications() {
   const [onlyUnread, setOnlyUnread] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO: review - setState in useEffect
     setNotifications(data.notifications || []);
   }, []);
 

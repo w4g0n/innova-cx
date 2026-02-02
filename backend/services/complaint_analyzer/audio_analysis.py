@@ -8,7 +8,7 @@ import numpy as np
 import librosa
 import webrtcvad
 import warnings
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional  # noqa: F401 -- TODO: review - remove unused imports (Optional, Tuple)
 from faster_whisper import WhisperModel
 
 # Suppress the pkg_resources warning

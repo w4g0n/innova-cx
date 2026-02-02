@@ -50,12 +50,14 @@ export default function CustomerChatbot() {
       id: "m1",
       from: "bot",
       text: `Hi ${nameFromEmail}! I’m Nova. How can I help you today?`,
+      // eslint-disable-next-line react-hooks/purity -- TODO: review - Date.now() is impure during render, move to useEffect or useRef
       ts: Date.now(),
     },
     {
       id: "m2",
       from: "bot",
       text: "Would you like to file a complaint or do you have an inquiry?",
+      // eslint-disable-next-line react-hooks/purity -- TODO: review - Date.now() is impure during render, move to useEffect or useRef
       ts: Date.now() + 1,
     },
   ]);

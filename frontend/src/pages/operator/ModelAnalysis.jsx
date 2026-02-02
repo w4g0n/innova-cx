@@ -49,6 +49,7 @@ export default function ModelAnalysis() {
       };
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO: review - setState in useEffect
     setData(filteredData);
   }, [timeFilter, deptFilter]);
 

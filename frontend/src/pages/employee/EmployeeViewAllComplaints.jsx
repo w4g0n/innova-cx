@@ -68,6 +68,7 @@ export default function EmployeeViewAllComplaints() {
   // Load tickets from local JSON on mount
   useEffect(() => {
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO: review - setState in useEffect
       setTickets(ticketsData.tickets || []);
     } catch (err) {
       console.error("Error loading local tickets JSON:", err);

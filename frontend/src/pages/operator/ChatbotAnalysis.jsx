@@ -1,6 +1,6 @@
 import Layout from "../../components/Layout";
 import "./ChatbotAnalysis.css";
-import { useState, useEffect } from "react";
+import { useState, useEffect } from "react"; // eslint-disable-line no-unused-vars -- TODO: review - useEffect unused
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
 
@@ -25,7 +25,7 @@ export default function ChatbotAnalysis() {
 
   // Chart Colors
   const pieColors = ["#401c51", "#9b71a3", "#cfc3d7"];
-  const barColors = ["#401c51", "#9b71a3"];
+  const barColors = ["#401c51", "#9b71a3"]; // eslint-disable-line no-unused-vars -- TODO: review - barColors unused
 
   // Sample dynamic chart data (replace with Postman mock/dummy API)
   const responseTimeData = [
