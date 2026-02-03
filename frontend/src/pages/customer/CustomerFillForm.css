@@ -6,7 +6,7 @@
   gap: 14px;
 }
 
-/* ✅ embedded mode tweaks (layout only) */
+/* embedded mode tweaks (layout only) */
 .custFormPage--embedded {
   gap: 12px;
 }
@@ -79,6 +79,20 @@
 
 .custField--inline {
   flex: 0 0 auto;
+}
+
+.custTwoPillsRow {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.custTwoPillsItem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 /* Mode toggles */
@@ -192,4 +206,278 @@
   background: #d32f2f;
   color: white;
   border-color: #d32f2f;
+}
+/* Voice (ChatGPT-style mic) */
+.custVoiceWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px; /* keeps spacing consistent with other fields */
+}
+
+.custVoiceStart {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(89, 36, 180, 0.10);
+  border: 1px solid rgba(89, 36, 180, 0.18);
+  color: var(--btn-primary);
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.custVoiceStart:hover {
+  background: rgba(89, 36, 180, 0.14);
+}
+
+.custVoiceStart:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.custVoiceStartIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custVoiceStartText {
+  line-height: 1;
+}
+
+.custVoiceBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 999px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.custVoiceBar--recording {
+  border-color: rgba(211, 47, 47, 0.35);
+  box-shadow: 0 0 0 3px rgba(211, 47, 47, 0.10);
+}
+
+.custVoiceBar--transcribing {
+  opacity: 0.85;
+}
+
+.custVoiceBarText {
+  flex: 1 1 auto;
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(17, 17, 17, 0.70);
+  white-space: nowrap;
+}
+
+.custWaves {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding-left: 6px;
+}
+
+.custWave {
+  width: 3px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(89, 36, 180, 0.55);
+  animation: custWaveAnim 1.1s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.custVoiceBar--recording .custWave {
+  background: rgba(211, 47, 47, 0.70);
+}
+
+.custWave:nth-child(2) { animation-delay: 0.1s; }
+.custWave:nth-child(3) { animation-delay: 0.2s; }
+.custWave:nth-child(4) { animation-delay: 0.3s; }
+.custWave:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes custWaveAnim {
+  0%, 100% { transform: scaleY(0.6); opacity: 0.65; }
+  50% { transform: scaleY(1.6); opacity: 1; }
+}
+
+.custVoiceActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.custVoiceIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.custVoiceIconBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.custVoiceIconBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.custVoiceIconBtn--cancel {
+  color: rgba(17, 17, 17, 0.70);
+}
+
+.custVoiceIconBtn--confirm {
+  background: var(--btn-primary);
+  border-color: var(--btn-primary);
+  color: #ffffff;
+}
+
+.custVoiceIconBtn--confirm:hover {
+  filter: brightness(1.05);
+}
+
+.custVoiceReview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custVoiceReviewTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.custVoiceDraft {
+  border-radius: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  outline: none;
+  font-size: 14px;
+  resize: vertical;
+  background: #ffffff;
+}
+
+.custVoiceDraft:focus {
+  border-color: rgba(89, 36, 180, 0.35);
+  box-shadow: 0 0 0 3px rgba(89, 36, 180, 0.10);
+}
+
+
+/* Attachments (optional) */
+.custAttachSection {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.custAttachHeader {
+  display: flex;
+  flex-direction: column; 
+  align-items: flex-start; 
+  gap: 8px;
+}
+
+.custAttachLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(17, 17, 17, 0.85);
+}
+
+.custAttachHint {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: rgba(17, 17, 17, 0.60);
+  line-height: 1.35;
+}
+
+.custAttachBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #ffffff;
+  color: rgba(17, 17, 17, 0.78);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.custAttachBtn:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.custAttachIcon {
+  display: inline-flex;
+}
+
+.custFileInput {
+  display: none;
+}
+
+.custFileChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.custFileChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 8px 10px 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.custFileName {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(17, 17, 17, 0.80);
+}
+
+.custFileMeta {
+  font-size: 12px;
+  color: rgba(17, 17, 17, 0.55);
+}
+
+.custFileRemove {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(17, 17, 17, 0.70);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.custFileRemove:hover {
+  background: rgba(0, 0, 0, 0.10);
 }
