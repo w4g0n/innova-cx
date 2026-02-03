@@ -8,47 +8,47 @@ and now it uses make commands to run those profiles
 
 
 FOR BACKEND:
-Make backend
+make backend
 runs: docker compose --profile backend up
 
-Make backend-build 
+make backend-build 
 runs: docker compose --profile backend up --build
 
 
 
 FOR FRONT END: 
 Note: (this runs vite no need to do npm run dev anymore)
-Make frontend
-runs: docker compose --profile frontend up --build
+make frontend
+runs: docker compose --profile frontend up
 
-Make frontend-build 
+make frontend-build 
 runs: docker compose --profile frontend up --build
 
 
 
 FOR AUDIO TRANSCRIBER AND ANALYSIS:
-Make audio
+make audio
 runs: docker compose --profile audio up
 
-Make audio-build 
+make audio-build 
 runs: docker compose --profile audio up --build
 
 
 
 FOR CHATBOT:
-Make chatbot 
+make chatbot 
 runs: docker compose --profile chatbot up
 
-Make chatbot-build 
+make chatbot-build 
 runs: docker compose --profile chatbot up --build
 
 
 
 FOR DEV:
-Make dev
+make dev
 runs: docker compose --profile backend --profile frontend up
 
-Make dev-build
+make dev-build
 runs: docker compose --profile backend --profile frontend up --build
 
 
