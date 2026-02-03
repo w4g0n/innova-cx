@@ -1,5 +1,6 @@
 services:
   postgres:
+    profiles: ["backend"]
     image: postgres:14-alpine
     container_name: innovacx-db
     restart: unless-stopped
@@ -21,6 +22,7 @@ services:
       retries: 10
 
   backend:
+    profiles: ["backend"]
     build: ./backend
     container_name: innovacx-backend
     restart: unless-stopped
@@ -36,12 +38,10 @@ services:
         condition: service_healthy
     networks:
       - innovacx-network
-    command: >
-      uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
   whisper:
-    profiles:
-      - audio
+    profiles: ["audio"]
     build: ./backend/audio-transcriber/whisper
     container_name: innovacx-whisper
     restart: unless-stopped
@@ -51,14 +51,25 @@ services:
       - innovacx-network
 
   chatbot:
-    profiles:
-      - chatbot
+    profiles: ["chatbot"]
     build: ./chatbot
     container_name: innovacx-chatbot
     stdin_open: true
     tty: true
     volumes:
       - ./chatbot/data:/app/data
+    networks:
+      - innovacx-network
+
+  frontend:
+    profiles: ["frontend"]
+    build: ./frontend
+    container_name: innovacx-frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
     networks:
       - innovacx-network
 
