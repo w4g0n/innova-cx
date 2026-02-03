@@ -141,3 +141,154 @@
     max-width: 100%;
   }
 }
+
+
+/* ===== Additions: customer-friendly toggles & actions (layout-only) ===== */
+
+.customerSettingsMuted {
+  margin-top: 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: rgba(17, 17, 17, 0.58);
+  line-height: 1.45;
+}
+
+.customerSettingsRow--actions {
+  align-items: flex-start;
+}
+
+.customerSettingsActionBtn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(64, 28, 81, 0.12);
+  color: #401c51;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.25s ease, transform 0.25s ease;
+}
+
+.customerSettingsActionBtn:hover {
+  background: rgba(64, 28, 81, 0.16);
+  transform: translateY(-1px);
+}
+
+.customerSettingsDangerBtn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(211, 47, 47, 0.12);
+  color: rgb(211, 47, 47);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.25s ease, transform 0.25s ease;
+}
+
+.customerSettingsDangerBtn:hover {
+  background: rgba(211, 47, 47, 0.16);
+  transform: translateY(-1px);
+}
+
+.customerSettingsToggleList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.customerSettingsToggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 10px;
+  border-radius: 14px;
+}
+
+.customerSettingsToggleRow:hover {
+  background: rgba(64, 28, 81, 0.05);
+}
+
+.customerSettingsToggleText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.customerSettingsToggleTitle {
+  font-size: 13px;
+  font-weight: 900;
+  color: rgba(17, 17, 17, 0.82);
+}
+
+.customerSettingsInlineToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 10px;
+  border-radius: 14px;
+}
+
+.customerSettingsInlineToggle:hover {
+  background: rgba(64, 28, 81, 0.05);
+}
+
+.customerSettingsInlineToggleText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Toggle switch */
+.customerToggle {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  background: rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  flex: 0 0 auto;
+  padding: 0;
+}
+
+.customerToggleKnob {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #ffffff;
+  transform: translateY(-50%);
+  transition: left 0.22s ease, background 0.22s ease;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.14);
+}
+
+.customerToggle--on {
+  background: rgba(89, 36, 180, 0.18);
+  border-color: rgba(89, 36, 180, 0.26);
+}
+
+.customerToggle--on .customerToggleKnob {
+  left: 21px;
+}
+
+.customerSettingsPrivacyActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+@media (max-width: 720px) {
+  .customerSettingsRow--actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

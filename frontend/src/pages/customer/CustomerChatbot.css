@@ -158,7 +158,8 @@
 }
 
 /* composer */
-.custComposer {
+\.custComposer {
+  position: relative;
   display: flex;
   gap: 10px;
   align-items: center;
@@ -168,8 +169,8 @@
 }
 
 .custMicBtn {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
   border: 1px solid rgba(64, 28, 81, 0.22);
   background: rgba(64, 28, 81, 0.08);
@@ -217,3 +218,114 @@
   border-color: #d32f2f;
 }
 
+
+
+/* Compact voice controls (chatbot input) */
+.custVoiceMiniBar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 999px;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.06);
+  z-index: 5;
+}
+
+.custVoiceMiniBar--recording {
+  border-color: rgba(211, 47, 47, 0.35);
+  box-shadow: 0 0 0 3px rgba(211, 47, 47, 0.10), 0 10px 26px rgba(0, 0, 0, 0.06);
+}
+
+.custVoiceMiniBar--transcribing {
+  opacity: 0.88;
+}
+
+.custVoiceMiniLeft {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.custVoiceMiniText {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: rgba(17, 17, 17, 0.72);
+  white-space: nowrap;
+}
+
+.custWavesMini {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.custWaveMini {
+  width: 3px;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(211, 47, 47, 0.70);
+  animation: custWaveMiniAnim 1.1s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.custWaveMini:nth-child(2) { animation-delay: 0.1s; }
+.custWaveMini:nth-child(3) { animation-delay: 0.2s; }
+.custWaveMini:nth-child(4) { animation-delay: 0.3s; }
+.custWaveMini:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes custWaveMiniAnim {
+  0%, 100% { transform: scaleY(0.6); opacity: 0.65; }
+  50% { transform: scaleY(1.6); opacity: 1; }
+}
+
+.custVoiceMiniActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custVoiceMiniIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #ffffff;
+  cursor: pointer;
+  color: rgba(17, 17, 17, 0.72);
+}
+
+.custVoiceMiniIconBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.custVoiceMiniIconBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.custVoiceMiniIconBtn--confirm {
+  background: var(--nova-purple);
+  border-color: var(--nova-purple);
+  color: #ffffff;
+}
+
+.custVoiceMiniIconBtn--confirm:hover {
+  filter: brightness(1.05);
+}
+
+@media (max-width: 520px) {
+  .custVoiceMiniBar {
+    bottom: 62px; /* a bit higher on small screens */
+  }
+}

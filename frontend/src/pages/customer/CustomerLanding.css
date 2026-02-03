@@ -580,7 +580,6 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
-/* ✅ Fill a form text button */
 .novaTextBtn {
   height: 36px;
   border-radius: 10px;
@@ -614,6 +613,7 @@ body {
   flex-direction: column;
   background: rgba(229, 230, 237, 0.55);
   overflow: hidden;
+  position: relative;
 }
 
 .novaChatList {
@@ -698,6 +698,13 @@ body {
   outline: none;
 }
 
+.novaComposer input:focus {
+  border-color: rgba(64, 28, 81, 0.55);
+  box-shadow: 0 0 0 3px rgba(64, 28, 81, 0.14);
+  outline: none;
+}
+
+
 .novaComposer button {
   border-radius: 999px;
   border: none;
@@ -714,7 +721,132 @@ body {
   background: #9b71a3;
 }
 
-/* ✅ embedded form host */
+/* ============================= */
+/* Compact Mic (ChatGPT-style)   */
+/* ============================= */
+
+.novaComposerWrap {
+  position: relative;
+}
+
+/* little bar shown when listening */
+.novaVoiceBar {
+  margin: 0 12px 10px 12px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.novaVoiceLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.novaVoiceText {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: rgba(17, 17, 17, 0.72);
+  white-space: nowrap;
+}
+
+.novaWaves {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.novaWave {
+  width: 3px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(64, 28, 81, 0.55);
+  animation: novaWaveAnim 1.1s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.novaWave:nth-child(2) { animation-delay: 0.1s; }
+.novaWave:nth-child(3) { animation-delay: 0.2s; }
+.novaWave:nth-child(4) { animation-delay: 0.3s; }
+.novaWave:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes novaWaveAnim {
+  0%, 100% { transform: scaleY(0.6); opacity: 0.65; }
+  50% { transform: scaleY(1.6); opacity: 1; }
+}
+
+.novaVoiceActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.novaVoiceIconBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.novaVoiceIconBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.novaVoiceIconBtn.confirm {
+  background: var(--nova-purple);
+  border-color: var(--nova-purple);
+  color: #ffffff;
+}
+
+.novaVoiceIconBtn.confirm:hover {
+  background: #9b71a3;
+  border-color: #9b71a3;
+}
+
+.novaVoiceIconBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* mic button inside the input row */
+.novaMicBtn {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #ffffff;
+  color: var(--nova-purple);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.novaMicBtn:hover {
+  background: rgba(64, 28, 81, 0.05);
+}
+
+.novaMicBtn.active {
+  background: rgba(64, 28, 81, 0.12);
+  border-color: rgba(64, 28, 81, 0.22);
+}
+
+/* Align composer items nicely */
+.novaComposer {
+  align-items: center;
+}
+
 .novaWidgetBody--form {
   background: rgba(229, 230, 237, 0.55);
 }
@@ -723,4 +855,72 @@ body {
   flex: 1;
   overflow: auto;
   padding: 14px;
+}
+
+.novaCloseModal {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 17, 17, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.novaCloseModalContent {
+  width: 100%;
+  max-width: 320px;
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
+  padding: 14px 14px 12px;
+}
+
+.novaCloseModalContent p {
+  margin: 0 0 20px 0;
+  font-size: 18px; 
+  font-weight: 500; 
+  text-align: center;
+  color: #111;
+}
+
+.novaCloseModalBtns {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+}
+
+/* shared button style */
+.novaCloseModalBtns button {
+  min-width: 90px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+/* YES = purple */
+.novaCloseModalBtns button:first-child {
+  border: none;
+  background: var(--nova-purple);
+  color: #fff;
+}
+
+.novaCloseModalBtns button:first-child:hover {
+  background: #9b71a3;
+}
+
+/* NO = grey */
+.novaCloseModalBtns button:last-child {
+  border: none;
+  background: #e5e5e5;
+  color: #333;
+}
+
+.novaCloseModalBtns button:last-child:hover {
+  background: #d8d8d8;
 }

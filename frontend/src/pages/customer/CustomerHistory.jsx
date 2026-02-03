@@ -85,6 +85,22 @@ export default function CustomerHistory() {
     });
   }, [historyItems, query, type, status]);
 
+
+  const ordered = useMemo(() => {
+    // Keep the same items and filtering logic — only control the display order by status.
+    const rank = { Open: 0, "In Progress": 1, Resolved: 2 };
+
+    return filtered
+      .map((item, idx) => ({ item, idx }))
+      .sort((a, b) => {
+        const ra = rank[a.item.status] ?? 999;
+        const rb = rank[b.item.status] ?? 999;
+        if (ra !== rb) return ra - rb;
+        return a.idx - b.idx; // preserve original order within the same status
+      })
+      .map((x) => x.item);
+  }, [filtered]);
+
   const clearFilters = () => {
     setQuery("");
     setType("All");
@@ -142,7 +158,7 @@ export default function CustomerHistory() {
               <p className="historyEmptySub">Try adjusting your search or filters.</p>
             </div>
           ) : (
-            filtered.map((item) => (
+            ordered.map((item) => (
               <article
                 key={item.id}
                 className="historyCard historyCard--click"

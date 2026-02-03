@@ -241,6 +241,97 @@ export default function CustomerLanding() {
     });
   };
 
+  // =========================
+  // ✅ Compact Mic (ChatGPT-style)
+  // =========================
+  const speechRef = useRef(null);
+  const [voiceActive, setVoiceActive] = useState(false); // recording/listening UI
+  const [voiceDraft, setVoiceDraft] = useState(""); // transcript draft
+  const [voiceBusy, setVoiceBusy] = useState(false); // "transcribing"/processing state
+
+  const getSpeechRecognition = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return null;
+    return SR;
+  };
+
+  const startVoice = () => {
+    const SR = getSpeechRecognition();
+    if (!SR) {
+      alert("Voice input isn’t supported in this browser. Try Chrome.");
+      return;
+    }
+
+    // reset draft each time you start
+    setVoiceDraft("");
+    setVoiceBusy(false);
+    setVoiceActive(true);
+
+    const rec = new SR();
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    rec.continuous = false;
+
+    rec.onresult = (event) => {
+      let interim = "";
+      let finalText = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const chunk = event.results[i][0]?.transcript || "";
+        if (event.results[i].isFinal) finalText += chunk;
+        else interim += chunk;
+      }
+      const merged = (finalText || interim || "").trim();
+      setVoiceDraft(merged);
+    };
+
+    rec.onerror = () => {
+      // keep it quiet; just close UI
+      setVoiceActive(false);
+      setVoiceBusy(false);
+    };
+
+    rec.onend = () => {
+      // When recognition stops (user stops speaking), we keep the draft visible
+      setVoiceBusy(false);
+      // keep voiceActive true so user can ✓ or X
+      // but if nothing captured, close it
+      setTimeout(() => {
+        setVoiceActive((prev) => {
+          if (!voiceDraft.trim()) return false;
+          return prev;
+        });
+      }, 0);
+    };
+
+    speechRef.current = rec;
+
+    try {
+      rec.start();
+    } catch {
+      // If start throws (already started), just ignore
+    }
+  };
+
+  const cancelVoice = () => {
+    try {
+      speechRef.current?.stop?.();
+    } catch {}
+    setVoiceActive(false);
+    setVoiceBusy(false);
+    setVoiceDraft("");
+  };
+
+  const confirmVoice = () => {
+    const t = (voiceDraft || "").trim();
+    if (!t) {
+      cancelVoice();
+      return;
+    }
+    // Insert into input (no other logic changed)
+    setText((prev) => (prev ? `${prev} ${t}` : t));
+    cancelVoice();
+  };
+
   return (
     <div className="customer-landing-page">
       {/* --- MAIN CONTENT --- */}
@@ -471,10 +562,91 @@ export default function CustomerLanding() {
                 </div>
 
                 {hasChosenType && (
-                  <form className="novaComposer" onSubmit={handleSend}>
-                    <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" />
-                    <button type="submit">Send</button>
-                  </form>
+                  <div className="novaComposerWrap">
+                    {voiceActive && (
+                      <div className={`novaVoiceBar ${voiceBusy ? "isBusy" : ""}`}>
+                        <div className="novaVoiceLeft">
+                          <div className="novaVoiceText">
+                            {voiceBusy ? "Transcribing…" : (voiceDraft.trim() ? "Review & insert" : "Listening…")}
+                          </div>
+                          <div className="novaWaves" aria-hidden="true">
+                            <span className="novaWave" />
+                            <span className="novaWave" />
+                            <span className="novaWave" />
+                            <span className="novaWave" />
+                            <span className="novaWave" />
+                          </div>
+                        </div>
+
+                        <div className="novaVoiceActions">
+                          <button
+                            type="button"
+                            className="novaVoiceIconBtn cancel"
+                            onClick={cancelVoice}
+                            aria-label="Cancel recording"
+                            disabled={voiceBusy}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                              <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                            </svg>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="novaVoiceIconBtn confirm"
+                            onClick={confirmVoice}
+                            aria-label="Insert transcript"
+                            disabled={voiceBusy}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                              <path
+                                d="M20 6L9 17l-5-5"
+                                stroke="currentColor"
+                                strokeWidth="2.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <form className="novaComposer" onSubmit={handleSend}>
+                      <button
+                        type="button"
+                        className={`novaMicBtn ${voiceActive ? "active" : ""}`}
+                        aria-label="Voice input"
+                        onClick={() => {
+                          if (voiceActive) cancelVoice();
+                          else startVoice();
+                        }}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path
+                            d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z"
+                            fill="currentColor"
+                            opacity="0.95"
+                          />
+                          <path
+                            d="M19 11a7 7 0 0 1-14 0"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                          />
+                          <path
+                            d="M12 18v3"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      </button>
+
+                      <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" />
+                      <button type="submit">Send</button>
+                    </form>
+                  </div>
                 )}
 
                 {showCloseConfirm && (

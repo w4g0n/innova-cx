@@ -13,7 +13,9 @@ export default function CustomerChatbot() {
   // ===============================
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const streamRef = useRef(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
 
   // ===============================
   // User info
@@ -155,44 +157,92 @@ export default function CustomerChatbot() {
   };
 
   // ===============================
-  // Mic / Whisper integration
+  // Mic / Whisper integration (ChatGPT-style controls)
   // ===============================
-  const handleMicClick = async () => {
-    if (!isRecording) {
+  const stopStreamTracks = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+  };
+
+  const startRecording = async () => {
+    try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
 
       chunksRef.current = [];
-      const recorder = new MediaRecorder(stream, {
-        mimeType: "audio/mp4"
-      });
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/mp4" });
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
-        chunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
 
       recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/mp4" });
+        // If we stopped without confirming (cancel), just cleanup.
+        if (!isTranscribing) {
+          stopStreamTracks();
+          return;
+        }
 
-        const formData = new FormData();
-        formData.append("audio", blob, "mic.mp4");
+        try {
+          const blob = new Blob(chunksRef.current, { type: "audio/mp4" });
 
-        const res = await fetch("http://localhost:3001/transcribe", {
-          method: "POST",
-          body: formData,
-        });
+          const formData = new FormData();
+          formData.append("audio", blob, "mic.mp4");
 
-        const data = await res.json();
-        setText(data.transcript); // editable draft
+          const res = await fetch("http://localhost:3001/transcribe", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await res.json();
+          setText(data.transcript || ""); // editable draft
+        } catch (e) {
+          console.error(e);
+          alert("Could not transcribe audio. Please try again.");
+        } finally {
+          setIsTranscribing(false);
+          setIsRecording(false);
+          stopStreamTracks();
+        }
       };
 
       recorder.start();
       setIsRecording(true);
-      return;
+    } catch (e) {
+      console.error(e);
+      alert("Microphone permission is required to record audio.");
     }
+  };
 
-    mediaRecorderRef.current.stop();
+  const cancelRecording = () => {
+    try {
+      setIsTranscribing(false);
+      setIsRecording(false);
+
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        // Cancel path: stop recorder, but onstop will early-return because isTranscribing is false
+        mediaRecorderRef.current.stop();
+      } else {
+        stopStreamTracks();
+      }
+
+      chunksRef.current = [];
+    } catch (e) {
+      console.error(e);
+      stopStreamTracks();
+    }
+  };
+
+  const confirmRecording = () => {
+    if (!mediaRecorderRef.current) return;
+    if (mediaRecorderRef.current.state === "inactive") return;
+
+    setIsTranscribing(true);
     setIsRecording(false);
+    mediaRecorderRef.current.stop();
   };
 
   // ===============================
@@ -242,16 +292,69 @@ export default function CustomerChatbot() {
               <button
                 type="button"
                 className={`custMicBtn ${isRecording ? "recording" : ""}`}
-                onClick={handleMicClick}
+                onClick={startRecording}
+                disabled={isRecording || isTranscribing}
                 aria-label="Record audio"
+                title="Record"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                   <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M12 18v3" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M8 21h8" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  <path d="M12 18v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
               </button>
+
+              {(isRecording || isTranscribing) && (
+                <div
+                  className={`custVoiceMiniBar ${
+                    isRecording ? "custVoiceMiniBar--recording" : ""
+                  } ${isTranscribing ? "custVoiceMiniBar--transcribing" : ""}`}
+                >
+                  <div className="custVoiceMiniLeft">
+                    <span className="custVoiceMiniText">
+                      {isTranscribing ? "Transcribing…" : "Listening…"}
+                    </span>
+
+                    {!isTranscribing && (
+                      <span className="custWavesMini" aria-hidden="true">
+                        <span className="custWaveMini" />
+                        <span className="custWaveMini" />
+                        <span className="custWaveMini" />
+                        <span className="custWaveMini" />
+                        <span className="custWaveMini" />
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="custVoiceMiniActions">
+                    <button
+                      type="button"
+                      className="custVoiceMiniIconBtn"
+                      onClick={cancelRecording}
+                      disabled={isTranscribing}
+                      aria-label="Cancel recording"
+                      title="Cancel"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="custVoiceMiniIconBtn custVoiceMiniIconBtn--confirm"
+                      onClick={confirmRecording}
+                      disabled={isTranscribing}
+                      aria-label="Confirm recording"
+                      title="Confirm"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <textarea
                 className="custInput"
