@@ -25,9 +25,10 @@ Place your trained model files in a folder on your machine (NOT in the repo):
 
 ```
 C:\models\sentiment\
-  model.pt           # ~500MB trained model
-  config.json        # Model configuration
-  vocab.json         # Tokenizer vocab (if needed)
+  model.pt               # ~500MB trained model
+  tokenizer.json         # Tokenizer data
+  tokenizer_config.json  # Tokenizer configuration
+  training_history.csv   # Training metrics (optional)
 ```
 
 ### 2. Update docker-compose.yml
