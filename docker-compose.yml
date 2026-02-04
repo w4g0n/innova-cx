@@ -56,6 +56,18 @@ services:
     networks:
       - innovacx-network
 
+  sentiment:
+    profiles: ["frontend"]
+    build: ./backend/sentiment-service
+    container_name: innovacx-sentiment
+    restart: unless-stopped
+    environment:
+      USE_MOCK_MODEL: "true"
+    ports:
+      - "8002:8002"
+    networks:
+      - innovacx-network
+
   frontend:
     profiles: ["frontend"]
     build: ./frontend
