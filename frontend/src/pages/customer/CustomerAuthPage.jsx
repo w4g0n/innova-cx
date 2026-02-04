@@ -54,9 +54,8 @@ export default function CustomerAuthPage() {
         <h1 className="auth-title">Verify your identity</h1>
 
         <p className="auth-subtext">
-          Enter the 6-digit verification code we sent to
+          Enter the one-time verification code sent to your authenticator.
           <br />
-          <span className="auth-email">your@email.com</span>
         </p>
 
         <form onSubmit={handleSubmit}>
