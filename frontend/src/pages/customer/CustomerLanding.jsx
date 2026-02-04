@@ -3,9 +3,25 @@ import { useNavigate } from "react-router-dom";
 import "./CustomerLanding.css";
 import dccLogo from "../../assets/dcc-logo.png";
 import CustomerFillForm from "./CustomerFillForm";
+import useNovaChatbot from "./chatbot.js"; 
 
 export default function CustomerLanding() {
   const navigate = useNavigate();
+
+  const {
+  listRef,
+  messages,
+  text,
+  setText,
+  stage,
+  hasChosenType,
+  handleSelect,
+  handleSend,
+} = useNovaChatbot({
+  onGoToForm: (type) => {
+    window.location.href = `/customer/fill-form?type=${encodeURIComponent(type)}`;
+  },
+});
 
   const clusters = [
     { title: "Business", desc: "Flexible office & workspace options" },
@@ -13,17 +29,12 @@ export default function CustomerLanding() {
     { title: "Social", desc: "Restaurants, cafes & amenities" },
   ];
 
-  const listRef = useRef(null);
   const profileRef = useRef(null);
   const notifRef = useRef(null);
 
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const [stage, setStage] = useState("start");
-  const [hasChosenType, setHasChosenType] = useState(false);
-  const [text, setText] = useState("");
-  const [messages, setMessages] = useState([]);
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -96,23 +107,6 @@ export default function CustomerLanding() {
     };
   }, []);
 
-  // ---------- INITIAL MESSAGES ----------
-  const startChatMessages = () => {
-    const id1 = `bot-${Date.now()}`;
-    const id2 = `bot-${Date.now() + 1}`;
-    setMessages([{ id: id1, from: "bot", text: "", typing: true }]);
-    setTimeout(() => {
-      setMessages([
-        { id: id1, from: "bot", text: `Hi ${nameFromEmail}! I’m Nova. How can I help you today?`, typing: false },
-        { id: id2, from: "bot", text: "Would you like to file a complaint or do you have an inquiry?", typing: false },
-      ]);
-      setStage("chooseType");
-      setHasChosenType(false);
-    }, 800);
-  };
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO: review - setState in useEffect, consider restructuring
-  useEffect(() => startChatMessages(), [nameFromEmail]);
 
   // ---------- AUTO SCROLL ----------
   useEffect(() => {
@@ -121,67 +115,6 @@ export default function CustomerLanding() {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, isOpen, isExpanded, novaView]);
 
-  // ---------- CHAT HELPERS ----------
-  const pushUser = (msg) => {
-    setMessages((prev) => [...prev, { id: `user-${Date.now()}`, from: "user", text: msg, typing: false }]);
-  };
-
-  const pushBot = (msg, delay = 800) => {
-    const typingId = `bot-${Date.now()}`;
-    setMessages((prev) => [...prev, { id: typingId, from: "bot", text: "", typing: true }]);
-    setTimeout(() => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === typingId ? { ...m, text: msg, typing: false } : m))
-      );
-    }, delay);
-  };
-
-  const goToForm = (type) => {
-    const url = type ? `/customer/fill-form?type=${encodeURIComponent(type)}` : "/customer/fill-form";
-    window.location.href = url;
-  };
-
-  const handleSelect = (type) => {
-    setHasChosenType(true);
-    if (type === "complaint") {
-      pushUser("I want to raise a complaint.");
-      pushBot("Got it. You can submit the complaint here in chat, or fill a form instead. Which do you prefer?");
-      setStage("complaintChoice");
-    }
-    if (type === "inquiry") {
-      pushUser("I want to raise an inquiry.");
-      pushBot("Sure — tell me your question and I’ll try to help right away.");
-      setStage("inquiry");
-    }
-  };
-
-  const handleSend = (e) => {
-    e.preventDefault();
-    const value = text.trim();
-    if (!value) return;
-    pushUser(value);
-    setText("");
-
-    if (stage === "complaintChoice") {
-      if (value.toLowerCase().includes("form")) {
-        pushBot("No problem — taking you to the complaint form now.");
-        setTimeout(() => goToForm("Complaint"), 250);
-      } else {
-        pushBot("Okay — please describe the complaint in one or two sentences. Include key details.");
-      }
-      setStage("start");
-      return;
-    }
-
-    if (stage === "inquiry") {
-      pushBot("Thanks — for this demo, I’ll log your inquiry. Would you like to submit a form for tracking?");
-      setStage("start");
-      return;
-    }
-
-    pushBot("Thanks — I can help with that.");
-  };
-
   const handleClose = () => setShowCloseConfirm(true);
 
   const confirmClose = () => {
@@ -189,9 +122,6 @@ export default function CustomerLanding() {
     setIsOpen(false);
     setIsExpanded(false);
     setNovaView("chat");
-    setMessages([]);
-    setStage("start");
-    startChatMessages();
   };
 
   const openHistory = () => {
@@ -553,12 +483,12 @@ export default function CustomerLanding() {
                     </div>
                   ))}
 
-                  {!hasChosenType && stage === "chooseType" && (
+                  {!hasChosenType && (
                     <div className="novaQuickRow">
-                      <button onClick={() => handleSelect("complaint")}>Complaint</button>
-                      <button onClick={() => handleSelect("inquiry")}>Inquiry</button>
-                    </div>
-                  )}
+                    <button onClick={() => handleSelect("complaint")}>Complaint</button>
+                    <button onClick={() => handleSelect("inquiry")}>Inquiry</button>
+                  </div>
+                )}
                 </div>
 
                 {hasChosenType && (
@@ -611,41 +541,53 @@ export default function CustomerLanding() {
                         </div>
                       </div>
                     )}
+                     <form
+  className="novaComposer"
+  onSubmit={(e) => {
+    e.preventDefault();
+    handleSend(text);
+    setText("");
+  }}
+>
 
-                    <form className="novaComposer" onSubmit={handleSend}>
-                      <button
-                        type="button"
-                        className={`novaMicBtn ${voiceActive ? "active" : ""}`}
-                        aria-label="Voice input"
-                        onClick={() => {
-                          if (voiceActive) cancelVoice();
-                          else startVoice();
-                        }}
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                          <path
-                            d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z"
-                            fill="currentColor"
-                            opacity="0.95"
-                          />
-                          <path
-                            d="M19 11a7 7 0 0 1-14 0"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                          />
-                          <path
-                            d="M12 18v3"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      </button>
+  <button
+    type="button"
+    className={`novaMicBtn ${voiceActive ? "active" : ""}`}
+    aria-label="Voice input"
+    onClick={() => {
+      if (voiceActive) cancelVoice();
+      else startVoice();
+    }}
+  >
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z"
+        fill="currentColor"
+        opacity="0.95"
+      />
+      <path
+        d="M19 11a7 7 0 0 1-14 0"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12 18v3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  </button>
 
-                      <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" />
-                      <button type="submit">Send</button>
-                    </form>
+  <input
+    value={text}
+    onChange={(e) => setText(e.target.value)}
+    placeholder="Type a message…"
+  />
+
+  <button type="submit">Send</button>
+</form>
                   </div>
                 )}
 
