@@ -22,23 +22,21 @@ export default function Login() {
   const role = useMemo(() => resolveRoleFromEmail(email), [email]);
 
   const handleSubmit = (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role,
-        email,
-      })
-    );
+  localStorage.setItem(
+    "user",
+    JSON.stringify({
+      role,
+      email,
+    })
+  );
 
-    if (role === "customer") {
-      navigate("/customer/dashboard");
-      return;
-    }
+  navigate("/verify", {
+    state: { role },
+  });
+};
 
-    navigate(`/${role}`);
-  };
 
   return (
     <div className="loginBg">
