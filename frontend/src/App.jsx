@@ -19,6 +19,14 @@ const CustomerTicketDetails = lazy(() =>
   import("./pages/customer/CustomerTicketDetails")
 );
 const CustomerSettings = lazy(() => import("./pages/customer/CustomerSettings"));
+//auth
+const CustomerAuthPage = lazy(() =>
+  import("./pages/customer/CustomerAuthPage")
+);
+
+
+
+
 
 // Employee
 const EmployeeNotifications = lazy(() =>
@@ -68,6 +76,10 @@ export default function App() {
           {/* Public */}
           <Route path="/" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+
+          <Route path="/" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/verify" element={<CustomerAuthPage />} />
 
           {/* Customer landing (PROTECTED) */}
           <Route
