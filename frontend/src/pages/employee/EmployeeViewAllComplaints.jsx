@@ -7,7 +7,6 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
-import ticketsData from "../../mock-data/employeeAllTickets.json";
 import "./ViewAllComplaint.css";
 
 // SORT ORDER HELPERS
@@ -30,6 +29,16 @@ const timeToMinutes = (value) => {
   if (unit?.startsWith("Hour")) return n * 60;
   if (unit?.startsWith("Day")) return n * 1440;
   return 0;
+};
+
+// Convert minutes to human-readable format
+const formatMinutes = (value) => {
+  const minutes = timeToMinutes(value);
+  if (minutes === 0) return "-";
+  if (minutes < 60) return `${minutes} Minutes`;
+  if (minutes % 60 === 0) return `${minutes / 60} Hours`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  return `${Math.floor(minutes / 1440)} Days ${Math.floor((minutes % 1440) / 60)}h`;
 };
 
 // Convert "YYYY-MM-DD" or "DD/MM/YYYY" to Date safely
@@ -65,35 +74,34 @@ export default function EmployeeViewAllComplaints() {
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [showDateFilter, setShowDateFilter] = useState(false);
 
-  // Load tickets from local JSON on mount
+  // Load tickets from backend on mount
   useEffect(() => {
-    try {
-      setTickets(ticketsData.tickets || []);
-    } catch (err) {
-      console.error("Error loading local tickets JSON:", err);
+    async function loadTickets() {
+      try {
+        const res = await fetch(
+          "http://127.0.0.1:8000/api/employee/E001/tickets/all"
+        );
+        const data = await res.json();
+
+        // Map backend fields to table-friendly keys
+        const normalized = (data.tickets || []).map((t) => ({
+          ...t,
+          _issueDateRaw: t.issueDate,
+          _responseTimeRaw: t.responseTime,
+          _resolutionTimeRaw: t.resolutionTime,
+        }));
+
+        setTickets(normalized);
+      } catch (err) {
+        console.error("Error loading tickets:", err);
+      }
     }
+
+    loadTickets();
   }, []);
 
-  // ✅ Normalize data so the table columns are always populated
-  const normalizedTickets = useMemo(() => {
-    return (tickets || []).map((t) => {
-      const issueDateRaw = t.issueDate ?? t.issue_date ?? t.createdAt ?? "";
-      const responseTimeRaw =
-        t.metrics?.meanTimeToRespond ?? t.response_time ?? t.responseTime ?? "";
-      const resolutionTimeRaw =
-        t.metrics?.meanTimeToResolve ??
-        t.resolution_time ??
-        t.resolutionTime ??
-        "";
-
-      return {
-        ...t,
-        _issueDateRaw: issueDateRaw,
-        _responseTimeRaw: responseTimeRaw,
-        _resolutionTimeRaw: resolutionTimeRaw,
-      };
-    });
-  }, [tickets]);
+  // ✅ Normalize data for table columns
+  const normalizedTickets = useMemo(() => tickets, [tickets]);
 
   // SORT HANDLER
   const handleSort = (key) => {
@@ -208,7 +216,6 @@ export default function EmployeeViewAllComplaints() {
         <section className="search-section-EV-VAC">
           <PillSearch
             value={searchTerm}
-            // ✅ Works whether PillSearch sends (value) OR (event)
             onChange={(v) => {
               if (typeof v === "string") setSearchTerm(v);
               else setSearchTerm(v?.target?.value ?? "");
@@ -243,8 +250,6 @@ export default function EmployeeViewAllComplaints() {
                 { value: "Critical", label: "Critical" },
               ]}
             />
-
-            {/* Filters button next to dropdowns */}
             <FilterPillButton onClick={() => setShowDateFilter(!showDateFilter)} />
           </div>
         </section>
@@ -312,7 +317,6 @@ export default function EmployeeViewAllComplaints() {
 
                   <td>{t.subject}</td>
 
-                  {/* ✅ FIX: PriorityPill expects prop name "priority" */}
                   <td>
                     <PriorityPill priority={t.priority} />
                   </td>
@@ -320,8 +324,8 @@ export default function EmployeeViewAllComplaints() {
                   <td>{t.status}</td>
 
                   <td>{t._issueDateRaw}</td>
-                  <td>{t._responseTimeRaw}</td>
-                  <td>{t._resolutionTimeRaw}</td>
+                  <td>{formatMinutes(t._responseTimeRaw)}</td>
+                  <td>{formatMinutes(t._resolutionTimeRaw)}</td>
 
                   <td
                     className="arrow-cell-EV-VAC clickable"

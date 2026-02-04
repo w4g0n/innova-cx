@@ -4,39 +4,12 @@ import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import PriorityPill from "../../components/common/PriorityPill";
-import employeeDashboard from "../../mock-data/employeeDashboard.json";
-import employeeOpenTickets from "../../mock-data/employeeOpenTickets.json";
-import employeeMonthlyReports from "../../mock-data/employeeMonthlyReports.json";
 import "./EmployeeDashboard.css";
 
-function monthKeyToReportId(monthKey) {
-  if (!monthKey || typeof monthKey !== "string") return "";
-  const match = monthKey.match(/^(\d{4})-(\d{2})$/);
-  if (!match) return "";
-
-  const year = match[1];
-  const mm = match[2];
-
-  const map = {
-    "01": "jan",
-    "02": "feb",
-    "03": "mar",
-    "04": "apr",
-    "05": "may",
-    "06": "jun",
-    "07": "jul",
-    "08": "aug",
-    "09": "sep",
-    "10": "oct",
-    "11": "nov",
-    "12": "dec",
-  };
-
-  const abbr = map[mm];
-  return abbr ? `${abbr}-${year}` : "";
-}
+const BACKEND_URL = "http://127.0.0.1:8000";
 
 export default function EmployeeDashboard() {
+  const EMPLOYEE_ID = "E001"; // replace with actual logged-in employee ID
   const [employee, setEmployee] = useState(null);
   const [kpis, setKpis] = useState({});
   const [tickets, setTickets] = useState([]);
@@ -44,23 +17,30 @@ export default function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      // Set local JSON data directly
-      setEmployee(employeeDashboard.employee);
-      setKpis(employeeDashboard.kpis);
-      setTickets(employeeOpenTickets.tickets);
-      setReports(employeeMonthlyReports.reports);
-    } catch (err) {
-      console.error("Error loading local JSON data:", err);
-    } finally {
-      setLoading(false);
+    async function loadDashboard() {
+      setLoading(true);
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/employee/dashboard/${EMPLOYEE_ID}`);
+        const data = await res.json();
+
+        setEmployee(data.employee);
+        setKpis(data.kpis || {});
+        setTickets(data.tickets || []);
+        setReports(data.reports || []);
+      } catch (err) {
+        console.error("Error fetching dashboard:", err);
+      } finally {
+        setLoading(false);
+      }
     }
+
+    loadDashboard();
   }, []);
 
   if (loading)
     return (
       <Layout role="employee">
-        <main>Loading...</main>
+        <main className="loading">Loading...</main>
       </Layout>
     );
 
@@ -68,18 +48,18 @@ export default function EmployeeDashboard() {
     <Layout role="employee">
       <div className="empDash">
         <PageHeader
-          title={`Good Morning, ${employee.name}`}
+          title={`Good Morning, ${employee.full_name ?? employee.name}`}
           subtitle="Here’s your activity and assigned workload."
         />
 
         {/* KPI Section */}
         <section className="empDash__kpis">
-          <KpiCard label="Tickets Assigned" value={kpis.ticketsAssigned} />
-          <KpiCard label="In Progress" value={kpis.inProgress} />
-          <KpiCard label="Resolved This Month" value={kpis.resolvedThisMonth} />
-          <KpiCard label="Critical" value={kpis.critical} />
-          <KpiCard label="Overdue" value={kpis.overdue} />
-          <KpiCard label="New Today" value={kpis.newToday} />
+          <KpiCard label="Tickets Assigned" value={kpis.ticketsAssigned ?? 0} />
+          <KpiCard label="In Progress" value={kpis.inProgress ?? 0} />
+          <KpiCard label="Resolved This Month" value={kpis.resolvedThisMonth ?? 0} />
+          <KpiCard label="Critical" value={kpis.critical ?? 0} />
+          <KpiCard label="Overdue" value={kpis.overdue ?? 0} />
+          <KpiCard label="New Today" value={kpis.newToday ?? 0} />
         </section>
 
         {/* Dashboard Grid */}
@@ -102,16 +82,22 @@ export default function EmployeeDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {tickets.map((t) => (
-                    <tr key={t.ticketId}>
-                      <td>{t.ticketId}</td>
-                      <td>{t.subject}</td>
-                      <td>
-                        <PriorityPill priority={t.priority} />
+                  {tickets.length > 0 ? (
+                    tickets.map((t) => (
+                      <tr key={t.ticketId}>
+                        <td>{t.ticketId}</td>
+                        <td>{t.subject}</td>
+                        <td><PriorityPill priority={t.priority} /></td>
+                        <td>{t.status}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: "center" }}>
+                        No open tickets assigned.
                       </td>
-                      <td>{t.status}</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -130,13 +116,13 @@ export default function EmployeeDashboard() {
               Monthly summaries auto-generated for you.
             </p>
 
-            {reports.map((r) => (
-              <ReportItem
-                key={r.month || r.label}
-                month={r.label}
-                reportId={monthKeyToReportId(r.month)} 
-              />
-            ))}
+            {reports.length > 0 ? (
+              reports.map((r) => (
+                <ReportItem key={r.reportId} month={r.month} reportId={r.reportId} />
+              ))
+            ) : (
+              <p style={{ textAlign: "center" }}>No reports available yet.</p>
+            )}
           </aside>
         </section>
       </div>
