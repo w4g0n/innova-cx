@@ -43,7 +43,9 @@ export default function CustomerChatbot() {
   // ===============================
   // Chat state
   // ===============================
-  const [stage, setStage] = useState("start");
+  const [stage, setStage] = useState("start"); 
+  // start | inquiry | complaintChoice | done
+
   const [hasChosenType, setHasChosenType] = useState(false);
   const [text, setText] = useState("");
 
@@ -52,15 +54,7 @@ export default function CustomerChatbot() {
       id: "m1",
       from: "bot",
       text: `Hi ${nameFromEmail}! I’m Nova. How can I help you today?`,
-      // eslint-disable-next-line react-hooks/purity -- TODO: review - Date.now() is impure during render, move to useEffect or useRef
       ts: Date.now(),
-    },
-    {
-      id: "m2",
-      from: "bot",
-      text: "Would you like to file a complaint or do you have an inquiry?",
-      // eslint-disable-next-line react-hooks/purity -- TODO: review - Date.now() is impure during render, move to useEffect or useRef
-      ts: Date.now() + 1,
     },
   ]);
 
@@ -102,7 +96,6 @@ export default function CustomerChatbot() {
     setHasChosenType(true);
 
     if (type === "complaint") {
-      pushUser("I want to raise a complaint.");
       pushBot(
         "Got it. You can submit the complaint here in chat, or you can fill a form instead. Which do you prefer?"
       );
@@ -111,17 +104,37 @@ export default function CustomerChatbot() {
     }
 
     if (type === "inquiry") {
-      pushUser("I want to raise an inquiry.");
-      pushBot("Sure — tell me your question and I’ll try to help right away.");
+      pushBot("Sure — what can I help you with?");
       setStage("inquiry");
     }
   };
 
   // ===============================
-  // Send message (FINAL TEXT ONLY)
+  // CHATBOT API (Inquiry only)
   // ===============================
-  const handleSend = (e) => {
+  const sendToChatbot = async (message) => {
+    const res = await fetch("http://chatbot:8000/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message,
+        mode: "inquiry",
+      }),
+    });
+
+    if (!res.ok) throw new Error("Chatbot API failed");
+
+    const data = await res.json();
+    return data.reply;
+  };
+
+  // ===============================
+  // Send message
+  // ===============================
+  const handleSend = async (e) => {
     e.preventDefault();
+
+    if (stage === "done") return;
 
     const t = text.trim();
     if (!t) return;
@@ -129,35 +142,48 @@ export default function CustomerChatbot() {
     pushUser(t);
     setText("");
 
+    // ---------- INQUIRY (BACKEND ONLY) ----------
+    if (stage === "inquiry") {
+      try {
+        pushBot("…"); // lightweight typing indicator
+        const reply = await sendToChatbot
+
+        const realReply = await sendToChatbot(t);
+        setMessages((prev) => [
+          ...prev.slice(0, -1), // remove "…"
+          {
+            id: `b-${Date.now()}`,
+            from: "bot",
+            text: realReply,
+            ts: Date.now(),
+          },
+        ]);
+      } catch (err) {
+        console.error(err);
+        pushBot("Sorry — the chatbot service is unavailable right now.");
+      }
+      return;
+    }
+
+    // ---------- COMPLAINT ----------
     if (stage === "complaintChoice") {
       if (t.toLowerCase().includes("form")) {
         pushBot("No problem — taking you to the complaint form now.");
-        setTimeout(() => goToForm("Complaint"), 350);
+        setTimeout(() => goToForm("Complaint"), 500);
+        setStage("done");
         return;
       }
 
       pushBot(
-        "Okay — please describe the complaint in one or two sentences. Include any key details."
+        "Thanks for the details. Please submit this complaint using the form so it can be tracked properly."
       );
-      setStage("start");
-      return;
+      setTimeout(() => goToForm("Complaint"), 700);
+      setStage("done");
     }
-
-    if (stage === "inquiry") {
-      pushBot(
-        "Thanks — for this demo, I’ll log your inquiry and suggest using the form if you want a tracked ticket."
-      );
-      setStage("start");
-      return;
-    }
-
-    pushBot(
-      "Thanks — I can help with that. If you want to submit a tracked request, you can also use “Fill a form instead”."
-    );
   };
 
   // ===============================
-  // Mic / Whisper integration (ChatGPT-style controls)
+  // Mic / Whisper integration
   // ===============================
   const stopStreamTracks = () => {
     if (streamRef.current) {
@@ -180,7 +206,6 @@ export default function CustomerChatbot() {
       };
 
       recorder.onstop = async () => {
-        // If we stopped without confirming (cancel), just cleanup.
         if (!isTranscribing) {
           stopStreamTracks();
           return;
@@ -188,17 +213,16 @@ export default function CustomerChatbot() {
 
         try {
           const blob = new Blob(chunksRef.current, { type: "audio/mp4" });
-
           const formData = new FormData();
           formData.append("audio", blob, "mic.mp4");
 
-          const res = await fetch("http://localhost:3001/transcribe", {
+          const res = await fetch("http://whisper:3001/transcribe", {
             method: "POST",
             body: formData,
           });
 
           const data = await res.json();
-          setText(data.transcript || ""); // editable draft
+          setText(data.transcript || "");
         } catch (e) {
           console.error(e);
           alert("Could not transcribe audio. Please try again.");
@@ -211,38 +235,11 @@ export default function CustomerChatbot() {
 
       recorder.start();
       setIsRecording(true);
+      setIsTranscribing(true);
     } catch (e) {
       console.error(e);
       alert("Microphone permission is required to record audio.");
     }
-  };
-
-  const cancelRecording = () => {
-    try {
-      setIsTranscribing(false);
-      setIsRecording(false);
-
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        // Cancel path: stop recorder, but onstop will early-return because isTranscribing is false
-        mediaRecorderRef.current.stop();
-      } else {
-        stopStreamTracks();
-      }
-
-      chunksRef.current = [];
-    } catch (e) {
-      console.error(e);
-      stopStreamTracks();
-    }
-  };
-
-  const confirmRecording = () => {
-    if (!mediaRecorderRef.current) return;
-    if (mediaRecorderRef.current.state === "inactive") return;
-
-    setIsTranscribing(true);
-    setIsRecording(false);
-    mediaRecorderRef.current.stop();
   };
 
   // ===============================
@@ -252,28 +249,24 @@ export default function CustomerChatbot() {
     <Layout role="customer">
       <div className="custChatPage">
         <div className="custChatTop">
-          <PageHeader title="Chatbot" subtitle="Chat with Nova or submit a form anytime." />
-
-          <div className="custChatTopActions">
-            <button className="softPillBtn" onClick={() => navigate("/customer")}>
-              Back to Home
-            </button>
-            <button className="softPillBtn" onClick={() => goToForm()}>
-              Fill a form instead
-            </button>
-          </div>
+          <PageHeader
+            title="Chatbot"
+            subtitle="Chat with Nova or submit a form anytime."
+          />
         </div>
 
         <section className="custChatShellV2">
           <div className="custChatPanelV2">
             {!hasChosenType && (
               <div className="custQuickTop">
-                <div className="custQuickTopHint">Choose one to get started:</div>
+                <div className="custQuickTopHint">
+                  Choose one to get started:
+                </div>
                 <div className="custQuickTopBtns">
-                  <button className="custQuickBtn" onClick={() => handleSelect("complaint")}>
+                  <button onClick={() => handleSelect("complaint")}>
                     Complaint
                   </button>
-                  <button className="custQuickBtn" onClick={() => handleSelect("inquiry")}>
+                  <button onClick={() => handleSelect("inquiry")}>
                     Inquiry
                   </button>
                 </div>
@@ -289,86 +282,18 @@ export default function CustomerChatbot() {
             </div>
 
             <form className="custComposer" onSubmit={handleSend}>
-              <button
-                type="button"
-                className={`custMicBtn ${isRecording ? "recording" : ""}`}
-                onClick={startRecording}
-                disabled={isRecording || isTranscribing}
-                aria-label="Record audio"
-                title="Record"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                  <path d="M12 18v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              </button>
-
-              {(isRecording || isTranscribing) && (
-                <div
-                  className={`custVoiceMiniBar ${
-                    isRecording ? "custVoiceMiniBar--recording" : ""
-                  } ${isTranscribing ? "custVoiceMiniBar--transcribing" : ""}`}
-                >
-                  <div className="custVoiceMiniLeft">
-                    <span className="custVoiceMiniText">
-                      {isTranscribing ? "Transcribing…" : "Listening…"}
-                    </span>
-
-                    {!isTranscribing && (
-                      <span className="custWavesMini" aria-hidden="true">
-                        <span className="custWaveMini" />
-                        <span className="custWaveMini" />
-                        <span className="custWaveMini" />
-                        <span className="custWaveMini" />
-                        <span className="custWaveMini" />
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="custVoiceMiniActions">
-                    <button
-                      type="button"
-                      className="custVoiceMiniIconBtn"
-                      onClick={cancelRecording}
-                      disabled={isTranscribing}
-                      aria-label="Cancel recording"
-                      title="Cancel"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                        <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="custVoiceMiniIconBtn custVoiceMiniIconBtn--confirm"
-                      onClick={confirmRecording}
-                      disabled={isTranscribing}
-                      aria-label="Confirm recording"
-                      title="Confirm"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                        <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              )}
-
               <textarea
                 className="custInput"
                 value={text}
-                rows={1}
                 placeholder="Type or speak your message…"
-                onChange={(e) => {
-                  setText(e.target.value);
-                  e.target.style.height = "auto";
-                  e.target.style.height = `${e.target.scrollHeight}px`;
-                }}
+                onChange={(e) => setText(e.target.value)}
+                disabled={stage === "done"}
               />
-
-              <button type="submit" className="primaryPillBtn">
+              <button
+                type="submit"
+                className="primaryPillBtn"
+                disabled={stage === "done"}
+              >
                 Send
               </button>
             </form>

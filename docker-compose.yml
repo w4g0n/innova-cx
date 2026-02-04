@@ -28,36 +28,31 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      PYTHONUNBUFFERED: "1"
-    volumes:
-      - ./backend:/app
-    ports:
-      - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
+    ports:
+      - "8000:8000"
     networks:
       - innovacx-network
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  chatbot:
+    profiles: ["frontend"]
+    build: ./backend/chatbot
+    container_name: innovacx-chatbot
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    networks:
+      - innovacx-network
 
   whisper:
-    profiles: ["audio"]
+    profiles: ["frontend"]
     build: ./backend/audio-transcriber/whisper
     container_name: innovacx-whisper
     restart: unless-stopped
     ports:
       - "3001:3001"
-    networks:
-      - innovacx-network
-
-  chatbot:
-    profiles: ["chatbot"]
-    build: ./chatbot
-    container_name: innovacx-chatbot
-    stdin_open: true
-    tty: true
-    volumes:
-      - ./chatbot/data:/app/data
     networks:
       - innovacx-network
 
@@ -70,6 +65,9 @@ services:
       - /app/node_modules
     ports:
       - "5173:5173"
+    depends_on:
+      - chatbot
+      - whisper
     networks:
       - innovacx-network
 

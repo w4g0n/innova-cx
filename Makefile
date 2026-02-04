@@ -10,8 +10,12 @@ backend-build:
 
 
 # =========================
-# FRONTEND (VITE)
+# FRONTEND (UI + CHATBOT + WHISPER)
 # =========================
+# Frontend profile now includes:
+# - frontend
+# - chatbot
+# - whisper
 
 frontend:
 	docker compose --profile frontend up
@@ -21,18 +25,8 @@ frontend-build:
 
 
 # =========================
-# AUDIO (WHISPER)
-# =========================
-
-audio:
-	docker compose --profile audio up
-
-audio-build:
-	docker compose --profile audio up --build
-
-
-# =========================
-# CHATBOT
+# OPTIONAL: CHATBOT ONLY
+# (useful for debugging, not required for normal use)
 # =========================
 
 chatbot:
@@ -43,7 +37,19 @@ chatbot-build:
 
 
 # =========================
-# COMBINATIONS
+# OPTIONAL: AUDIO (WHISPER) ONLY
+# =========================
+
+audio:
+	docker compose --profile audio up
+
+audio-build:
+	docker compose --profile audio up --build
+
+
+# =========================
+# FULL DEV STACK
+# (Backend + Frontend + AI)
 # =========================
 
 dev:
@@ -58,4 +64,4 @@ dev-build:
 # =========================
 
 down:
-	docker compose down
+	docker compose down --remove-orphans

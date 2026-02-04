@@ -1,3 +1,11 @@
+@import "./components/common/PillSelect.css";
+@import "./components/common/KpiCard.css";
+@import "./components/common/PageHeader.css";
+@import "./components/common/PillSearch.css";
+@import "./components/common/FilterPillButton.css";
+@import "./components/common/PriorityPill.css";
+@import "./components/common/ExportPdfButton.css";
+
 :root {
   --sidebar-bg: #401c51;
   --screen-bg: #e5e6ed;
@@ -6,14 +14,6 @@
   --text-dark: #111;
   --text-light: #ffffff;
 }
-
-@import "./components/common/PillSelect.css";
-@import "./components/common/KpiCard.css";
-@import "./components/common/PageHeader.css";
-@import "./components/common/PillSearch.css";
-@import "./components/common/FilterPillButton.css";
-@import "./components/common/PriorityPill.css";
-@import "./components/common/ExportPdfButton.css";
 
 * {
   box-sizing: border-box;
