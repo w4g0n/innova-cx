@@ -90,7 +90,7 @@ def main() -> None:
         audio, _ = librosa.load(wav_path, sr=TARGET_SAMPLE_RATE)
 
         # Transcription
-        segments, _ = model.transcribe(audio)
+        segments, _ = model.transcribe(audio, language="en")
         transcript = " ".join(segment.text for segment in segments).strip()
 
         # Analysis
