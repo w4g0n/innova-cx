@@ -147,6 +147,14 @@ async def analyze_text(input: TextInput):
 
     result = predictor.predict(input.text)
 
+    logger.info(
+        "Sentiment (text) score=%.3f urgency=%.3f category=%s mock=%s",
+        result["text_sentiment"],
+        result["text_urgency"],
+        categorize_sentiment(result["text_sentiment"]),
+        USE_MOCK,
+    )
+
     return SentimentResponse(
         text_sentiment=result["text_sentiment"],
         text_urgency=result["text_urgency"],
@@ -164,6 +172,15 @@ async def analyze_combined(input: CombinedInput):
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
     result = predictor.predict_combined(input.text, input.audio_features)
+
+    logger.info(
+        "Sentiment (combined) text=%.3f audio=%s combined=%.3f urgency=%.3f mock=%s",
+        result["text_sentiment"],
+        "none" if result.get("audio_sentiment") is None else f'{result["audio_sentiment"]:.3f}',
+        result["combined_sentiment"],
+        result["urgency"],
+        USE_MOCK,
+    )
 
     return CombinedResponse(
         text_sentiment=result["text_sentiment"],
