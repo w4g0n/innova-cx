@@ -145,12 +145,12 @@ export default function CustomerChatbot() {
     // ---------- INQUIRY (BACKEND ONLY) ----------
     if (stage === "inquiry") {
       try {
-        pushBot("…"); // lightweight typing indicator
+        pushBot("…"); 
         const reply = await sendToChatbot
 
         const realReply = await sendToChatbot(t);
         setMessages((prev) => [
-          ...prev.slice(0, -1), // remove "…"
+          ...prev.slice(0, -1), 
           {
             id: `b-${Date.now()}`,
             from: "bot",
