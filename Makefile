@@ -49,14 +49,14 @@ audio-build:
 
 # =========================
 # FULL DEV STACK
-# (Backend + Frontend + AI)
+# (Frontend + AI)
 # =========================
 
 dev:
-	docker compose --profile backend --profile frontend up
+	docker compose --profile dev up
 
 dev-build:
-	docker compose --profile backend --profile frontend up --build
+	docker compose --profile dev up --build
 
 
 # =========================

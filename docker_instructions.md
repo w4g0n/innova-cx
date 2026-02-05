@@ -50,6 +50,18 @@ runs: docker compose --profile backend --profile frontend up
 make dev-build
 runs: docker compose --profile backend --profile frontend up --build
 
+Dev profile (single profile that runs everything):
+docker compose --profile dev up
+docker compose --profile dev up --build
+
+Sentiment model notes:
+By default it runs in mock mode.
+
+When you have a real model, copy 
+`.env.example` to `.env` and set:
+USE_MOCK_MODEL=false
+SENTIMENT_MODEL_PATH=/path/to/your/model
+
 
 
 note: only add " --build" if its the first time running 
