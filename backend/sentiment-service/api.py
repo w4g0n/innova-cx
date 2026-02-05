@@ -20,7 +20,7 @@ app = FastAPI(title="InnovaCX Sentiment Service", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -83,14 +83,41 @@ async def startup():
     else:
         logger.info(f"Loading real model from {MODEL_PATH}")
         try:
-            # Import real model wrapper when available
-            # from inference import MLModelWrapper
-            # predictor = MLModelWrapper(MODEL_PATH)
-            logger.warning("Real model loading not implemented - falling back to mock")
-            from mock_predictor import MockPredictor
-            predictor = MockPredictor()
+            from inference import MultiTaskPredictor
+            real_model = MultiTaskPredictor(MODEL_PATH, device="cpu")
+
+            class RealPredictor:
+                """Adapter around MultiTaskPredictor to match api.py interface."""
+                def __init__(self, model):
+                    self._model = model
+
+                def predict(self, text):
+                    return self._model.predict(text)
+
+                def predict_combined(self, text, audio_features=None):
+                    result = self._model.predict(text)
+                    audio_sentiment = None
+                    if audio_features:
+                        energy = audio_features.get("mean_energy", 0.05)
+                        audio_sentiment = -0.3 if energy > 0.1 else 0.0
+                    if audio_sentiment is not None:
+                        combined = result["text_sentiment"] * 0.7 + audio_sentiment * 0.3
+                    else:
+                        combined = result["text_sentiment"]
+                    return {
+                        "text_sentiment": result["text_sentiment"],
+                        "audio_sentiment": audio_sentiment,
+                        "combined_sentiment": round(combined, 3),
+                        "urgency": result["text_urgency"],
+                        "keywords": result["keywords"],
+                        "confidence": 0.95,
+                    }
+
+            predictor = RealPredictor(real_model)
+            logger.info("Real model loaded successfully")
         except Exception as e:
-            logger.error(f"Failed to load model: {e}")
+            logger.error(f"Failed to load real model: {e}")
+            logger.warning("Falling back to mock mode")
             from mock_predictor import MockPredictor
             predictor = MockPredictor()
 

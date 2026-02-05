@@ -117,7 +117,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
     }
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
 
     const payload = {
@@ -134,6 +134,18 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
         lastModified: f.lastModified,
       })),
     };
+
+    // Run sentiment analysis on the message text
+    if (message.trim()) {
+      try {
+        console.log("[Sentiment] Sending to API...", message.substring(0, 50));
+        const sentiment = await analyzeSentiment(message);
+        console.log("[Sentiment Analysis]", sentiment);
+        payload.sentiment = sentiment;
+      } catch (err) {
+        console.error("[Sentiment] FAILED:", err);
+      }
+    }
 
     console.log("FORM SUBMIT (demo):", payload);
     alert("Submitted (demo). Your request has been recorded.");
@@ -201,6 +213,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
         if (data?.transcript) {
           try {
             const sentiment = await analyzeSentiment(data.transcript);
+            console.log("[Sentiment Analysis]", sentiment);
             setSentimentAnalysis(sentiment);
           } catch (sentimentErr) {
             console.warn("Sentiment analysis unavailable:", sentimentErr);
@@ -463,51 +476,6 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
 
                 {voiceStage === "review" && (
                   <div className="custVoiceReview">
-                    {/*
-                      =======================================================================
-                      SENTIMENT ANALYSIS DISPLAY (for frontend team)
-                      =======================================================================
-
-                      After audio transcription, we call the sentiment API to analyze the text.
-                      The `sentimentAnalysis` state contains:
-                        - text_sentiment: number (-1 to +1)
-                        - text_urgency: number (0 to 1)
-                        - keywords: string[]
-                        - category: "very_negative" | "negative" | "neutral" | "positive" | "very_positive"
-                        - mock_mode: boolean (true if using demo mode)
-
-                      CSS classes to style (add to CustomerFillForm.css):
-                        - .custSentimentPreview: container for sentiment badges
-                        - .custSentimentBadge: base badge style
-                        - .custSentimentBadge--negative: red styling
-                        - .custSentimentBadge--neutral: yellow styling
-                        - .custSentimentBadge--positive: green styling
-                        - .custUrgencyBadge: high urgency indicator
-                        - .custKeywords: keywords display
-                        - .custMockBadge: demo mode indicator
-
-                      Example implementation:
-
-                      {sentimentAnalysis && (
-                        <div className="custSentimentPreview">
-                          <span className={`custSentimentBadge custSentimentBadge--${sentimentAnalysis.category}`}>
-                            {sentimentAnalysis.category.replace("_", " ")}
-                          </span>
-                          {sentimentAnalysis.text_urgency > 0.6 && (
-                            <span className="custUrgencyBadge">HIGH URGENCY</span>
-                          )}
-                          {sentimentAnalysis.keywords?.length > 0 && (
-                            <span className="custKeywords">
-                              Keywords: {sentimentAnalysis.keywords.join(", ")}
-                            </span>
-                          )}
-                          {sentimentAnalysis.mock_mode && (
-                            <span className="custMockBadge">Demo</span>
-                          )}
-                        </div>
-                      )}
-                      =======================================================================
-                    */}
                     <div className="custVoiceReviewTop">
                       <div className="custHint">Review & edit transcript, then ✓ to insert.</div>
                       <div className="custVoiceActions">
