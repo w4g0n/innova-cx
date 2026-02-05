@@ -71,7 +71,7 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
     let sentiment = null;
     if (result.transcript) {
       try {
-        const sentimentRes = await fetch(`${sentimentUrl}/analyze-combined`, {
+        const sentimentRes = await fetch(sentimentUrl + "/analyze-combined", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
