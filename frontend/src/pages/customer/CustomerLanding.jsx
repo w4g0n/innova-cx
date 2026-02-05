@@ -8,20 +8,25 @@ import useNovaChatbot from "./chatbot.js";
 export default function CustomerLanding() {
   const navigate = useNavigate();
 
+  const [embeddedFormType, setEmbeddedFormType] = useState("Complaint");
+
   const {
-  listRef,
-  messages,
-  text,
-  setText,
-  stage,
-  hasChosenType,
-  handleSelect,
-  handleSend,
-} = useNovaChatbot({
-  onGoToForm: (type) => {
-    window.location.href = `/customer/fill-form?type=${encodeURIComponent(type)}`;
-  },
-});
+    listRef,
+    messages,
+    text,
+    setText,
+    stage,
+    hasChosenType,
+    handleSelect,
+    handleSend,
+  } = useNovaChatbot({
+    onGoToForm: (type) => {
+      setEmbeddedFormType(type || "Complaint");
+      if (!isOpen) setIsOpen(true);
+      if (!isExpanded) setIsExpanded(true);
+      setNovaView("form");
+    },
+  });
 
   const clusters = [
     { title: "Business", desc: "Flexible office & workspace options" },
@@ -467,7 +472,11 @@ export default function CustomerLanding() {
           <div className={`novaWidgetBody ${novaView === "form" ? "novaWidgetBody--form" : ""}`}>
             {novaView === "form" ? (
               <div className="novaFormHost">
-                <CustomerFillForm embedded onCancel={() => setNovaView("chat")} />
+                <CustomerFillForm
+                  embedded
+                  initialType={embeddedFormType}
+                  onCancel={() => setNovaView("chat")}
+                />
               </div>
             ) : (
               <>
@@ -491,7 +500,7 @@ export default function CustomerLanding() {
                 )}
                 </div>
 
-                {hasChosenType && (
+                {hasChosenType && stage === "inquiry" && (
                   <div className="novaComposerWrap">
                     {voiceActive && (
                       <div className={`novaVoiceBar ${voiceBusy ? "isBusy" : ""}`}>

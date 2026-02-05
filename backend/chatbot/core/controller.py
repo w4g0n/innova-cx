@@ -3,7 +3,9 @@ from .retriever import retrieve_context
 
 MAX_INQUIRY_ATTEMPTS = 3
 
-def handle_complaint(user_text: str, state: dict) -> str:
+def handle_complaint(user_text: str, state: dict | None = None) -> str:
+    if state is None:
+        state = {"attempts": 0}
     context = retrieve_context(user_text, mode="complaint")
 
     prompt = (
@@ -21,7 +23,10 @@ def handle_complaint(user_text: str, state: dict) -> str:
     return generate_response(prompt)
 
 
-def handle_inquiry(user_text: str, state: dict) -> str:
+def handle_inquiry(user_text: str, state: dict | None = None) -> str:
+    if state is None:
+        state = {"attempts": 0}
+
     state["attempts"] += 1
 
     if state["attempts"] > MAX_INQUIRY_ATTEMPTS:

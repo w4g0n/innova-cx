@@ -5,7 +5,7 @@ import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
 import "./CustomerFillForm.css";
 
-export default function CustomerFillForm({ embedded = false, onCancel }) {
+export default function CustomerFillForm({ embedded = false, onCancel, initialType }) {
   const location = useLocation();
 
   const user = useMemo(() => {
@@ -98,6 +98,12 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
   const [draftTranscript, setDraftTranscript] = useState("");
 
   useEffect(() => {
+    if (initialType === "Complaint" || initialType === "Inquiry") {
+      setType(initialType);
+    }
+  }, [initialType]);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const t = params.get("type");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO: review - setState in useEffect, consider deriving from URL
@@ -186,7 +192,10 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
         const formData = new FormData();
         formData.append("audio", blob, "mic.mp4");
 
-        const res = await fetch("http://localhost:3001/transcribe", {
+        const whisperBaseUrl =
+          import.meta.env.VITE_WHISPER_BASE_URL || "http://localhost:3001";
+
+        const res = await fetch(`${whisperBaseUrl}/transcribe`, {
           method: "POST",
           body: formData,
         });

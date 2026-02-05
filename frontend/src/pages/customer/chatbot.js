@@ -36,8 +36,11 @@ export default function useNovaChatbot({ onGoToForm } = {}) {
   };
 
   // ---------- BACKEND CALL ----------
+  const chatbotBaseUrl =
+    import.meta.env.VITE_CHATBOT_BASE_URL || "http://localhost:8001";
+
   const sendToChatbot = async (message) => {
-    const res = await fetch("http://innovacx-chatbot:8000/api/chat", {
+    const res = await fetch(`${chatbotBaseUrl}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -59,8 +62,8 @@ export default function useNovaChatbot({ onGoToForm } = {}) {
     setHasChosenType(true);
 
     if (type === "complaint") {
-      pushBot("Redirecting you to the complaint form…");
-      setStage("done");
+      pushBot("Opening the complaint form below…");
+      setStage("complaint");
       onGoToForm?.("Complaint");
       return;
     }
