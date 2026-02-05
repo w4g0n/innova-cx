@@ -1,4 +1,4 @@
-from controller import handle_inquiry, handle_complaint
+from core.controller import handle_inquiry, handle_complaint
 
 print("Chatbot ready.")
 print("Modes: inquiry | complaint")
