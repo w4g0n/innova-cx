@@ -262,7 +262,7 @@ export default function ManagerViewComplaints() {
           />
         </section>
 
-        {/* ✅ Reset now sits next to the dropdowns */}
+        
         <section className="mv-filtersRow">
           <div className="mv-filterGroup">
             <div className="mv-select">

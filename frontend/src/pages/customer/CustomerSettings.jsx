@@ -22,11 +22,9 @@ export default function CustomerSettings() {
   const email = (user?.email || "").trim();
   const phone = (user?.phone || user?.mobile || "").trim();
 
-  // ✅ Demo preferences (UI-only — will connect to backend later)
   const [language, setLanguage] = useState("English");
   const [notifPref, setNotifPref] = useState("Enabled");
 
-  // More customer-friendly settings (UI-only)
   const [emailNotifs, setEmailNotifs] = useState(true);
   const [inAppNotifs, setInAppNotifs] = useState(true);
   const [statusAlerts, setStatusAlerts] = useState(true);
@@ -39,8 +37,6 @@ export default function CustomerSettings() {
   };
 
   const onDeleteAccount = () => {
-    // Keep it safe: confirmation required even in demo UI
-    // (No real delete happens here.)
     const ok = window.confirm(
       "Demo only: This would request account deletion once the backend is connected. Continue?"
     );
@@ -75,7 +71,7 @@ export default function CustomerSettings() {
         </div>
 
         <div className="customerSettingsGrid">
-          {/* Account */}
+          
           <div className="customerSettingsCard">
             <div className="customerSettingsCardHeader">
               <div className="customerSettingsCardTitle">Account</div>
@@ -126,7 +122,7 @@ export default function CustomerSettings() {
             </div>
           </div>
 
-          {/* Notifications */}
+          
           <div className="customerSettingsCard">
             <div className="customerSettingsCardHeader">
               <div className="customerSettingsCardTitle">Notifications</div>
@@ -193,7 +189,7 @@ export default function CustomerSettings() {
             </div>
           </div>
 
-          {/* Preferences */}
+          
           <div className="customerSettingsCard">
             <div className="customerSettingsCardHeader">
               <div className="customerSettingsCardTitle">Preferences</div>
@@ -275,7 +271,7 @@ export default function CustomerSettings() {
             </div>
           </div>
 
-          {/* Privacy */}
+          
           <div className="customerSettingsCard">
             <div className="customerSettingsCardHeader">
               <div className="customerSettingsCardTitle">Privacy</div>

@@ -1,4 +1,3 @@
-/* ========== GLOBAL ========== */
 * {
   box-sizing: border-box;
 }
@@ -9,7 +8,16 @@ body {
   color: #111;
 }
 
-/* ========== NAVBAR ========== */
+.customer-landing-page,
+.main-content {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.customer-landing-page {
+  overflow-x: hidden;
+}
+
 .navbar {
   position: absolute;
   top: 0;
@@ -19,7 +27,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 250px;
+  padding: 0 80px;
   background: transparent;
 }
 
@@ -33,6 +41,8 @@ body {
   list-style: none;
   margin: 0;
   padding: 0;
+  flex: 1;
+  justify-content: center;
 }
 
 .nav-links li a {
@@ -61,18 +71,17 @@ body {
   width: 100%;
 }
 
-/* NAV ACTIONS (Notifications + Profile) */
 .nav-actions {
   display: flex;
   align-items: center;
   gap: 14px;
+  margin-left: auto;
 }
 
 .navAction {
   position: relative;
 }
 
-/* ✅ purple icon buttons like chatbot launcher */
 .navIconButton {
   width: 60px;
   height: 60px;
@@ -218,9 +227,9 @@ body {
   color: #991b1b;
 }
 
-/* ========== HERO SECTION ========== */
 .hero {
-  height: 850px;
+  height: 100vh;
+  min-height: 850px;
   width: 100%;
   position: relative;
   background-image: url("../../assets/dcc-bg.png");
@@ -242,7 +251,6 @@ body {
   border-bottom-right-radius: 25px;
 }
 
-/* HERO CONTENT */
 .hero-content {
   position: relative;
   z-index: 2;
@@ -256,18 +264,20 @@ body {
   padding-top: 10px;
 }
 
-/* HERO TITLE */
 .hero-title-wrapper {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  max-width: 100%;
 }
 
 .hero-title {
-  font-size: 140px;
+  font-size: clamp(56px, 9vw, 140px);
   font-weight: 400;
   margin: 0;
   line-height: 1.1;
+  max-width: 100%;
+  word-break: break-word;
 }
 
 .hero-static {
@@ -292,8 +302,11 @@ body {
   display: block;
   height: 120px;
   line-height: 120px;
-  font-size: 120px;
+  font-size: clamp(42px, 7vw, 120px);
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @keyframes scrollWords {
@@ -312,7 +325,8 @@ body {
 }
 
 .hero-line {
-  width: 1500px;
+  width: 100%;
+  max-width: 1500px;
   height: 1px;
   background-color: #fff;
   margin-top: 40px;
@@ -394,7 +408,6 @@ body {
   }
 }
 
-/* ========== CLUSTERS ========== */
 .clusters {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -421,7 +434,6 @@ body {
   color: #555;
 }
 
-/* ========== FOOTER ========== */
 .footer {
   padding: 40px 48px;
   background: #111;
@@ -457,12 +469,10 @@ body {
   }
 }
 
-/* ========== NOVA CHAT COLORS ========== */
 :root {
   --nova-purple: #401c51;
 }
 
-/* ========== CHAT LAUNCHER ========== */
 .novaWidgetLauncher {
   position: fixed;
   bottom: 20px;
@@ -493,7 +503,6 @@ body {
   background: rgba(255, 255, 255, 0.95);
 }
 
-/* ========== CHAT WIDGET ========== */
 .novaWidget {
   position: fixed;
   bottom: 76px;
@@ -513,14 +522,15 @@ body {
 }
 
 .novaWidget.expanded {
-  width: 95vw;
-  height: 95vh;
-  bottom: 2.5vh;
-  right: 2.5vw;
-  border-radius: 16px;
+  width: 100vw;
+  height: 100vh;
+  bottom: 0;
+  right: 0;
+  top: 0;
+  left: 0;
+  border-radius: 0;
 }
 
-/* ========== HEADER ========== */
 .novaWidgetHeader {
   height: 58px;
   background: var(--nova-purple);
@@ -606,7 +616,6 @@ body {
   background: rgba(255, 255, 255, 0.28);
 }
 
-/* ========== CHAT BODY ========== */
 .novaWidgetBody {
   flex: 1;
   display: flex;
@@ -659,7 +668,6 @@ body {
   color: #2b1247;
 }
 
-/* QUICK BUTTONS */
 .novaQuickRow {
   display: flex;
   gap: 10px;
@@ -682,7 +690,6 @@ body {
   background: rgba(64, 28, 81, 0.08);
 }
 
-/* ========== COMPOSER ========== */
 .novaComposer {
   display: flex;
   gap: 10px;
@@ -721,15 +728,10 @@ body {
   background: #9b71a3;
 }
 
-/* ============================= */
-/* Compact Mic (ChatGPT-style)   */
-/* ============================= */
-
 .novaComposerWrap {
   position: relative;
 }
 
-/* little bar shown when listening */
 .novaVoiceBar {
   margin: 0 12px 10px 12px;
   border-radius: 999px;
@@ -818,10 +820,9 @@ body {
   cursor: not-allowed;
 }
 
-/* mic button inside the input row */
 .novaMicBtn {
-  width: 38px;
-  height: 38px;
+  width: 46px;
+  height: 46px;
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.12);
   background: #ffffff;
@@ -842,7 +843,6 @@ body {
   border-color: rgba(64, 28, 81, 0.22);
 }
 
-/* Align composer items nicely */
 .novaComposer {
   align-items: center;
 }
@@ -892,7 +892,6 @@ body {
   width: 100%;
 }
 
-/* shared button style */
 .novaCloseModalBtns button {
   min-width: 90px;
   padding: 10px 18px;
@@ -903,7 +902,6 @@ body {
   transition: 0.2s;
 }
 
-/* YES = purple */
 .novaCloseModalBtns button:first-child {
   border: none;
   background: var(--nova-purple);
@@ -914,7 +912,6 @@ body {
   background: #9b71a3;
 }
 
-/* NO = grey */
 .novaCloseModalBtns button:last-child {
   border: none;
   background: #e5e5e5;

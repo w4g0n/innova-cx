@@ -18,8 +18,6 @@ export default function ComplaintTrends() {
     setPriority("All Priorities");
   };
 
-  // Demo dataset (so the UI actually changes with filters)
-  // Keys match your dropdown values exactly.
   const data = useMemo(
     () => ({
       "This Month": {
@@ -297,7 +295,6 @@ export default function ComplaintTrends() {
           },
         },
 
-        // Department-specific examples (you can add more combos later)
         "IT Support": {
           "All Priorities": {
             kpis: {
@@ -369,7 +366,6 @@ export default function ComplaintTrends() {
         },
       },
 
-      // Time-range variations (example)
       "Last 3 Months": {
         "All Departments": {
           "All Priorities": {
@@ -445,7 +441,6 @@ export default function ComplaintTrends() {
     return byPriority;
   }, [data, timeRange, department, priority]);
 
-  // Normalize bars to the same max height logic as before
   const bars = useMemo(() => {
     const values = (view?.bars || []).map((b) => b.value);
     const max = Math.max(...values, 1);

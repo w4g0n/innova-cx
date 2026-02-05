@@ -4,7 +4,6 @@
   font-size: 18px;
 }
 
-/* FILTERS ABOVE KPIs */
 .filtersRow {
   display: flex;
   align-items: center;
@@ -20,14 +19,12 @@
   gap: 12px;
 }
 
-/* Layout-only wrapper for PillSelect */
 .pillSelectHolder {
   display: flex;
   align-items: center;
   min-width: 190px;
 }
 
-/* KPI ROW - layout only */
 .kpiRow {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -35,7 +32,6 @@
   margin-bottom: 22px;
 }
 
-/* CHARTS GRID */
 .chartsGrid {
   display: grid;
   grid-template-columns: 2fr 1.2fr;
@@ -66,7 +62,6 @@
   line-height: 1.5;
 }
 
-/* SIMPLE BAR CHART */
 .trendBars {
   display: flex;
   align-items: flex-end;
@@ -106,7 +101,6 @@
   color: rgba(17, 17, 17, 0.65);
 }
 
-/* CATEGORY LIST */
 .categoryList {
   display: flex;
   flex-direction: column;
@@ -147,7 +141,6 @@
   text-align: right;
 }
 
-/* TABLE */
 .tableWrapper {
   background: #ffffff;
   border-radius: 16px;
@@ -205,7 +198,6 @@
   font-weight: 750;
 }
 
-/* RESPONSIVE */
 @media (max-width: 1200px) {
   .kpiRow {
     grid-template-columns: repeat(3, 1fr);

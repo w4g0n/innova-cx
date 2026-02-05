@@ -45,7 +45,6 @@ export default function EmployeeDashboard() {
 
   useEffect(() => {
     try {
-      // Set local JSON data directly
       setEmployee(employeeDashboard.employee);
       setKpis(employeeDashboard.kpis);
       setTickets(employeeOpenTickets.tickets);
@@ -72,7 +71,7 @@ export default function EmployeeDashboard() {
           subtitle="Here’s your activity and assigned workload."
         />
 
-        {/* KPI Section */}
+        
         <section className="empDash__kpis">
           <KpiCard label="Tickets Assigned" value={kpis.ticketsAssigned} />
           <KpiCard label="In Progress" value={kpis.inProgress} />
@@ -82,9 +81,9 @@ export default function EmployeeDashboard() {
           <KpiCard label="New Today" value={kpis.newToday} />
         </section>
 
-        {/* Dashboard Grid */}
+        
         <section className="empDash__grid">
-          {/* Open Tickets */}
+          
           <article className="empCard">
             <h2 className="empCard__title">Open Tickets Assigned to Me</h2>
             <p className="empCard__subtitle">
@@ -123,7 +122,7 @@ export default function EmployeeDashboard() {
             </div>
           </article>
 
-          {/* Reports Section */}
+          
           <aside className="empCard empReports">
             <h2 className="empCard__title">Reports</h2>
             <p className="empCard__subtitle">
@@ -144,7 +143,6 @@ export default function EmployeeDashboard() {
   );
 }
 
-// Report Card Component
 function ReportItem({ month, reportId }) {
   return (
     <div className="empReportCard">

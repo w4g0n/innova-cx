@@ -1,16 +1,18 @@
 import { useState, useRef, useEffect } from "react";
+import { sendChatMessage } from "../../services/api";
 
 export default function useNovaChatbot({ onGoToForm } = {}) {
   const listRef = useRef(null);
 
-  // stages: start | inquiry | done
   const [stage, setStage] = useState("start");
   const [hasChosenType, setHasChosenType] = useState(false);
   const [text, setText] = useState("");
   const [messages, setMessages] = useState([]);
 
-  // ---------- GREETING ----------
-  useEffect(() => {
+  const resetSession = () => {
+    setStage("start");
+    setHasChosenType(false);
+    setText("");
     setMessages([
       {
         id: `b-${Date.now()}`,
@@ -18,9 +20,12 @@ export default function useNovaChatbot({ onGoToForm } = {}) {
         text: "Hi! I’m Nova. How can I help you today?",
       },
     ]);
+  };
+
+  useEffect(() => {
+    resetSession();
   }, []);
 
-  // ---------- HELPERS ----------
   const pushUser = (t) => {
     setMessages((prev) => [
       ...prev,
@@ -35,29 +40,11 @@ export default function useNovaChatbot({ onGoToForm } = {}) {
     ]);
   };
 
-  // ---------- BACKEND CALL ----------
-  const chatbotBaseUrl =
-    import.meta.env.VITE_CHATBOT_BASE_URL || "http://localhost:8001";
-
   const sendToChatbot = async (message) => {
-    const res = await fetch(`${chatbotBaseUrl}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message,
-        mode: "inquiry",
-      }),
-    });
-
-    if (!res.ok) {
-      throw new Error("Chatbot API failed");
-    }
-
-    const data = await res.json();
+    const data = await sendChatMessage(message, "inquiry");
     return data.reply;
   };
 
-  // ---------- TYPE SELECT ----------
   const handleSelect = (type) => {
     setHasChosenType(true);
 
@@ -74,7 +61,6 @@ export default function useNovaChatbot({ onGoToForm } = {}) {
     }
   };
 
-  // ---------- SEND ----------
   const handleSend = async (value) => {
     const t = value.trim();
     if (!t || stage !== "inquiry") return;
@@ -116,5 +102,6 @@ export default function useNovaChatbot({ onGoToForm } = {}) {
     hasChosenType,
     handleSelect,
     handleSend,
+    resetSession,
   };
 }

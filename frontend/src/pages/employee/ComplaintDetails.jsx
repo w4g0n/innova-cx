@@ -13,7 +13,6 @@ export default function ComplaintDetails() {
 
   const closeModal = () => setModalType(null);
 
-  // Load ticket from local JSON
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -31,7 +30,6 @@ export default function ComplaintDetails() {
     }
   }, [id]);
 
-  // Modal component
   const Modal = ({ type }) => {
     if (!type || !ticket) return null;
 
@@ -168,7 +166,6 @@ export default function ComplaintDetails() {
     );
   };
 
-  // Loading or error states
   if (loading)
     return (
       <Layout role="employee">
@@ -186,7 +183,7 @@ export default function ComplaintDetails() {
   return (
     <Layout role="employee">
       <main className="main">
-        {/* HEADER */}
+        
         <div className="details-header">
           <div className="header-left">
             <button className="back-btn" onClick={() => window.history.back()}>
@@ -213,7 +210,7 @@ export default function ComplaintDetails() {
           </div>
         </div>
 
-        {/* SUMMARY */}
+        
         <section className="card-section">
           <h2 className="section-title">Summary</h2>
           <div className="summary-grid">
@@ -243,7 +240,7 @@ export default function ComplaintDetails() {
           </div>
         </section>
 
-        {/* DETAILS */}
+        
         <section className="details-grid">
           <div className="card-section">
             <h2 className="section-title">Complaint Details</h2>
@@ -276,7 +273,7 @@ export default function ComplaintDetails() {
         </section>
       </main>
 
-      {/* MODAL */}
+      
       <Modal type={modalType} />
     </Layout>
   );

@@ -87,7 +87,6 @@ export default function CustomerHistory() {
 
 
   const ordered = useMemo(() => {
-    // Keep the same items and filtering logic — only control the display order by status.
     const rank = { Open: 0, "In Progress": 1, Resolved: 2 };
 
     return filtered
@@ -96,7 +95,7 @@ export default function CustomerHistory() {
         const ra = rank[a.item.status] ?? 999;
         const rb = rank[b.item.status] ?? 999;
         if (ra !== rb) return ra - rb;
-        return a.idx - b.idx; // preserve original order within the same status
+        return a.idx - b.idx;
       })
       .map((x) => x.item);
   }, [filtered]);
@@ -111,8 +110,26 @@ export default function CustomerHistory() {
     <Layout role="customer">
       <div className="custHistory">
         <PageHeader
-          title="History"
-          subtitle="Review your past inquiries and complaints."
+          title="My Tickets"
+          subtitle="Review your inquiries and complaints."
+          actions={
+            <button
+              type="button"
+              className="custBackBtn"
+              onClick={() => navigate("/customer")}
+              aria-label="Back to landing page"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M15 6l-6 6 6 6"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          }
         />
 
         <div className="historyKpis">

@@ -9,7 +9,6 @@ export default function CustomerTicketDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  // Dummy data (same IDs as History demo)
   const tickets = useMemo(
     () => [
       {
@@ -107,7 +106,7 @@ export default function CustomerTicketDetails() {
               className="primaryPillBtn"
               onClick={() => navigate("/customer/history")}
             >
-              Back to History
+              Back to My Tickets
             </button>
           }
         />
@@ -124,12 +123,11 @@ export default function CustomerTicketDetails() {
               className="primaryPillBtn"
               onClick={() => navigate("/customer/history")}
             >
-              Go to History
+              Go to My Tickets
             </button>
           </div>
         ) : (
           <>
-            {/* Top summary card */}
             <section className="ticketCard">
               <div className="ticketTop">
                 <div className="ticketTopLeft">
@@ -175,7 +173,6 @@ export default function CustomerTicketDetails() {
               </div>
             </section>
 
-            {/* Updates */}
             <section className="updatesCard">
               <h3 className="sectionTitle">Updates</h3>
 

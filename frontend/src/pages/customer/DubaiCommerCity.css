@@ -4,7 +4,6 @@ body {
   color: #333;
 }
 
-/* NAVBAR */
 .navbar {
   display: flex;
   justify-content: space-between;
@@ -38,7 +37,6 @@ body {
   border-radius: 4px;
 }
 
-/* HERO */
 .hero {
   height: 400px;
   background: url("/hero-bg.jpg") center/cover no-repeat;
@@ -60,7 +58,6 @@ body {
   margin-bottom: 20px;
 }
 
-/* CLUSTERS */
 .clusters {
   display: flex;
   justify-content: center;
@@ -78,7 +75,6 @@ body {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
-/* FOOTER */
 .footer {
   background: #222;
   color: #fff;
