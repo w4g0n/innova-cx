@@ -3,13 +3,10 @@ import { Suspense, lazy } from "react";
 
 import ProtectedRoute from "./auth/ProtectedRoute";
 
-// Lazily loaded pages
 const Login = lazy(() => import("./pages/Login"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 
-// Customer
 const CustomerLanding = lazy(() => import("./pages/customer/CustomerLanding"));
-const CustomerChatbot = lazy(() => import("./pages/customer/CustomerChatbot"));
 const CustomerNotifications = lazy(() =>
   import("./pages/customer/CustomerNotifications")
 );
@@ -19,7 +16,6 @@ const CustomerTicketDetails = lazy(() =>
   import("./pages/customer/CustomerTicketDetails")
 );
 const CustomerSettings = lazy(() => import("./pages/customer/CustomerSettings"));
-//auth
 const CustomerAuthPage = lazy(() =>
   import("./pages/customer/CustomerAuthPage")
 );
@@ -28,7 +24,6 @@ const CustomerAuthPage = lazy(() =>
 
 
 
-// Employee
 const EmployeeNotifications = lazy(() =>
   import("./pages/employee/EmployeeNotifications")
 );
@@ -41,7 +36,6 @@ const EmployeeViewAllComplaints = lazy(() =>
   import("./pages/employee/EmployeeViewAllComplaints")
 );
 
-// Manager
 const ManagerNotifications = lazy(() =>
   import("./pages/manager/ManagerNotifications")
 );
@@ -56,7 +50,6 @@ const ManagerComplaintDetails = lazy(() =>
 );
 const ViewEmployees = lazy(() => import("./pages/manager/ManagerViewEmployees"));
 
-// Operator
 const OperatorNotifications = lazy(() =>
   import("./pages/operator/OperatorNotifications")
 );
@@ -73,7 +66,7 @@ export default function App() {
         }
       >
         <Routes>
-          {/* Public */}
+          
           <Route path="/" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
 
@@ -81,7 +74,7 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/verify" element={<CustomerAuthPage />} />
 
-          {/* Customer landing (PROTECTED) */}
+          
           <Route
             path="/customer"
             element={
@@ -91,21 +84,13 @@ export default function App() {
             }
           />
 
-          {/* Backward-compatible route (if anything still links to /customer/dashboard) */}
+          
           <Route
             path="/customer/dashboard"
             element={<Navigate to="/customer" replace />}
           />
 
-          {/* Customer (protected) */}
-          <Route
-            path="/customer/chatbot"
-            element={
-              <ProtectedRoute role="customer">
-                <CustomerChatbot />
-              </ProtectedRoute>
-            }
-          />
+          
           <Route
             path="/customer/notifications"
             element={
@@ -148,7 +133,7 @@ export default function App() {
             }
           />
 
-          {/* Employee (protected) */}
+          
           <Route
             path="/employee"
             element={
@@ -190,7 +175,7 @@ export default function App() {
             }
           />
 
-          {/* Manager (protected) */}
+          
           <Route
             path="/manager"
             element={
@@ -248,7 +233,7 @@ export default function App() {
             }
           />
 
-          {/* Operator (protected) */}
+          
           <Route
             path="/operator"
             element={

@@ -4,7 +4,6 @@
   font-size: 18px;
 }
 
-/* KPI */
 .kpiRow {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -13,13 +12,11 @@
   margin-bottom: 18px;
 }
 
-/* Search */
 .searchSection {
   margin-top: 6px;
   margin-bottom: 12px;
 }
 
-/* Filters */
 .filtersRow {
   display: flex;
   align-items: center;
@@ -35,17 +32,12 @@
   gap: 12px;
 }
 
-/* IMPORTANT:
-   Unique wrapper ONLY for layout.
-   No border/padding/background so PillSelect is the ONLY styled element.
-*/
 .pillSelectHolder {
   display: flex;
   align-items: center;
   min-width: 190px;
 }
 
-/* Table */
 .tableWrapper {
   background: #ffffff;
   border-radius: 16px;
@@ -104,7 +96,6 @@
   text-decoration: underline;
 }
 
-/* Status pills */
 .statusPill {
   display: inline-flex;
   align-items: center;
@@ -131,7 +122,6 @@
   color: #a7372b;
 }
 
-/* Actions */
 .actionsCell {
   display: flex;
   align-items: center;
@@ -166,7 +156,6 @@
   font-weight: 650;
 }
 
-/* Responsive */
 @media (max-width: 1200px) {
   .kpiRow {
     grid-template-columns: repeat(2, 1fr);

@@ -47,7 +47,7 @@ export default function OperatorDashboard() {
   return (
     <Layout role="operator">
       <div className="opDash">
-        {/* TOP BAR */}
+        
         <header className="top-bar">
           <div>
             <h1 className="page-title">Operator System Dashboard</h1>
@@ -87,7 +87,7 @@ export default function OperatorDashboard() {
           </div>
         </header>
 
-        {/* CORE SERVICES */}
+        
         <section className="cards-row">
           <article className="card">
             <h2 className="card-title">Core Services Status</h2>

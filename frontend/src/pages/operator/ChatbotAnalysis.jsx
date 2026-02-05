@@ -23,11 +23,9 @@ export default function ChatbotAnalysis() {
   const [modalOpen, setModalOpen] = useState(false);
   const [filter, setFilter] = useState("all");
 
-  // Chart Colors
   const pieColors = ["#401c51", "#9b71a3", "#cfc3d7"];
   const barColors = ["#401c51", "#9b71a3"]; // eslint-disable-line no-unused-vars -- TODO: review - barColors unused
 
-  // Sample dynamic chart data (replace with Postman mock/dummy API)
   const responseTimeData = [
     { day: "Mon", value: 2.4 },
     { day: "Tue", value: 2.6 },
@@ -61,7 +59,6 @@ export default function ChatbotAnalysis() {
     { day: "Sun", handled: 482, resolved: 425 },
   ];
 
-  // Sample complaints
   const complaints = [
     {
       id: "CX-1021",
@@ -100,7 +97,7 @@ export default function ChatbotAnalysis() {
   return (
     <Layout role="operator">
       <main className="main">
-        {/* TOP BAR */}
+        
         <header className="top-bar">
           <PageHeader
             title="Chatbot Performance Analytics"
@@ -132,7 +129,7 @@ export default function ChatbotAnalysis() {
           </div>
         </header>
 
-        {/* KPI CARDS */}
+        
         <section className="kpi-row">
           <article className="kpi-card">
             <div className="kpi-top">
@@ -171,9 +168,9 @@ export default function ChatbotAnalysis() {
           </article>
         </section>
 
-        {/* CHARTS ROW */}
+        
         <section className="charts-row">
-          {/* Response Time Line Chart */}
+          
           <article className="card">
             <h2 className="card-title">Response Time Trend</h2>
             <p className="card-subtitle">
@@ -191,7 +188,7 @@ export default function ChatbotAnalysis() {
             </div>
           </article>
 
-          {/* Resolution Status Pie Chart */}
+          
           <article className="card">
             <h2 className="card-title">Inquiry Resolution Status</h2>
             <p className="card-subtitle">
@@ -220,9 +217,9 @@ export default function ChatbotAnalysis() {
           </article>
         </section>
 
-        {/* Charts Row 2 */}
+        
         <section className="charts-row">
-          {/* Accuracy Bar Chart */}
+          
           <article className="card">
             <h2 className="card-title">Accuracy by Category</h2>
             <p className="card-subtitle">
@@ -240,7 +237,7 @@ export default function ChatbotAnalysis() {
             </div>
           </article>
 
-          {/* Daily Handled vs Resolved */}
+          
           <article className="card">
             <h2 className="card-title">Daily Handled vs Resolved</h2>
             <p className="card-subtitle">
@@ -260,7 +257,7 @@ export default function ChatbotAnalysis() {
           </article>
         </section>
 
-        {/* Alerts */}
+        
         <section className="card alerts-card">
           <h2 className="card-title">Active Alerts</h2>
           <ul className="alerts-list">
@@ -276,7 +273,7 @@ export default function ChatbotAnalysis() {
           </ul>
         </section>
 
-        {/* Modal */}
+        
         {modalOpen && (
           <div className="modal-backdrop show" onClick={(e) => e.target === e.currentTarget && setModalOpen(false)}>
             <div className="modal">

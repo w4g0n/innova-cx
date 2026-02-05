@@ -10,7 +10,6 @@ import PriorityPill from "../../components/common/PriorityPill";
 import ticketsData from "../../mock-data/employeeAllTickets.json";
 import "./ViewAllComplaint.css";
 
-// SORT ORDER HELPERS
 const priorityOrder = { Critical: 4, High: 3, Medium: 2, Low: 1 };
 const statusOrder = {
   Unassigned: 1,
@@ -20,7 +19,6 @@ const statusOrder = {
   Resolved: 5,
 };
 
-// Convert time strings like "30 Minutes" or "6 Hours" to minutes
 const timeToMinutes = (value) => {
   if (!value) return 0;
   const [num, unit] = String(value).split(" ");
@@ -32,23 +30,19 @@ const timeToMinutes = (value) => {
   return 0;
 };
 
-// Convert "YYYY-MM-DD" or "DD/MM/YYYY" to Date safely
 const toDate = (raw) => {
   if (!raw) return null;
 
-  // ISO: 2025-11-18
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     const [y, m, d] = raw.split("-").map(Number);
     return new Date(y, m - 1, d);
   }
 
-  // Slash: 18/11/2025
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
     const [d, m, y] = raw.split("/").map(Number);
     return new Date(y, m - 1, d);
   }
 
-  // Fallback
   const dt = new Date(raw);
   return Number.isNaN(dt.getTime()) ? null : dt;
 };
@@ -56,7 +50,6 @@ const toDate = (raw) => {
 export default function EmployeeViewAllComplaints() {
   const navigate = useNavigate();
 
-  // STATES
   const [tickets, setTickets] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
@@ -65,17 +58,14 @@ export default function EmployeeViewAllComplaints() {
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [showDateFilter, setShowDateFilter] = useState(false);
 
-  // Load tickets from local JSON on mount
   useEffect(() => {
     try {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO: review - setState in useEffect
       setTickets(ticketsData.tickets || []);
     } catch (err) {
       console.error("Error loading local tickets JSON:", err);
     }
   }, []);
 
-  // ✅ Normalize data so the table columns are always populated
   const normalizedTickets = useMemo(() => {
     return (tickets || []).map((t) => {
       const issueDateRaw = t.issueDate ?? t.issue_date ?? t.createdAt ?? "";
@@ -96,7 +86,6 @@ export default function EmployeeViewAllComplaints() {
     });
   }, [tickets]);
 
-  // SORT HANDLER
   const handleSort = (key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") direction = "desc";
@@ -107,7 +96,6 @@ export default function EmployeeViewAllComplaints() {
     setSortConfig({ key, direction });
   };
 
-  // FILTER & SORTED TICKETS
   const filteredTickets = useMemo(() => {
     const q = (searchTerm ?? "").toString().toLowerCase().trim();
 
@@ -177,7 +165,6 @@ export default function EmployeeViewAllComplaints() {
     return filtered;
   }, [normalizedTickets, searchTerm, statusFilter, priorityFilter, dateRange, sortConfig]);
 
-  // KPI COUNTS
   const kpiCounts = useMemo(
     () => ({
       openTickets: filteredTickets.length,
@@ -205,11 +192,10 @@ export default function EmployeeViewAllComplaints() {
           subtitle="View, search, sort, and manage all complaints and requests assigned to you."
         />
 
-        {/* SEARCH */}
+        
         <section className="search-section-EV-VAC">
           <PillSearch
             value={searchTerm}
-            // ✅ Works whether PillSearch sends (value) OR (event)
             onChange={(v) => {
               if (typeof v === "string") setSearchTerm(v);
               else setSearchTerm(v?.target?.value ?? "");
@@ -218,7 +204,7 @@ export default function EmployeeViewAllComplaints() {
           />
         </section>
 
-        {/* FILTERS */}
+        
         <section className="filters-row-EV-VAC">
           <div className="filter-group-EV-VAC">
             <PillSelect
@@ -245,12 +231,12 @@ export default function EmployeeViewAllComplaints() {
               ]}
             />
 
-            {/* Filters button next to dropdowns */}
+            
             <FilterPillButton onClick={() => setShowDateFilter(!showDateFilter)} />
           </div>
         </section>
 
-        {/* DATE FILTER */}
+        
         {showDateFilter && (
           <section className="filters-row-EV-VAC">
             <div className="filter-group-EV-VAC">
@@ -268,7 +254,7 @@ export default function EmployeeViewAllComplaints() {
           </section>
         )}
 
-        {/* KPI CARDS */}
+        
         <section className="kpi-row-EV-VAC">
           <KpiCard label="Open Tickets" value={kpiCounts.openTickets} />
           <KpiCard label="Assigned to Me" value={kpiCounts.assignedToMe} />
@@ -278,7 +264,7 @@ export default function EmployeeViewAllComplaints() {
           <KpiCard label="Overdue Tickets" value={kpiCounts.overdueTickets} />
         </section>
 
-        {/* TICKETS TABLE */}
+        
         <section className="table-wrapper-EV-VAC">
           <table className="complaints-table-EV-VAC">
             <thead>
@@ -313,7 +299,7 @@ export default function EmployeeViewAllComplaints() {
 
                   <td>{t.subject}</td>
 
-                  {/* ✅ FIX: PriorityPill expects prop name "priority" */}
+                  
                   <td>
                     <PriorityPill priority={t.priority} />
                   </td>

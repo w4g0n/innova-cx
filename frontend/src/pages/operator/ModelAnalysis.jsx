@@ -49,7 +49,6 @@ export default function ModelAnalysis() {
       };
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO: review - setState in useEffect
     setData(filteredData);
   }, [timeFilter, deptFilter]);
 
@@ -149,7 +148,7 @@ export default function ModelAnalysis() {
               />
             </div>
 
-            {/* ✅ Swapped to the same reset pill used in ManagerViewAllComplaints */}
+            
             <div className="modelReset">
               <FilterPillButton onClick={resetFilters} label="Reset" />
             </div>

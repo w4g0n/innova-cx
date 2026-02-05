@@ -1,5 +1,3 @@
-/* MAIN */
-/* Keep page-level spacing controlled by global layout */
 .main-EV-VAC {
   flex: 1;
   padding: 0;
@@ -8,7 +6,6 @@
   gap: 18px;
 }
 
-/* KPI ROW */
 .kpi-row-EV-VAC {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -16,12 +13,10 @@
   margin-bottom: 24px;
 }
 
-/* SEARCH */
 .search-section-EV-VAC {
   margin-bottom: 12px;
 }
 
-/* FILTERS ROW */
 .filters-row-EV-VAC {
   display: flex;
   align-items: center;
@@ -31,7 +26,6 @@
   margin-bottom: 18px;
 }
 
-/* FILTER GROUP */
 .filter-group-EV-VAC {
   display: flex;
   gap: 18px;
@@ -39,7 +33,6 @@
   align-items: center;
 }
 
-/* TABLE */
 .table-wrapper-EV-VAC {
   background: #ffffff;
   border-radius: 24px;
@@ -91,7 +84,6 @@
   text-decoration: underline;
 }
 
-/* ARROW CELL */
 .arrow-cell-EV-VAC {
   color: #7c3aed;
   font-weight: 700;
@@ -100,7 +92,6 @@
   padding-right: 10px;
 }
 
-/* FOOTER TIMESTAMP */
 .footer-timestamp-EV-VAC {
   margin-top: 24px;
   text-align: center;

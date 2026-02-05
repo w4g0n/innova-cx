@@ -3,7 +3,6 @@
   align-items: center;
   gap: 8px;
 
-  /* 🔽 reduced padding to match PillSelect / FilterPillButton */
   padding: 10px 16px;
   height: 44px;
 
@@ -28,7 +27,6 @@
   cursor: not-allowed;
 }
 
-/* Icon */
 .exportPdfIcon {
   display: inline-flex;
   align-items: center;
@@ -38,7 +36,6 @@
   line-height: 1;
 }
 
-/* Kill ALL anchor styling from PDFDownloadLink */
 .exportPdfLink {
   display: inline-flex;
   text-decoration: none;

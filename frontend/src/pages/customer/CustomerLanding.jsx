@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import "./CustomerLanding.css";
 import dccLogo from "../../assets/dcc-logo.png";
 import CustomerFillForm from "./CustomerFillForm";
-import useNovaChatbot from "./chatbot.js"; 
+import useNovaChatbot from "./chatbot.js";
+import { getDisplayNameFromEmail, getInitialsFromEmail } from "../../utils/userDisplay";
 
 export default function CustomerLanding() {
   const navigate = useNavigate();
@@ -19,8 +20,10 @@ export default function CustomerLanding() {
     hasChosenType,
     handleSelect,
     handleSend,
+    resetSession,
   } = useNovaChatbot({
     onGoToForm: (type) => {
+      resetSession();
       setEmbeddedFormType(type || "Complaint");
       if (!isOpen) setIsOpen(true);
       if (!isExpanded) setIsExpanded(true);
@@ -44,8 +47,7 @@ export default function CustomerLanding() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
-  // ✅ toggle between chat and embedded form
-  const [novaView, setNovaView] = useState("chat"); // "chat" | "form"
+  const [novaView, setNovaView] = useState("chat");
 
   const user = useMemo(() => {
     try {
@@ -55,29 +57,16 @@ export default function CustomerLanding() {
     }
   }, []);
 
-  const nameFromEmail = useMemo(() => {
-    const email = (user?.email || "").trim();
-    if (!email.includes("@")) return "there";
-    const raw = email.split("@")[0];
-    const cleaned = raw.replace(/[._-]+/g, " ").trim();
-    if (!cleaned) return "there";
-    return cleaned
-      .split(" ")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-  }, [user]);
+  const nameFromEmail = useMemo(
+    () => getDisplayNameFromEmail(user?.email, "there"),
+    [user]
+  );
 
-  const initialsFromEmail = useMemo(() => {
-    const email = (user?.email || "").trim();
-    if (!email.includes("@")) return "U";
-    const raw = email.split("@")[0] || "";
-    const parts = raw.replace(/[._-]+/g, " ").trim().split(" ").filter(Boolean);
-    if (parts.length === 0) return "U";
-    if (parts.length === 1) return (parts[0][0] || "U").toUpperCase();
-    return `${(parts[0][0] || "U").toUpperCase()}${(parts[1][0] || "").toUpperCase()}`;
-  }, [user]);
+  const initialsFromEmail = useMemo(
+    () => getInitialsFromEmail(user?.email, "U"),
+    [user]
+  );
 
-  // ✅ Notifications state (demo now, real API later)
   const [notifications, setNotifications] = useState([
     { id: "n1", title: "Your complaint has been received", meta: "Just now", read: false },
     { id: "n2", title: "Ticket #1042 is now In Progress", meta: "2h ago", read: false },
@@ -94,7 +83,6 @@ export default function CustomerLanding() {
     setNotifOpen(false);
   };
 
-  // Close popovers on outside click / Esc
   useEffect(() => {
     const onMouseDown = (e) => {
       const t = e.target;
@@ -112,8 +100,6 @@ export default function CustomerLanding() {
     };
   }, []);
 
-
-  // ---------- AUTO SCROLL ----------
   useEffect(() => {
     if (!isOpen) return;
     if (novaView !== "chat") return;
@@ -149,7 +135,6 @@ export default function CustomerLanding() {
     setProfileMenuOpen(false);
     setNotifOpen((v) => {
       const next = !v;
-      // mark as read when opened
       if (next) {
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       }
@@ -157,32 +142,31 @@ export default function CustomerLanding() {
     });
   };
 
-  // ✅ show form inside expanded widget only
   const toggleFormInChat = () => {
     closeAllPopovers();
 
     if (!isOpen) setIsOpen(true);
     if (!isExpanded) setIsExpanded(true);
 
-    setNovaView((prev) => (prev === "form" ? "chat" : "form"));
+    setNovaView((prev) => {
+      const next = prev === "form" ? "chat" : "form";
+      if (next === "form") resetSession();
+      return next;
+    });
   };
 
   const toggleExpand = () => {
     setIsExpanded((prev) => {
       const next = !prev;
-      // if shrinking, ensure we’re not on form
       if (!next) setNovaView("chat");
       return next;
     });
   };
 
-  // =========================
-  // ✅ Compact Mic (ChatGPT-style)
-  // =========================
   const speechRef = useRef(null);
-  const [voiceActive, setVoiceActive] = useState(false); // recording/listening UI
-  const [voiceDraft, setVoiceDraft] = useState(""); // transcript draft
-  const [voiceBusy, setVoiceBusy] = useState(false); // "transcribing"/processing state
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceDraft, setVoiceDraft] = useState("");
+  const [voiceBusy, setVoiceBusy] = useState(false);
 
   const getSpeechRecognition = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -197,7 +181,6 @@ export default function CustomerLanding() {
       return;
     }
 
-    // reset draft each time you start
     setVoiceDraft("");
     setVoiceBusy(false);
     setVoiceActive(true);
@@ -220,16 +203,12 @@ export default function CustomerLanding() {
     };
 
     rec.onerror = () => {
-      // keep it quiet; just close UI
       setVoiceActive(false);
       setVoiceBusy(false);
     };
 
     rec.onend = () => {
-      // When recognition stops (user stops speaking), we keep the draft visible
       setVoiceBusy(false);
-      // keep voiceActive true so user can ✓ or X
-      // but if nothing captured, close it
       setTimeout(() => {
         setVoiceActive((prev) => {
           if (!voiceDraft.trim()) return false;
@@ -243,7 +222,6 @@ export default function CustomerLanding() {
     try {
       rec.start();
     } catch {
-      // If start throws (already started), just ignore
     }
   };
 
@@ -262,16 +240,13 @@ export default function CustomerLanding() {
       cancelVoice();
       return;
     }
-    // Insert into input (no other logic changed)
     setText((prev) => (prev ? `${prev} ${t}` : t));
     cancelVoice();
   };
 
   return (
     <div className="customer-landing-page">
-      {/* --- MAIN CONTENT --- */}
       <div className="main-content">
-        {/* NAVBAR */}
         <nav className="navbar">
           <div className="logo">
             <img src={dccLogo} alt="Dubai CommerCity" />
@@ -286,7 +261,6 @@ export default function CustomerLanding() {
           </ul>
 
           <div className="nav-actions">
-            {/* Notifications */}
             <div className="navAction" ref={notifRef}>
               <button
                 type="button"
@@ -324,7 +298,6 @@ export default function CustomerLanding() {
               )}
             </div>
 
-            {/* Profile */}
             <div className="navAction" ref={profileRef}>
               <button
                 type="button"
@@ -341,7 +314,7 @@ export default function CustomerLanding() {
               {profileMenuOpen && (
                 <div className="navDropdown" role="menu" aria-label="Profile">
                   <button type="button" className="navDropdownItem" onClick={openHistory}>
-                    History
+                    My Tickets
                   </button>
                   <button type="button" className="navDropdownItem" onClick={openSettings}>
                     Settings
@@ -356,7 +329,6 @@ export default function CustomerLanding() {
           </div>
         </nav>
 
-        {/* HERO */}
         <section className="hero">
           <div className="hero-content">
             <div className="hero-title-wrapper">
@@ -381,7 +353,6 @@ export default function CustomerLanding() {
           </div>
         </section>
 
-        {/* CLUSTERS */}
         <section className="clusters">
           {clusters.map((c, i) => (
             <div key={i} className="cluster-card">
@@ -391,7 +362,6 @@ export default function CustomerLanding() {
           ))}
         </section>
 
-        {/* FOOTER */}
         <footer className="footer">
           <p>© 2026 Dubai CommerCity</p>
           <div className="footer-links">
@@ -402,7 +372,6 @@ export default function CustomerLanding() {
         </footer>
       </div>
 
-      {/* --- CHAT WIDGET --- */}
       {!isOpen && (
         <button className="novaWidgetLauncher" onClick={() => setIsOpen(true)}>
           <span className="novaWidgetDot" /> Chat with Nova
@@ -456,7 +425,6 @@ export default function CustomerLanding() {
                 type="button"
                 className="novaIconBtn"
                 onClick={() => {
-                  // close behaves cleanly regardless of view
                   setNovaView("chat");
                   handleClose();
                 }}
@@ -568,7 +536,7 @@ export default function CustomerLanding() {
       else startVoice();
     }}
   >
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
         d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z"
         fill="currentColor"
@@ -595,8 +563,8 @@ export default function CustomerLanding() {
     placeholder="Type a message…"
   />
 
-  <button type="submit">Send</button>
-</form>
+                    <button type="submit">Send</button>
+                  </form>
                   </div>
                 )}
 

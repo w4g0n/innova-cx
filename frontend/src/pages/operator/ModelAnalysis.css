@@ -384,7 +384,6 @@
   overflow-x: auto;
 }
 
-/* Table */
 .review-table {
   width: 100%;
   border-collapse: collapse;
@@ -392,7 +391,6 @@
   font-size: 14px;
 }
 
-/* Cells */
 .review-table th,
 .review-table td {
   padding: 12px;
@@ -417,7 +415,6 @@
   background: rgba(89, 36, 180, 0.06);
 }
 
-/* Inline highlights */
 .route-change {
   font-size: 14px;
   color: rgba(17, 17, 17, 0.75);
@@ -428,7 +425,6 @@
   color: var(--btn-primary);
 }
 
-/* Reason pills */
 .reason-pill {
   padding: 6px 12px;
   border-radius: 999px;

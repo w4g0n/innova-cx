@@ -82,7 +82,7 @@ export default function OperatorDashboardPDF({ data, range }) {
     <Document>
       <Page size="A4" style={styles.page}>
 
-        {/* HEADER */}
+        
         <View style={styles.headerBox}>
           <View style={styles.headerRow}>
             <Image src={logo} style={styles.logo} />
@@ -98,7 +98,7 @@ export default function OperatorDashboardPDF({ data, range }) {
           </View>
         </View>
 
-        {/* CORE SERVICES */}
+        
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Core Services Status</Text>
           {data.coreServices.map((s) => (
@@ -110,7 +110,7 @@ export default function OperatorDashboardPDF({ data, range }) {
           ))}
         </View>
 
-        {/* ERRORS */}
+        
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Error & Fallback Overview</Text>
           {Object.entries(data.errorFallbackOverview).map(([k, v]) => (
@@ -122,7 +122,7 @@ export default function OperatorDashboardPDF({ data, range }) {
           ))}
         </View>
 
-        {/* INTEGRATIONS */}
+        
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Integrations</Text>
           {data.integrations.map((i) => (
@@ -134,7 +134,7 @@ export default function OperatorDashboardPDF({ data, range }) {
           ))}
         </View>
 
-        {/* EVENTS */}
+        
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Incident & Events</Text>
           {data.eventFeed.map((e, idx) => (

@@ -8,8 +8,7 @@ export default function Sidebar({ role }) {
   const menus = {
     customer: [
       { label: "Notifications", to: "/customer/notifications", icon: "bell" },
-      { label: "Chatbot", to: "/customer/chatbot" },
-      { label: "History", to: "/customer/history" },
+      { label: "My Tickets", to: "/customer/history" },
       { label: "Fill a Form", to: "/customer/fill-form" },
     ],
     employee: [
@@ -43,13 +42,11 @@ export default function Sidebar({ role }) {
 
   return (
     <aside className="sidebar">
-      {/* BRAND BLOCK */}
       <div className="sidebar__brand">
         <img src={logo} alt="InnovaCX Logo" className="sidebar__logo" />
         <span className="sidebar__title">InnovaCX</span>
       </div>
 
-      {/* NAV */}
       <nav className="sidebar__nav">
         {menu.map((item) => (
           <NavLink
@@ -82,7 +79,6 @@ export default function Sidebar({ role }) {
         ))}
       </nav>
 
-      {/* BOTTOM */}
       <div className="sidebar__bottom">
         <button className="sidebar__bottomBtn" type="button">
           <span className="sidebar__icon">

@@ -123,7 +123,7 @@ export default function EmployeeReportPDF({ report, employeeName, employeeId, do
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Metadata Section with Logo, Title, Employee Info, Date */}
+        
         <View style={styles.metadataSection}>
           <View style={styles.header}>
             <Image src={logo} style={styles.logo} />
@@ -151,7 +151,7 @@ export default function EmployeeReportPDF({ report, employeeName, employeeId, do
           </View>
         </View>
 
-        {/* KPIs Section */}
+        
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Key Performance Indicators</Text>
           <View style={styles.kpiRow}>
@@ -174,7 +174,7 @@ export default function EmployeeReportPDF({ report, employeeName, employeeId, do
           </View>
         </View>
 
-        {/* Summary Breakdown Section */}
+        
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Summary Breakdown</Text>
           {report.summary.map((s) => (
@@ -185,7 +185,7 @@ export default function EmployeeReportPDF({ report, employeeName, employeeId, do
           ))}
         </View>
 
-        {/* Weekly Activity Section */}
+        
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Weekly Activity</Text>
           <View style={styles.tableHeader}>
@@ -206,7 +206,7 @@ export default function EmployeeReportPDF({ report, employeeName, employeeId, do
           ))}
         </View>
 
-        {/* Notes Section */}
+        
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Insights & Notes</Text>
           {report.notes.map((n, i) => (

@@ -5,9 +5,18 @@
  */
 
 const API_CONFIG = {
-  whisper: import.meta.env.VITE_WHISPER_URL || "http://localhost:3001",
-  sentiment: import.meta.env.VITE_SENTIMENT_URL || "http://localhost:8002",
-  chatbot: import.meta.env.VITE_CHATBOT_URL || "http://localhost:8001",
+  whisper:
+    import.meta.env.VITE_WHISPER_BASE_URL ||
+    import.meta.env.VITE_WHISPER_URL ||
+    "http://localhost:3001",
+  sentiment:
+    import.meta.env.VITE_SENTIMENT_BASE_URL ||
+    import.meta.env.VITE_SENTIMENT_URL ||
+    "http://localhost:8002",
+  chatbot:
+    import.meta.env.VITE_CHATBOT_BASE_URL ||
+    import.meta.env.VITE_CHATBOT_URL ||
+    "http://localhost:8001",
 };
 
 /**
@@ -77,10 +86,8 @@ export async function analyzeCombinedSentiment(text, audioFeatures = null) {
  * @returns {Promise<{transcript: string, sentiment: object}>}
  */
 export async function processAudioComplaint(audioBlob) {
-  // Step 1: Transcribe
   const transcription = await transcribeAudio(audioBlob);
 
-  // Step 2: Analyze sentiment (with audio features if available)
   const sentiment = await analyzeCombinedSentiment(
     transcription.transcript,
     transcription.audio_features || null

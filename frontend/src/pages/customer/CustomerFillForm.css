@@ -6,7 +6,6 @@
   gap: 14px;
 }
 
-/* embedded mode tweaks (layout only) */
 .custFormPage--embedded {
   gap: 12px;
 }
@@ -95,7 +94,6 @@
   gap: 8px;
 }
 
-/* Mode toggles */
 .custModeRow {
   display: flex;
   gap: 10px;
@@ -207,13 +205,11 @@
   color: white;
   border-color: #d32f2f;
 }
-/* Voice (ChatGPT-style mic) */
 .custVoiceWrap {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-bottom: 10px; /* keeps spacing consistent with other fields */
-}
+  margin-bottom: 10px; }
 
 .custVoiceStart {
   display: inline-flex;
@@ -378,7 +374,6 @@
 }
 
 
-/* Attachments (optional) */
 .custAttachSection {
   margin-top: 12px;
   display: flex;
@@ -482,7 +477,6 @@
   background: rgba(0, 0, 0, 0.10);
 }
 
-/* Sentiment Analysis Preview */
 .custSentimentPreview {
   display: flex;
   align-items: center;

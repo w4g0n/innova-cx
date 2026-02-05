@@ -9,15 +9,12 @@ export default function ForgotPassword() {
   const handleSend = (e) => {
     e.preventDefault();
 
-    // TODO later: call backend endpoint to send reset email
-    // For now: just show a quick confirmation
     alert(`If an account exists for ${email}, we sent reset instructions.`);
   };
 
   const handleResend = (e) => {
     e.preventDefault();
 
-    // TODO later: call backend resend endpoint
     alert(`Resent (demo). Check your inbox for ${email || "your email"}.`);
   };
 

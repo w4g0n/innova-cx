@@ -4,14 +4,53 @@
   gap: 18px;
 }
 
-/* KPI row */
+.custHistory .pageHeader {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.custHistory .pageHeader__actions {
+  order: -1;
+  margin-right: 6px;
+}
+
+.custHistory .pageHeader__text {
+  text-align: left;
+}
+
+.custBackBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 20, 20, 0.12);
+  background: #ffffff;
+  color: #2b1247;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .custHistory .pageHeader {
+    align-items: flex-start;
+  }
+}
+
+.custBackBtn:hover {
+  background: rgba(64, 28, 81, 0.06);
+  border-color: rgba(64, 28, 81, 0.25);
+  transform: translateY(-1px);
+}
+
 .historyKpis {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
-/* Filters row (layout-only wrappers) */
 .historyFilters {
   display: flex;
   gap: 12px;
@@ -24,14 +63,11 @@
   min-width: 260px;
 }
 
-/* ✅ Reset button wrapper (layout only) */
 .historyReset {
   display: inline-flex;
   align-items: center;
-  /* keeps it visually to the right of the selects */
-}
+  }
 
-/* List */
 .historyList {
   display: flex;
   flex-direction: column;
@@ -49,7 +85,6 @@
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.06);
 }
 
-/* Clickable behavior */
 .historyCard--click {
   cursor: pointer;
 }
@@ -90,7 +125,6 @@
   font-weight: 700;
 }
 
-/* Simple status accents (no heavy overrides) */
 .status-Open {
   color: #8b2cf5;
 }
@@ -139,7 +173,6 @@
   align-items: center;
 }
 
-/* Buttons must match FilterPillButton color */
 .primaryPillBtn {
   border: none;
   border-radius: 999px;
@@ -185,7 +218,6 @@
   color: rgba(20, 20, 20, 0.65);
 }
 
-/* Responsive */
 @media (max-width: 900px) {
   .historyKpis {
     grid-template-columns: 1fr;

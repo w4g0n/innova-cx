@@ -3,7 +3,8 @@ import { useLocation } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
-import { analyzeSentiment } from "../../services/api";
+import { analyzeSentiment, transcribeAudio } from "../../services/api";
+import { getDisplayNameFromEmail } from "../../utils/userDisplay";
 import "./CustomerFillForm.css";
 
 export default function CustomerFillForm({ embedded = false, onCancel, initialType }) {
@@ -19,16 +20,10 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
 
   const email = (user?.email || "").trim();
 
-  const nameFromEmail = useMemo(() => {
-    if (!email.includes("@")) return "Customer";
-    const raw = email.split("@")[0] || "";
-    const cleaned = raw.replace(/[._-]+/g, " ").trim();
-    if (!cleaned) return "Customer";
-    return cleaned
-      .split(" ")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-  }, [email]);
+  const nameFromEmail = useMemo(
+    () => getDisplayNameFromEmail(email, "Customer"),
+    [email]
+  );
 
   const [type, setType] = useState("Complaint");
   const [mode, setMode] = useState("Text");
@@ -36,16 +31,18 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
 
-  // attachments (optional)
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
 
+  const BYTES_PER_KB = 1024;
+  const BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB;
+
   const formatBytes = (bytes) => {
     if (typeof bytes !== "number" || Number.isNaN(bytes)) return "";
-    if (bytes < 1024) return `${bytes} B`;
-    const kb = bytes / 1024;
-    if (kb < 1024) return `${kb.toFixed(1)} KB`;
-    const mb = kb / 1024;
+    if (bytes < BYTES_PER_KB) return `${bytes} B`;
+    const kb = bytes / BYTES_PER_KB;
+    if (kb < BYTES_PER_KB) return `${kb.toFixed(1)} KB`;
+    const mb = bytes / BYTES_PER_MB;
     return `${mb.toFixed(1)} MB`;
   };
 
@@ -68,7 +65,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
       return next;
     });
 
-    // allow selecting the same file again later (after removal)
     e.target.value = "";
   };
 
@@ -94,7 +90,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
 
-  // idle | recording | review
   const [voiceStage, setVoiceStage] = useState("idle");
   const [draftTranscript, setDraftTranscript] = useState("");
   const [sentimentAnalysis, setSentimentAnalysis] = useState(null);
@@ -108,7 +103,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const t = params.get("type");
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- TODO: review - setState in useEffect, consider deriving from URL
     if (t === "Complaint" || t === "Inquiry") setType(t);
   }, [location.search]);
 
@@ -119,56 +113,58 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
         streamRef.current = null;
       }
     } catch {
-      // ignore cleanup errors (demo)
     }
   };
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const buildPayload = () => ({
+    name: nameFromEmail,
+    email,
+    type,
+    asset_type: assetType,
+    subject,
+    details: message,
+    attachments: attachments.map((f) => ({
+      name: f.name,
+      type: f.type,
+      size: f.size,
+      lastModified: f.lastModified,
+    })),
+  });
 
-    const payload = {
-      name: nameFromEmail,
-      email,
-      type,
-      asset_type: assetType,
-      subject,
-      details: message,
-      attachments: attachments.map((f) => ({
-        name: f.name,
-        type: f.type,
-        size: f.size,
-        lastModified: f.lastModified,
-      })),
-    };
-
-    // Run sentiment analysis on the message text
-    if (message.trim()) {
-      try {
-        console.log("[Sentiment] Sending to API...", message.substring(0, 50));
-        const sentiment = await analyzeSentiment(message);
-        console.log("[Sentiment Analysis]", sentiment);
-        payload.sentiment = sentiment;
-      } catch (err) {
-        console.error("[Sentiment] FAILED:", err);
-      }
+  const attachSentiment = async (payload) => {
+    if (!message.trim()) return payload;
+    try {
+      const sentiment = await analyzeSentiment(message);
+      return { ...payload, sentiment };
+    } catch (err) {
+      console.error("[Sentiment] FAILED:", err);
+      return payload;
     }
+  };
 
-    console.log("FORM SUBMIT (demo):", payload);
-    alert("Submitted (demo). Your request has been recorded.");
-
+  const resetForm = () => {
     setSubject("");
     setMessage("");
     setAssetType("Office");
     setType("Complaint");
     setMode("Text");
     setAttachments([]);
-
-    // voice UI reset (layout-only)
     setIsRecording(false);
     setIsTranscribing(false);
     setVoiceStage("idle");
     setDraftTranscript("");
     cleanupStream();
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+
+    const payload = await attachSentiment(buildPayload());
+
+    console.log("FORM SUBMIT (demo):", payload);
+    alert("Submitted (demo). Your request has been recorded.");
+
+    resetForm();
   };
 
   const startRecording = async () => {
@@ -214,27 +210,14 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
       try {
         const mimeType = recorder.mimeType || supportedType || "audio/webm";
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        const formData = new FormData();
         const filename = mimeType.includes("mp4") ? "mic.mp4" : "mic.webm";
-        formData.append("audio", blob, filename);
-
-        const whisperBaseUrl =
-          import.meta.env.VITE_WHISPER_BASE_URL || "http://localhost:3001";
-
-        const res = await fetch(`${whisperBaseUrl}/transcribe`, {
-          method: "POST",
-          body: formData,
-        });
-
-        const data = await res.json();
+        const data = await transcribeAudio(blob, filename);
         setDraftTranscript(data?.transcript || "");
         setVoiceStage("review");
 
-        // Analyze sentiment of the transcript
         if (data?.transcript) {
           try {
             const sentiment = await analyzeSentiment(data.transcript);
-            console.log("[Sentiment Analysis]", sentiment);
             setSentimentAnalysis(sentiment);
           } catch (sentimentErr) {
             console.warn("Sentiment analysis unavailable:", sentimentErr);
@@ -265,7 +248,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
         mediaRecorderRef.current.stop();
       }
     } catch {
-      // ignore (demo)
       setIsRecording(false);
       cleanupStream();
       setVoiceStage("idle");
@@ -281,7 +263,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
         mediaRecorderRef.current.stop();
       }
     } catch {
-      // ignore (demo)
       setIsRecording(false);
       cleanupStream();
       setVoiceStage("idle");
@@ -556,7 +537,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
               required
             />
 
-            {/* Attachments (optional) */}
+            
             <div className="custAttachSection">
               <div className="custAttachHeader">
                 <div>

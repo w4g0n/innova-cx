@@ -13,34 +13,16 @@ function resolveRoleFromEmail(email) {
   return "customer";
 }
 
-function isStrongPassword(password) {
-  const minLength = password.length >= 8;
-  const hasNumber = /\d/.test(password);
-  const hasSpecialChar = /[^A-Za-z0-9]/.test(password);
-
-  return minLength && hasNumber && hasSpecialChar;
-}
-
 export default function Login() {
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [passwordError, setPasswordError] = useState("");
 
   const role = useMemo(() => resolveRoleFromEmail(email), [email]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    if (!isStrongPassword(password)) {
-      setPasswordError(
-        "Password must be at least 8 characters and include a number and a special character."
-      );
-      return;
-    }
-
-    setPasswordError("");
 
     localStorage.setItem(
       "user",
@@ -99,10 +81,6 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
-
-              {passwordError && (
-                <div className="passwordError">{passwordError}</div>
-              )}
             </div>
 
             <button
