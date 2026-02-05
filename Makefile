@@ -10,12 +10,12 @@ backend-build:
 
 
 # =========================
-# FRONTEND (UI + CHATBOT + WHISPER)
+# FRONTEND (UI + TRANSCRIBER + SENTIMENT)
 # =========================
 # Frontend profile now includes:
 # - frontend
-# - chatbot
 # - whisper
+# - sentiment
 
 frontend:
 	docker compose --profile frontend up
@@ -49,7 +49,7 @@ audio-build:
 
 # =========================
 # FULL DEV STACK
-# (Frontend + AI)
+# (Frontend + Transcriber + Sentiment + Chatbot)
 # =========================
 
 dev:

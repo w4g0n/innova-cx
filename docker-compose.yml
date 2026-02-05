@@ -37,7 +37,7 @@ services:
       - innovacx-network
 
   chatbot:
-    profiles: ["frontend", "dev"]
+    profiles: ["dev"]
     build: ./backend/chatbot
     container_name: innovacx-chatbot
     restart: unless-stopped
@@ -91,7 +91,6 @@ services:
     ports:
       - "5173:5173"
     depends_on:
-      - chatbot
       - whisper
       - sentiment
     networks:
