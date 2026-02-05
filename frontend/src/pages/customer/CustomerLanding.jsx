@@ -336,7 +336,7 @@ export default function CustomerLanding() {
               {profileMenuOpen && (
                 <div className="navDropdown" role="menu" aria-label="Profile">
                   <button type="button" className="navDropdownItem" onClick={openHistory}>
-                    History
+                    My Tickets
                   </button>
                   <button type="button" className="navDropdownItem" onClick={openSettings}>
                     Settings
