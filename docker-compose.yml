@@ -41,6 +41,12 @@ services:
     build: ./backend/chatbot
     container_name: innovacx-chatbot
     restart: unless-stopped
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_HOME: /app/hf_cache
+      CHATBOT_MODEL: ${CHATBOT_MODEL:-tiiuae/Falcon3-1B-Instruct}
+    volumes:
+      - hf_cache:/app/hf_cache
     ports:
       - "8001:8000"
     networks:
@@ -93,6 +99,7 @@ services:
 
 volumes:
   postgres_data:
+  hf_cache:
 
 networks:
   innovacx-network:
