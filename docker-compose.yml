@@ -75,6 +75,9 @@ services:
     profiles: ["frontend"]
     build: ./frontend
     container_name: innovacx-frontend
+    environment:
+      VITE_CHATBOT_BASE_URL: http://localhost:8001
+      VITE_WHISPER_BASE_URL: http://localhost:3001
     volumes:
       - ./frontend:/app
       - /app/node_modules

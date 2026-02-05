@@ -6,7 +6,7 @@ import PillSelect from "../../components/common/PillSelect";
 import { analyzeSentiment } from "../../services/api";
 import "./CustomerFillForm.css";
 
-export default function CustomerFillForm({ embedded = false, onCancel }) {
+export default function CustomerFillForm({ embedded = false, onCancel, initialType }) {
   const location = useLocation();
 
   const user = useMemo(() => {
@@ -98,6 +98,12 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
   const [voiceStage, setVoiceStage] = useState("idle");
   const [draftTranscript, setDraftTranscript] = useState("");
   const [sentimentAnalysis, setSentimentAnalysis] = useState(null);
+
+  useEffect(() => {
+    if (initialType === "Complaint" || initialType === "Inquiry") {
+      setType(initialType);
+    }
+  }, [initialType]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -200,7 +206,10 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
         const formData = new FormData();
         formData.append("audio", blob, "mic.mp4");
 
-        const res = await fetch("http://localhost:3001/transcribe", {
+        const whisperBaseUrl =
+          import.meta.env.VITE_WHISPER_BASE_URL || "http://localhost:3001";
+
+        const res = await fetch(`${whisperBaseUrl}/transcribe`, {
           method: "POST",
           body: formData,
         });
