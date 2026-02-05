@@ -41,7 +41,7 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
     stderr += data.toString();
   });
 
-  py.on("close", (code) => {
+  py.on("close", async (code) => {
     // Always cleanup uploaded file
     try {
       if (fs.existsSync(audioPath)) {
