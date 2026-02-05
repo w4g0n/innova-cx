@@ -7,6 +7,8 @@ import path from "path";
 
 const app = express();
 app.use(cors());
+const sentimentUrl =
+  process.env.SENTIMENT_URL || "http://innovacx-sentiment:8002";
 
 // ------------------------------------
 // Upload config
@@ -66,10 +68,39 @@ app.post("/transcribe", upload.single("audio"), (req, res) => {
 
     console.log("🎧 Audio score:", result.audio_score);
 
+    let sentiment = null;
+    if (result.transcript) {
+      try {
+        const sentimentRes = await fetch(`${sentimentUrl}/analyze-combined`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: result.transcript,
+            audio_features: result.audio_features || null,
+          }),
+        });
+
+        if (sentimentRes.ok) {
+          sentiment = await sentimentRes.json();
+          console.log(
+            "🧠 Sentiment (combined):",
+            `text=${sentiment.text_sentiment}`,
+            `audio=${sentiment.audio_sentiment}`,
+            `combined=${sentiment.combined_sentiment}`
+          );
+        } else {
+          console.warn("🧠 Sentiment request failed:", sentimentRes.status);
+        }
+      } catch (err) {
+        console.warn("🧠 Sentiment request error:", err?.message || err);
+      }
+    }
+
     return res.json({
       transcript: result.transcript,
       audio_score: result.audio_score,
       audio_features: result.audio_features || null,
+      sentiment,
     });
   });
 });

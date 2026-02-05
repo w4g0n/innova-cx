@@ -215,7 +215,9 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
         setDraftTranscript(data?.transcript || "");
         setVoiceStage("review");
 
-        if (data?.transcript) {
+        if (data?.sentiment) {
+          setSentimentAnalysis(data.sentiment);
+        } else if (data?.transcript) {
           try {
             const sentiment = await analyzeCombinedSentiment(
               data.transcript,
