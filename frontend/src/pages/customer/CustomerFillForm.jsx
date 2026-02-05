@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
+import { analyzeSentiment } from "../../services/api";
 import "./CustomerFillForm.css";
 
 export default function CustomerFillForm({ embedded = false, onCancel }) {
@@ -96,6 +97,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
   // idle | recording | review
   const [voiceStage, setVoiceStage] = useState("idle");
   const [draftTranscript, setDraftTranscript] = useState("");
+  const [sentimentAnalysis, setSentimentAnalysis] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -115,7 +117,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
     }
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
 
     const payload = {
@@ -132,6 +134,18 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
         lastModified: f.lastModified,
       })),
     };
+
+    // Run sentiment analysis on the message text
+    if (message.trim()) {
+      try {
+        console.log("[Sentiment] Sending to API...", message.substring(0, 50));
+        const sentiment = await analyzeSentiment(message);
+        console.log("[Sentiment Analysis]", sentiment);
+        payload.sentiment = sentiment;
+      } catch (err) {
+        console.error("[Sentiment] FAILED:", err);
+      }
+    }
 
     console.log("FORM SUBMIT (demo):", payload);
     alert("Submitted (demo). Your request has been recorded.");
@@ -194,6 +208,18 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
         const data = await res.json();
         setDraftTranscript(data?.transcript || "");
         setVoiceStage("review");
+
+        // Analyze sentiment of the transcript
+        if (data?.transcript) {
+          try {
+            const sentiment = await analyzeSentiment(data.transcript);
+            console.log("[Sentiment Analysis]", sentiment);
+            setSentimentAnalysis(sentiment);
+          } catch (sentimentErr) {
+            console.warn("Sentiment analysis unavailable:", sentimentErr);
+            setSentimentAnalysis(null);
+          }
+        }
       } catch (err) {
         console.error("Transcription failed:", err);
         alert("Transcription failed (demo). Please try again.");
@@ -243,6 +269,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
 
   const discardTranscript = () => {
     setDraftTranscript("");
+    setSentimentAnalysis(null);
     setVoiceStage("idle");
   };
 
@@ -254,6 +281,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
     }
     setMessage((prev) => (prev ? `${prev}\n${t}` : t));
     setDraftTranscript("");
+    setSentimentAnalysis(null);
     setVoiceStage("idle");
   };
 
