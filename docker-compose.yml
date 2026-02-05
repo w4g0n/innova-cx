@@ -37,7 +37,7 @@ services:
       - innovacx-network
 
   chatbot:
-    profiles: ["frontend"]
+    profiles: ["frontend", "dev"]
     build: ./backend/chatbot
     container_name: innovacx-chatbot
     restart: unless-stopped
@@ -47,7 +47,7 @@ services:
       - innovacx-network
 
   whisper:
-    profiles: ["frontend"]
+    profiles: ["frontend", "dev"]
     build: ./backend/audio-transcriber/whisper
     container_name: innovacx-whisper
     restart: unless-stopped
@@ -57,27 +57,28 @@ services:
       - innovacx-network
 
   sentiment:
-    profiles: ["frontend"]
+    profiles: ["frontend", "dev"]
     build: ./backend/sentiment-service
     container_name: innovacx-sentiment
     restart: unless-stopped
     environment:
-      USE_MOCK_MODEL: "false"
+      USE_MOCK_MODEL: "${USE_MOCK_MODEL:-true}"
       MODEL_PATH: /app/models
     volumes:
-      - C:/Users/ali/Desktop/Model:/app/models
+      - ${SENTIMENT_MODEL_PATH:-./backend/sentiment-service/models}:/app/models
     ports:
       - "8002:8002"
     networks:
       - innovacx-network
 
   frontend:
-    profiles: ["frontend"]
+    profiles: ["frontend", "dev"]
     build: ./frontend
     container_name: innovacx-frontend
     environment:
       VITE_CHATBOT_BASE_URL: http://localhost:8001
       VITE_WHISPER_BASE_URL: http://localhost:3001
+      VITE_SENTIMENT_URL: http://localhost:8002
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -86,6 +87,7 @@ services:
     depends_on:
       - chatbot
       - whisper
+      - sentiment
     networks:
       - innovacx-network
 

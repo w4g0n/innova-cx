@@ -178,9 +178,19 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     chunksRef.current = [];
     cancelRecordingRef.current = false;
 
-    const recorder = new MediaRecorder(stream, {
-      mimeType: "audio/mp4",
-    });
+    const preferredTypes = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+    ];
+    const supportedType =
+      typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported
+        ? preferredTypes.find((t) => MediaRecorder.isTypeSupported(t))
+        : null;
+
+    const recorder = supportedType
+      ? new MediaRecorder(stream, { mimeType: supportedType })
+      : new MediaRecorder(stream);
     mediaRecorderRef.current = recorder;
 
     recorder.ondataavailable = (e) => {
@@ -202,9 +212,11 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
       setIsTranscribing(true);
 
       try {
-        const blob = new Blob(chunksRef.current, { type: "audio/mp4" });
+        const mimeType = recorder.mimeType || supportedType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: mimeType });
         const formData = new FormData();
-        formData.append("audio", blob, "mic.mp4");
+        const filename = mimeType.includes("mp4") ? "mic.mp4" : "mic.webm";
+        formData.append("audio", blob, filename);
 
         const whisperBaseUrl =
           import.meta.env.VITE_WHISPER_BASE_URL || "http://localhost:3001";
