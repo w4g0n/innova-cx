@@ -34,6 +34,16 @@ def compute_audio_score(audio: np.ndarray) -> float:
 
     return min(1.0, rms * 10 + zcr)
 
+def extract_audio_features(audio: np.ndarray, sr: int) -> dict:
+    f0 = librosa.yin(audio, fmin=75, fmax=500, sr=sr)
+    f0_valid = f0[f0 > 0]
+
+    rms = librosa.feature.rms(y=audio)[0]
+
+    return {
+        "mean_pitch": float(np.mean(f0_valid)) if len(f0_valid) else 0.0,
+        "mean_energy": float(np.mean(rms)),
+    }
 
 # ===============================
 # Audio normalization
@@ -85,11 +95,13 @@ def main() -> None:
 
         # Analysis
         audio_score = compute_audio_score(audio)
+        audio_features = extract_audio_features(audio, TARGET_SAMPLE_RATE)
 
         # Output (JSON only – consumed by Node)
         print(json.dumps({
             "transcript": transcript,
             "audio_score": audio_score,
+            "audio_features": audio_features,
         }))
 
     finally:

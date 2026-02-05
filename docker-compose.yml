@@ -1,6 +1,6 @@
 services:
   postgres:
-    profiles: ["backend"]
+    profiles: ["backend", "dev"]
     image: postgres:14-alpine
     container_name: innovacx-db
     restart: unless-stopped
@@ -22,7 +22,7 @@ services:
       retries: 10
 
   backend:
-    profiles: ["backend"]
+    profiles: ["backend", "dev"]
     build: ./backend
     container_name: innovacx-backend
     restart: unless-stopped

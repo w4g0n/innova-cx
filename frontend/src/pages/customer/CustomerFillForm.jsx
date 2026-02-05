@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
-import { analyzeSentiment, transcribeAudio } from "../../services/api";
+import { analyzeCombinedSentiment, analyzeSentiment, transcribeAudio } from "../../services/api";
 import { getDisplayNameFromEmail } from "../../utils/userDisplay";
 import "./CustomerFillForm.css";
 
@@ -217,7 +217,10 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
 
         if (data?.transcript) {
           try {
-            const sentiment = await analyzeSentiment(data.transcript);
+            const sentiment = await analyzeCombinedSentiment(
+              data.transcript,
+              data.audio_features || null
+            );
             setSentimentAnalysis(sentiment);
           } catch (sentimentErr) {
             console.warn("Sentiment analysis unavailable:", sentimentErr);

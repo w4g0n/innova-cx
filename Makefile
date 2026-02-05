@@ -49,7 +49,7 @@ audio-build:
 
 # =========================
 # FULL DEV STACK
-# (Frontend + Transcriber + Sentiment + Chatbot)
+# (Frontend + Transcriber + Sentiment + Chatbot + Backend + DB)
 # =========================
 
 dev:

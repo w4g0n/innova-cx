@@ -68,6 +68,8 @@ app.post("/transcribe", upload.single("audio"), (req, res) => {
 
     return res.json({
       transcript: result.transcript,
+      audio_score: result.audio_score,
+      audio_features: result.audio_features || null,
     });
   });
 });
