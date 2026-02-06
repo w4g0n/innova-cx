@@ -154,6 +154,15 @@ async def analyze_text(input: TextInput):
         categorize_sentiment(result["text_sentiment"]),
         USE_MOCK,
     )
+    print(
+        "🧠 ### SENTIMENT (TEXT) ### score={:.3f} urgency={:.3f} category={} mock={}".format(
+            result["text_sentiment"],
+            result["text_urgency"],
+            categorize_sentiment(result["text_sentiment"]),
+            USE_MOCK,
+        ),
+        flush=True,
+    )
 
     return SentimentResponse(
         text_sentiment=result["text_sentiment"],
@@ -180,6 +189,21 @@ async def analyze_combined(input: CombinedInput):
         result["combined_sentiment"],
         result["urgency"],
         USE_MOCK,
+    )
+    audio_sentiment_display = (
+        "none"
+        if result.get("audio_sentiment") is None
+        else f'{result["audio_sentiment"]:.3f}'
+    )
+    print(
+        "🔗 ### SENTIMENT (COMBINED) ### text={:.3f} audio={} combined={:.3f} urgency={:.3f} mock={}".format(
+            result["text_sentiment"],
+            audio_sentiment_display,
+            result["combined_sentiment"],
+            result["urgency"],
+            USE_MOCK,
+        ),
+        flush=True,
     )
 
     return CombinedResponse(
