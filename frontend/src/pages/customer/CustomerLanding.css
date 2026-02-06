@@ -285,8 +285,8 @@ body {
 }
 
 .hero-dynamic {
-  height: 140px;
-  line-height: 140px;
+  height: 120px;
+  line-height: 120px;
   overflow: hidden;
   margin-top: 10px;
   position: relative;
@@ -522,13 +522,52 @@ body {
 }
 
 .novaWidget.expanded {
-  width: 100vw;
-  height: 100vh;
-  bottom: 0;
-  right: 0;
-  top: 0;
-  left: 0;
-  border-radius: 0;
+  position: fixed;
+  top: 25px;
+  left: 15px;
+  right: 15px;
+  bottom: 15px;
+  width: auto;
+  height: auto;
+  border-radius: 14px;
+  transform: none;
+}
+
+.novaWidget.expanded .novaWidgetHeader {
+  height: 62px;
+  padding: 12px 14px;
+}
+
+.novaWidget.expanded .novaChatList {
+  padding: 16px 18px;
+}
+
+.novaWidget.expanded .novaBubble {
+  font-size: 14px;
+  padding: 12px 14px;
+}
+
+.novaWidget.expanded .novaComposer {
+  padding: 14px 16px;
+  gap: 12px;
+}
+
+.novaWidget.expanded .novaComposer input {
+  font-size: 14px;
+  padding: 12px 16px;
+}
+
+.novaWidget.expanded .novaComposer button:not(.novaMicBtn) {
+  padding: 12px 18px;
+  font-size: 14px;
+}
+
+.novaWidget.expanded .novaMicBtn {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  min-height: 46px;
+  padding: 0;
 }
 
 .novaWidgetHeader {
@@ -710,7 +749,6 @@ body {
   box-shadow: 0 0 0 3px rgba(64, 28, 81, 0.14);
   outline: none;
 }
-
 
 .novaComposer button {
   border-radius: 999px;
