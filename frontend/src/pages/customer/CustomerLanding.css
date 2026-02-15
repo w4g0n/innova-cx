@@ -1,5 +1,6 @@
 * {
   box-sizing: border-box;
+  user-select: none;
 }
 
 body {
@@ -27,12 +28,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 80px;
+  padding-top: 4%;
+  padding-left: 8%;
+  padding-right: 8%;
   background: transparent;
 }
 
 .logo img {
-  height: 250px;
+  height: 150px;
 }
 
 .nav-links {
@@ -272,7 +275,7 @@ body {
 }
 
 .hero-title {
-  font-size: clamp(56px, 9vw, 140px);
+  font-size: clamp(35px, 9vw, 120px);
   font-weight: 400;
   margin: 0;
   line-height: 1.1;
@@ -302,7 +305,7 @@ body {
   display: block;
   height: 120px;
   line-height: 120px;
-  font-size: clamp(42px, 7vw, 120px);
+  font-size: clamp(35px, 7vw, 82px);
   white-space: nowrap;
   max-width: 100%;
   overflow: hidden;

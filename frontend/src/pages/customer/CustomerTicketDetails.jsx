@@ -1,93 +1,50 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PriorityPill from "../../components/common/PriorityPill";
+import { authHeader } from "../../utils/auth";
 import "./CustomerTicketDetails.css";
 
 export default function CustomerTicketDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [ticket, setTicket] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const tickets = useMemo(
-    () => [
-      {
-        id: "INC-1024",
-        title: "Unable to access my account",
-        type: "Inquiry",
-        status: "Open",
-        date: "Aug 16, 2025",
-        priority: "Low",
-        description:
-          "I tried logging in with my email but it keeps saying my credentials are invalid. Please help me regain access.",
-        updates: [
-          { date: "Aug 16, 2025", text: "Ticket created and assigned to support." },
-          { date: "Aug 16, 2025", text: "We are reviewing your login activity (demo)." },
-        ],
-      },
-      {
-        id: "CMP-2219",
-        title: "Delivery was delayed and support did not respond",
-        type: "Complaint",
-        status: "In Progress",
-        date: "Aug 12, 2025",
-        priority: "High",
-        description:
-          "My order arrived late and I could not get a response from support. I would like an explanation and resolution.",
-        updates: [
-          { date: "Aug 12, 2025", text: "Ticket created and assigned to an agent." },
-          { date: "Aug 13, 2025", text: "Agent requested delivery timeline from vendor (demo)." },
-        ],
-      },
-      {
-        id: "CMP-2144",
-        title: "Incorrect billing amount on my invoice",
-        type: "Complaint",
-        status: "Resolved",
-        date: "Aug 02, 2025",
-        priority: "Medium",
-        description:
-          "The amount shown on my invoice is higher than expected. Please verify and correct the billing details.",
-        updates: [
-          { date: "Aug 02, 2025", text: "Ticket created." },
-          { date: "Aug 03, 2025", text: "Billing team reviewed invoice and issued correction (demo)." },
-          { date: "Aug 03, 2025", text: "Ticket marked as Resolved." },
-        ],
-      },
-      {
-        id: "INC-0997",
-        title: "How can I update my email address?",
-        type: "Inquiry",
-        status: "Resolved",
-        date: "Jul 28, 2025",
-        priority: "Low",
-        description:
-          "I want to change the email linked to my account. Please guide me on the correct steps.",
-        updates: [
-          { date: "Jul 28, 2025", text: "Ticket created." },
-          { date: "Jul 28, 2025", text: "Provided steps to update email in settings (demo)." },
-          { date: "Jul 29, 2025", text: "Ticket marked as Resolved." },
-        ],
-      },
-      {
-        id: "CMP-2050",
-        title: "App keeps crashing when I submit the form",
-        type: "Complaint",
-        status: "Open",
-        date: "Jul 21, 2025",
-        priority: "Critical",
-        description:
-          "Every time I submit the complaint form, the app freezes and closes. This is blocking me from completing my request.",
-        updates: [
-          { date: "Jul 21, 2025", text: "Ticket created and flagged as Critical." },
-          { date: "Jul 21, 2025", text: "Engineering team notified (demo)." },
-        ],
-      },
-    ],
-    []
-  );
+  useEffect(() => {
+    fetch(`http://localhost:8000/api/customer/tickets/${id}`, {
+      headers: authHeader(),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Not found");
+        return res.json();
+      })
+      .then((data) => {
+        const t = data.ticket;
 
-  const ticket = tickets.find((t) => t.id === id);
+        setTicket({
+          id: t.ticketId,
+          title: t.description?.subject,
+          type: "Ticket",
+          status: t.status,
+          date: t.issueDate,
+          priority: t.priority,
+          description: t.description?.details,
+          updates:
+            t.updates?.map((u) => ({
+              date: new Date(u.date).toLocaleString(),
+              text: `${u.author}: ${u.message}`,        
+            })) || [],
+        });
+
+        setLoading(false);
+      })
+      .catch(() => {
+        setTicket(null);
+        setLoading(false);
+      });
+  }, [id]);
 
   const statusClass = (s) => {
     const key = (s || "").replaceAll(" ", "");
@@ -104,14 +61,14 @@ export default function CustomerTicketDetails() {
             <button
               type="button"
               className="primaryPillBtn"
-              onClick={() => navigate("/customer/history")}
+              onClick={() => navigate("/customer/mytickets")}
             >
               Back to My Tickets
             </button>
           }
         />
 
-        {!ticket ? (
+        {!loading && !ticket ? (
           <div className="ticketEmpty">
             <h3 className="ticketEmptyTitle">Ticket not found</h3>
             <p className="ticketEmptySub">
@@ -121,12 +78,12 @@ export default function CustomerTicketDetails() {
             <button
               type="button"
               className="primaryPillBtn"
-              onClick={() => navigate("/customer/history")}
+              onClick={() => navigate("/customer/mytickets")}
             >
               Go to My Tickets
             </button>
           </div>
-        ) : (
+        ) : ticket ? (
           <>
             <section className="ticketCard">
               <div className="ticketTop">
@@ -136,7 +93,9 @@ export default function CustomerTicketDetails() {
                     <span className="dot">•</span>
                     <span className="ticketType">{ticket.type}</span>
                     <span className="dot">•</span>
-                    <span className={statusClass(ticket.status)}>{ticket.status}</span>
+                    <span className={statusClass(ticket.status)}>
+                      {ticket.status}
+                    </span>
                   </div>
 
                   <h2 className="ticketTitle">{ticket.title}</h2>
@@ -158,7 +117,9 @@ export default function CustomerTicketDetails() {
                   <button
                     type="button"
                     className="primaryPillBtn"
-                    onClick={() => alert(`Download / Share ticket ${ticket.id} (demo)`)}
+                    onClick={() =>
+                      alert(`Download / Share ticket ${ticket.id} (demo)`)
+                    }
                   >
                     Share
                   </button>
@@ -189,6 +150,8 @@ export default function CustomerTicketDetails() {
               </div>
             </section>
           </>
+        ) : (
+          <p>Loading ticket...</p>
         )}
       </div>
     </Layout>

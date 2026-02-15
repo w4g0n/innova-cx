@@ -4,9 +4,6 @@ import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import PriorityPill from "../../components/common/PriorityPill";
-import employeeDashboard from "../../mock-data/employeeDashboard.json";
-import employeeOpenTickets from "../../mock-data/employeeOpenTickets.json";
-import employeeMonthlyReports from "../../mock-data/employeeMonthlyReports.json";
 import "./EmployeeDashboard.css";
 
 function monthKeyToReportId(monthKey) {
@@ -36,6 +33,27 @@ function monthKeyToReportId(monthKey) {
   return abbr ? `${abbr}-${year}` : "";
 }
 
+function getStoredToken() {
+  // 1) Direct token keys (if you ever add them later)
+  const direct =
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken");
+
+  if (direct) return direct;
+
+  // 2) Your current Login.jsx stores token INSIDE "user"
+  try {
+    const rawUser = localStorage.getItem("user");
+    if (!rawUser) return "";
+    const user = JSON.parse(rawUser);
+    return user?.access_token || "";
+  } catch {
+    return "";
+  }
+}
+
 export default function EmployeeDashboard() {
   const [employee, setEmployee] = useState(null);
   const [kpis, setKpis] = useState({});
@@ -44,16 +62,60 @@ export default function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      setEmployee(employeeDashboard.employee);
-      setKpis(employeeDashboard.kpis);
-      setTickets(employeeOpenTickets.tickets);
-      setReports(employeeMonthlyReports.reports);
-    } catch (err) {
-      console.error("Error loading local JSON data:", err);
-    } finally {
-      setLoading(false);
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      try {
+        const token = getStoredToken();
+
+        const res = await fetch("http://localhost:8000/api/employee/dashboard", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Dashboard fetch failed (${res.status}): ${text}`);
+        }
+
+        const data = await res.json();
+
+        if (cancelled) return;
+
+        setEmployee(data.employee || null);
+        setKpis(data.kpis || {});
+        setTickets(Array.isArray(data.tickets) ? data.tickets : []);
+        setReports(Array.isArray(data.reports) ? data.reports : []);
+      } catch (err) {
+        console.error("Error loading dashboard data:", err);
+
+        if (!cancelled) {
+          setEmployee({ name: "Employee" });
+          setKpis({
+            ticketsAssigned: 0,
+            inProgress: 0,
+            resolvedThisMonth: 0,
+            critical: 0,
+            overdue: 0,
+            newToday: 0,
+          });
+          setTickets([]);
+          setReports([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading)
@@ -67,11 +129,11 @@ export default function EmployeeDashboard() {
     <Layout role="employee">
       <div className="empDash">
         <PageHeader
-          title={`Good Morning, ${employee.name}`}
+          title={`Good Morning, ${employee?.name || "Employee"}`}
           subtitle="Here’s your activity and assigned workload."
         />
 
-        
+        {/* KPI Section */}
         <section className="empDash__kpis">
           <KpiCard label="Tickets Assigned" value={kpis.ticketsAssigned} />
           <KpiCard label="In Progress" value={kpis.inProgress} />
@@ -81,9 +143,9 @@ export default function EmployeeDashboard() {
           <KpiCard label="New Today" value={kpis.newToday} />
         </section>
 
-        
+        {/* Dashboard Grid */}
         <section className="empDash__grid">
-          
+          {/* Open Tickets */}
           <article className="empCard">
             <h2 className="empCard__title">Open Tickets Assigned to Me</h2>
             <p className="empCard__subtitle">
@@ -122,7 +184,7 @@ export default function EmployeeDashboard() {
             </div>
           </article>
 
-          
+          {/* Reports Section */}
           <aside className="empCard empReports">
             <h2 className="empCard__title">Reports</h2>
             <p className="empCard__subtitle">
@@ -133,7 +195,7 @@ export default function EmployeeDashboard() {
               <ReportItem
                 key={r.month || r.label}
                 month={r.label}
-                reportId={monthKeyToReportId(r.month)} 
+                reportId={monthKeyToReportId(r.month)}
               />
             ))}
           </aside>
@@ -143,6 +205,7 @@ export default function EmployeeDashboard() {
   );
 }
 
+// Report Card Component
 function ReportItem({ month, reportId }) {
   return (
     <div className="empReportCard">

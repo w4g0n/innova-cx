@@ -1,970 +1,722 @@
-/* ============================================================
-   AI Complaint Management System - PostgreSQL Schema (DDL)
-   ============================================================ */
+-- =========================================================
+-- InnovaCX 
+-- =========================================================
 
--- -------------------------------
--- Create dedicated schema
--- -------------------------------
-CREATE SCHEMA IF NOT EXISTS cms;
-SET search_path TO cms;
+BEGIN;
 
--- -------------------------------
--- 1) ENUM TYPES (prevents bad values)
--- -------------------------------
+-- -------------------------
+-- Extensions
+-- -------------------------
+CREATE EXTENSION IF NOT EXISTS pgcrypto; -- gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS citext;   -- case-insensitive email
 
--- System login roles used by AppAccount
+-- -------------------------
+-- Enums (match UI strings exactly)
+-- -------------------------
 DO $$ BEGIN
-  CREATE TYPE role_type AS ENUM ('user', 'employee', 'manager', 'operator');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+  CREATE TYPE user_role AS ENUM ('customer', 'employee', 'manager', 'operator');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- Ticket channel
-DO $$ BEGIN
-  CREATE TYPE ticket_channel AS ENUM ('text', 'audio', 'chatbot');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
-
--- Ticket lifecycle statuses 
 DO $$ BEGIN
   CREATE TYPE ticket_status AS ENUM (
-    'unassigned',
-    'assigned',
-    'in_progress',
-    'resolved',
-    'overdue',
-    'escalated',
-    'submitted'
+    'Open',
+    'In Progress',
+    'Unassigned',
+    'Assigned',
+    'Escalated',
+    'Overdue',
+    'Resolved'
   );
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
-
--- Approval workflow
-DO $$ BEGIN
-  CREATE TYPE approval_status AS ENUM ('pending', 'approved', 'rejected');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
-  CREATE TYPE approval_type AS ENUM ('rescore', 'reroute', 'other');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+  CREATE TYPE ticket_priority AS ENUM ('Low', 'Medium', 'High', 'Critical');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- Issue report workflow
 DO $$ BEGIN
-  CREATE TYPE issue_report_status AS ENUM ('received', 'in_review', 'resolved', 'rejected');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+  CREATE TYPE ticket_type AS ENUM ('Complaint', 'Inquiry');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+DO $$ BEGIN
+  CREATE TYPE approval_request_type AS ENUM ('Rescoring', 'Rerouting');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE approval_status AS ENUM ('Pending', 'Approved', 'Rejected');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE chat_sender_type AS ENUM ('customer', 'bot', 'operator');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE notification_type AS ENUM (
+    'ticket_assignment',
+    'sla_warning',
+    'customer_reply',
+    'status_change',
+    'report_ready',
+    'system'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE service_severity AS ENUM ('ok', 'warning', 'critical');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE TYPE event_severity AS ENUM ('info', 'warning', 'critical');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- -------------------------
+-- Reference tables
+-- -------------------------
+CREATE TABLE IF NOT EXISTS departments (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL UNIQUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- -------------------------
+-- Users + Profiles (Identity)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS users (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email         CITEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role          user_role NOT NULL,
+  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+  user_id       UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  full_name     TEXT NOT NULL,
+  phone         TEXT,
+  location      TEXT,
+  department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+  employee_code TEXT UNIQUE,
+  job_title     TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- -------------------------
+-- Tickets
+-- -------------------------
+CREATE TABLE IF NOT EXISTS tickets (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_code         TEXT NOT NULL UNIQUE,
+  subject             TEXT NOT NULL,
+  details             TEXT NOT NULL,
+  ticket_type         ticket_type NOT NULL DEFAULT 'Complaint',
+  status              ticket_status NOT NULL DEFAULT 'Unassigned',
+  priority            ticket_priority NOT NULL DEFAULT 'Medium',
+  department_id       UUID REFERENCES departments(id) ON DELETE SET NULL,
+  created_by_user_id  UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  assigned_to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  assigned_at         TIMESTAMPTZ,
+  first_response_at   TIMESTAMPTZ,
+  resolved_at         TIMESTAMPTZ,
+  respond_due_at      TIMESTAMPTZ,
+  resolve_due_at      TIMESTAMPTZ,
+  respond_breached    BOOLEAN NOT NULL DEFAULT FALSE,
+  resolve_breached    BOOLEAN NOT NULL DEFAULT FALSE,
+  sentiment_score     NUMERIC(4,3),
+  sentiment_label     TEXT,
+  model_priority      ticket_priority,
+  model_department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+  model_confidence    NUMERIC(5,2),
+  model_suggestion    TEXT,
+  final_resolution    TEXT,
+  resolved_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);
+CREATE INDEX IF NOT EXISTS idx_tickets_priority    ON tickets(priority);
+CREATE INDEX IF NOT EXISTS idx_tickets_created_at  ON tickets(created_at);
+CREATE INDEX IF NOT EXISTS idx_tickets_assignee    ON tickets(assigned_to_user_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_creator     ON tickets(created_by_user_id);
+
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_tickets_updated_at ON tickets;
+CREATE TRIGGER trg_tickets_updated_at
+BEFORE UPDATE ON tickets
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+-- -------------------------
+-- Ticket attachments
+-- -------------------------
+CREATE TABLE IF NOT EXISTS ticket_attachments (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id   UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  file_name   TEXT NOT NULL,
+  file_url    TEXT,
+  uploaded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket ON ticket_attachments(ticket_id);
+
+-- -------------------------
+-- Ticket updates
+-- -------------------------
+CREATE TABLE IF NOT EXISTS ticket_updates (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id      UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  author_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  update_type    TEXT NOT NULL,
+  message        TEXT NOT NULL,
+  from_status    ticket_status,
+  to_status      ticket_status,
+  meta           JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_updates_ticket  ON ticket_updates(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_updates_created ON ticket_updates(created_at);
+
+-- -------------------------
+-- Steps taken
+-- -------------------------
+CREATE TABLE IF NOT EXISTS ticket_work_steps (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id          UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  step_no            INT NOT NULL,
+  technician_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  occurred_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  notes              TEXT,
+  UNIQUE(ticket_id, step_no)
+);
+
+-- -------------------------
+-- Approvals
+-- -------------------------
+CREATE TABLE IF NOT EXISTS approval_requests (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_code         TEXT NOT NULL UNIQUE,
+  ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  request_type         approval_request_type NOT NULL,
+  current_value        TEXT NOT NULL,
+  requested_value      TEXT NOT NULL,
+  request_reason       TEXT,
+  submitted_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  submitted_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  status               approval_status NOT NULL DEFAULT 'Pending',
+  decided_by_user_id   UUID REFERENCES users(id) ON DELETE SET NULL,
+  decided_at           TIMESTAMPTZ,
+  decision_notes       TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(status);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_ticket ON approval_requests(ticket_id);
+
+-- -------------------------
+-- Chat tables
+-- -------------------------
+CREATE TABLE IF NOT EXISTS chat_conversations (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+  channel           TEXT NOT NULL DEFAULT 'web',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ended_at          TIMESTAMPTZ,
+  status            TEXT NOT NULL DEFAULT 'open'
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id  UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+  sender_type      chat_sender_type NOT NULL,
+  sender_user_id   UUID REFERENCES users(id) ON DELETE SET NULL,
+  message_text     TEXT NOT NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  intent           TEXT,
+  category         TEXT,
+  sentiment_score  NUMERIC(4,3),
+  escalation_flag  BOOLEAN NOT NULL DEFAULT FALSE,
+  linked_ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_convo   ON chat_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at);
+
+-- -------------------------
 -- Notifications
-DO $$ BEGIN
-  CREATE TYPE notification_channel AS ENUM ('email', 'sms', 'whatsapp', 'push');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  CREATE TYPE notification_status AS ENUM ('queued', 'sent', 'failed');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
-
--- -------------------------------
--- 2) MASTER DATA TABLES
--- -------------------------------
-
-/* Department: used for employee organization and AI routing/reviews */
-CREATE TABLE IF NOT EXISTS department (
-  department_id   VARCHAR PRIMARY KEY,        -- e.g. "DPT-01"
-  name            VARCHAR NOT NULL UNIQUE,     -- unique so it can be referenced safely
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- -------------------------
+CREATE TABLE IF NOT EXISTS notifications (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type       notification_type NOT NULL,
+  title      TEXT NOT NULL,
+  message    TEXT NOT NULL,
+  priority   ticket_priority,
+  ticket_id  UUID REFERENCES tickets(id) ON DELETE SET NULL,
+  report_id  TEXT,
+  read       BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- -------------------------------
--- 3) USERS / EMPLOYEES / AUTH
--- -------------------------------
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
 
-/* End users raising complaints */
-CREATE TABLE IF NOT EXISTS "user" (
-  user_id     VARCHAR PRIMARY KEY,            -- e.g. "USR-501"
-  full_name   VARCHAR NOT NULL,
-  phone_e164  VARCHAR NOT NULL,               -- e.g. +971501234567
-  company     VARCHAR NOT NULL,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- -------------------------
+-- Employee Monthly Reports
+-- -------------------------
+CREATE TABLE IF NOT EXISTS employee_reports (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_code      TEXT NOT NULL UNIQUE,
+  employee_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  month_label      TEXT NOT NULL,
+  subtitle         TEXT NOT NULL,
+  kpi_rating       TEXT NOT NULL,
+  kpi_resolved     INT  NOT NULL,
+  kpi_sla          TEXT NOT NULL,
+  kpi_avg_response TEXT NOT NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_user_phone ON "user"(phone_e164);
-CREATE INDEX IF NOT EXISTS idx_user_company ON "user"(company);
-
-/* Internal employees (technicians, supervisors, managers, etc.) */
-CREATE TABLE IF NOT EXISTS employee (
-  employee_id    VARCHAR PRIMARY KEY,         -- e.g. "EMP-1023"
-  department_id  VARCHAR NOT NULL REFERENCES department(department_id) ON UPDATE CASCADE,
-  full_name      VARCHAR NOT NULL,
-  email          VARCHAR NOT NULL UNIQUE,
-  role           VARCHAR NOT NULL,             -- job title e.g. Technician, Supervisor
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS employee_report_summary_items (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id  UUID NOT NULL REFERENCES employee_reports(id) ON DELETE CASCADE,
+  label      TEXT NOT NULL,
+  value_text TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_employee_department ON employee(department_id);
-
-/* Authentication account (login + role-based access)
-   - links to either a user or an employee based on role
-   - password is stored as a hash (never plain text)
-*/
-CREATE TABLE IF NOT EXISTS app_account (
-  account_id          VARCHAR PRIMARY KEY,    -- e.g. "ACC-1001"
-  linked_user_id      VARCHAR NULL REFERENCES "user"(user_id) ON UPDATE CASCADE,
-  linked_employee_id  VARCHAR NULL REFERENCES employee(employee_id) ON UPDATE CASCADE,
-  email               VARCHAR NOT NULL UNIQUE,
-  password_hash       VARCHAR NOT NULL,
-  role                role_type NOT NULL,
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  last_login_at       TIMESTAMPTZ NULL,
-
-  -- Ensure an account links to at most one identity row
-  CONSTRAINT chk_account_single_link
-    CHECK (
-      (linked_user_id IS NOT NULL AND linked_employee_id IS NULL)
-      OR
-      (linked_user_id IS NULL AND linked_employee_id IS NOT NULL)
-      OR
-      (linked_user_id IS NULL AND linked_employee_id IS NULL) -- allow for operator accounts if you want no link
-    )
+CREATE TABLE IF NOT EXISTS employee_report_rating_components (
+  id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id UUID NOT NULL REFERENCES employee_reports(id) ON DELETE CASCADE,
+  name      TEXT NOT NULL,
+  score     NUMERIC(4,1) NOT NULL,
+  pct       INT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_account_role ON app_account(role);
-
-/* Password reset tokens for forgot-password and resend-reset */
-CREATE TABLE IF NOT EXISTS password_reset_token (
-  reset_id      VARCHAR PRIMARY KEY,          -- e.g. "RST-9001"
-  account_id    VARCHAR NOT NULL REFERENCES app_account(account_id) ON DELETE CASCADE,
-  token_hash    VARCHAR NOT NULL,             -- store hashed token
-  requested_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  expires_at    TIMESTAMPTZ NOT NULL,
-  used_at       TIMESTAMPTZ NULL,
-  resent_at     TIMESTAMPTZ NULL
+CREATE TABLE IF NOT EXISTS employee_report_weekly (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id    UUID NOT NULL REFERENCES employee_reports(id) ON DELETE CASCADE,
+  week_label   TEXT NOT NULL,
+  assigned     INT NOT NULL,
+  resolved     INT NOT NULL,
+  sla          TEXT NOT NULL,
+  avg_response TEXT NOT NULL,
+  delta_type   TEXT NOT NULL,
+  delta_text   TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_reset_account ON password_reset_token(account_id);
-CREATE INDEX IF NOT EXISTS idx_reset_expires ON password_reset_token(expires_at);
-
--- -------------------------------
--- 4) TICKETS (COMPLAINTS)
--- -------------------------------
-
-/* Ticket = complaint record */
-CREATE TABLE IF NOT EXISTS ticket (
-  ticket_id        VARCHAR PRIMARY KEY,       -- e.g. "CX-1122"
-  user_id          VARCHAR NULL REFERENCES "user"(user_id) ON UPDATE CASCADE,
-  employee_id      VARCHAR NULL REFERENCES employee(employee_id) ON UPDATE CASCADE,
-  subject          VARCHAR NOT NULL,
-  title            VARCHAR NOT NULL,
-  description      TEXT NULL,
-  channel          ticket_channel NOT NULL,
-  department       VARCHAR NOT NULL REFERENCES department(name) ON UPDATE CASCADE,
-  priority         VARCHAR NOT NULL,           
-  status           ticket_status NOT NULL,
-  submitted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  last_updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  resolved_at      TIMESTAMPTZ NULL
+CREATE TABLE IF NOT EXISTS employee_report_notes (
+  id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id UUID NOT NULL REFERENCES employee_reports(id) ON DELETE CASCADE,
+  note      TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_ticket_user ON ticket(user_id);
-CREATE INDEX IF NOT EXISTS idx_ticket_employee ON ticket(employee_id);
-CREATE INDEX IF NOT EXISTS idx_ticket_department ON ticket(department);
-CREATE INDEX IF NOT EXISTS idx_ticket_status_priority ON ticket(status, priority);
-CREATE INDEX IF NOT EXISTS idx_ticket_submitted ON ticket(submitted_at);
-CREATE INDEX IF NOT EXISTS idx_ticket_updated ON ticket(last_updated_at);
-
--- -------------------------------
--- 5) SLA TABLE (timestamps are STORED; booleans are derived in queries)
--- -------------------------------
-
-/* TicketSLA stores SLA deadlines + breach timestamps */
-CREATE TABLE IF NOT EXISTS ticket_sla (
-  ticket_id            VARCHAR PRIMARY KEY REFERENCES ticket(ticket_id) ON DELETE CASCADE,
-  respond_due_at       TIMESTAMPTZ NOT NULL,
-  resolve_due_at       TIMESTAMPTZ NOT NULL,
-  respond_breached_at  TIMESTAMPTZ NULL,
-  resolve_breached_at  TIMESTAMPTZ NULL,
-
-  -- note: response due should not be after resolve due (usually)
-  CONSTRAINT chk_sla_due_order CHECK (respond_due_at <= resolve_due_at)
+-- -------------------------
+-- Operator System Dashboard
+-- -------------------------
+CREATE TABLE IF NOT EXISTS system_service_status (
+  name       TEXT PRIMARY KEY,
+  status     TEXT NOT NULL,
+  severity   service_severity NOT NULL DEFAULT 'ok',
+  note       TEXT NOT NULL,
+  checked_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_sla_respond_due ON ticket_sla(respond_due_at);
-CREATE INDEX IF NOT EXISTS idx_sla_resolve_due ON ticket_sla(resolve_due_at);
-
--- -------------------------------
--- 6) STATUS + ASSIGNMENT HISTORY
--- -------------------------------
-
-/* TicketStatusHistory: timeline for status changes */
-CREATE TABLE IF NOT EXISTS ticket_status_history (
-  history_id  VARCHAR PRIMARY KEY,            -- e.g. "HIS-8001"
-  ticket_id   VARCHAR NOT NULL REFERENCES ticket(ticket_id) ON DELETE CASCADE,
-  status      ticket_status NOT NULL,
-  changed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS system_integration_status (
+  name       TEXT PRIMARY KEY,
+  status     TEXT NOT NULL,
+  severity   service_severity NOT NULL DEFAULT 'ok',
+  note       TEXT NOT NULL,
+  checked_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_statushist_ticket_time ON ticket_status_history(ticket_id, changed_at);
-
-/* TicketAssignmentHistory: manager assign/reassign tracking */
-CREATE TABLE IF NOT EXISTS ticket_assignment_history (
-  assignment_id  VARCHAR PRIMARY KEY,         -- e.g. "ASN-5001"
-  ticket_id      VARCHAR NOT NULL REFERENCES ticket(ticket_id) ON DELETE CASCADE,
-  employee_id    VARCHAR NOT NULL REFERENCES employee(employee_id) ON UPDATE CASCADE,  -- assigned to
-  assigned_by    VARCHAR NOT NULL REFERENCES employee(employee_id) ON UPDATE CASCADE,  -- assigned by (manager/supervisor)
-  assigned_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  note           TEXT NULL
+CREATE TABLE IF NOT EXISTS system_queue_metrics (
+  name        TEXT PRIMARY KEY,
+  value       TEXT NOT NULL,
+  severity    service_severity NOT NULL DEFAULT 'ok',
+  note        TEXT NOT NULL,
+  measured_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_assign_ticket_time ON ticket_assignment_history(ticket_id, assigned_at);
-CREATE INDEX IF NOT EXISTS idx_assign_employee ON ticket_assignment_history(employee_id);
-
--- -------------------------------
--- 7) WORKLOG (steps taken)
--- -------------------------------
-
-/* TicketWorkLog: steps/notes added by employees while working the ticket */
-CREATE TABLE IF NOT EXISTS ticket_work_log (
-  worklog_id    VARCHAR PRIMARY KEY,          -- e.g. "WLG-6001"
-  ticket_id     VARCHAR NOT NULL REFERENCES ticket(ticket_id) ON DELETE CASCADE,
-  employee_id   VARCHAR NOT NULL REFERENCES employee(employee_id) ON UPDATE CASCADE,
-  step_no       INT NOT NULL,
-  note          TEXT NOT NULL,
-  occurred_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT uq_worklog_step UNIQUE(ticket_id, step_no),
-  CONSTRAINT chk_step_positive CHECK (step_no > 0)
+CREATE TABLE IF NOT EXISTS system_event_feed (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  severity    event_severity NOT NULL DEFAULT 'info',
+  title       TEXT NOT NULL,
+  description TEXT NOT NULL,
+  event_time  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_worklog_ticket ON ticket_work_log(ticket_id);
-CREATE INDEX IF NOT EXISTS idx_worklog_employee ON ticket_work_log(employee_id);
-
--- -------------------------------
--- 8) ATTACHMENTS (audio/images/files)
--- -------------------------------
-
-/* TicketAttachment: store any file attached to a ticket */
-CREATE TABLE IF NOT EXISTS ticket_attachment (
-  attachment_id     VARCHAR PRIMARY KEY,      -- e.g. "ATT-9101"
-  ticket_id         VARCHAR NOT NULL REFERENCES ticket(ticket_id) ON DELETE CASCADE,
-  file_name         VARCHAR NOT NULL,
-  content_type      VARCHAR NOT NULL,          -- e.g. audio/webm, image/jpeg
-  size_bytes        BIGINT NULL,
-  duration_seconds  INT NULL,                  -- for audio/video only
-  storage_key       VARCHAR NULL,              -- where file is stored (S3 key/path)
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-  CONSTRAINT chk_size_nonnegative CHECK (size_bytes IS NULL OR size_bytes >= 0),
-  CONSTRAINT chk_duration_nonnegative CHECK (duration_seconds IS NULL OR duration_seconds >= 0)
+CREATE TABLE IF NOT EXISTS system_versions (
+  component   TEXT PRIMARY KEY,
+  version     TEXT NOT NULL,
+  deployed_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_attach_ticket ON ticket_attachment(ticket_id);
-CREATE INDEX IF NOT EXISTS idx_attach_type ON ticket_attachment(content_type);
-
--- -------------------------------
--- 9) NOTIFICATIONS LOG
--- -------------------------------
-
-/* NotificationLog: tracks email/SMS/etc queue + delivery outcomes */
-CREATE TABLE IF NOT EXISTS notification_log (
-  notification_id  VARCHAR PRIMARY KEY,       -- e.g. "NTF-4001"
-  ticket_id        VARCHAR NOT NULL REFERENCES ticket(ticket_id) ON DELETE CASCADE,
-  channel          notification_channel NOT NULL,
-  status           notification_status NOT NULL,
-  queued_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  sent_at          TIMESTAMPTZ NULL,
-  error_message    TEXT NULL
+CREATE TABLE IF NOT EXISTS system_config_kv (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_notify_ticket ON notification_log(ticket_id);
-CREATE INDEX IF NOT EXISTS idx_notify_status ON notification_log(status);
-CREATE INDEX IF NOT EXISTS idx_notify_queued ON notification_log(queued_at);
-
--- -------------------------------
--- 10) AI OUTPUT STORAGE (for analytics + rescore/reroute)
--- -------------------------------
-
-/* TicketAIResult: persists model predictions + confidence for each ticket */
-CREATE TABLE IF NOT EXISTS ticket_ai_result (
-  ai_ticket_id            VARCHAR PRIMARY KEY,  -- e.g. "AIR-3001"
-  ticket_id               VARCHAR NOT NULL REFERENCES ticket(ticket_id) ON DELETE CASCADE,
-  predicted_department_id  VARCHAR NULL REFERENCES department(department_id) ON UPDATE CASCADE,
-  model_version            VARCHAR NULL,
-  predicted_priority       VARCHAR NULL,          
-  confidence_score         NUMERIC NULL,         
-  priority_to_respond      INT NULL,
-  priority_to_resolve      INT NULL,
-  created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-  CONSTRAINT chk_confidence_range
-    CHECK (confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)),
-
-  CONSTRAINT chk_priority_respond_range
-    CHECK (priority_to_respond IS NULL OR (priority_to_respond BETWEEN 1 AND 5)),
-
-  CONSTRAINT chk_priority_resolve_range
-    CHECK (priority_to_resolve IS NULL OR (priority_to_resolve BETWEEN 1 AND 5))
-);
-
-CREATE INDEX IF NOT EXISTS idx_ai_ticket ON ticket_ai_result(ticket_id);
-CREATE INDEX IF NOT EXISTS idx_ai_created ON ticket_ai_result(created_at);
-CREATE INDEX IF NOT EXISTS idx_ai_dept ON ticket_ai_result(predicted_department_id);
-
--- -------------------------------
--- 11) MANAGER APPROVAL REQUESTS
--- -------------------------------
-
-/* ApprovalRequest: employee submits; manager approves/rejects */
-CREATE TABLE IF NOT EXISTS approval_request (
-  request_id               VARCHAR PRIMARY KEY,      -- e.g. "REQ-3101"
-  ticket_id                VARCHAR NOT NULL REFERENCES ticket(ticket_id) ON DELETE CASCADE,
-  request_type             approval_type NOT NULL,
-  current_value            VARCHAR NULL,
-  requested_value          VARCHAR NULL,
-  submitted_by_employee_id VARCHAR NOT NULL REFERENCES employee(employee_id) ON UPDATE CASCADE,
-  submitted_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  status                   approval_status NOT NULL DEFAULT 'pending',
-  decided_at               TIMESTAMPTZ NULL,
-  decision_note            TEXT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_approval_ticket ON approval_request(ticket_id);
-CREATE INDEX IF NOT EXISTS idx_approval_status ON approval_request(status);
-CREATE INDEX IF NOT EXISTS idx_approval_submitter ON approval_request(submitted_by_employee_id);
-
--- -------------------------------
--- 12) ISSUE REPORTS 
--- -------------------------------
-
-/* IssueReport: generic report table */
-CREATE TABLE IF NOT EXISTS issue_report (
-  report_id     VARCHAR PRIMARY KEY,              -- e.g. "RPT-7001"
-  ticket_id     VARCHAR NOT NULL REFERENCES ticket(ticket_id) ON DELETE CASCADE,
-  submitted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  status        issue_report_status NOT NULL DEFAULT 'received',
-  details       TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_issuereport_ticket ON issue_report(ticket_id);
-CREATE INDEX IF NOT EXISTS idx_issuereport_status ON issue_report(status);
-
-/* TicketIssueReport: more detailed issue reports (user submitted + resolver) */
-CREATE TABLE IF NOT EXISTS ticket_issue_report (
-  report_id               VARCHAR PRIMARY KEY,   -- e.g. "RPT-7100"
-  ticket_id               VARCHAR NOT NULL REFERENCES ticket(ticket_id) ON DELETE CASCADE,
-  submitted_by_user_id     VARCHAR NOT NULL REFERENCES "user"(user_id) ON UPDATE CASCADE,
-  resolved_by_employee_id  VARCHAR NULL REFERENCES employee(employee_id) ON UPDATE CASCADE,
-  issue_text              TEXT NOT NULL,
-  status                  issue_report_status NOT NULL DEFAULT 'received',
-  submitted_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  resolved_at             TIMESTAMPTZ NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_ticketissuereport_ticket ON ticket_issue_report(ticket_id);
-CREATE INDEX IF NOT EXISTS idx_ticketissuereport_user ON ticket_issue_report(submitted_by_user_id);
-CREATE INDEX IF NOT EXISTS idx_ticketissuereport_status ON ticket_issue_report(status);
-
--- -------------------------------
--- 13) AI REVIEW / OVERRIDES (operator analytics)
--- -------------------------------
-
-/* TicketReview: stores model vs final decisions (audit + analytics) */
-CREATE TABLE IF NOT EXISTS ticket_review (
-  review_id                    VARCHAR PRIMARY KEY,   -- e.g. "REV-8801"
-  ticket_id                    VARCHAR NOT NULL REFERENCES ticket(ticket_id) ON DELETE CASCADE,
-  model_routing_department_id   VARCHAR NULL REFERENCES department(department_id) ON UPDATE CASCADE,
-  final_routing_department_id   VARCHAR NULL REFERENCES department(department_id) ON UPDATE CASCADE,
-  customer_type                VARCHAR NULL,          -- Tenant, Vendor, etc.
-  model_priority               VARCHAR NULL,
-  final_priority               VARCHAR NULL,
-  reason                       TEXT NULL,
-  reviewed_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_review_ticket ON ticket_review(ticket_id);
-CREATE INDEX IF NOT EXISTS idx_review_time ON ticket_review(reviewed_at);
-
--- -------------------------------
--- 14) CHATBOT TABLES
--- -------------------------------
-
-/* ChatConversation: one chat thread per user session */
-CREATE TABLE IF NOT EXISTS chat_conversation (
-  conversation_id  VARCHAR PRIMARY KEY,        -- e.g. "CONV-1001"
-  user_id          VARCHAR NOT NULL REFERENCES "user"(user_id) ON DELETE CASCADE,
-  status           VARCHAR NOT NULL DEFAULT 'active', -- active/closed
-  context          JSONB NULL,                 -- stores collected fields (e.g. location)
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_conv_user ON chat_conversation(user_id);
-CREATE INDEX IF NOT EXISTS idx_conv_created ON chat_conversation(created_at);
-
-/* ChatMessage: stores the messages in each conversation */
-CREATE TABLE IF NOT EXISTS chat_message (
-  message_id       VARCHAR PRIMARY KEY,        -- e.g. "MSG-2001"
-  conversation_id  VARCHAR NOT NULL REFERENCES chat_conversation(conversation_id) ON DELETE CASCADE,
-  role             VARCHAR NOT NULL,           -- "user" or "bot"
-  text             TEXT NOT NULL,
-  "timestamp"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  metadata         JSONB NULL                  -- suggestedReplies, nextAction, intent, etc.
-);
-
-CREATE INDEX IF NOT EXISTS idx_msg_conv_time ON chat_message(conversation_id, "timestamp");
-
--- -------------------------------
--- 15) PERFORMANCE REPORTS
--- -------------------------------
-
-/* EmployeePerformanceReport: monthly snapshot report used by employee/manager dashboards */
-CREATE TABLE IF NOT EXISTS employee_performance_report (
-  report_id        VARCHAR PRIMARY KEY,        -- e.g. "RPT-EMP-2025-10-EMP-1023"
-  employee_id      VARCHAR NOT NULL REFERENCES employee(employee_id) ON DELETE CASCADE,
-  report_month     VARCHAR NOT NULL,           -- "YYYY-MM"
-  overall_rating   INT NOT NULL,
-  generated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  report_payload   JSONB NULL,
-
-  CONSTRAINT uq_employee_month UNIQUE(employee_id, report_month),
-  CONSTRAINT chk_overall_rating CHECK (overall_rating BETWEEN 0 AND 100)
-);
-
-CREATE INDEX IF NOT EXISTS idx_emp_report_employee ON employee_performance_report(employee_id);
-CREATE INDEX IF NOT EXISTS idx_emp_report_month ON employee_performance_report(report_month);
-
-/* PerformanceNote: manager notes on performance reports */
-CREATE TABLE IF NOT EXISTS performance_note (
-  note_id      VARCHAR PRIMARY KEY,
-  report_id    VARCHAR NOT NULL REFERENCES employee_performance_report(report_id) ON DELETE CASCADE,
-  note_text    TEXT NOT NULL,
-  created_by   VARCHAR NOT NULL REFERENCES employee(employee_id) ON UPDATE CASCADE,
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_perf_note_report ON performance_note(report_id);
-
--- ============================================================
--- 16) OPTIONAL: Helpful VIEW for SLA booleans (derived at query time)
--- ============================================================
-
-/* This view returns SLA status flags without storing them in the table */
-CREATE OR REPLACE VIEW v_ticket_sla_status AS
-SELECT
-  s.ticket_id,
-  s.respond_due_at,
-  s.resolve_due_at,
-  s.respond_breached_at,
-  s.resolve_breached_at,
-
-  /* derived flags */
-  (s.respond_breached_at IS NOT NULL OR now() > s.respond_due_at) AS respond_breached_now,
-  (s.resolve_breached_at IS NOT NULL OR now() > s.resolve_due_at) AS resolve_breached_now,
-  ( (s.respond_breached_at IS NOT NULL OR now() > s.respond_due_at)
-    OR
-    (s.resolve_breached_at IS NOT NULL OR now() > s.resolve_due_at)
-  ) AS sla_breached_now
-FROM ticket_sla s;
-
--- ============================================================
--- End of schema
--- ============================================================
-
--- ============================================================
--- 17) KPI & ANALYTICS VIEWS
--- (Read-only views for dashboards, reports, and analytics)
--- ============================================================
-
--- ------------------------------------------------------------
--- 1) Ticket-level KPI view
--- Purpose:
--- - Per-ticket analytics
--- - SLA tracking
--- - Resolution time calculations
--- ------------------------------------------------------------
-CREATE OR REPLACE VIEW v_ticket_kpis AS
-SELECT
-  t.ticket_id,
-  t.department,
-  t.priority,
-  t.status,
-
-  t.submitted_at,
-  t.resolved_at,
-
-  -- Resolution time in hours
-  CASE
-    WHEN t.resolved_at IS NOT NULL
-    THEN EXTRACT(EPOCH FROM (t.resolved_at - t.submitted_at)) / 3600
-    ELSE NULL
-  END AS resolution_hours,
-
-  -- SLA flags
-  (s.respond_breached_at IS NOT NULL) AS respond_sla_breached,
-  (s.resolve_breached_at IS NOT NULL) AS resolve_sla_breached,
-
-  -- Overall SLA breach flag
-  (
-    s.respond_breached_at IS NOT NULL
-    OR s.resolve_breached_at IS NOT NULL
-  ) AS sla_breached
-
-FROM ticket t
-LEFT JOIN ticket_sla s ON s.ticket_id = t.ticket_id;
-
-
--- ------------------------------------------------------------
--- 2) Employee KPI view
--- Purpose:
--- - Employee performance dashboards
--- - SLA + escalation tracking
--- ------------------------------------------------------------
-CREATE OR REPLACE VIEW v_employee_kpis AS
-SELECT
-  e.employee_id,
-  e.full_name,
-  e.department_id,
-
-  COUNT(t.ticket_id) AS tickets_handled,
-
-  COUNT(t.ticket_id)
-    FILTER (WHERE t.status = 'resolved') AS tickets_resolved,
-
-  -- Average resolution time (hours)
-  AVG(
-    EXTRACT(EPOCH FROM (t.resolved_at - t.submitted_at)) / 3600
-  ) FILTER (WHERE t.resolved_at IS NOT NULL) AS avg_resolution_hours,
-
-  -- SLA breaches count
-  COUNT(s.ticket_id)
-    FILTER (
-      WHERE s.respond_breached_at IS NOT NULL
-         OR s.resolve_breached_at IS NOT NULL
-    ) AS sla_breaches,
-
-  -- Escalation count
-  COUNT(h.ticket_id)
-    FILTER (WHERE h.status = 'escalated') AS escalations
-
-FROM employee e
-LEFT JOIN ticket t ON t.employee_id = e.employee_id
-LEFT JOIN ticket_sla s ON s.ticket_id = t.ticket_id
-LEFT JOIN ticket_status_history h ON h.ticket_id = t.ticket_id
-
-GROUP BY e.employee_id, e.full_name, e.department_id;
-
-
--- ------------------------------------------------------------
--- 3) Department KPI view
--- Purpose:
--- - Department-level dashboards
--- - Management overview
--- ------------------------------------------------------------
-CREATE OR REPLACE VIEW v_department_kpis AS
-SELECT
-  t.department,
-
-  COUNT(*) AS total_tickets,
-
-  COUNT(*)
-    FILTER (WHERE t.status = 'resolved') AS resolved_tickets,
-
-  -- Resolution rate (%)
-  ROUND(
-    COUNT(*) FILTER (WHERE t.status = 'resolved')::NUMERIC
-    / NULLIF(COUNT(*), 0) * 100,
-    2
-  ) AS resolution_rate_percent,
-
-  -- Average resolution time (hours)
-  AVG(
-    EXTRACT(EPOCH FROM (t.resolved_at - t.submitted_at)) / 3600
-  ) FILTER (WHERE t.resolved_at IS NOT NULL) AS avg_resolution_hours,
-
-  -- SLA breaches
-  COUNT(s.ticket_id)
-    FILTER (
-      WHERE s.respond_breached_at IS NOT NULL
-         OR s.resolve_breached_at IS NOT NULL
-    ) AS sla_breaches
-
-FROM ticket t
-LEFT JOIN ticket_sla s ON s.ticket_id = t.ticket_id
-
-GROUP BY t.department;
-
--- ------------------------------------------------------------
--- 4) Monthly employee KPI view
--- Purpose:
--- - Feeds employee_performance_report table
--- - Used for monthly snapshots
--- ------------------------------------------------------------
-
-CREATE OR REPLACE VIEW v_employee_monthly_kpis AS
-SELECT
-  e.employee_id,
-  TO_CHAR(t.submitted_at, 'YYYY-MM') AS report_month,
-
-  COUNT(t.ticket_id) AS tickets_handled,
-
-  COUNT(t.ticket_id)
-    FILTER (WHERE t.status = 'resolved') AS tickets_resolved,
-
-  AVG(
-    EXTRACT(EPOCH FROM (t.resolved_at - t.submitted_at)) / 3600
-  ) FILTER (WHERE t.resolved_at IS NOT NULL) AS avg_resolution_hours,
-
-  COUNT(s.ticket_id)
-    FILTER (
-      WHERE s.respond_breached_at IS NOT NULL
-         OR s.resolve_breached_at IS NOT NULL
-    ) AS sla_breaches
-
-FROM employee e
-LEFT JOIN ticket t ON t.employee_id = e.employee_id
-LEFT JOIN ticket_sla s ON s.ticket_id = t.ticket_id
-
-GROUP BY e.employee_id, report_month;
-
--- ============================================================
--- End of KPI Views
--- ============================================================
-
--- INSERTING PART
-
-SET search_path TO cms;
-
--- ============================================================
--- 1) DEPARTMENTS
--- ============================================================
-INSERT INTO department (department_id, name) VALUES
-('DPT-IT', 'IT Support'),
-('DPT-NET', 'Network'),
-('DPT-BILL', 'Billing'),
-('DPT-CS', 'Customer Service'),
-('DPT-OPS', 'Operations')
-ON CONFLICT DO NOTHING;
-
-
--- ============================================================
--- 2) USERS
--- ============================================================
-INSERT INTO "user" (user_id, full_name, phone_e164, company) VALUES
-('USR-001', 'Ahmed Al Mansoori', '+971501111111', 'Emirates Tech'),
-('USR-002', 'Sara Khaled', '+971502222222', 'Dubai Holdings'),
-('USR-003', 'Omar Hassan', '+971503333333', 'Etisalat'),
-('USR-004', 'Laila Noor', '+971504444444', 'Careem')
-ON CONFLICT DO NOTHING;
-
-
--- ============================================================
--- 3) EMPLOYEES
--- ============================================================
-INSERT INTO employee (employee_id, department_id, full_name, email, role) VALUES
-('EMP-101', 'DPT-IT', 'Yousef Ali', 'yousef@company.com', 'Technician'),
-('EMP-102', 'DPT-NET', 'Mona Farouk', 'mona@company.com', 'Engineer'),
-('EMP-103', 'DPT-BILL', 'Khalid Saeed', 'khalid@company.com', 'Billing Officer'),
-('EMP-104', 'DPT-CS', 'Lina Saleh', 'lina@company.com', 'Supervisor'),
-('EMP-200', 'DPT-CS', 'Hassan Nabil', 'hassan@company.com', 'Manager')
-ON CONFLICT DO NOTHING;
-
-
--- ============================================================
--- 4) APP ACCOUNTS
--- ============================================================
-INSERT INTO app_account (
-  account_id, linked_user_id, linked_employee_id,
-  email, password_hash, role
+-- =========================================================
+-- Seed data
+-- =========================================================
+
+INSERT INTO departments (name) VALUES
+  ('IT'),
+  ('Facilities'),
+  ('Security'),
+  ('HR'),
+  ('Admin'),
+  ('Facilities Management'),
+  ('IT Support'),
+  ('Cleaning'),
+  ('Maintenance')
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO users (email, password_hash, role) VALUES
+  ('customer1@innova.cx', 'HASHED_PASSWORD', 'customer'),
+  ('manager@innova.cx',   'HASHED_PASSWORD', 'manager'),
+  ('operator@innova.cx',  'HASHED_PASSWORD', 'operator'),
+  ('ahmed@innova.cx',     'HASHED_PASSWORD', 'employee'),
+  ('maria@innova.cx',     'HASHED_PASSWORD', 'employee'),
+  ('omar@innova.cx',      'HASHED_PASSWORD', 'employee'),
+  ('sara@innova.cx',      'HASHED_PASSWORD', 'employee'),
+  ('bilal@innova.cx',     'HASHED_PASSWORD', 'employee'),
+  ('fatima@innova.cx',    'HASHED_PASSWORD', 'employee'),
+  ('yousef@innova.cx',    'HASHED_PASSWORD', 'employee'),
+  ('khalid@innova.cx',    'HASHED_PASSWORD', 'employee')
+ON CONFLICT (email) DO NOTHING;
+
+-- Profiles
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Dr. Farhad', NULL, 'Department Manager',
+       (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1)
+FROM users u WHERE u.email='manager@innova.cx'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Ahmed Hassan', 'EMP-1023', 'Senior Technician',
+       (SELECT id FROM departments WHERE name='Facilities' LIMIT 1)
+FROM users u WHERE u.email='ahmed@innova.cx'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Maria Lopez', 'EMP-1078', 'Technician',
+       (SELECT id FROM departments WHERE name='Facilities' LIMIT 1)
+FROM users u WHERE u.email='maria@innova.cx'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Omar Ali', 'EMP-1150', 'Assistant Technician',
+       (SELECT id FROM departments WHERE name='Facilities' LIMIT 1)
+FROM users u WHERE u.email='omar@innova.cx'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Sara Ahmed', 'EMP-1192', 'Technician',
+       (SELECT id FROM departments WHERE name='Cleaning' LIMIT 1)
+FROM users u WHERE u.email='sara@innova.cx'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title)
+SELECT u.id, 'Bilal Khan', 'EMP-1244', 'HVAC Specialist'
+FROM users u WHERE u.email='bilal@innova.cx'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title)
+SELECT u.id, 'Fatima Noor', 'EMP-1290', 'Coordinator'
+FROM users u WHERE u.email='fatima@innova.cx'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title)
+SELECT u.id, 'Yousef Karim', 'EMP-1331', 'Maintenance Supervisor'
+FROM users u WHERE u.email='yousef@innova.cx'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title)
+SELECT u.id, 'Khalid Musa', 'EMP-1378', 'Electrician'
+FROM users u WHERE u.email='khalid@innova.cx'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, phone, location)
+SELECT u.id, 'Customer One', '+971500000000', 'Dubai'
+FROM users u WHERE u.email='customer1@innova.cx'
+ON CONFLICT (user_id) DO NOTHING;
+
+-- Tickets (original sample seed)
+WITH
+cust  AS (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+ahmed AS (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
+maria AS (SELECT id FROM users WHERE email='maria@innova.cx' LIMIT 1),
+omar  AS (SELECT id FROM users WHERE email='omar@innova.cx' LIMIT 1),
+sara  AS (SELECT id FROM users WHERE email='sara@innova.cx' LIMIT 1),
+fac   AS (SELECT id FROM departments WHERE name='Facilities' LIMIT 1),
+it    AS (SELECT id FROM departments WHERE name='IT' LIMIT 1)
+INSERT INTO tickets (
+  ticket_code, subject, details, ticket_type, priority, status, department_id,
+  created_by_user_id, assigned_to_user_id, created_at,
+  respond_due_at, resolve_due_at,
+  model_suggestion, model_priority, model_confidence,
+  sentiment_score, sentiment_label
 ) VALUES
-('ACC-U1', 'USR-001', NULL, 'ahmed@gmail.com', 'hash123', 'user'),
-('ACC-U2', 'USR-002', NULL, 'sara@gmail.com', 'hash123', 'user'),
-('ACC-U3', 'USR-003', NULL, 'omar@gmail.com', 'hash123', 'user'),
+('CX-1122','Air conditioning not working','AC stopped cooling in office area. Needs urgent repair.',
+ 'Complaint','Critical','Unassigned',(SELECT id FROM fac),(SELECT id FROM cust),NULL,
+ to_timestamp('19/11/2025','DD/MM/YYYY'),
+ to_timestamp('19/11/2025','DD/MM/YYYY') + interval '30 minutes',
+ to_timestamp('19/11/2025','DD/MM/YYYY') + interval '6 hours',
+ 'Dispatch HVAC technician and check compressor / thermostat; confirm coolant pressure.',
+ 'Critical',92.50, -0.450,'Negative'),
 
-('ACC-E1', NULL, 'EMP-101', 'yousef@company.com', 'hash123', 'employee'),
-('ACC-E2', NULL, 'EMP-102', 'mona@company.com', 'hash123', 'employee'),
-('ACC-M1', NULL, 'EMP-200', 'hassan@company.com', 'hash123', 'manager')
-ON CONFLICT DO NOTHING;
+('CX-3862','Water leakage in pantry','Leakage detected under pantry sink. Water pooling on floor.',
+ 'Complaint','Critical','Overdue',(SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM maria),
+ to_timestamp('18/11/2025','DD/MM/YYYY'),
+ to_timestamp('18/11/2025','DD/MM/YYYY') + interval '30 minutes',
+ to_timestamp('18/11/2025','DD/MM/YYYY') + interval '6 hours',
+ 'Isolate water source and replace faulty seal / pipe joint; dry area and confirm no further leak.',
+ 'Critical',90.10,-0.380,'Negative'),
 
+('CX-4587','Wi-Fi connection unstable','Frequent disconnects reported across floor 2.',
+ 'Inquiry','High','Escalated',(SELECT id FROM it),(SELECT id FROM cust),NULL,
+ to_timestamp('19/11/2025','DD/MM/YYYY'),
+ to_timestamp('19/11/2025','DD/MM/YYYY') + interval '1 hour',
+ to_timestamp('19/11/2025','DD/MM/YYYY') + interval '18 hours',
+ 'Check AP logs, channel overlap, and DHCP lease issues; restart controller if needed.',
+ 'High',88.00,-0.120,'Neutral'),
 
--- ============================================================
--- 5) PASSWORD RESET TOKENS
--- ============================================================
-INSERT INTO password_reset_token (
-  reset_id, account_id, token_hash, expires_at
+('CX-4630','Lift stopping between floors','Elevator intermittently stops between floors and reboots.',
+ 'Complaint','High','Assigned',(SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM ahmed),
+ to_timestamp('18/11/2025','DD/MM/YYYY'),
+ to_timestamp('18/11/2025','DD/MM/YYYY') + interval '1 hour',
+ to_timestamp('18/11/2025','DD/MM/YYYY') + interval '18 hours',
+ 'Run elevator diagnostics, inspect door sensors and control panel error logs.',
+ 'High',86.40,-0.200,'Neutral'),
+
+('CX-4701','Cleaning service missed schedule','Cleaning did not occur on scheduled time.',
+ 'Complaint','Medium','Unassigned',(SELECT id FROM fac),(SELECT id FROM cust),NULL,
+ to_timestamp('16/11/2025','DD/MM/YYYY'),
+ to_timestamp('16/11/2025','DD/MM/YYYY') + interval '3 hours',
+ to_timestamp('16/11/2025','DD/MM/YYYY') + interval '2 days',
+ 'Assign cleaning team; confirm schedule and update customer with ETA.',
+ 'Medium',80.00,0.050,'Neutral'),
+
+('CX-4725','Parking access card not working','Customer access card fails at gate reader.',
+ 'Inquiry','Medium','Overdue',(SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM omar),
+ to_timestamp('13/11/2025','DD/MM/YYYY'),
+ to_timestamp('13/11/2025','DD/MM/YYYY') + interval '3 hours',
+ to_timestamp('13/11/2025','DD/MM/YYYY') + interval '2 days',
+ 'Re-encode card, test reader, and confirm access permissions in system.',
+ 'Medium',82.20,-0.050,'Neutral'),
+
+('CX-4780','Noise from maintenance works','Noise complaint due to late-hour maintenance.',
+ 'Complaint','Low','Escalated',(SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sara),
+ to_timestamp('09/11/2025','DD/MM/YYYY'),
+ to_timestamp('09/11/2025','DD/MM/YYYY') + interval '6 hours',
+ to_timestamp('09/11/2025','DD/MM/YYYY') + interval '3 days',
+ 'Coordinate maintenance hours; add noise control measures and notify affected area.',
+ 'Low',76.00,0.100,'Neutral')
+ON CONFLICT (ticket_code) DO NOTHING;
+
+-- ✅ KPI-friendly tickets for Ahmed (FIXED: every row has same number of columns)
+WITH
+cust  AS (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+ahmed AS (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
+fac   AS (SELECT id FROM departments WHERE name='Facilities' LIMIT 1)
+INSERT INTO tickets (
+  ticket_code,
+  subject,
+  details,
+  ticket_type,
+  priority,
+  status,
+  department_id,
+  created_by_user_id,
+  assigned_to_user_id,
+  created_at,
+  assigned_at,
+  respond_due_at,
+  resolve_due_at,
+  first_response_at,
+  resolved_at,
+  final_resolution,
+  resolved_by_user_id
 ) VALUES
-(
-  'RST-001', 'ACC-U1', 'resettokenhash',
-  NOW() + INTERVAL '30 minutes'
-)
-ON CONFLICT DO NOTHING;
 
+-- New Today
+('CX-9001','New today test ticket','Seed ticket to populate "New Today".',
+ 'Complaint','Medium','Assigned',(SELECT id FROM fac),
+ (SELECT id FROM cust),(SELECT id FROM ahmed),
+ now(), now(),
+ now() + interval '1 hour', now() + interval '18 hours',
+ NULL, NULL, NULL, NULL),
 
--- ============================================================
--- 6) TICKETS
--- ============================================================
-INSERT INTO ticket (
-  ticket_id, user_id, employee_id,
-  subject, title, description,
-  channel, department, priority, status,
-  submitted_at, last_updated_at, resolved_at
-) VALUES
-(
-  'CX-1001', 'USR-001', 'EMP-101',
-  'Internet Issue', 'No Internet Access',
-  'Internet disconnected since morning.',
-  'chatbot', 'IT Support', 'High', 'resolved',
-  NOW() - INTERVAL '3 days',
-  NOW() - INTERVAL '1 day',
-  NOW() - INTERVAL '1 day'
-),
-(
-  'CX-1002', 'USR-002', 'EMP-103',
-  'Billing Error', 'Wrong Invoice Amount',
-  'Extra charge on last invoice.',
-  'text', 'Billing', 'Medium', 'in_progress',
-  NOW() - INTERVAL '2 days',
-  NOW() - INTERVAL '6 hours',
-  NULL
-),
-(
-  'CX-1003', 'USR-003', NULL,
-  'Network Speed', 'Slow Internet Speed',
-  'Connection speed is very slow.',
-  'audio', 'Network', 'Low', 'submitted',
-  NOW() - INTERVAL '5 hours',
-  NOW() - INTERVAL '5 hours',
-  NULL
-)
-ON CONFLICT DO NOTHING;
+-- In Progress
+('CX-9002','In progress test ticket','Seed ticket to populate "In Progress".',
+ 'Complaint','High','In Progress',(SELECT id FROM fac),
+ (SELECT id FROM cust),(SELECT id FROM ahmed),
+ now() - interval '1 day', now() - interval '1 day' + interval '5 minutes',
+ now() - interval '1 day' + interval '1 hour', now() + interval '18 hours',
+ now() - interval '1 day' + interval '30 minutes', NULL, NULL, NULL),
 
+-- Critical
+('CX-9003','Critical test ticket','Seed ticket to populate "Critical".',
+ 'Complaint','Critical','Assigned',(SELECT id FROM fac),
+ (SELECT id FROM cust),(SELECT id FROM ahmed),
+ now() - interval '2 days', now() - interval '2 days' + interval '10 minutes',
+ now() + interval '30 minutes', now() + interval '6 hours',
+ NULL, NULL, NULL, NULL),
 
--- ============================================================
--- 7) SLA
--- ============================================================
-INSERT INTO ticket_sla (
-  ticket_id, respond_due_at, resolve_due_at,
-  respond_breached_at, resolve_breached_at
-) VALUES
-(
-  'CX-1001',
-  NOW() - INTERVAL '2 days',
-  NOW() - INTERVAL '1 day',
-  NULL,
-  NULL
-),
-(
-  'CX-1002',
-  NOW() - INTERVAL '12 hours',
-  NOW() + INTERVAL '1 day',
-  NOW() - INTERVAL '2 hours',
-  NULL
-),
-(
-  'CX-1003',
-  NOW() + INTERVAL '4 hours',
-  NOW() + INTERVAL '2 days',
-  NULL,
-  NULL
-)
-ON CONFLICT DO NOTHING;
+-- Overdue
+('CX-9004','Overdue test ticket','Seed ticket to populate "Overdue".',
+ 'Complaint','High','Overdue',(SELECT id FROM fac),
+ (SELECT id FROM cust),(SELECT id FROM ahmed),
+ now() - interval '5 days', now() - interval '5 days' + interval '10 minutes',
+ now() - interval '5 days' + interval '30 minutes', now() - interval '4 days',
+ now() - interval '5 days' + interval '25 minutes', NULL, NULL, NULL),
 
+-- Resolved This Month
+('CX-9005','Resolved this month test','Seed ticket to populate "Resolved This Month".',
+ 'Complaint','Medium','Resolved',(SELECT id FROM fac),
+ (SELECT id FROM cust),(SELECT id FROM ahmed),
+ date_trunc('month', now()) + interval '1 day',
+ date_trunc('month', now()) + interval '1 day' + interval '10 minutes',
+ date_trunc('month', now()) + interval '1 day' + interval '1 hour',
+ date_trunc('month', now()) + interval '3 days',
+ date_trunc('month', now()) + interval '1 day' + interval '20 minutes',
+ date_trunc('month', now()) + interval '2 days',
+ 'Resolved during monthly KPI seeding.',
+ (SELECT id FROM ahmed))
 
--- ============================================================
--- 8) STATUS HISTORY
--- ============================================================
-INSERT INTO ticket_status_history (history_id, ticket_id, status) VALUES
-('HIS-001', 'CX-1001', 'submitted'),
-('HIS-002', 'CX-1001', 'assigned'),
-('HIS-003', 'CX-1001', 'resolved'),
+ON CONFLICT (ticket_code) DO NOTHING;
 
-('HIS-004', 'CX-1002', 'submitted'),
-('HIS-005', 'CX-1002', 'in_progress'),
+-- Work steps example
+INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, occurred_at, notes)
+SELECT t.id, 1, (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
+       t.created_at + interval '20 minutes',
+       'Initial inspection completed. Logged error codes and safety checks.'
+FROM tickets t WHERE t.ticket_code='CX-4630'
+ON CONFLICT (ticket_id, step_no) DO NOTHING;
 
-('HIS-006', 'CX-1003', 'submitted')
-ON CONFLICT DO NOTHING;
+-- Placeholder tickets required for approvals linkage
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+SELECT 'CX-2011', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3101',
+       'Complaint','Medium','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       to_timestamp('18/11/2025','DD/MM/YYYY')
+WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2011');
 
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+SELECT 'CX-2034', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3110',
+       'Complaint','Medium','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       to_timestamp('18/11/2025','DD/MM/YYYY')
+WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2034');
 
--- ============================================================
--- 9) ASSIGNMENT HISTORY
--- ============================================================
-INSERT INTO ticket_assignment_history (
-  assignment_id, ticket_id, employee_id, assigned_by, note
-) VALUES
-(
-  'ASN-001', 'CX-1001', 'EMP-101', 'EMP-200',
-  'Auto-assigned by AI routing'
-),
-(
-  'ASN-002', 'CX-1002', 'EMP-103', 'EMP-200',
-  'Manual assignment by manager'
-)
-ON CONFLICT DO NOTHING;
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+SELECT 'CX-2078', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3125',
+       'Complaint','High','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       to_timestamp('17/11/2025','DD/MM/YYYY')
+WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2078');
 
-
--- ============================================================
--- 10) WORK LOGS
--- ============================================================
-INSERT INTO ticket_work_log (
-  worklog_id, ticket_id, employee_id, step_no, note
-) VALUES
-(
-  'WLG-001', 'CX-1001', 'EMP-101', 1,
-  'Checked router and network configuration'
-),
-(
-  'WLG-002', 'CX-1001', 'EMP-101', 2,
-  'Restarted modem and confirmed connectivity'
-)
-ON CONFLICT DO NOTHING;
-
-
--- ============================================================
--- 11) ATTACHMENTS
--- ============================================================
-INSERT INTO ticket_attachment (
-  attachment_id, ticket_id, file_name, content_type,
-  size_bytes, duration_seconds, storage_key
-) VALUES
-(
-  'ATT-001', 'CX-1003', 'voice_complaint.webm',
-  'audio/webm', 204800, 45, 'tickets/CX-1003/audio1.webm'
-)
-ON CONFLICT DO NOTHING;
-
-
--- ============================================================
--- 12) NOTIFICATIONS
--- ============================================================
-INSERT INTO notification_log (
-  notification_id, ticket_id, channel, status, sent_at
-) VALUES
-(
-  'NTF-001', 'CX-1001', 'email', 'sent', NOW() - INTERVAL '2 days'
-),
-(
-  'NTF-002', 'CX-1002', 'sms', 'failed', NULL
-)
-ON CONFLICT DO NOTHING;
-
-
--- ============================================================
--- 13) AI RESULTS
--- ============================================================
-INSERT INTO ticket_ai_result (
-  ai_ticket_id, ticket_id, predicted_department_id,
-  model_version, predicted_priority,
-  confidence_score, priority_to_respond, priority_to_resolve
-) VALUES
-(
-  'AIR-001', 'CX-1001', 'DPT-IT',
-  'v1.2.0', 'High', 0.94, 1, 2
-),
-(
-  'AIR-002', 'CX-1003', 'DPT-NET',
-  'v1.2.0', 'Low', 0.78, 3, 4
-)
-ON CONFLICT DO NOTHING;
-
-
--- ============================================================
--- 14) APPROVAL REQUESTS
--- ============================================================
-INSERT INTO approval_request (
-  request_id, ticket_id, request_type,
-  current_value, requested_value,
-  submitted_by_employee_id, status
-) VALUES
-(
-  'REQ-001', 'CX-1002', 'rescore',
-  'Medium', 'High',
-  'EMP-103', 'pending'
-)
-ON CONFLICT DO NOTHING;
-
-
--- ============================================================
--- 15) ISSUE REPORTS
--- ============================================================
-INSERT INTO issue_report (
-  report_id, ticket_id, details
-) VALUES
-(
-  'RPT-001', 'CX-1002',
-  'Customer dissatisfied with invoice explanation'
-)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO ticket_issue_report (
-  report_id, ticket_id, submitted_by_user_id,
-  issue_text
-) VALUES
-(
-  'RPT-002', 'CX-1003', 'USR-003',
-  'Internet speed unacceptable during work hours'
-)
-ON CONFLICT DO NOTHING;
-
-
--- ============================================================
--- 16) CHATBOT DATA
--- ============================================================
-INSERT INTO chat_conversation (
-  conversation_id, user_id, context
-) VALUES
-(
-  'CONV-001', 'USR-001',
-  '{"intent":"internet_issue","location":"Dubai"}'
-)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO chat_message (
-  message_id, conversation_id, role, text
-) VALUES
-(
-  'MSG-001', 'CONV-001', 'user',
-  'My internet is not working'
-),
-(
-  'MSG-002', 'CONV-001', 'bot',
-  'I have created a ticket for you.'
-)
-ON CONFLICT DO NOTHING;
-
-
--- ============================================================
--- 17) PERFORMANCE REPORTS (from KPI view)
--- ============================================================
-INSERT INTO employee_performance_report (
-  report_id, employee_id, report_month, overall_rating
+-- Approvals
+INSERT INTO approval_requests (
+  request_code, ticket_id, request_type, current_value, requested_value,
+  request_reason, submitted_by_user_id, submitted_at, status
 )
 SELECT
-  'RPT-EMP-2026-01-EMP-101',
-  employee_id,
-  report_month,
-  88
-FROM v_employee_monthly_kpis
-WHERE employee_id = 'EMP-101'
-ON CONFLICT DO NOTHING;
+  'REQ-3101', t.id, 'Rescoring',
+  'Priority: Medium', 'Priority: Critical',
+  'Raised due to increased urgency and impact on operations.',
+  (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
+  to_timestamp('18/11/2025 10:22','DD/MM/YYYY HH24:MI'),
+  'Pending'
+FROM tickets t WHERE t.ticket_code='CX-2011'
+ON CONFLICT (request_code) DO NOTHING;
 
-
--- ============================================================
--- 18) PERFORMANCE NOTES
--- ============================================================
-INSERT INTO performance_note (
-  note_id, report_id, note_text, created_by
-) VALUES
-(
-  'NOTE-001',
-  'RPT-EMP-2026-01-EMP-101',
-  'Excellent SLA adherence and customer communication.',
-  'EMP-200'
+INSERT INTO approval_requests (
+  request_code, ticket_id, request_type, current_value, requested_value,
+  request_reason, submitted_by_user_id, submitted_at, status
 )
+SELECT
+  'REQ-3110', t.id, 'Rerouting',
+  'Dept: Facilities', 'Dept: Security',
+  'Security review required due to access-control implications.',
+  (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
+  to_timestamp('18/11/2025 11:05','DD/MM/YYYY HH24:MI'),
+  'Pending'
+FROM tickets t WHERE t.ticket_code='CX-2034'
+ON CONFLICT (request_code) DO NOTHING;
+
+INSERT INTO approval_requests (
+  request_code, ticket_id, request_type, current_value, requested_value,
+  request_reason, submitted_by_user_id, submitted_at, status
+)
+SELECT
+  'REQ-3125', t.id, 'Rescoring',
+  'Priority: High', 'Priority: Medium',
+  'Adjusted after verification reduced the severity classification.',
+  (SELECT id FROM users WHERE email='maria@innova.cx' LIMIT 1),
+  to_timestamp('17/11/2025 15:40','DD/MM/YYYY HH24:MI'),
+  'Pending'
+FROM tickets t WHERE t.ticket_code='CX-2078'
+ON CONFLICT (request_code) DO NOTHING;
+
+-- Operator dashboard seed
+INSERT INTO system_service_status (name, status, severity, note)
+VALUES
+  ('API Gateway', 'Healthy', 'ok', 'Normal latency'),
+  ('Chatbot Service', 'Healthy', 'ok', 'No errors detected'),
+  ('Database', 'Healthy', 'ok', 'Primary reachable')
+ON CONFLICT (name) DO UPDATE
+SET status=EXCLUDED.status, severity=EXCLUDED.severity, note=EXCLUDED.note, checked_at=now();
+
+INSERT INTO system_integration_status (name, status, severity, note)
+VALUES
+  ('Email (SES)', 'Healthy', 'ok', 'Delivery normal'),
+  ('Storage (S3)', 'Healthy', 'ok', 'Uploads normal')
+ON CONFLICT (name) DO UPDATE
+SET status=EXCLUDED.status, severity=EXCLUDED.severity, note=EXCLUDED.note, checked_at=now();
+
+INSERT INTO system_queue_metrics (name, value, severity, note)
+VALUES
+  ('Ticket Queue', '12', 'ok', 'Normal throughput'),
+  ('Escalation Queue', '3', 'warning', 'Slight backlog'),
+  ('Notification Queue', '0', 'ok', 'No backlog')
+ON CONFLICT (name) DO UPDATE
+SET value=EXCLUDED.value, severity=EXCLUDED.severity, note=EXCLUDED.note, measured_at=now();
+
+INSERT INTO system_event_feed (severity, title, description, event_time)
+VALUES
+  ('info', 'Deployment complete', 'Operator services updated successfully.', now() - interval '2 hours'),
+  ('warning', 'Queue backlog', 'Escalation queue slightly above baseline.', now() - interval '45 minutes')
 ON CONFLICT DO NOTHING;
 
+INSERT INTO system_versions (component, version, deployed_at)
+VALUES
+  ('API', 'v1.0.0', '2025-11-24'),
+  ('Chatbot', 'v1.0.0', '2025-11-24'),
+  ('Model', 'v1.0.0', '2025-11-24')
+ON CONFLICT (component) DO UPDATE
+SET version=EXCLUDED.version, deployed_at=EXCLUDED.deployed_at;
+
+INSERT INTO system_config_kv (key, value)
+VALUES
+  ('maintenance_mode', 'false'),
+  ('rate_limit', 'enabled')
+ON CONFLICT (key) DO UPDATE
+SET value=EXCLUDED.value;
+
+COMMIT;

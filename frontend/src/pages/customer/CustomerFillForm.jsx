@@ -81,7 +81,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     );
   };
 
-
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
@@ -112,8 +111,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
-    } catch {
-    }
+    } catch {}
   };
 
   const buildPayload = () => ({
@@ -156,15 +154,39 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     cleanupStream();
   };
 
+  // 🔥 Updated submit function to POST to backend
   const submit = async (e) => {
     e.preventDefault();
 
     const payload = await attachSentiment(buildPayload());
+    const token = localStorage.getItem("token");
 
-    console.log("FORM SUBMIT (demo):", payload);
-    alert("Submitted (demo). Your request has been recorded.");
+    try {
+      const res = await fetch("http://localhost:8000/api/customer/tickets", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-    resetForm();
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to create ticket");
+      }
+
+      const data = await res.json();
+      alert(`Ticket created successfully! Ticket ID: ${data.ticket.ticketId}`);
+
+      resetForm();
+
+      // Close embedded form if present
+      if (embedded && typeof onCancel === "function") onCancel();
+    } catch (err) {
+      console.error("Ticket creation failed:", err);
+      alert(`Error creating ticket: ${err.message}`);
+    }
   };
 
   const startRecording = async () => {
@@ -174,15 +196,10 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     chunksRef.current = [];
     cancelRecordingRef.current = false;
 
-    const preferredTypes = [
-      "audio/webm;codecs=opus",
-      "audio/webm",
-      "audio/mp4",
-    ];
-    const supportedType =
-      typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported
-        ? preferredTypes.find((t) => MediaRecorder.isTypeSupported(t))
-        : null;
+    const preferredTypes = ["audio/webm;codecs=opus","audio/webm","audio/mp4"];
+    const supportedType = typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported
+      ? preferredTypes.find((t) => MediaRecorder.isTypeSupported(t))
+      : null;
 
     const recorder = supportedType
       ? new MediaRecorder(stream, { mimeType: supportedType })
@@ -215,17 +232,12 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
         setDraftTranscript(data?.transcript || "");
         setVoiceStage("review");
 
-        if (data?.sentiment) {
-          setSentimentAnalysis(data.sentiment);
-        } else if (data?.transcript) {
+        if (data?.sentiment) setSentimentAnalysis(data.sentiment);
+        else if (data?.transcript) {
           try {
-            const sentiment = await analyzeCombinedSentiment(
-              data.transcript,
-              data.audio_features || null
-            );
+            const sentiment = await analyzeCombinedSentiment(data.transcript, data.audio_features || null);
             setSentimentAnalysis(sentiment);
-          } catch (sentimentErr) {
-            console.warn("Sentiment analysis unavailable:", sentimentErr);
+          } catch {
             setSentimentAnalysis(null);
           }
         }
@@ -249,9 +261,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
 
     cancelRecordingRef.current = true;
     try {
-      if (mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
-      }
+      if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
     } catch {
       setIsRecording(false);
       cleanupStream();
@@ -264,9 +274,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
 
     cancelRecordingRef.current = false;
     try {
-      if (mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
-      }
+      if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
     } catch {
       setIsRecording(false);
       cleanupStream();
