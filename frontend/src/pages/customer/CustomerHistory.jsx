@@ -38,7 +38,7 @@ export default function CustomerHistory() {
         const mappedTickets = (data.tickets || []).map((t) => ({
           id: t.ticketId,
           title: t.subject,
-          type: "Complaint", // optional: if you have type in backend, replace
+          type: t.ticketType, // optional: if you have type in backend, replace
           status: t.status,
           date: t.issueDate,
           priority: t.priority,

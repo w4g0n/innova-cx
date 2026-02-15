@@ -145,6 +145,7 @@ export default function CustomerLanding() {
     closeAllPopovers();
     localStorage.removeItem("user");
     localStorage.removeItem("token");
+    localStorage.removeItem("temp_token");
     navigate("/");
   };
 

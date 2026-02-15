@@ -1,23 +1,27 @@
 # backend/api/main.py
 
 import os
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional, List
-
+import time
+import json
+import hmac
 import base64
 import hashlib
-import hmac
-import json
-import time
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional, List
 
 import bcrypt
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import OperationalError
 
-from fastapi import APIRouter, FastAPI, HTTPException, Depends, Header, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+import pyotp  # for RFC 6238 TOTP
+import qrcode
+import io
+
 
 
 # =========================================================
@@ -27,10 +31,7 @@ app = FastAPI(title="InnovaCX API (DB-backed)", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,7 +41,7 @@ api = APIRouter(prefix="/api")
 
 
 # =========================================================
-# DB
+# Database helpers
 # =========================================================
 def build_default_dsn() -> str:
     host = os.getenv("DB_HOST", "localhost")
@@ -86,7 +87,7 @@ def execute(sql: str, params: Optional[tuple] = None) -> int:
 
 
 # =========================================================
-# Auth helpers (bcrypt + minimal JWT)
+# Auth helpers (bcrypt + JWT)
 # =========================================================
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "86400"))  # 24h
@@ -144,30 +145,26 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 # =========================================================
-# Auth dependency helpers (Bearer token -> current user)
+# Auth dependencies
 # =========================================================
 def _get_bearer_token(authorization: Optional[str]) -> str:
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
-
     parts = authorization.split(" ", 1)
     if len(parts) != 2 or parts[0].lower() != "bearer":
         raise HTTPException(status_code=401, detail="Invalid Authorization header")
-
     return parts[1].strip()
 
 
 def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
     token = _get_bearer_token(authorization)
     payload = verify_jwt(token)
-
     user = fetch_one(
         "SELECT id, email, role, is_active FROM users WHERE id = %s",
         (payload.get("sub"),),
     )
     if not user or not user.get("is_active"):
         raise HTTPException(status_code=401, detail="Invalid or inactive user")
-
     return user
 
 
@@ -176,6 +173,7 @@ def require_employee(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[s
         raise HTTPException(status_code=403, detail="Forbidden")
     return user
 
+
 def require_customer(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     if user.get("role") != "customer":
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -183,7 +181,7 @@ def require_customer(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[s
 
 
 # =========================================================
-# Helpers for responseTime / resolutionTime formatting
+# Helpers for response/resolution time
 # =========================================================
 def minutes_to_label(total_minutes: Optional[int]) -> str:
     if not total_minutes or total_minutes <= 0:
@@ -211,6 +209,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class VerifyTOTPRequest(BaseModel):
+    login_token: str
+    otp_code: str
+
+
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -227,7 +230,7 @@ class ResetPasswordRequest(BaseModel):
 
 
 # =========================================================
-# Routes
+# Routes: Health & Root
 # =========================================================
 @api.get("/health")
 def health():
@@ -241,50 +244,145 @@ def api_root():
     return {"message": "InnovaCX API is running", "time": datetime.now(timezone.utc).isoformat()}
 
 
-@api.post("/auth/login", response_model=LoginResponse)
-def login(body: LoginRequest):
-    email = body.email.strip().lower()
+# ----------------------------
+# MFA / TOTP Setup & Verification
+# ----------------------------
+@api.get("/auth/totp-status")
+def totp_status(user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Returns whether MFA is enabled for the current user.
+    """
+    row = fetch_one(
+        "SELECT mfa_enabled FROM users WHERE id = %s",
+        (user["id"],),
+    )
+    needs_setup = not bool(row["mfa_enabled"]) if row else True
+    return {"needsSetup": needs_setup}  # frontend expects needsSetup
 
+
+@api.get("/auth/totp-setup")
+def totp_setup(user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Returns a QR code URL for the user to scan in their authenticator app.
+    Only generates a new secret if the user does not have one.
+    """
+    # Generate secret if not exists
+    if not user.get("totp_secret"):
+        secret = pyotp.random_base32()  # 16-char base32 secret
+        execute("UPDATE users SET totp_secret = %s WHERE id = %s", (secret, user["id"]))
+    else:
+        secret = user["totp_secret"]
+
+    # Build otpauth URI
+    issuer = "InnovaCX"
+    email = user["email"]
+    otpauth_url = pyotp.totp.TOTP(secret).provisioning_uri(name=email, issuer_name=issuer)
+
+    # Generate QR code as base64 PNG
+    qr = qrcode.QRCode(box_size=6, border=2)
+    qr.add_data(otpauth_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    buffered = io.BytesIO()
+    img.save(buffered, format="PNG")
+    qr_base64 = base64.b64encode(buffered.getvalue()).decode()
+
+    return {"qrCode": f"data:image/png;base64,{qr_base64}", "secret": secret}
+
+
+@api.post("/auth/login")
+def login(body: LoginRequest):
+    """
+    Login route returns a temporary token.
+    If MFA is not yet enabled, frontend should show QR code.
+    """
+    email = body.email.strip().lower()
     user = fetch_one(
-        """
-        SELECT id, email, password_hash, role, is_active
-        FROM users
-        WHERE email = %s
-        """,
+        "SELECT id, email, password_hash, role, is_active, totp_secret, mfa_enabled FROM users WHERE email = %s",
         (email,),
     )
 
     if not user or not user.get("is_active"):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-
     if not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     execute("UPDATE users SET last_login_at = NOW() WHERE id = %s", (user["id"],))
 
-    profile = fetch_one(
-        "SELECT full_name FROM user_profiles WHERE user_id = %s",
-        (user["id"],),
-    )
+    # Generate secret if missing
+    if not user.get("totp_secret"):
+        secret = pyotp.random_base32()
+        execute("UPDATE users SET totp_secret = %s WHERE id = %s", (secret, user["id"]))
+        user["totp_secret"] = secret
 
-    token = create_jwt({"sub": str(user["id"]), "role": user["role"], "email": user["email"]})
+    # Temporary token valid for 10 minutes
+    temp_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=600)
+
+    # Flag to indicate MFA setup required
+    requires_setup = not user.get("mfa_enabled", False)
 
     return {
-        "access_token": token,
-        "token_type": "bearer",
+        "access_token": temp_token,
+        "token_type": "temporary",
+        "requiresSetup": requires_setup,
         "user": {
             "id": str(user["id"]),
             "email": user["email"],
             "role": user["role"],
-            "full_name": (profile or {}).get("full_name"),
         },
     }
 
+@api.post("/auth/totp-setup-complete")
+def totp_setup_complete(user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Mark MFA as enabled after user has scanned QR and verified OTP.
+    """
+    # Update the database
+    execute(
+        "UPDATE users SET mfa_enabled = TRUE WHERE id = %s",
+        (user["id"],)
+    )
+    return {"success": True}
 
+@api.post("/auth/totp-verify")
+def totp_verify(body: VerifyTOTPRequest):
+    """
+    Verifies the OTP code from user.
+    If correct, marks MFA as enabled (first-time setup) and returns a full JWT.
+    """
+    payload = verify_jwt(body.login_token)
+    user = fetch_one(
+        "SELECT id, email, role, totp_secret, mfa_enabled FROM users WHERE id = %s",
+        (payload.get("sub"),),
+    )
+
+    if not user or not user.get("totp_secret"):
+        raise HTTPException(status_code=400, detail="TOTP not configured")
+
+    totp = pyotp.TOTP(user["totp_secret"])
+    if not totp.verify(body.otp_code, valid_window=1):
+        raise HTTPException(status_code=401, detail="Invalid OTP code")
+
+    # Enable MFA if first-time verification
+    if not user.get("mfa_enabled"):
+        execute("UPDATE users SET mfa_enabled = TRUE WHERE id = %s", (user["id"],))
+
+    # Issue real JWT valid for standard TTL
+    access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {"id": str(user["id"]), "email": user["email"], "role": user["role"]},
+    }
+
+
+# =========================================================
+# Routes: Password Reset
+# =========================================================
 @api.post("/auth/forgot-password")
 def forgot_password(body: ForgotPasswordRequest):
     email = body.email.strip().lower()
-
     user = fetch_one(
         "SELECT id FROM users WHERE email = %s AND is_active = TRUE",
         (email,),
@@ -293,7 +391,6 @@ def forgot_password(body: ForgotPasswordRequest):
     if user:
         raw_token = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-
         execute(
             """
             INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
@@ -301,7 +398,6 @@ def forgot_password(body: ForgotPasswordRequest):
             """,
             (user["id"], token_hash),
         )
-
         if DEV_LOG_RESET_TOKENS:
             print(f"[DEV] Password reset token for {email}: {raw_token}")
 
@@ -319,38 +415,25 @@ def reset_password(body: ResetPasswordRequest):
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
                 SELECT id, user_id
                 FROM password_reset_tokens
-                WHERE token_hash = %s
-                  AND used_at IS NULL
-                  AND expires_at > NOW()
+                WHERE token_hash = %s AND used_at IS NULL AND expires_at > NOW()
                 """,
                 (token_hash,),
             )
             row = cur.fetchone()
-
             if not row:
                 raise HTTPException(status_code=400, detail="Invalid or expired token")
 
             new_hash = hash_password(new_password)
-
-            cur.execute(
-                "UPDATE users SET password_hash = %s WHERE id = %s",
-                (new_hash, row["user_id"]),
-            )
-
-            cur.execute(
-                "UPDATE password_reset_tokens SET used_at = NOW() WHERE id = %s",
-                (row["id"],),
-            )
+            cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, row["user_id"]))
+            cur.execute("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = %s", (row["id"],))
 
     return {"ok": True, "message": "Password updated successfully"}
-
 
 # =========================================================
 # Employee Dashboard (EmployeeDashboard.jsx)
@@ -843,6 +926,7 @@ def customer_mytickets(
           ticket_code,
           subject,
           priority,
+          ticket_type,
           status,
           created_at,
           assigned_at,
@@ -875,6 +959,7 @@ def customer_mytickets(
                 "ticketId": r.get("ticket_code"),
                 "subject": r.get("subject"),
                 "priority": r.get("priority"),
+                "ticketType": r.get("ticket_type"),
                 "status": r.get("status"),
                 "issueDate": issue_date,
                 "responseTime": response_time,
@@ -1089,16 +1174,25 @@ def create_customer_ticket(
                 """
                 INSERT INTO tickets (
                     ticket_code,
+                    ticket_type,
                     subject,
                     details,
                     priority,
                     status,
                     created_by_user_id,
                     created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING id;
                 """,
-                (ticket_code, body.subject, body.details, "Low", "Unassigned", user["id"]),
+                (
+                    ticket_code,
+                    body.type,         
+                    body.subject,
+                    body.details,
+                    "Low",
+                    "Unassigned",
+                    user["id"],
+                ),
             )
             ticket_id = cur.fetchone()[0]
 
@@ -1117,11 +1211,13 @@ def create_customer_ticket(
         "message": "Ticket created successfully",
         "ticket": {
             "ticketId": ticket_code,
+            "ticketType": body.type, 
             "subject": body.subject,
             "priority": "Normal",
             "status": "New",
         },
     }
+
 
 
 # =========================================================

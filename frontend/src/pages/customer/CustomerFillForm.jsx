@@ -159,7 +159,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     e.preventDefault();
 
     const payload = await attachSentiment(buildPayload());
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("access_token");
+
 
     try {
       const res = await fetch("http://localhost:8000/api/customer/tickets", {

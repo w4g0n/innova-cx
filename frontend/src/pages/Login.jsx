@@ -8,17 +8,17 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
 
     try {
       const base = import.meta.env.VITE_API_BASE_URL;
-      if (!base) {
-        alert("Missing VITE_API_BASE_URL in your .env file.");
-        return;
-      }
+      if (!base) throw new Error("Missing VITE_API_BASE_URL in .env");
 
+      // Step 1: Login with email/password
       const res = await fetch(`${base}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -27,37 +27,33 @@ export default function Login() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.detail || "Login failed. Please check your credentials.");
+        alert(err.detail || "Login failed. Check your credentials.");
+        setLoading(false);
         return;
       }
 
       const data = await res.json();
 
-      // ✅ store token in a key the employee pages will find
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("token", data.access_token); // optional (extra compatibility)
-
-      // keep user info separately too (nice for UI)
-      localStorage.setItem(
-        "user",
+      // Step 2: Store a temporary token for MFA verification
+      // This is NOT the final JWT — only used for OTP verification
+      sessionStorage.setItem("mfa_token", data.access_token);
+      sessionStorage.setItem(
+        "mfa_user",
         JSON.stringify({
           id: data.user.id,
           email: data.user.email,
           role: data.user.role,
           full_name: data.user.full_name,
-          token_type: data.token_type,
         })
       );
 
-      const role = data.user.role;
-      if (role === "customer") {
-        navigate("/customer/dashboard");
-      } else {
-        navigate(`/${role}`);
-      }
+      // Step 3: Redirect to MFA verification page
+      navigate("/verify");
     } catch (error) {
-      console.error(error);
-      alert("Network error. Please make sure the backend is running.");
+      console.error("Login error:", error);
+      alert("Network error or backend not running.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -68,7 +64,7 @@ export default function Login() {
           <div className="loginOverlay" />
           <div className="loginLeftContent">
             <h1 className="welcomeTitle">Welcome back!</h1>
-            <p className="welcomeSub">Sign-in using your given credentials.</p>
+            <p className="welcomeSub">Sign-in using your credentials.</p>
             <div className="markWrap">
               <img src={logo} alt="InnovaCX logo" className="novaLogo" />
             </div>
@@ -113,8 +109,8 @@ export default function Login() {
               Forgot password?
             </button>
 
-            <button type="submit" className="loginBtn">
-              Log In
+            <button type="submit" className="loginBtn" disabled={loading}>
+              {loading ? "Logging in..." : "Log In"}
             </button>
           </form>
         </section>
