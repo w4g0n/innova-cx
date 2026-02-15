@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
@@ -34,7 +34,6 @@ function monthKeyToReportId(monthKey) {
 }
 
 function getStoredToken() {
-  // 1) Direct token keys (if you ever add them later)
   const direct =
     localStorage.getItem("access_token") ||
     localStorage.getItem("token") ||
@@ -43,7 +42,6 @@ function getStoredToken() {
 
   if (direct) return direct;
 
-  // 2) Your current Login.jsx stores token INSIDE "user"
   try {
     const rawUser = localStorage.getItem("user");
     if (!rawUser) return "";
@@ -61,14 +59,26 @@ export default function EmployeeDashboard() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // 🔐 MFA + Auth Enforcement
+  const token = getStoredToken();
+  const mfaToken = sessionStorage.getItem("mfa_token");
+
+  // If user has temporary MFA token → force verification
+  if (!token && mfaToken) {
+    return <Navigate to="/verify" replace />;
+  }
+
+  // If no auth at all → go to login
+  if (!token && !mfaToken) {
+    return <Navigate to="/" replace />;
+  }
+
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       setLoading(true);
       try {
-        const token = getStoredToken();
-
         const res = await fetch("http://localhost:8000/api/employee/dashboard", {
           method: "GET",
           headers: {
@@ -116,7 +126,7 @@ export default function EmployeeDashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [token]);
 
   if (loading)
     return (
@@ -133,7 +143,6 @@ export default function EmployeeDashboard() {
           subtitle="Here’s your activity and assigned workload."
         />
 
-        {/* KPI Section */}
         <section className="empDash__kpis">
           <KpiCard label="Tickets Assigned" value={kpis.ticketsAssigned} />
           <KpiCard label="In Progress" value={kpis.inProgress} />
@@ -143,9 +152,7 @@ export default function EmployeeDashboard() {
           <KpiCard label="New Today" value={kpis.newToday} />
         </section>
 
-        {/* Dashboard Grid */}
         <section className="empDash__grid">
-          {/* Open Tickets */}
           <article className="empCard">
             <h2 className="empCard__title">Open Tickets Assigned to Me</h2>
             <p className="empCard__subtitle">
@@ -184,7 +191,6 @@ export default function EmployeeDashboard() {
             </div>
           </article>
 
-          {/* Reports Section */}
           <aside className="empCard empReports">
             <h2 className="empCard__title">Reports</h2>
             <p className="empCard__subtitle">
@@ -205,7 +211,6 @@ export default function EmployeeDashboard() {
   );
 }
 
-// Report Card Component
 function ReportItem({ month, reportId }) {
   return (
     <div className="empReportCard">

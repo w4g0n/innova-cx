@@ -90,6 +90,16 @@ CREATE TABLE IF NOT EXISTS users (
   last_login_at TIMESTAMPTZ
 );
 
+-- -------------------------
+-- MFA columns (safe for re-runs)
+-- -------------------------
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS totp_secret TEXT;
+
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
+
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id       UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   full_name     TEXT NOT NULL,

@@ -7,18 +7,20 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
-import ticketsData from "../../mock-data/employeeAllTickets.json";
 import "./ViewAllComplaint.css";
 
+// SORT ORDER HELPERS
 const priorityOrder = { Critical: 4, High: 3, Medium: 2, Low: 1 };
 const statusOrder = {
   Unassigned: 1,
   Assigned: 2,
-  Escalated: 3,
-  Overdue: 4,
-  Resolved: 5,
+  "In Progress": 3,   // ✅ add missing
+  Escalated: 4,
+  Overdue: 5,
+  Resolved: 6,
 };
 
+// Convert time strings like "30 Minutes" or "6 Hours" to minutes
 const timeToMinutes = (value) => {
   if (!value) return 0;
   const [num, unit] = String(value).split(" ");
@@ -30,6 +32,7 @@ const timeToMinutes = (value) => {
   return 0;
 };
 
+// Convert "YYYY-MM-DD" or "DD/MM/YYYY" to Date safely
 const toDate = (raw) => {
   if (!raw) return null;
 
@@ -47,9 +50,30 @@ const toDate = (raw) => {
   return Number.isNaN(dt.getTime()) ? null : dt;
 };
 
+// ✅ SAME token getter approach as EmployeeDashboard
+function getStoredToken() {
+  const direct =
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken");
+
+  if (direct) return direct;
+
+  try {
+    const rawUser = localStorage.getItem("user");
+    if (!rawUser) return "";
+    const user = JSON.parse(rawUser);
+    return user?.access_token || "";
+  } catch {
+    return "";
+  }
+}
+
 export default function EmployeeViewAllComplaints() {
   const navigate = useNavigate();
 
+  // STATES
   const [tickets, setTickets] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
@@ -58,24 +82,57 @@ export default function EmployeeViewAllComplaints() {
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [showDateFilter, setShowDateFilter] = useState(false);
 
+  // ✅ Load tickets from API on mount
   useEffect(() => {
-    try {
-      setTickets(ticketsData.tickets || []);
-    } catch (err) {
-      console.error("Error loading local tickets JSON:", err);
-    }
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const token = getStoredToken();
+        if (!token) {
+          console.warn("No token found. Please login first.");
+          if (!cancelled) setTickets([]);
+          return;
+        }
+
+        const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+
+        const res = await fetch(`${base}/employee/tickets`, {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          console.error("Failed to load tickets:", res.status, text);
+          if (!cancelled) setTickets([]);
+          return;
+        }
+
+        const data = await res.json();
+        if (!cancelled) setTickets(data.tickets || []);
+      } catch (err) {
+        console.error("Error loading tickets:", err);
+        if (!cancelled) setTickets([]);
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  // ✅ Normalize data so the table columns are always populated
   const normalizedTickets = useMemo(() => {
     return (tickets || []).map((t) => {
       const issueDateRaw = t.issueDate ?? t.issue_date ?? t.createdAt ?? "";
       const responseTimeRaw =
         t.metrics?.meanTimeToRespond ?? t.response_time ?? t.responseTime ?? "";
       const resolutionTimeRaw =
-        t.metrics?.meanTimeToResolve ??
-        t.resolution_time ??
-        t.resolutionTime ??
-        "";
+        t.metrics?.meanTimeToResolve ?? t.resolution_time ?? t.resolutionTime ?? "";
 
       return {
         ...t,
@@ -86,6 +143,7 @@ export default function EmployeeViewAllComplaints() {
     });
   }, [tickets]);
 
+  // SORT HANDLER
   const handleSort = (key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") direction = "desc";
@@ -96,6 +154,7 @@ export default function EmployeeViewAllComplaints() {
     setSortConfig({ key, direction });
   };
 
+  // FILTER & SORTED TICKETS
   const filteredTickets = useMemo(() => {
     const q = (searchTerm ?? "").toString().toLowerCase().trim();
 
@@ -165,19 +224,34 @@ export default function EmployeeViewAllComplaints() {
     return filtered;
   }, [normalizedTickets, searchTerm, statusFilter, priorityFilter, dateRange, sortConfig]);
 
-  const kpiCounts = useMemo(
-    () => ({
-      openTickets: filteredTickets.length,
-      assignedToMe: filteredTickets.filter((t) => t.status === "Assigned").length,
-      inProgress: filteredTickets.filter((t) => t.status === "Escalated").length,
-      newTickets: filteredTickets.filter((t) => t.status === "Unassigned").length,
-      highPriority: filteredTickets.filter(
+  // ✅ KPI COUNTS (MATCH DASHBOARD DEFINITIONS)
+  const kpiCounts = useMemo(() => {
+    const notResolved = filteredTickets.filter((t) => t.status !== "Resolved");
+
+    const isToday = (raw) => {
+      const d = toDate(raw);
+      if (!d) return false;
+      const now = new Date();
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      );
+    };
+
+    return {
+      openTickets: notResolved.length, // dashboard ticketsAssigned style (not resolved)
+      assignedToMe: notResolved.length, // already "my tickets"
+      inProgress: filteredTickets.filter(
+        (t) => t.status === "Assigned" || t.status === "In Progress"
+      ).length,
+      newTickets: filteredTickets.filter((t) => isToday(t._issueDateRaw)).length,
+      highPriority: notResolved.filter(
         (t) => t.priority === "High" || t.priority === "Critical"
       ).length,
       overdueTickets: filteredTickets.filter((t) => t.status === "Overdue").length,
-    }),
-    [filteredTickets]
-  );
+    };
+  }, [filteredTickets]);
 
   const getSortArrow = (key) => {
     if (sortConfig.key !== key) return "   ↑↓";
@@ -192,7 +266,7 @@ export default function EmployeeViewAllComplaints() {
           subtitle="View, search, sort, and manage all complaints and requests assigned to you."
         />
 
-        
+        {/* SEARCH */}
         <section className="search-section-EV-VAC">
           <PillSearch
             value={searchTerm}
@@ -204,7 +278,7 @@ export default function EmployeeViewAllComplaints() {
           />
         </section>
 
-        
+        {/* FILTERS */}
         <section className="filters-row-EV-VAC">
           <div className="filter-group-EV-VAC">
             <PillSelect
@@ -214,6 +288,7 @@ export default function EmployeeViewAllComplaints() {
                 { value: "All Status", label: "All Status" },
                 { value: "Unassigned", label: "Unassigned" },
                 { value: "Assigned", label: "Assigned" },
+                { value: "In Progress", label: "In Progress" },
                 { value: "Escalated", label: "Escalated" },
                 { value: "Resolved", label: "Resolved" },
                 { value: "Overdue", label: "Overdue" },
@@ -231,12 +306,11 @@ export default function EmployeeViewAllComplaints() {
               ]}
             />
 
-            
             <FilterPillButton onClick={() => setShowDateFilter(!showDateFilter)} />
           </div>
         </section>
 
-        
+        {/* DATE FILTER */}
         {showDateFilter && (
           <section className="filters-row-EV-VAC">
             <div className="filter-group-EV-VAC">
@@ -254,17 +328,17 @@ export default function EmployeeViewAllComplaints() {
           </section>
         )}
 
-        
+        {/* KPI CARDS */}
         <section className="kpi-row-EV-VAC">
           <KpiCard label="Open Tickets" value={kpiCounts.openTickets} />
           <KpiCard label="Assigned to Me" value={kpiCounts.assignedToMe} />
           <KpiCard label="In Progress" value={kpiCounts.inProgress} />
-          <KpiCard label="New" value={kpiCounts.newTickets} />
+          <KpiCard label="New Today" value={kpiCounts.newTickets} />
           <KpiCard label="High Priority" value={kpiCounts.highPriority} />
           <KpiCard label="Overdue Tickets" value={kpiCounts.overdueTickets} />
         </section>
 
-        
+        {/* TICKETS TABLE */}
         <section className="table-wrapper-EV-VAC">
           <table className="complaints-table-EV-VAC">
             <thead>
@@ -299,7 +373,6 @@ export default function EmployeeViewAllComplaints() {
 
                   <td>{t.subject}</td>
 
-                  
                   <td>
                     <PriorityPill priority={t.priority} />
                   </td>

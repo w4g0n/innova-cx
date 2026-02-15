@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ComplaintTrends.css";
 
@@ -8,438 +9,122 @@ import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 
 export default function ComplaintTrends() {
+  const navigate = useNavigate();
+
+  // ------------------- State -------------------
   const [timeRange, setTimeRange] = useState("This Month");
   const [department, setDepartment] = useState("All Departments");
   const [priority, setPriority] = useState("All Priorities");
 
+  const [apiData, setApiData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // ------------------- Reset Filters -------------------
   const resetFilters = () => {
     setTimeRange("This Month");
     setDepartment("All Departments");
     setPriority("All Priorities");
   };
 
-  const data = useMemo(
-    () => ({
-      "This Month": {
-        "All Departments": {
-          "All Priorities": {
-            kpis: {
-              complaints: 128,
-              sla: "91%",
-              response: "38 mins",
-              resolve: "1.6 days",
-              topCategory: "HVAC Issues",
-              repeat: "9%",
-              complaintsCaption: "↑ 12% vs last month",
-              slaCaption: "Target: 90%",
-              responseCaption: "First agent response",
-              resolveCaption: "From creation to closure",
-              topCategoryCaption: "32 tickets this month",
-              repeatCaption: "Same issue in 30 days",
-            },
-            bars: [
-              { label: "Jun", value: 84 },
-              { label: "Jul", value: 101 },
-              { label: "Aug", value: 118 },
-              { label: "Sep", value: 132 },
-            ],
-            categories: [
-              { name: "HVAC / Temperature", pct: 32 },
-              { name: "Plumbing / Leakage", pct: 24 },
-              { name: "Cleaning / Housekeeping", pct: 17 },
-              { name: "Electrical / Lighting", pct: 12 },
-              { name: "Other", pct: 15 },
-            ],
-            table: [
-              {
-                month: "June",
-                total: 84,
-                resolved: 79,
-                withinSla: "88%",
-                avgResponse: "45 mins",
-                avgResolve: "2.1 days",
-                delta: { type: "neg", value: "- 6%" },
-              },
-              {
-                month: "July",
-                total: 101,
-                resolved: 95,
-                withinSla: "90%",
-                avgResponse: "41 mins",
-                avgResolve: "1.9 days",
-                delta: { type: "pos", value: "+ 20%" },
-              },
-              {
-                month: "August",
-                total: 118,
-                resolved: 110,
-                withinSla: "92%",
-                avgResponse: "39 mins",
-                avgResolve: "1.7 days",
-                delta: { type: "pos", value: "+ 17%" },
-              },
-              {
-                month: "September",
-                total: 132,
-                resolved: 124,
-                withinSla: "91%",
-                avgResponse: "38 mins",
-                avgResolve: "1.6 days",
-                delta: { type: "pos", value: "+ 12%" },
-              },
-            ],
-          },
+  // ------------------- Fetch Data with Session -------------------
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
 
-          "Critical only": {
-            kpis: {
-              complaints: 34,
-              sla: "89%",
-              response: "42 mins",
-              resolve: "1.9 days",
-              topCategory: "Electrical / Lighting",
-              repeat: "11%",
-              complaintsCaption: "↑ 6% vs last month",
-              slaCaption: "Target: 90%",
-              responseCaption: "First agent response",
-              resolveCaption: "From creation to closure",
-              topCategoryCaption: "9 tickets this month",
-              repeatCaption: "Same issue in 30 days",
-            },
-            bars: [
-              { label: "Jun", value: 18 },
-              { label: "Jul", value: 26 },
-              { label: "Aug", value: 31 },
-              { label: "Sep", value: 34 },
-            ],
-            categories: [
-              { name: "Electrical / Lighting", pct: 30 },
-              { name: "HVAC / Temperature", pct: 25 },
-              { name: "Plumbing / Leakage", pct: 20 },
-              { name: "Security", pct: 15 },
-              { name: "Other", pct: 10 },
-            ],
-            table: [
-              {
-                month: "June",
-                total: 18,
-                resolved: 16,
-                withinSla: "86%",
-                avgResponse: "50 mins",
-                avgResolve: "2.4 days",
-                delta: { type: "neg", value: "- 3%" },
-              },
-              {
-                month: "July",
-                total: 26,
-                resolved: 23,
-                withinSla: "88%",
-                avgResponse: "46 mins",
-                avgResolve: "2.1 days",
-                delta: { type: "pos", value: "+ 8%" },
-              },
-              {
-                month: "August",
-                total: 31,
-                resolved: 28,
-                withinSla: "90%",
-                avgResponse: "43 mins",
-                avgResolve: "2.0 days",
-                delta: { type: "pos", value: "+ 12%" },
-              },
-              {
-                month: "September",
-                total: 34,
-                resolved: 31,
-                withinSla: "89%",
-                avgResponse: "42 mins",
-                avgResolve: "1.9 days",
-                delta: { type: "pos", value: "+ 6%" },
-              },
-            ],
-          },
+    setLoading(true);
+    setError(null);
 
-          "High & Critical": {
-            kpis: {
-              complaints: 62,
-              sla: "90%",
-              response: "40 mins",
-              resolve: "1.8 days",
-              topCategory: "HVAC Issues",
-              repeat: "10%",
-              complaintsCaption: "↑ 9% vs last month",
-              slaCaption: "Target: 90%",
-              responseCaption: "First agent response",
-              resolveCaption: "From creation to closure",
-              topCategoryCaption: "18 tickets this month",
-              repeatCaption: "Same issue in 30 days",
-            },
-            bars: [
-              { label: "Jun", value: 40 },
-              { label: "Jul", value: 49 },
-              { label: "Aug", value: 56 },
-              { label: "Sep", value: 62 },
-            ],
-            categories: [
-              { name: "HVAC / Temperature", pct: 34 },
-              { name: "Plumbing / Leakage", pct: 22 },
-              { name: "Electrical / Lighting", pct: 16 },
-              { name: "Cleaning / Housekeeping", pct: 14 },
-              { name: "Other", pct: 14 },
-            ],
-            table: [
-              {
-                month: "June",
-                total: 40,
-                resolved: 36,
-                withinSla: "87%",
-                avgResponse: "47 mins",
-                avgResolve: "2.0 days",
-                delta: { type: "neg", value: "- 4%" },
-              },
-              {
-                month: "July",
-                total: 49,
-                resolved: 45,
-                withinSla: "89%",
-                avgResponse: "43 mins",
-                avgResolve: "1.9 days",
-                delta: { type: "pos", value: "+ 10%" },
-              },
-              {
-                month: "August",
-                total: 56,
-                resolved: 52,
-                withinSla: "91%",
-                avgResponse: "41 mins",
-                avgResolve: "1.8 days",
-                delta: { type: "pos", value: "+ 14%" },
-              },
-              {
-                month: "September",
-                total: 62,
-                resolved: 58,
-                withinSla: "90%",
-                avgResponse: "40 mins",
-                avgResolve: "1.8 days",
-                delta: { type: "pos", value: "+ 9%" },
-              },
-            ],
-          },
+    const params = new URLSearchParams({
+      timeRange,
+      department,
+      priority,
+    });
 
-          "Low & Medium": {
-            kpis: {
-              complaints: 66,
-              sla: "92%",
-              response: "36 mins",
-              resolve: "1.4 days",
-              topCategory: "Cleaning / Housekeeping",
-              repeat: "8%",
-              complaintsCaption: "↑ 14% vs last month",
-              slaCaption: "Target: 90%",
-              responseCaption: "First agent response",
-              resolveCaption: "From creation to closure",
-              topCategoryCaption: "21 tickets this month",
-              repeatCaption: "Same issue in 30 days",
-            },
-            bars: [
-              { label: "Jun", value: 44 },
-              { label: "Jul", value: 52 },
-              { label: "Aug", value: 62 },
-              { label: "Sep", value: 66 },
-            ],
-            categories: [
-              { name: "Cleaning / Housekeeping", pct: 30 },
-              { name: "HVAC / Temperature", pct: 24 },
-              { name: "Plumbing / Leakage", pct: 18 },
-              { name: "Electrical / Lighting", pct: 10 },
-              { name: "Other", pct: 18 },
-            ],
-            table: [
-              {
-                month: "June",
-                total: 44,
-                resolved: 43,
-                withinSla: "90%",
-                avgResponse: "44 mins",
-                avgResolve: "1.8 days",
-                delta: { type: "neg", value: "- 2%" },
-              },
-              {
-                month: "July",
-                total: 52,
-                resolved: 50,
-                withinSla: "92%",
-                avgResponse: "39 mins",
-                avgResolve: "1.6 days",
-                delta: { type: "pos", value: "+ 18%" },
-              },
-              {
-                month: "August",
-                total: 62,
-                resolved: 60,
-                withinSla: "93%",
-                avgResponse: "37 mins",
-                avgResolve: "1.5 days",
-                delta: { type: "pos", value: "+ 16%" },
-              },
-              {
-                month: "September",
-                total: 66,
-                resolved: 66,
-                withinSla: "92%",
-                avgResponse: "36 mins",
-                avgResolve: "1.4 days",
-                delta: { type: "pos", value: "+ 14%" },
-              },
-            ],
-          },
-        },
-
-        "IT Support": {
-          "All Priorities": {
-            kpis: {
-              complaints: 22,
-              sla: "94%",
-              response: "29 mins",
-              resolve: "1.2 days",
-              topCategory: "Network Outages",
-              repeat: "7%",
-              complaintsCaption: "↑ 8% vs last month",
-              slaCaption: "Target: 90%",
-              responseCaption: "First agent response",
-              resolveCaption: "From creation to closure",
-              topCategoryCaption: "6 tickets this month",
-              repeatCaption: "Same issue in 30 days",
-            },
-            bars: [
-              { label: "Jun", value: 12 },
-              { label: "Jul", value: 16 },
-              { label: "Aug", value: 19 },
-              { label: "Sep", value: 22 },
-            ],
-            categories: [
-              { name: "Network Outages", pct: 28 },
-              { name: "Access Requests", pct: 22 },
-              { name: "Hardware", pct: 20 },
-              { name: "Software", pct: 18 },
-              { name: "Other", pct: 12 },
-            ],
-            table: [
-              {
-                month: "June",
-                total: 12,
-                resolved: 11,
-                withinSla: "92%",
-                avgResponse: "34 mins",
-                avgResolve: "1.5 days",
-                delta: { type: "pos", value: "+ 5%" },
-              },
-              {
-                month: "July",
-                total: 16,
-                resolved: 15,
-                withinSla: "93%",
-                avgResponse: "32 mins",
-                avgResolve: "1.3 days",
-                delta: { type: "pos", value: "+ 9%" },
-              },
-              {
-                month: "August",
-                total: 19,
-                resolved: 18,
-                withinSla: "94%",
-                avgResponse: "30 mins",
-                avgResolve: "1.2 days",
-                delta: { type: "pos", value: "+ 12%" },
-              },
-              {
-                month: "September",
-                total: 22,
-                resolved: 21,
-                withinSla: "94%",
-                avgResponse: "29 mins",
-                avgResolve: "1.2 days",
-                delta: { type: "pos", value: "+ 8%" },
-              },
-            ],
-          },
-        },
+    fetch(`http://localhost:8000/manager/trends?${params.toString()}`, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
       },
+    })
+      .then((res) => {
+        if (res.status === 401) {
+          navigate("/login");
+          return;
+        }
+        if (!res.ok) throw new Error("Failed to load trends");
+        return res.json();
+      })
+      .then((data) => {
+        setApiData(data);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setApiData(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [timeRange, department, priority, navigate]);
 
-      "Last 3 Months": {
-        "All Departments": {
-          "All Priorities": {
-            kpis: {
-              complaints: 351,
-              sla: "90%",
-              response: "40 mins",
-              resolve: "1.8 days",
-              topCategory: "HVAC Issues",
-              repeat: "10%",
-              complaintsCaption: "↑ 5% vs previous period",
-              slaCaption: "Target: 90%",
-              responseCaption: "First agent response",
-              resolveCaption: "From creation to closure",
-              topCategoryCaption: "84 tickets in 3 months",
-              repeatCaption: "Same issue in 30 days",
-            },
-            bars: [
-              { label: "Jul", value: 101 },
-              { label: "Aug", value: 118 },
-              { label: "Sep", value: 132 },
-              { label: "Oct", value: 0 }, // placeholder bar to keep layout consistent
-            ],
-            categories: [
-              { name: "HVAC / Temperature", pct: 31 },
-              { name: "Plumbing / Leakage", pct: 23 },
-              { name: "Cleaning / Housekeeping", pct: 16 },
-              { name: "Electrical / Lighting", pct: 14 },
-              { name: "Other", pct: 16 },
-            ],
-            table: [
-              {
-                month: "July",
-                total: 101,
-                resolved: 95,
-                withinSla: "90%",
-                avgResponse: "41 mins",
-                avgResolve: "1.9 days",
-                delta: { type: "pos", value: "+ 20%" },
-              },
-              {
-                month: "August",
-                total: 118,
-                resolved: 110,
-                withinSla: "92%",
-                avgResponse: "39 mins",
-                avgResolve: "1.7 days",
-                delta: { type: "pos", value: "+ 17%" },
-              },
-              {
-                month: "September",
-                total: 132,
-                resolved: 124,
-                withinSla: "91%",
-                avgResponse: "38 mins",
-                avgResolve: "1.6 days",
-                delta: { type: "pos", value: "+ 12%" },
-              },
-            ],
-          },
-        },
-      },
-    }),
-    []
-  );
-
+  // ------------------- Normalize Data for UI -------------------
   const view = useMemo(() => {
-    const byTime = data[timeRange] || data["This Month"];
-    const byDept = byTime[department] || byTime["All Departments"];
-    const byPriority =
-      byDept[priority] || byDept["All Priorities"] || byTime["All Departments"]["All Priorities"];
+    if (!apiData) return null;
 
-    return byPriority;
-  }, [data, timeRange, department, priority]);
+    const monthOrder = {
+      January: 1, February: 2, March: 3, April: 4,
+      May: 5, June: 6, July: 7, August: 8,
+      September: 9, October: 10, November: 11, December: 12,
+    };
+
+    const sortedTable = [...apiData.table].sort(
+      (a, b) => (monthOrder[a.month.trim()] || 0) - (monthOrder[b.month.trim()] || 0)
+    );
+
+    const normalizedTable = sortedTable.map((row, index, arr) => {
+      const prevSla = index > 0 ? arr[index - 1].within_sla || 0 : 0;
+      const currSla = row.within_sla || 0;
+      const diff = currSla - prevSla;
+
+      const delta = {
+        type: diff >= 0 ? "pos" : "neg",
+        value: `${diff >= 0 ? "+" : ""}${diff}%`,
+      };
+
+      return {
+        month: row.month.trim(),
+        total: row.total,
+        resolved: row.resolved,
+        withinSla: `${row.within_sla}%`,
+        avgResponse: row.avg_response != null ? `${row.avg_response} mins` : "—",
+        avgResolve: row.avg_resolve != null ? `${row.avg_resolve} days` : "—",
+        delta,
+      };
+    });
+
+    return {
+      kpis: {
+        complaints: apiData.kpis.complaints,
+        sla: apiData.kpis.sla,
+        response: apiData.kpis.response,
+        resolve: apiData.kpis.resolve,
+        topCategory: apiData.kpis.topCategory,
+        repeat: apiData.kpis.repeat,
+        complaintsCaption: "",
+        slaCaption: "",
+        responseCaption: "",
+        resolveCaption: "",
+        topCategoryCaption: "",
+        repeatCaption: "",
+      },
+      bars: apiData.bars,
+      categories: apiData.categories,
+      table: normalizedTable,
+    };
+  }, [apiData]);
 
   const bars = useMemo(() => {
     const values = (view?.bars || []).map((b) => b.value);
@@ -450,6 +135,26 @@ export default function ComplaintTrends() {
     }));
   }, [view]);
 
+  // ------------------- Loading / Error -------------------
+  if (loading) {
+    return (
+      <Layout role="manager">
+        <div className="mgrTrends">Loading trends…</div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout role="manager">
+        <div className="mgrTrends">{error}</div>
+      </Layout>
+    );
+  }
+
+  if (!view) return null;
+
+  // ------------------- JSX -------------------
   return (
     <Layout role="manager">
       <div className="mgrTrends">
@@ -472,9 +177,7 @@ export default function ComplaintTrends() {
                   { value: "Last 12 Months", label: "Last 12 Months" },
                 ]}
               />
-            </div>
 
-            <div className="pillSelectHolder">
               <PillSelect
                 value={department}
                 onChange={setDepartment}
@@ -487,9 +190,7 @@ export default function ComplaintTrends() {
                   { value: "IT Support", label: "IT Support" },
                 ]}
               />
-            </div>
 
-            <div className="pillSelectHolder">
               <PillSelect
                 value={priority}
                 onChange={setPriority}
@@ -508,45 +209,17 @@ export default function ComplaintTrends() {
         </section>
 
         <section className="kpiRow">
-          <KpiCard
-            label="Complaints This Month"
-            value={view.kpis.complaints}
-            caption={view.kpis.complaintsCaption}
-          />
-          <KpiCard
-            label="Resolved Within SLA"
-            value={view.kpis.sla}
-            caption={view.kpis.slaCaption}
-          />
-          <KpiCard
-            label="Average Response Time"
-            value={view.kpis.response}
-            caption={view.kpis.responseCaption}
-          />
-          <KpiCard
-            label="Average Resolve Time"
-            value={view.kpis.resolve}
-            caption={view.kpis.resolveCaption}
-          />
-          <KpiCard
-            label="Top Category"
-            value={view.kpis.topCategory}
-            caption={view.kpis.topCategoryCaption}
-          />
-          <KpiCard
-            label="Repeat Complaints"
-            value={view.kpis.repeat}
-            caption={view.kpis.repeatCaption}
-          />
+          <KpiCard label="Complaints This Month" value={view.kpis.complaints} />
+          <KpiCard label="Resolved Within SLA" value={view.kpis.sla} />
+          <KpiCard label="Average Response Time" value={view.kpis.response} />
+          <KpiCard label="Average Resolve Time" value={view.kpis.resolve} />
+          <KpiCard label="Top Category" value={view.kpis.topCategory} />
+          <KpiCard label="Repeat Complaints" value={view.kpis.repeat} />
         </section>
 
         <section className="chartsGrid">
           <div className="card">
             <h2 className="cardTitle">Complaints Over Time</h2>
-            <p className="cardSubtitle">
-              Monthly volume of complaints for your department.
-            </p>
-
             <div className="trendBars">
               {bars.map((b) => (
                 <div key={b.label} className="trendBar" style={{ height: b.heightPct }}>
@@ -554,7 +227,6 @@ export default function ComplaintTrends() {
                 </div>
               ))}
             </div>
-
             <div className="trendLabels">
               {bars.map((b) => (
                 <span key={b.label}>{b.label}</span>
@@ -564,10 +236,6 @@ export default function ComplaintTrends() {
 
           <aside className="card">
             <h2 className="cardTitle">Top Complaint Categories</h2>
-            <p className="cardSubtitle">
-              Share of complaints by type (current month).
-            </p>
-
             <div className="categoryList">
               {view.categories.map((c) => (
                 <div key={c.name} className="categoryRow">
@@ -584,10 +252,6 @@ export default function ComplaintTrends() {
 
         <section className="tableWrapper">
           <h2 className="cardTitle">Monthly Trend Summary</h2>
-          <p className="cardSubtitle">
-            Compare volumes and SLA performance month by month.
-          </p>
-
           <div className="trendsTableWrap">
             <table className="trendsTable">
               <thead>
@@ -612,7 +276,9 @@ export default function ComplaintTrends() {
                     <td>{row.avgResponse}</td>
                     <td>{row.avgResolve}</td>
                     <td>
-                      <span className={row.delta.type === "pos" ? "deltaPositive" : "deltaNegative"}>
+                      <span
+                        className={row.delta.type === "pos" ? "deltaPositive" : "deltaNegative"}
+                      >
                         {row.delta.value}
                       </span>
                     </td>

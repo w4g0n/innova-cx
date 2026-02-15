@@ -1,6 +1,6 @@
 import Layout from "../../components/Layout";
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useMemo, useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
@@ -9,18 +9,35 @@ import KpiCard from "../../components/common/KpiCard";
 import "./ManagerViewEmployees.css";
 
 export default function ManagerViewEmployees() {
-  const employees = [
-    { name: "Ahmed Hassan", id: "EMP-1023", role: "Senior Technician", completed: 34, inProgress: 3 },
-    { name: "Maria Lopez", id: "EMP-1078", role: "Technician", completed: 28, inProgress: 5 },
-    { name: "Omar Ali", id: "EMP-1150", role: "Assistant Technician", completed: 19, inProgress: 4 },
-    { name: "Sara Ahmed", id: "EMP-1192", role: "Technician", completed: 22, inProgress: 2 },
-    { name: "Bilal Khan", id: "EMP-1244", role: "HVAC Specialist", completed: 31, inProgress: 3 },
-    { name: "Fatima Noor", id: "EMP-1290", role: "Coordinator", completed: 25, inProgress: 1 },
-    { name: "Yousef Karim", id: "EMP-1331", role: "Maintenance Supervisor", completed: 40, inProgress: 6 },
-    { name: "Khalid Musa", id: "EMP-1378", role: "Electrician", completed: 27, inProgress: 2 },
-  ];
-
+  const navigate = useNavigate();
+  const [employees, setEmployees] = useState([]);
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token"); // JWT stored here
+    if (!token) {
+      navigate("/login"); // redirect if not logged in
+      return;
+    }
+
+    fetch("http://127.0.0.1:8000/manager/employees", {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`, // attach token
+      },
+    })
+      .then((res) => {
+        if (res.status === 401) {
+          navigate("/login"); // unauthorized
+          return null;
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data) setEmployees(data);
+      })
+      .catch((err) => console.error("Failed to fetch employees:", err));
+  }, [navigate]);
 
   const filteredEmployees = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -41,11 +58,11 @@ export default function ManagerViewEmployees() {
 
   const topPerformer = employees.reduce(
     (best, e) => (e.completed > best.completed ? e : best),
-    employees[0]
+    employees[0] || {}
   );
   const lowestPerformer = employees.reduce(
     (worst, e) => (e.completed < worst.completed ? e : worst),
-    employees[0]
+    employees[0] || {}
   );
 
   return (
