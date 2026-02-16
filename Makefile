@@ -47,6 +47,16 @@ audio-build:
 	docker compose --profile audio up --build
 
 
+
+# Feature Engineering Agent:
+
+feature-agent:
+	docker compose --profile feature-engineering up
+
+feature-agent-build:
+	docker compose --profile feature-engineering up --build
+
+
 # =========================
 # FULL DEV STACK
 # (Frontend + Transcriber + Sentiment + Chatbot + Backend + DB)
