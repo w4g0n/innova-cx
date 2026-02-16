@@ -77,6 +77,20 @@ services:
     networks:
       - innovacx-network
 
+  feature-engineering:
+    profiles: ["feature-engineering"]
+    build:
+      context: ./ai-models/MultiAgentPipeline/FeatureEngineeringAgent
+    container_name: innovacx-feature-engineering
+    volumes:
+      - ./ai-models/MultiAgentPipeline/FeatureEngineeringAgent/app:/app/app
+      - ./ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data:/app/data
+      - ./ai-models/MultiAgentPipeline/FeatureEngineeringAgent/models:/app/models
+    networks:
+      - innovacx-network
+    restart: unless-stopped
+
+
   frontend:
     profiles: ["frontend", "dev"]
     build: ./frontend
