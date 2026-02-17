@@ -8,44 +8,44 @@ import KpiCard from "../../components/common/KpiCard";
 
 import "./ManagerViewEmployees.css";
 
-export default function ManagerViewEmployees() {
-  const employees = [
-    { name: "Ahmed Hassan", id: "EMP-1023", role: "Senior Technician", completed: 34, inProgress: 3 },
-    { name: "Maria Lopez", id: "EMP-1078", role: "Technician", completed: 28, inProgress: 5 },
-    { name: "Omar Ali", id: "EMP-1150", role: "Assistant Technician", completed: 19, inProgress: 4 },
-    { name: "Sara Ahmed", id: "EMP-1192", role: "Technician", completed: 22, inProgress: 2 },
-    { name: "Bilal Khan", id: "EMP-1244", role: "HVAC Specialist", completed: 31, inProgress: 3 },
-    { name: "Fatima Noor", id: "EMP-1290", role: "Coordinator", completed: 25, inProgress: 1 },
-    { name: "Yousef Karim", id: "EMP-1331", role: "Maintenance Supervisor", completed: 40, inProgress: 6 },
-    { name: "Khalid Musa", id: "EMP-1378", role: "Electrician", completed: 27, inProgress: 2 },
-  ];
+const EMPLOYEES = [
+  { name: "Ahmed Hassan", id: "EMP-1023", role: "Senior Technician", completed: 34, inProgress: 3 },
+  { name: "Maria Lopez", id: "EMP-1078", role: "Technician", completed: 28, inProgress: 5 },
+  { name: "Omar Ali", id: "EMP-1150", role: "Assistant Technician", completed: 19, inProgress: 4 },
+  { name: "Sara Ahmed", id: "EMP-1192", role: "Technician", completed: 22, inProgress: 2 },
+  { name: "Bilal Khan", id: "EMP-1244", role: "HVAC Specialist", completed: 31, inProgress: 3 },
+  { name: "Fatima Noor", id: "EMP-1290", role: "Coordinator", completed: 25, inProgress: 1 },
+  { name: "Yousef Karim", id: "EMP-1331", role: "Maintenance Supervisor", completed: 40, inProgress: 6 },
+  { name: "Khalid Musa", id: "EMP-1378", role: "Electrician", completed: 27, inProgress: 2 },
+];
 
+export default function ManagerViewEmployees() {
   const [query, setQuery] = useState("");
 
   const filteredEmployees = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return employees;
+    if (!q) return EMPLOYEES;
 
-    return employees.filter(
+    return EMPLOYEES.filter(
       (e) =>
         e.name.toLowerCase().includes(q) ||
         e.id.toLowerCase().includes(q) ||
         e.role.toLowerCase().includes(q)
     );
-  }, [employees, query]);
+  }, [query]);
 
-  const kpiEmployees = employees.length;
-  const kpiCompleted = employees.reduce((sum, e) => sum + e.completed, 0);
-  const kpiInProgress = employees.reduce((sum, e) => sum + e.inProgress, 0);
+  const kpiEmployees = EMPLOYEES.length;
+  const kpiCompleted = EMPLOYEES.reduce((sum, e) => sum + e.completed, 0);
+  const kpiInProgress = EMPLOYEES.reduce((sum, e) => sum + e.inProgress, 0);
   const kpiAvg = kpiEmployees ? (kpiCompleted / kpiEmployees).toFixed(1) : "0.0";
 
-  const topPerformer = employees.reduce(
+  const topPerformer = EMPLOYEES.reduce(
     (best, e) => (e.completed > best.completed ? e : best),
-    employees[0]
+    EMPLOYEES[0]
   );
-  const lowestPerformer = employees.reduce(
+  const lowestPerformer = EMPLOYEES.reduce(
     (worst, e) => (e.completed < worst.completed ? e : worst),
-    employees[0]
+    EMPLOYEES[0]
   );
 
   return (

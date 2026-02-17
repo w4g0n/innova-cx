@@ -4,7 +4,7 @@ import "./CustomerLanding.css";
 import dccLogo from "../../assets/dcc-logo.png";
 import CustomerFillForm from "./CustomerFillForm";
 import useNovaChatbot from "./chatbot.js";
-import { getDisplayNameFromEmail, getInitialsFromEmail } from "../../utils/userDisplay";
+import { getInitialsFromEmail } from "../../utils/userDisplay";
 
 export default function CustomerLanding() {
   const navigate = useNavigate();
@@ -57,11 +57,6 @@ export default function CustomerLanding() {
     }
   }, []);
 
-  const nameFromEmail = useMemo(
-    () => getDisplayNameFromEmail(user?.email, "there"),
-    [user]
-  );
-
   const initialsFromEmail = useMemo(
     () => getInitialsFromEmail(user?.email, "U"),
     [user]
@@ -98,13 +93,13 @@ export default function CustomerLanding() {
       document.removeEventListener("mousedown", onMouseDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+  }, [listRef]);
 
   useEffect(() => {
     if (!isOpen) return;
     if (novaView !== "chat") return;
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [messages, isOpen, isExpanded, novaView]);
+  }, [messages, isOpen, isExpanded, novaView, listRef]);
 
   const handleClose = () => setShowCloseConfirm(true);
 
@@ -221,14 +216,17 @@ export default function CustomerLanding() {
 
     try {
       rec.start();
-    } catch {
+    } catch (err) {
+      console.debug("Speech recognition failed to start:", err);
     }
   };
 
   const cancelVoice = () => {
     try {
       speechRef.current?.stop?.();
-    } catch {}
+    } catch (err) {
+      console.debug("Speech recognition stop failed:", err);
+    }
     setVoiceActive(false);
     setVoiceBusy(false);
     setVoiceDraft("");

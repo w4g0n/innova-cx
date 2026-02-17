@@ -11,12 +11,6 @@ export default function CustomerChatbot() {
   // ===============================
   // Whisper / Audio state
   // ===============================
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const streamRef = useRef(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-
   // ===============================
   // User info
   // ===============================
@@ -54,7 +48,6 @@ export default function CustomerChatbot() {
       id: "m1",
       from: "bot",
       text: `Hi ${nameFromEmail}! I’m Nova. How can I help you today?`,
-      ts: Date.now(),
     },
   ]);
 
@@ -70,14 +63,14 @@ export default function CustomerChatbot() {
   const pushUser = (t) => {
     setMessages((prev) => [
       ...prev,
-      { id: `u-${Date.now()}`, from: "user", text: t, ts: Date.now() },
+      { id: `u-${Date.now()}`, from: "user", text: t },
     ]);
   };
 
   const pushBot = (t) => {
     setMessages((prev) => [
       ...prev,
-      { id: `b-${Date.now()}`, from: "bot", text: t, ts: Date.now() },
+      { id: `b-${Date.now()}`, from: "bot", text: t },
     ]);
   };
 
@@ -145,17 +138,15 @@ export default function CustomerChatbot() {
     // ---------- INQUIRY (BACKEND ONLY) ----------
     if (stage === "inquiry") {
       try {
-        pushBot("…"); 
-        const reply = await sendToChatbot
+        pushBot("…");
 
         const realReply = await sendToChatbot(t);
         setMessages((prev) => [
-          ...prev.slice(0, -1), 
+          ...prev.slice(0, -1),
           {
             id: `b-${Date.now()}`,
             from: "bot",
             text: realReply,
-            ts: Date.now(),
           },
         ]);
       } catch (err) {
@@ -179,66 +170,6 @@ export default function CustomerChatbot() {
       );
       setTimeout(() => goToForm("Complaint"), 700);
       setStage("done");
-    }
-  };
-
-  // ===============================
-  // Mic / Whisper integration
-  // ===============================
-  const stopStreamTracks = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-
-      chunksRef.current = [];
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/mp4" });
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = async () => {
-        if (!isTranscribing) {
-          stopStreamTracks();
-          return;
-        }
-
-        try {
-          const blob = new Blob(chunksRef.current, { type: "audio/mp4" });
-          const formData = new FormData();
-          formData.append("audio", blob, "mic.mp4");
-
-          const res = await fetch("http://whisper:3001/transcribe", {
-            method: "POST",
-            body: formData,
-          });
-
-          const data = await res.json();
-          setText(data.transcript || "");
-        } catch (e) {
-          console.error(e);
-          alert("Could not transcribe audio. Please try again.");
-        } finally {
-          setIsTranscribing(false);
-          setIsRecording(false);
-          stopStreamTracks();
-        }
-      };
-
-      recorder.start();
-      setIsRecording(true);
-      setIsTranscribing(true);
-    } catch (e) {
-      console.error(e);
-      alert("Microphone permission is required to record audio.");
     }
   };
 
