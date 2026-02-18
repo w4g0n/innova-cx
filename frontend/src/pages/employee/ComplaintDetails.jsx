@@ -1,33 +1,65 @@
-import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
-import ticketsData from "../../mock-data/employeeAllTickets.json"; // Local JSON import
 import "./TicketDetails.css";
 
+const API_BASE = "http://localhost:8000/api";
+
+// Token may be stored under one of these keys
+function getAuthToken() {
+  return (
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") ||
+    ""
+  );
+}
+
 export default function ComplaintDetails() {
-  const { id } = useParams(); // Get ticket ID from URL
+  const { id } = useParams(); // ticket code like "CX-4630"
+  const navigate = useNavigate();
+
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
   const [modalType, setModalType] = useState(null); // "reroute", "rescore", "escalate", "resolve"
 
   const closeModal = () => setModalType(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    try {
-      const allTickets = ticketsData.tickets || [];
-      const foundTicket = allTickets.find((t) => t.ticketId === id || t.id === id);
-      if (!foundTicket) throw new Error("Ticket not found");
-      setTicket(foundTicket);
-    } catch (err) {
-      console.error(err);
-      setError(err.message || "Could not load ticket details.");
-      setTicket(null);
-    } finally {
-      setLoading(false);
+    async function load() {
+      const token = getAuthToken();
+      if (!token) {
+        setError("Missing auth token. Please log in again.");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError("");
+
+      try {
+        const res = await fetch(`${API_BASE}/employee/tickets/${encodeURIComponent(id)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) {
+          const msg = await res.text();
+          throw new Error(msg || `Failed to load ticket (${res.status})`);
+        }
+
+        const data = await res.json();
+        setTicket(data?.ticket || null);
+      } catch (e) {
+        setError(e?.message || "Could not load ticket details.");
+        setTicket(null);
+      } finally {
+        setLoading(false);
+      }
     }
+
+    load();
   }, [id]);
 
   const Modal = ({ type }) => {
@@ -41,11 +73,7 @@ export default function ComplaintDetails() {
     };
 
     const submitText =
-      type === "resolve"
-        ? "Resolve"
-        : type === "escalate"
-        ? "Escalate"
-        : "Submit";
+      type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
 
     const renderBody = () => {
       switch (type) {
@@ -54,8 +82,8 @@ export default function ComplaintDetails() {
             <>
               <label>New Department</label>
               <div className="select-wrapper modal-dropdown">
-                <select>
-                  <option>Select Department</option>
+                <select defaultValue="">
+                  <option value="" disabled>Select Department</option>
                   <option>Maintenance</option>
                   <option>IT Support</option>
                   <option>Cleaning</option>
@@ -74,7 +102,7 @@ export default function ComplaintDetails() {
             <>
               <label>New Priority</label>
               <div className="select-wrapper modal-dropdown">
-                <select>
+                <select defaultValue="Medium">
                   <option>Low</option>
                   <option>Medium</option>
                   <option>High</option>
@@ -93,8 +121,8 @@ export default function ComplaintDetails() {
             <>
               <label>Escalation Level</label>
               <div className="select-wrapper modal-dropdown">
-                <select>
-                  <option>Select Level</option>
+                <select defaultValue="">
+                  <option value="" disabled>Select Level</option>
                   <option>Supervisor</option>
                   <option>Department Head</option>
                   <option>Management</option>
@@ -106,17 +134,14 @@ export default function ComplaintDetails() {
                 placeholder="Explain why this ticket must be escalated..."
               />
               <label>Additional Notes (optional)</label>
-              <textarea
-                className="modal-textarea"
-                placeholder="Any extra context..."
-              />
+              <textarea className="modal-textarea" placeholder="Any extra context..." />
             </>
           );
         case "resolve":
           return (
             <>
               <label>Model’s Suggested Resolution</label>
-              <div className="model-suggestion">{ticket.modelSuggestion}</div>
+              <div className="model-suggestion">{ticket.modelSuggestion || "-"}</div>
               <label>Suggested Resolution</label>
               <textarea
                 className="modal-textarea"
@@ -146,17 +171,20 @@ export default function ComplaintDetails() {
         >
           <div className="modal-header">
             <h2>{titles[type]}</h2>
-            <span className="modal-close" onClick={closeModal}>
-              ✕
-            </span>
+            <span className="modal-close" onClick={closeModal}>✕</span>
           </div>
+
           <div className="modal-body">{renderBody()}</div>
+
           <div className="modal-footer">
-            <button className="modal-btn cancel" onClick={closeModal}>
-              Cancel
-            </button>
+            <button className="modal-btn cancel" onClick={closeModal}>Cancel</button>
             <button
               className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
+              onClick={() => {
+                // endpoints for these actions can be added next
+                closeModal();
+                alert("Saved (UI only). Backend action endpoints can be added next.");
+              }}
             >
               {submitText}
             </button>
@@ -172,31 +200,33 @@ export default function ComplaintDetails() {
         <main className="main">Loading ticket details...</main>
       </Layout>
     );
+
   if (error)
     return (
       <Layout role="employee">
         <main className="main">{error}</main>
       </Layout>
     );
+
   if (!ticket) return null;
 
   return (
     <Layout role="employee">
       <main className="main">
-        
         <div className="details-header">
           <div className="header-left">
-            <button className="back-btn" onClick={() => window.history.back()}>
+            <button className="back-btn" onClick={() => navigate(-1)}>
               ← Back
             </button>
             <h1 className="ticket-title">Ticket ID: {ticket.ticketId}</h1>
             <div className="status-row">
-              <span className={`header-pill ${ticket.priority.toLowerCase()}-pill`}>
+              <span className={`header-pill ${(ticket.priority || "").toLowerCase()}-pill`}>
                 {ticket.priority}
               </span>
               <span className="header-pill status-pill">{ticket.status}</span>
             </div>
           </div>
+
           <div className="header-actions">
             <button className="btn-outline" onClick={() => setModalType("rescore")}>
               Rescore
@@ -210,43 +240,26 @@ export default function ComplaintDetails() {
           </div>
         </div>
 
-        
         <section className="card-section">
           <h2 className="section-title">Summary</h2>
           <div className="summary-grid">
-            <div>
-              <span className="label">Issue Date:</span> {ticket.issueDate}
-            </div>
-            <div>
-              <span className="label">Mean Time To Respond:</span>{" "}
-              {ticket.metrics?.meanTimeToRespond}
-            </div>
-            <div>
-              <span className="label">Mean Time To Resolve:</span>{" "}
-              {ticket.metrics?.meanTimeToResolve}
-            </div>
-            <div>
-              <span className="label">Submitted By:</span> {ticket.submittedBy?.name}
-            </div>
-            <div>
-              <span className="label">Contact:</span> {ticket.submittedBy?.contact}
-            </div>
-            <div>
-              <span className="label">Location:</span> {ticket.submittedBy?.location}
-            </div>
-            <div>
-              <span className="label">Description:</span> {ticket.description?.details}
-            </div>
+            <div><span className="label">Issue Date:</span> {ticket.issueDate}</div>
+            <div><span className="label">Mean Time To Respond:</span> {ticket.metrics?.meanTimeToRespond}</div>
+            <div><span className="label">Mean Time To Resolve:</span> {ticket.metrics?.meanTimeToResolve}</div>
+            <div><span className="label">Submitted By:</span> {ticket.submittedBy?.name}</div>
+            <div><span className="label">Contact:</span> {ticket.submittedBy?.contact}</div>
+            <div><span className="label">Location:</span> {ticket.submittedBy?.location}</div>
+            <div><span className="label">Description:</span> {ticket.description?.details}</div>
           </div>
         </section>
 
-        
         <section className="details-grid">
           <div className="card-section">
             <h2 className="section-title">Complaint Details</h2>
             <div className="subject">{ticket.description?.subject}</div>
             <p className="description">{ticket.description?.details}</p>
-            {ticket.attachments && ticket.attachments.length > 0 && (
+
+            {ticket.attachments?.length > 0 && (
               <div className="attachments">
                 {ticket.attachments.map((att, i) => (
                   <div key={i} className="attachment-thumb">{att}</div>
@@ -255,7 +268,7 @@ export default function ComplaintDetails() {
             )}
           </div>
 
-          {ticket.stepsTaken && ticket.stepsTaken.length > 0 && (
+          {ticket.stepsTaken?.length > 0 && (
             <div className="card-section">
               <h2 className="section-title">Steps Taken</h2>
               {ticket.stepsTaken.map((step) => (
@@ -273,7 +286,6 @@ export default function ComplaintDetails() {
         </section>
       </main>
 
-      
       <Modal type={modalType} />
     </Layout>
   );

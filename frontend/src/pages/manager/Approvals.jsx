@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
@@ -8,43 +9,49 @@ import FilterPillButton from "../../components/common/FilterPillButton";
 import "./Approvals.css";
 
 export default function Approvals() {
+  const navigate = useNavigate();
+
+  // ------------------- State -------------------
   const [query, setQuery] = useState("");
   const [requestType, setRequestType] = useState("All Request Types");
   const [status, setStatus] = useState("All Status");
+  const [rows, setRows] = useState([]);
 
-  const [rows, setRows] = useState([
-    {
-      requestId: "REQ-3101",
-      ticketId: "CX-2011",
-      type: "Rescoring",
-      current: "Priority: Medium",
-      requested: "Priority: Critical",
-      submittedBy: "Ahmed Hassan",
-      submittedOn: "18/11/2025 – 10:22",
-      status: "Pending",
-    },
-    {
-      requestId: "REQ-3110",
-      ticketId: "CX-2034",
-      type: "Rerouting",
-      current: "Dept: Facilities",
-      requested: "Dept: Security",
-      submittedBy: "Ahmed Hassan",
-      submittedOn: "18/11/2025 – 11:05",
-      status: "Pending",
-    },
-    {
-      requestId: "REQ-3125",
-      ticketId: "CX-2078",
-      type: "Rescoring",
-      current: "Priority: High",
-      requested: "Priority: Medium",
-      submittedBy: "Maria Lopez",
-      submittedOn: "17/11/2025 – 15:40",
-      status: "Pending",
-    },
-  ]);
+  // ------------------- Fetch Approvals with Session -------------------
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
 
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+
+    fetch("http://localhost:8000/manager/approvals", { headers })
+      .then((res) => {
+        if (res.status === 401) navigate("/login");
+        return res.json();
+      })
+      .then((data) => {
+        const formatted = data.map((a) => ({
+          requestId: a.requestId,
+          ticketId: a.ticketCode, // showing CX-XXXX instead of UUID
+          type: a.type,
+          current: a.current,
+          requested: a.requested,
+          submittedBy: a.submittedBy,
+          submittedOn: new Date(a.submittedOn).toLocaleString(),
+          status: a.status,
+        }));
+        setRows(formatted);
+      })
+      .catch((err) => console.error("Error fetching approvals:", err));
+  }, [navigate]);
+
+  // ------------------- Actions -------------------
   const approve = (requestId) => {
     setRows((prev) =>
       prev.map((r) => (r.requestId === requestId ? { ...r, status: "Approved" } : r))
@@ -57,9 +64,9 @@ export default function Approvals() {
     );
   };
 
+  // ------------------- Filtering -------------------
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-
     return rows.filter((r) => {
       const matchesQuery =
         !q ||
@@ -74,6 +81,7 @@ export default function Approvals() {
     });
   }, [rows, query, requestType, status]);
 
+  // ------------------- KPIs -------------------
   const totals = useMemo(() => {
     const total = rows.length;
     const pending = rows.filter((r) => r.status === "Pending").length;
@@ -88,6 +96,7 @@ export default function Approvals() {
     setStatus("All Status");
   };
 
+  // ------------------- JSX -------------------
   return (
     <Layout role="manager">
       <div className="mgrApprovals">

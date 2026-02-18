@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -7,6 +7,7 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import PriorityPill from "../../components/common/PriorityPill";
 import FilterPillButton from "../../components/common/FilterPillButton";
+import { getToken, authHeader, getUser } from "../../utils/auth";
 import "./CustomerHistory.css";
 
 export default function CustomerHistory() {
@@ -16,51 +17,42 @@ export default function CustomerHistory() {
   const [type, setType] = useState("All");
   const [status, setStatus] = useState("All");
 
-  const historyItems = useMemo(
-    () => [
-      {
-        id: "INC-1024",
-        title: "Unable to access my account",
-        type: "Inquiry",
-        status: "Open",
-        date: "Aug 16, 2025",
-        priority: "Low",
-      },
-      {
-        id: "CMP-2219",
-        title: "Delivery was delayed and support did not respond",
-        type: "Complaint",
-        status: "In Progress",
-        date: "Aug 12, 2025",
-        priority: "High",
-      },
-      {
-        id: "CMP-2144",
-        title: "Incorrect billing amount on my invoice",
-        type: "Complaint",
-        status: "Resolved",
-        date: "Aug 02, 2025",
-        priority: "Medium",
-      },
-      {
-        id: "INC-0997",
-        title: "How can I update my email address?",
-        type: "Inquiry",
-        status: "Resolved",
-        date: "Jul 28, 2025",
-        priority: "Low",
-      },
-      {
-        id: "CMP-2050",
-        title: "App keeps crashing when I submit the form",
-        type: "Complaint",
-        status: "Open",
-        date: "Jul 21, 2025",
-        priority: "Critical",
-      },
-    ],
-    []
-  );
+  const [historyItems, setHistoryItems] = useState([]);
+
+  // Fetch tickets from backend
+  useEffect(() => {
+    const fetchTickets = async () => {
+      const token = getToken();
+      if (!token) return;
+
+      try {
+        const res = await fetch("http://localhost:8000/api/customer/mytickets", {
+          headers: authHeader(),
+        });
+
+        if (!res.ok) throw new Error("Failed to fetch tickets");
+
+        const data = await res.json();
+
+        // Map backend tickets to your UI format
+        const mappedTickets = (data.tickets || []).map((t) => ({
+          id: t.ticketId,
+          title: t.subject,
+          type: t.ticketType, // optional: if you have type in backend, replace
+          status: t.status,
+          date: t.issueDate,
+          priority: t.priority,
+        }));
+
+        setHistoryItems(mappedTickets);
+      } catch (e) {
+        console.error(e);
+        setHistoryItems([]);
+      }
+    };
+
+    fetchTickets();
+  }, []);
 
   const counts = useMemo(() => {
     const total = historyItems.length;
@@ -74,17 +66,12 @@ export default function CustomerHistory() {
 
     return historyItems.filter((item) => {
       const matchesQuery =
-        !q ||
-        item.id.toLowerCase().includes(q) ||
-        item.title.toLowerCase().includes(q);
-
+        !q || item.id.toLowerCase().includes(q) || item.title.toLowerCase().includes(q);
       const matchesType = type === "All" ? true : item.type === type;
       const matchesStatus = status === "All" ? true : item.status === status;
-
       return matchesQuery && matchesType && matchesStatus;
     });
   }, [historyItems, query, type, status]);
-
 
   const ordered = useMemo(() => {
     const rank = { Open: 0, "In Progress": 1, Resolved: 2 };
@@ -162,7 +149,7 @@ export default function CustomerHistory() {
             options={["All", "Open", "In Progress", "Resolved"]}
             minWidth={180}
           />
-          
+
           <div className="historyReset">
             <FilterPillButton onClick={clearFilters} label="Reset" />
           </div>

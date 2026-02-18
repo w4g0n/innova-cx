@@ -1,40 +1,60 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/nova-logo.png";
 import "./Login.css";
-
-function resolveRoleFromEmail(email) {
-  const e = (email || "").toLowerCase().trim();
-
-  if (e.includes("manager")) return "manager";
-  if (e.includes("operator")) return "operator";
-  if (e.includes("employee")) return "employee";
-
-  return "customer";
-}
 
 export default function Login() {
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const role = useMemo(() => resolveRoleFromEmail(email), [email]);
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
 
-    localStorage.setItem(
-      "user",
-      JSON.stringify({
-        role,
-        email,
-      })
-    );
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL;
+      if (!base) throw new Error("Missing VITE_API_BASE_URL in .env");
 
-    navigate("/verify", {
-      state: { role, email },
-    });
+      // Step 1: Login with email/password
+      const res = await fetch(`${base}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || "Login failed. Check your credentials.");
+        setLoading(false);
+        return;
+      }
+
+      const data = await res.json();
+
+      // Step 2: Store a temporary token for MFA verification
+      // This is NOT the final JWT — only used for OTP verification
+      sessionStorage.setItem("mfa_token", data.access_token);
+      sessionStorage.setItem(
+        "mfa_user",
+        JSON.stringify({
+          id: data.user.id,
+          email: data.user.email,
+          role: data.user.role,
+          full_name: data.user.full_name,
+        })
+      );
+
+      // Step 3: Redirect to MFA verification page
+      navigate("/verify");
+    } catch (error) {
+      console.error("Login error:", error);
+      alert("Network error or backend not running.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -42,11 +62,9 @@ export default function Login() {
       <div className="loginWrapper">
         <section className="loginLeft">
           <div className="loginOverlay" />
-
           <div className="loginLeftContent">
             <h1 className="welcomeTitle">Welcome back!</h1>
-            <p className="welcomeSub">Sign-in using your given credentials.</p>
-
+            <p className="welcomeSub">Sign-in using your credentials.</p>
             <div className="markWrap">
               <img src={logo} alt="InnovaCX logo" className="novaLogo" />
             </div>
@@ -91,8 +109,8 @@ export default function Login() {
               Forgot password?
             </button>
 
-            <button type="submit" className="loginBtn">
-              Log In
+            <button type="submit" className="loginBtn" disabled={loading}>
+              {loading ? "Logging in..." : "Log In"}
             </button>
           </form>
         </section>

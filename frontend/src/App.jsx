@@ -100,7 +100,7 @@ export default function App() {
             }
           />
           <Route
-            path="/customer/history"
+            path="/customer/mytickets"
             element={
               <ProtectedRoute role="customer">
                 <CustomerHistory />

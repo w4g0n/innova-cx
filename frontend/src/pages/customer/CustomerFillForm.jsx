@@ -81,7 +81,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     );
   };
 
-
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
@@ -156,15 +155,40 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     cleanupStream();
   };
 
+  // 🔥 Updated submit function to POST to backend
   const submit = async (e) => {
     e.preventDefault();
 
     const payload = await attachSentiment(buildPayload());
+    const token = localStorage.getItem("access_token");
 
-    console.log("FORM SUBMIT (demo):", payload);
-    alert("Submitted (demo). Your request has been recorded.");
 
-    resetForm();
+    try {
+      const res = await fetch("http://localhost:8000/api/customer/tickets", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to create ticket");
+      }
+
+      const data = await res.json();
+      alert(`Ticket created successfully! Ticket ID: ${data.ticket.ticketId}`);
+
+      resetForm();
+
+      // Close embedded form if present
+      if (embedded && typeof onCancel === "function") onCancel();
+    } catch (err) {
+      console.error("Ticket creation failed:", err);
+      alert(`Error creating ticket: ${err.message}`);
+    }
   };
 
   const startRecording = async () => {
@@ -174,15 +198,10 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     chunksRef.current = [];
     cancelRecordingRef.current = false;
 
-    const preferredTypes = [
-      "audio/webm;codecs=opus",
-      "audio/webm",
-      "audio/mp4",
-    ];
-    const supportedType =
-      typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported
-        ? preferredTypes.find((t) => MediaRecorder.isTypeSupported(t))
-        : null;
+    const preferredTypes = ["audio/webm;codecs=opus","audio/webm","audio/mp4"];
+    const supportedType = typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported
+      ? preferredTypes.find((t) => MediaRecorder.isTypeSupported(t))
+      : null;
 
     const recorder = supportedType
       ? new MediaRecorder(stream, { mimeType: supportedType })
@@ -245,9 +264,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
 
     cancelRecordingRef.current = true;
     try {
-      if (mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
-      }
+      if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
     } catch {
       setIsRecording(false);
       cleanupStream();
@@ -260,9 +277,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
 
     cancelRecordingRef.current = false;
     try {
-      if (mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
-      }
+      if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
     } catch {
       setIsRecording(false);
       cleanupStream();

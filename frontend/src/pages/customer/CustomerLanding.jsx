@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "./CustomerLanding.css";
-import dccLogo from "../../assets/dcc-logo.png";
+import novaLogo from "../../assets/nova-logo.png";
 import CustomerFillForm from "./CustomerFillForm";
 import useNovaChatbot from "./chatbot.js";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
@@ -49,12 +49,33 @@ export default function CustomerLanding() {
 
   const [novaView, setNovaView] = useState("chat");
 
-  const user = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem("user") || "{}");
-    } catch {
-      return {};
+  const [user, setUser] = useState({});
+  const [notifications, setNotifications] = useState([]);
+
+  // Fetch user and notifications from API
+  useEffect(() => {
+    const authUser = getUser();
+    if (authUser) {
+      setUser(authUser);
     }
+    async function fetchNotifications() {
+      try {
+        const token = getToken();
+        const res = await fetch("http://localhost:8000/api/customer/notifications", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setNotifications(data.notifications || []);
+        } else {
+          setNotifications([]);
+        }
+      } catch {
+        setNotifications([]);
+      }
+    }
+
+    fetchNotifications();
   }, []);
 
   const initialsFromEmail = useMemo(
@@ -62,14 +83,8 @@ export default function CustomerLanding() {
     [user]
   );
 
-  const [notifications, setNotifications] = useState([
-    { id: "n1", title: "Your complaint has been received", meta: "Just now", read: false },
-    { id: "n2", title: "Ticket #1042 is now In Progress", meta: "2h ago", read: false },
-    { id: "n3", title: "We responded to your inquiry", meta: "Yesterday", read: true },
-  ]);
-
   const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
+    () => Array.isArray(notifications) ? notifications.filter((n) => !n.read).length : 0,
     [notifications]
   );
 
@@ -112,7 +127,7 @@ export default function CustomerLanding() {
 
   const openHistory = () => {
     closeAllPopovers();
-    navigate("/customer/history");
+    navigate("/customer/mytickets");
   };
 
   const openSettings = () => {
@@ -123,6 +138,8 @@ export default function CustomerLanding() {
   const handleLogout = () => {
     closeAllPopovers();
     localStorage.removeItem("user");
+    localStorage.removeItem("token");
+    localStorage.removeItem("temp_token");
     navigate("/");
   };
 
@@ -242,20 +259,33 @@ export default function CustomerLanding() {
     cancelVoice();
   };
 
+  const formatTimeAgo = (isoString) => {
+    if (!isoString) return "";
+    const now = new Date();
+    const date = new Date(isoString);
+    const diff = Math.floor((now - date) / 1000); // seconds
+
+    if (diff < 60) return `${diff} sec${diff !== 1 ? "s" : ""} ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+    return date.toLocaleDateString();
+  };
+
   return (
     <div className="customer-landing-page">
       <div className="main-content">
         <nav className="navbar">
           <div className="logo">
-            <img src={dccLogo} alt="Dubai CommerCity" />
+            <img src={novaLogo} alt="Dubai CommerCity" />
           </div>
 
           <ul className="nav-links">
             <li><a href="#">Our Facilities</a></li>
             <li><a href="#">Digital Ecosystem</a></li>
-            <li><a href="#">About</a></li>
             <li><a href="#">Newsroom</a></li>
             <li><a href="#">Contact</a></li>
+            <li><a href="#">About</a></li>
           </ul>
 
           <div className="nav-actions">
@@ -285,12 +315,21 @@ export default function CustomerLanding() {
                 <div className="navPopover" role="menu" aria-label="Notifications">
                   <div className="navPopoverHeader">Notifications</div>
                   <div className="navPopoverList">
-                    {notifications.map((n) => (
-                      <div key={n.id} className="navPopoverItem">
-                        <div className="navPopoverItemTitle">{n.title}</div>
-                        <div className="navPopoverItemMeta">{n.meta}</div>
-                      </div>
-                    ))}
+                    {notifications.length === 0 ? (
+                      <div className="navPopoverEmpty">No notifications</div>
+                    ) : (
+                      notifications.map((n) => (
+                        <div key={n.id} className={`navPopoverItem ${n.read ? "" : "unread"}`}>
+                          <div className="navPopoverItemHeader">
+                            <div className="navPopoverItemTitle">{n.title || n.type || "Notification"}</div>
+                            {n.createdAt && (
+                              <div className="navPopoverItemTime">{formatTimeAgo(n.createdAt)}</div>
+                            )}
+                          </div>
+                          <div className="navPopoverItemMeta">{n.message || ""}</div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               )}
@@ -333,9 +372,9 @@ export default function CustomerLanding() {
               <h1 className="hero-title"><span className="hero-static">We are</span></h1>
               <div className="hero-dynamic">
                 <div className="hero-dynamic-inner">
-                  <span>Dubai CommerCity</span>
-                  <span>Leading Business Hub</span>
-                  <span>Driving Digital Commerce</span>
+                  <span>InnovaAI</span>
+                  <span>Transforming Customer Experience</span>
+                  <span>An AI-Powered Ticket Prioritization System</span>
                 </div>
               </div>
               <div className="hero-line" />
@@ -344,8 +383,7 @@ export default function CustomerLanding() {
             <div className="hero-body">
               <button className="btn-hero">Learn More</button>
               <p className="hero-desc">
-                Dubai CommerCity is the first and leading free zone dedicated exclusively
-                to digital commerce in the Middle East Africa and South Asia (MEASA) region
+               We are transforming customer support with smart ticket prioritization. Using sentiment and audio analysis, our system identifies urgent issues and high-value customers, helping teams respond faster and more effectively.
               </p>
             </div>
           </div>
@@ -460,10 +498,10 @@ export default function CustomerLanding() {
 
                   {!hasChosenType && (
                     <div className="novaQuickRow">
-                    <button onClick={() => handleSelect("complaint")}>Complaint</button>
-                    <button onClick={() => handleSelect("inquiry")}>Inquiry</button>
-                  </div>
-                )}
+                      <button onClick={() => handleSelect("complaint")}>Complaint</button>
+                      <button onClick={() => handleSelect("inquiry")}>Inquiry</button>
+                    </div>
+                  )}
                 </div>
 
                 {hasChosenType && stage === "inquiry" && (
@@ -516,53 +554,53 @@ export default function CustomerLanding() {
                         </div>
                       </div>
                     )}
-                     <form
-  className="novaComposer"
-  onSubmit={(e) => {
-    e.preventDefault();
-    handleSend(text);
-    setText("");
-  }}
->
+                    <form
+                      className="novaComposer"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSend(text);
+                        setText("");
+                      }}
+                    >
 
-  <button
-    type="button"
-    className={`novaMicBtn ${voiceActive ? "active" : ""}`}
-    aria-label="Voice input"
-    onClick={() => {
-      if (voiceActive) cancelVoice();
-      else startVoice();
-    }}
-  >
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z"
-        fill="currentColor"
-        opacity="0.95"
-      />
-      <path
-        d="M19 11a7 7 0 0 1-14 0"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <path
-        d="M12 18v3"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  </button>
+                      <button
+                        type="button"
+                        className={`novaMicBtn ${voiceActive ? "active" : ""}`}
+                        aria-label="Voice input"
+                        onClick={() => {
+                          if (voiceActive) cancelVoice();
+                          else startVoice();
+                        }}
+                      >
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path
+                            d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z"
+                            fill="currentColor"
+                            opacity="0.95"
+                          />
+                          <path
+                            d="M19 11a7 7 0 0 1-14 0"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                          />
+                          <path
+                            d="M12 18v3"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      </button>
 
-  <input
-    value={text}
-    onChange={(e) => setText(e.target.value)}
-    placeholder="Type a message…"
-  />
+                      <input
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        placeholder="Type a message…"
+                      />
 
-                    <button type="submit">Send</button>
-                  </form>
+                      <button type="submit">Send</button>
+                    </form>
                   </div>
                 )}
 

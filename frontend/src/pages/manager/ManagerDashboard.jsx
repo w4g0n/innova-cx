@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ManagerDashboard.css";
 
@@ -6,6 +7,44 @@ import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 
 export default function ManagerDashboard() {
+  const navigate = useNavigate();
+
+  // State to hold backend KPIs
+  const [kpis, setKpis] = useState({
+    open_complaints: 0,
+    in_progress: 0,
+    resolved_today: 0,
+    active_employees: 0,
+    pending_approvals: 0,
+  });
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token"); // assuming JWT stored here
+    if (!token) {
+      navigate("/login"); // redirect if not logged in
+      return;
+    }
+
+    fetch("http://localhost:8000/manager", {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`, // pass token in header
+      },
+    })
+      .then((res) => {
+        if (res.status === 401) {
+          // token invalid or expired
+          navigate("/login");
+          return null;
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data) setKpis(data);
+      })
+      .catch((err) => console.error("Failed to fetch KPIs:", err));
+  }, [navigate]);
+
   return (
     <Layout role="manager">
       <div className="mgrDashboard">
@@ -15,12 +54,11 @@ export default function ManagerDashboard() {
         />
 
         <section className="managerKpiRow">
-          <KpiCard label="Open Complaints" value={42} />
-          <KpiCard label="Unassigned" value={7} />
-          <KpiCard label="In Progress" value={18} />
-          <KpiCard label="Resolved Today" value={9} />
-          <KpiCard label="Active Employees" value={12} />
-          <KpiCard label="Pending Approvals" value={3} />
+          <KpiCard label="Open Complaints" value={kpis.open_complaints} />
+          <KpiCard label="In Progress" value={kpis.in_progress} />
+          <KpiCard label="Resolved Today" value={kpis.resolved_today} />
+          <KpiCard label="Active Employees" value={kpis.active_employees} />
+          <KpiCard label="Pending Approvals" value={kpis.pending_approvals} />
         </section>
 
         <p className="managerIntro">
@@ -58,7 +96,9 @@ export default function ManagerDashboard() {
           <Link to="/manager/trends" className="managerBubbleCard">
             <span className="managerBubbleLabel">Analytics</span>
             <div className="managerBubbleTitle">Complaint Trends</div>
-            <div className="managerBubbleMetric">View insights and trend analysis.</div>
+            <div className="managerBubbleMetric">
+              View insights and trend analysis.
+            </div>
             <div className="managerBubbleLink">View trends →</div>
           </Link>
         </section>

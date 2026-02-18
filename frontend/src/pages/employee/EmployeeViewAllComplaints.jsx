@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -7,16 +7,19 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
-import ticketsData from "../../mock-data/employeeAllTickets.json";
 import "./ViewAllComplaint.css";
 
+const API_BASE = "http://localhost:8000/api";
+
 const priorityOrder = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+
 const statusOrder = {
   Unassigned: 1,
   Assigned: 2,
-  Escalated: 3,
-  Overdue: 4,
-  Resolved: 5,
+  "In Progress": 3,
+  Escalated: 4,
+  Overdue: 5,
+  Resolved: 6,
 };
 
 const timeToMinutes = (value) => {
@@ -47,10 +50,23 @@ const toDate = (raw) => {
   return Number.isNaN(dt.getTime()) ? null : dt;
 };
 
+function getStoredToken() {
+  return (
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") ||
+    ""
+  );
+}
+
 export default function EmployeeViewAllComplaints() {
   const navigate = useNavigate();
 
-  const [tickets] = useState(() => ticketsData.tickets || []);
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [priorityFilter, setPriorityFilter] = useState("All Priorities");
@@ -58,16 +74,43 @@ export default function EmployeeViewAllComplaints() {
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [showDateFilter, setShowDateFilter] = useState(false);
 
+  useEffect(() => {
+    const fetchTickets = async () => {
+      const token = getStoredToken();
+      if (!token) {
+        setError("No auth token found.");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/employee/tickets`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) {
+          throw new Error(`Failed to fetch tickets (${res.status})`);
+        }
+
+        const data = await res.json();
+        setTickets(data.tickets || []);
+      } catch (err) {
+        setError(err.message || "Failed to load tickets.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTickets();
+  }, []);
+
   const normalizedTickets = useMemo(() => {
     return (tickets || []).map((t) => {
       const issueDateRaw = t.issueDate ?? t.issue_date ?? t.createdAt ?? "";
       const responseTimeRaw =
         t.metrics?.meanTimeToRespond ?? t.response_time ?? t.responseTime ?? "";
       const resolutionTimeRaw =
-        t.metrics?.meanTimeToResolve ??
-        t.resolution_time ??
-        t.resolutionTime ??
-        "";
+        t.metrics?.meanTimeToResolve ?? t.resolution_time ?? t.resolutionTime ?? "";
 
       return {
         ...t,
@@ -89,11 +132,11 @@ export default function EmployeeViewAllComplaints() {
   };
 
   const filteredTickets = useMemo(() => {
-    const q = (searchTerm ?? "").toString().toLowerCase().trim();
+    const q = searchTerm.toLowerCase().trim();
 
     let filtered = normalizedTickets.filter((t) => {
-      const id = (t.ticketId ?? "").toString().toLowerCase();
-      const subj = (t.subject ?? "").toString().toLowerCase();
+      const id = (t.ticketId ?? "").toLowerCase();
+      const subj = (t.subject ?? "").toLowerCase();
 
       const matchesSearch = !q || id.includes(q) || subj.includes(q);
       const matchesStatus = statusFilter === "All Status" || t.status === statusFilter;
@@ -122,27 +165,22 @@ export default function EmployeeViewAllComplaints() {
             aVal = priorityOrder[a.priority] || 0;
             bVal = priorityOrder[b.priority] || 0;
             break;
-
           case "status":
             aVal = statusOrder[a.status] || 0;
             bVal = statusOrder[b.status] || 0;
             break;
-
           case "issueDate":
             aVal = toDate(a._issueDateRaw) || new Date(0);
             bVal = toDate(b._issueDateRaw) || new Date(0);
             break;
-
           case "responseTime":
             aVal = timeToMinutes(a._responseTimeRaw);
             bVal = timeToMinutes(b._responseTimeRaw);
             break;
-
           case "resolutionTime":
             aVal = timeToMinutes(a._resolutionTimeRaw);
             bVal = timeToMinutes(b._resolutionTimeRaw);
             break;
-
           default:
             aVal = a[sortConfig.key];
             bVal = b[sortConfig.key];
@@ -157,24 +195,36 @@ export default function EmployeeViewAllComplaints() {
     return filtered;
   }, [normalizedTickets, searchTerm, statusFilter, priorityFilter, dateRange, sortConfig]);
 
-  const kpiCounts = useMemo(
-    () => ({
-      openTickets: filteredTickets.length,
-      assignedToMe: filteredTickets.filter((t) => t.status === "Assigned").length,
-      inProgress: filteredTickets.filter((t) => t.status === "Escalated").length,
-      newTickets: filteredTickets.filter((t) => t.status === "Unassigned").length,
-      highPriority: filteredTickets.filter(
+  const kpiCounts = useMemo(() => {
+    const notResolved = filteredTickets.filter((t) => t.status !== "Resolved");
+
+    const isToday = (raw) => {
+      const d = toDate(raw);
+      if (!d) return false;
+      const now = new Date();
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      );
+    };
+
+    return {
+      openTickets: notResolved.length,
+      assignedToMe: notResolved.length,
+      inProgress: filteredTickets.filter(
+        (t) => t.status === "Assigned" || t.status === "In Progress"
+      ).length,
+      newTickets: filteredTickets.filter((t) => isToday(t._issueDateRaw)).length,
+      highPriority: notResolved.filter(
         (t) => t.priority === "High" || t.priority === "Critical"
       ).length,
       overdueTickets: filteredTickets.filter((t) => t.status === "Overdue").length,
-    }),
-    [filteredTickets]
-  );
+    };
+  }, [filteredTickets]);
 
-  const getSortArrow = (key) => {
-    if (sortConfig.key !== key) return "   ↑↓";
-    return sortConfig.direction === "asc" ? "   ↑" : "   ↓";
-  };
+  if (loading) return <Layout role="employee"><div>Loading tickets...</div></Layout>;
+  if (error) return <Layout role="employee"><div>{error}</div></Layout>;
 
   return (
     <Layout role="employee">
@@ -184,134 +234,12 @@ export default function EmployeeViewAllComplaints() {
           subtitle="View, search, sort, and manage all complaints and requests assigned to you."
         />
 
-        
-        <section className="search-section-EV-VAC">
-          <PillSearch
-            value={searchTerm}
-            onChange={(v) => {
-              if (typeof v === "string") setSearchTerm(v);
-              else setSearchTerm(v?.target?.value ?? "");
-            }}
-            placeholder="Search tickets by ID or summary..."
-          />
-        </section>
-
-        
-        <section className="filters-row-EV-VAC">
-          <div className="filter-group-EV-VAC">
-            <PillSelect
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={[
-                { value: "All Status", label: "All Status" },
-                { value: "Unassigned", label: "Unassigned" },
-                { value: "Assigned", label: "Assigned" },
-                { value: "Escalated", label: "Escalated" },
-                { value: "Resolved", label: "Resolved" },
-                { value: "Overdue", label: "Overdue" },
-              ]}
-            />
-            <PillSelect
-              value={priorityFilter}
-              onChange={setPriorityFilter}
-              options={[
-                { value: "All Priorities", label: "All Priorities" },
-                { value: "Low", label: "Low" },
-                { value: "Medium", label: "Medium" },
-                { value: "High", label: "High" },
-                { value: "Critical", label: "Critical" },
-              ]}
-            />
-
-            
-            <FilterPillButton onClick={() => setShowDateFilter(!showDateFilter)} />
-          </div>
-        </section>
-
-        
-        {showDateFilter && (
-          <section className="filters-row-EV-VAC">
-            <div className="filter-group-EV-VAC">
-              <input
-                type="date"
-                value={dateRange.from}
-                onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
-              />
-              <input
-                type="date"
-                value={dateRange.to}
-                onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
-              />
-            </div>
-          </section>
-        )}
-
-        
         <section className="kpi-row-EV-VAC">
           <KpiCard label="Open Tickets" value={kpiCounts.openTickets} />
-          <KpiCard label="Assigned to Me" value={kpiCounts.assignedToMe} />
           <KpiCard label="In Progress" value={kpiCounts.inProgress} />
-          <KpiCard label="New" value={kpiCounts.newTickets} />
+          <KpiCard label="New Today" value={kpiCounts.newTickets} />
           <KpiCard label="High Priority" value={kpiCounts.highPriority} />
           <KpiCard label="Overdue Tickets" value={kpiCounts.overdueTickets} />
-        </section>
-
-        
-        <section className="table-wrapper-EV-VAC">
-          <table className="complaints-table-EV-VAC">
-            <thead>
-              <tr>
-                {[
-                  { key: "ticketId", label: "Ticket ID" },
-                  { key: "subject", label: "Subject" },
-                  { key: "priority", label: "Priority" },
-                  { key: "status", label: "Status" },
-                  { key: "issueDate", label: "Issue Date" },
-                  { key: "responseTime", label: "Response Time" },
-                  { key: "resolutionTime", label: "Resolution Time" },
-                  { key: null, label: "" },
-                ].map((col) => (
-                  <th key={col.label} onClick={() => col.key && handleSort(col.key)}>
-                    {col.label}
-                    {col.key && getSortArrow(col.key)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredTickets.map((t) => (
-                <tr key={t.ticketId}>
-                  <td
-                    className="complaint-link-EV-VAC clickable"
-                    onClick={() => navigate(`/employee/details/${t.ticketId}`)}
-                  >
-                    {t.ticketId}
-                  </td>
-
-                  <td>{t.subject}</td>
-
-                  
-                  <td>
-                    <PriorityPill priority={t.priority} />
-                  </td>
-
-                  <td>{t.status}</td>
-
-                  <td>{t._issueDateRaw}</td>
-                  <td>{t._responseTimeRaw}</td>
-                  <td>{t._resolutionTimeRaw}</td>
-
-                  <td
-                    className="arrow-cell-EV-VAC clickable"
-                    onClick={() => navigate(`/employee/details/${t.ticketId}`)}
-                  >
-                    ➜
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </section>
       </main>
     </Layout>

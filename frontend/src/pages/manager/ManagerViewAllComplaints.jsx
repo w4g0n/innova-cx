@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
-import { Link } from "react-router-dom";
 import "./ManagerViewAllComplaints.css";
 
 import PageHeader from "../../components/common/PageHeader";
@@ -11,140 +11,64 @@ import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
 
 export default function ManagerViewComplaints() {
-  const employees = [
-    "Ahmed Hassan",
-    "Maria Lopez",
-    "Omar Ali",
-    "Sara Ahmed",
-    "Bilal Khan",
-    "Fatima Noor",
-    "Yousef Karim",
-    "Khalid Musa",
-  ];
+  const navigate = useNavigate();
 
-  const departments = ["IT", "Facilities", "Security", "HR", "Admin"];
+  // Tickets & Employees
+  const [rows, setRows] = useState([]);
+  const [employees, setEmployees] = useState([]);
 
-  const [rows, setRows] = useState([
-    {
-      id: "CX-1122",
-      subject: "Air conditioning not working",
-      priority: "critical",
-      priorityText: "Critical",
-      status: "Unassigned",
-      assignee: "—",
-      issueDate: "19/11/2025",
-      respondTime: "30 Minutes",
-      resolveTime: "6 Hours",
-      action: "Assign",
-    },
-    {
-      id: "CX-3862",
-      subject: "Water leakage in pantry",
-      priority: "critical",
-      priorityText: "Critical",
-      status: "Overdue",
-      assignee: "Maria Lopez",
-      issueDate: "18/11/2025",
-      respondTime: "30 Minutes",
-      resolveTime: "6 Hours",
-      action: "Reassign",
-    },
-    {
-      id: "CX-4587",
-      subject: "Wi-Fi connection unstable",
-      priority: "high",
-      priorityText: "High",
-      status: "Escalated",
-      assignee: "Supervisor Team",
-      issueDate: "19/11/2025",
-      respondTime: "1 Hour",
-      resolveTime: "18 Hours",
-      action: "Reassign",
-    },
-    {
-      id: "CX-4630",
-      subject: "Lift stopping between floors",
-      priority: "high",
-      priorityText: "High",
-      status: "Assigned",
-      assignee: "Ahmed Hassan",
-      issueDate: "18/11/2025",
-      respondTime: "1 Hour",
-      resolveTime: "18 Hours",
-      action: "Reassign",
-    },
-    {
-      id: "CX-4701",
-      subject: "Cleaning service missed schedule",
-      priority: "medium",
-      priorityText: "Medium",
-      status: "Unassigned",
-      assignee: "—",
-      issueDate: "16/11/2025",
-      respondTime: "3 Hours",
-      resolveTime: "2 Days",
-      action: "Assign",
-    },
-    {
-      id: "CX-4725",
-      subject: "Parking access card not working",
-      priority: "medium",
-      priorityText: "Medium",
-      status: "Overdue",
-      assignee: "Omar Ali",
-      issueDate: "13/11/2025",
-      respondTime: "3 Hours",
-      resolveTime: "2 Days",
-      action: "Reassign",
-    },
-    {
-      id: "CX-4780",
-      subject: "Noise from maintenance works",
-      priority: "low",
-      priorityText: "Low",
-      status: "Escalated",
-      assignee: "Sara Ahmed",
-      issueDate: "09/11/2025",
-      respondTime: "6 Hours",
-      resolveTime: "3 Days",
-      action: "Reassign",
-    },
-  ]);
-
+  // Filters & Search
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [priorityFilter, setPriorityFilter] = useState("All Priorities");
 
+  // Assignment modal state
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [activeTicketId, setActiveTicketId] = useState(null);
   const [originalAssignee, setOriginalAssignee] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState("");
 
+  // More actions menu
   const [openMenuFor, setOpenMenuFor] = useState(null);
 
-  const toggleMenu = (ticketId) => {
-    setOpenMenuFor((prev) => (prev === ticketId ? null : ticketId));
-  };
+  // Departments for rerouting (dummy placeholder, replace with real list if needed)
+  const departments = ["Maintenance", "IT", "Security", "Cleaning", "Facilities"];
 
+  // Fetch tickets & employees with session token
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+
+    // Fetch complaints
+    fetch("http://127.0.0.1:8000/manager/complaints", { headers })
+      .then((res) => {
+        if (res.status === 401) navigate("/login");
+        return res.json();
+      })
+      .then((data) => data && setRows(data || []))
+      .catch((err) => console.error("Failed to fetch tickets:", err));
+
+    // Fetch employees for assignment modal
+    fetch("http://127.0.0.1:8000/manager/employees", { headers })
+      .then((res) => {
+        if (res.status === 401) navigate("/login");
+        return res.json();
+      })
+      .then((data) => data && setEmployees(data.map((e) => e.name)))
+      .catch((err) => console.error("Failed to fetch employees:", err));
+  }, [navigate]);
+
+  // ------------------- Menu / Modal Handlers -------------------
+  const toggleMenu = (ticketId) => setOpenMenuFor((prev) => (prev === ticketId ? null : ticketId));
   const closeMenu = () => setOpenMenuFor(null);
-
-  const handleReroute = (ticketId, dept) => {
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === ticketId
-          ? { ...r, status: "Unassigned", assignee: "—", action: "Assign", reroutedTo: dept }
-          : r
-      )
-    );
-    closeMenu();
-  };
-
-  const cancelReroute = (ticketId) => {
-    setRows((prev) =>
-      prev.map((r) => (r.id === ticketId ? { ...r, reroutedTo: undefined } : r))
-    );
-    closeMenu();
-  };
 
   const openAssignModal = (ticketId, currentAssignee) => {
     const initial = currentAssignee && currentAssignee !== "—" ? currentAssignee : "";
@@ -167,21 +91,14 @@ export default function ManagerViewComplaints() {
   const confirmAssignment = () => {
     if (!activeTicketId) return;
 
-    if (!selectedEmployee) {
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === activeTicketId
-            ? { ...r, assignee: "—", status: "Unassigned", action: "Assign" }
-            : r
-        )
-      );
-      closeAssignModal();
-      return;
-    }
-
     setRows((prev) =>
       prev.map((r) => {
         if (r.id !== activeTicketId) return r;
+
+        if (!selectedEmployee) {
+          return { ...r, assignee: "—", status: "Unassigned", action: "Assign" };
+        }
+
         const nextStatus = r.status === "Unassigned" ? "Assigned" : r.status;
         return {
           ...r,
@@ -196,35 +113,41 @@ export default function ManagerViewComplaints() {
     closeAssignModal();
   };
 
+  const handleReroute = (ticketId, dept) => {
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === ticketId
+          ? { ...r, status: "Unassigned", assignee: "—", action: "Assign", reroutedTo: dept }
+          : r
+      )
+    );
+    closeMenu();
+  };
+
+  const cancelReroute = (ticketId) => {
+    setRows((prev) => prev.map((r) => (r.id === ticketId ? { ...r, reroutedTo: undefined } : r)));
+    closeMenu();
+  };
+
+  // ------------------- Filtering & KPIs -------------------
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-
     return rows.filter((r) => {
-      const matchesSearch =
-        q === "" || r.id.toLowerCase().includes(q) || r.subject.toLowerCase().includes(q);
-
+      const matchesSearch = q === "" || r.id.toLowerCase().includes(q) || r.subject.toLowerCase().includes(q);
       const matchesStatus = statusFilter === "All Status" || r.status === statusFilter;
-
-      const matchesPriority =
-        priorityFilter === "All Priorities" || r.priorityText === priorityFilter;
-
+      const matchesPriority = priorityFilter === "All Priorities" || r.priorityText === priorityFilter;
       return matchesSearch && matchesStatus && matchesPriority;
     });
   }, [rows, search, statusFilter, priorityFilter]);
 
   const kpis = useMemo(() => {
     const list = filteredRows;
-    const unassigned = list.filter((r) => r.status === "Unassigned").length;
-    const critical = list.filter((r) => r.priority === "critical").length;
-    const overdue = list.filter((r) => r.status === "Overdue").length;
-    const inProgress = list.filter((r) => r.status === "Assigned").length;
-
     return {
       openTickets: list.length,
-      unassigned,
-      critical,
-      overdue,
-      inProgress,
+      unassigned: list.filter((r) => r.status === "Unassigned").length,
+      critical: list.filter((r) => r.priority === "critical").length,
+      overdue: list.filter((r) => r.status === "Overdue").length,
+      inProgress: list.filter((r) => r.status === "Assigned").length,
       resolvedToday: 0,
     };
   }, [filteredRows]);
@@ -235,6 +158,7 @@ export default function ManagerViewComplaints() {
     setPriorityFilter("All Priorities");
   };
 
+  // ------------------- JSX -------------------
   return (
     <Layout role="manager">
       <main className="mv-main" onClick={closeMenu}>
@@ -262,7 +186,6 @@ export default function ManagerViewComplaints() {
           />
         </section>
 
-        
         <section className="mv-filtersRow">
           <div className="mv-filterGroup">
             <div className="mv-select">
@@ -337,23 +260,17 @@ export default function ManagerViewComplaints() {
                         {r.id}
                       </Link>
                     </td>
-
                     <td className="mv-subjectCell mv-cellGrow">{r.subject}</td>
-
                     <td className="mv-cellTight">
                       <PriorityPill priority={r.priorityText} />
                     </td>
-
                     <td className="mv-cellTight">
                       <span
-                        className={`mv-statusPill ${
-                          r.status === "Overdue" ? "mv-statusPill--overdue" : ""
-                        }`}
+                        className={`mv-statusPill ${r.status === "Overdue" ? "mv-statusPill--overdue" : ""}`}
                       >
                         {r.status}
                       </span>
                     </td>
-
                     <td className="mv-cellMid">
                       <div className="mv-assigneeCell">
                         <div className="mv-ellipsis">{r.assignee}</div>
@@ -362,11 +279,9 @@ export default function ManagerViewComplaints() {
                         )}
                       </div>
                     </td>
-
                     <td className="mv-cellTight">{r.issueDate}</td>
                     <td className="mv-cellTight">{r.respondTime}</td>
                     <td className="mv-cellTight">{r.resolveTime}</td>
-
                     <td className="mv-cellTight" onClick={(e) => e.stopPropagation()}>
                       <div className="mv-actionCell">
                         <button
@@ -378,7 +293,6 @@ export default function ManagerViewComplaints() {
                         </button>
                       </div>
                     </td>
-
                     <td className="mv-cellTight" onClick={(e) => e.stopPropagation()}>
                       <div className="mv-moreCell">
                         {showMore ? (
@@ -391,11 +305,9 @@ export default function ManagerViewComplaints() {
                             >
                               ⋯
                             </button>
-
                             {openMenuFor === r.id && (
                               <div className={`mv-menu ${openUp ? "mv-menu--up" : ""}`}>
                                 <div className="mv-menuTitle">Reroute to</div>
-
                                 {departments.map((d) => (
                                   <button
                                     key={d}
@@ -407,7 +319,6 @@ export default function ManagerViewComplaints() {
                                     {d}
                                   </button>
                                 ))}
-
                                 {showCancelReroute && (
                                   <button
                                     type="button"
@@ -428,7 +339,6 @@ export default function ManagerViewComplaints() {
                   </tr>
                 );
               })}
-
               {filteredRows.length === 0 && (
                 <tr>
                   <td colSpan={10} className="mv-empty">
@@ -442,17 +352,10 @@ export default function ManagerViewComplaints() {
 
         {isAssignOpen && (
           <div className="mv-modalOverlay" onClick={closeAssignModal} role="presentation">
-            <div
-              className="mv-modal"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-            >
+            <div className="mv-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
               <div className="mv-modalHeader">
                 <h3 className="mv-modalTitle">Assign Ticket</h3>
-                <button className="mv-modalClose" type="button" onClick={closeAssignModal}>
-                  ✕
-                </button>
+                <button className="mv-modalClose" type="button" onClick={closeAssignModal}>✕</button>
               </div>
 
               <p className="mv-modalSub">
@@ -464,9 +367,7 @@ export default function ManagerViewComplaints() {
                   <button
                     key={name}
                     type="button"
-                    className={`mv-employeeItem ${
-                      selectedEmployee === name ? "mv-employeeItem--selected" : ""
-                    }`}
+                    className={`mv-employeeItem ${selectedEmployee === name ? "mv-employeeItem--selected" : ""}`}
                     onClick={() => setSelectedEmployee(name)}
                   >
                     {name}
@@ -475,14 +376,8 @@ export default function ManagerViewComplaints() {
               </div>
 
               <div className="mv-modalActions">
-                <button className="mv-modalClear" type="button" onClick={clearSelection}>
-                  Unassign / Clear
-                </button>
-
-                <button className="mv-modalCancel" type="button" onClick={closeAssignModal}>
-                  Cancel
-                </button>
-
+                <button className="mv-modalClear" type="button" onClick={clearSelection}>Unassign / Clear</button>
+                <button className="mv-modalCancel" type="button" onClick={closeAssignModal}>Cancel</button>
                 <button
                   className="mv-modalConfirm"
                   type="button"

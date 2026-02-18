@@ -4,13 +4,18 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including tzdata for timezone
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsndfile1 \
     libpq-dev \
     gcc \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# Set timezone to Dubai (permanent)
+ENV TZ=Asia/Dubai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Copy requirements file
 COPY requirements.txt .
