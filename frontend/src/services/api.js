@@ -20,10 +20,12 @@ const API_CONFIG = {
 };
 
 /**
- * Transcribe audio file using Whisper service
+ * Transcribe audio file using Whisper service.
+ * The Whisper service also forwards the audio to the Audio Analyzer
+ * backend service, so the response includes audio_features.
  * @param {Blob} audioBlob - Audio blob to transcribe
  * @param {string} filename - Filename for the audio
- * @returns {Promise<{transcript: string}>}
+ * @returns {Promise<{transcript: string, audio_score: number|null, audio_features: object|null}>}
  */
 export async function transcribeAudio(audioBlob, filename = "recording.mp4") {
   const formData = new FormData();
@@ -63,7 +65,7 @@ export async function analyzeSentiment(text) {
 /**
  * Analyze combined text + audio sentiment
  * @param {string} text - Text to analyze
- * @param {object|null} audioFeatures - Optional audio features from Whisper
+ * @param {object|null} audioFeatures - Optional audio features from Whisper response
  * @returns {Promise<object>}
  */
 export async function analyzeCombinedSentiment(text, audioFeatures = null) {
@@ -81,9 +83,9 @@ export async function analyzeCombinedSentiment(text, audioFeatures = null) {
 }
 
 /**
- * Full audio pipeline: transcribe + analyze sentiment
+ * Full audio pipeline: transcribe (includes audio analysis) → combined sentiment
  * @param {Blob} audioBlob - Audio blob to process
- * @returns {Promise<{transcript: string, sentiment: object}>}
+ * @returns {Promise<{transcript: string, sentiment: object, audioFeatures: object|null}>}
  */
 export async function processAudioComplaint(audioBlob) {
   const transcription = await transcribeAudio(audioBlob);

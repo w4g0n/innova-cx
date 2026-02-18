@@ -7,8 +7,9 @@ import path from "path";
 
 const app = express();
 app.use(cors());
-const sentimentUrl =
-  process.env.SENTIMENT_URL || "http://innovacx-sentiment:8002";
+
+const audioAnalyzerUrl =
+  process.env.AUDIO_ANALYZER_URL || "http://innovacx-audio-analyzer:8003";
 
 // ------------------------------------
 // Upload config
@@ -28,81 +29,82 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
 
   console.log("🎙️ Received audio:", audioPath);
 
-  const py = spawn("python3", ["analyze.py", audioPath]);
+  // --- 1. Transcribe via Python (Faster-Whisper) ---
+  const transcriptPromise = new Promise((resolve, reject) => {
+    const py = spawn("python3", ["analyze.py", audioPath]);
 
-  let stdout = "";
-  let stderr = "";
+    let stdout = "";
+    let stderr = "";
 
-  py.stdout.on("data", (data) => {
-    stdout += data.toString();
-  });
+    py.stdout.on("data", (data) => { stdout += data.toString(); });
+    py.stderr.on("data", (data) => { stderr += data.toString(); });
 
-  py.stderr.on("data", (data) => {
-    stderr += data.toString();
-  });
-
-  py.on("close", async (code) => {
-    // Always cleanup uploaded file
-    try {
-      if (fs.existsSync(audioPath)) {
-        fs.unlinkSync(audioPath);
+    py.on("close", (code) => {
+      if (code !== 0 || stderr) {
+        console.error("🐍 Python error:", stderr || `Exited with code ${code}`);
+        return reject(new Error("Transcription failed"));
       }
-    } catch (err) {
-      console.warn("⚠️ Failed to cleanup audio file:", err.message);
-    }
-
-    if (code !== 0 || stderr) {
-      console.error("🐍 Python error:");
-      console.error(stderr || `Exited with code ${code}`);
-      return res.status(500).json({ error: "Audio processing failed" });
-    }
-
-    let result;
-    try {
-      result = JSON.parse(stdout);
-    } catch (err) {
-      console.error("❌ Invalid Python output:");
-      console.error(stdout);
-      return res.status(500).json({ error: "Invalid analyzer output" });
-    }
-
-    console.log("🎧 Audio score:", result.audio_score);
-
-    let sentiment = null;
-    if (result.transcript) {
       try {
-        const sentimentRes = await fetch(sentimentUrl + "/analyze-combined", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: result.transcript,
-            audio_features: result.audio_features || null,
-          }),
-        });
-
-        if (sentimentRes.ok) {
-          sentiment = await sentimentRes.json();
-          console.log(
-            "🧠 Sentiment (combined):",
-            `text=${sentiment.text_sentiment}`,
-            `audio=${sentiment.audio_sentiment}`,
-            `combined=${sentiment.combined_sentiment}`
-          );
-        } else {
-          console.warn("🧠 Sentiment request failed:", sentimentRes.status);
-        }
-      } catch (err) {
-        console.warn("🧠 Sentiment request error:", err?.message || err);
+        resolve(JSON.parse(stdout));
+      } catch {
+        console.error("❌ Invalid Python output:", stdout);
+        reject(new Error("Invalid transcriber output"));
       }
-    }
-
-    return res.json({
-      transcript: result.transcript,
-      audio_score: result.audio_score,
-      audio_features: result.audio_features || null,
-      sentiment,
     });
   });
+
+  // --- 2. Forward audio to Audio Analyzer service (server-to-server) ---
+  const audioAnalysisPromise = (async () => {
+    try {
+      const fileBuffer = fs.readFileSync(audioPath);
+      const formData = new FormData();
+      formData.append(
+        "audio",
+        new Blob([fileBuffer]),
+        req.file.originalname || "audio.webm"
+      );
+
+      const analyzerRes = await fetch(`${audioAnalyzerUrl}/analyze`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (analyzerRes.ok) {
+        const result = await analyzerRes.json();
+        console.log("🔊 Audio analysis: score=", result.audio_score);
+        return result;
+      }
+      console.warn("🔊 Audio analysis failed:", analyzerRes.status);
+      return null;
+    } catch (err) {
+      console.warn("🔊 Audio analysis unavailable:", err?.message || err);
+      return null;
+    }
+  })();
+
+  // --- 3. Wait for both, then respond ---
+  try {
+    const [transcription, audioAnalysis] = await Promise.all([
+      transcriptPromise,
+      audioAnalysisPromise,
+    ]);
+
+    console.log("📝 Transcript:", (transcription.transcript || "").slice(0, 80));
+
+    return res.json({
+      transcript: transcription.transcript,
+      audio_score: audioAnalysis?.audio_score ?? null,
+      audio_features: audioAnalysis?.audio_features ?? null,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  } finally {
+    try {
+      if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
+    } catch (cleanupErr) {
+      console.warn("⚠️ Failed to cleanup audio file:", cleanupErr.message);
+    }
+  }
 });
 
 // ------------------------------------

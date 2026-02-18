@@ -57,8 +57,22 @@ services:
     build: ./backend/audio-transcriber/whisper
     container_name: innovacx-whisper
     restart: unless-stopped
+    environment:
+      AUDIO_ANALYZER_URL: http://innovacx-audio-analyzer:8003
+    depends_on:
+      - audio-analyzer
     ports:
       - "3001:3001"
+    networks:
+      - innovacx-network
+
+  audio-analyzer:
+    profiles: ["frontend", "dev"]
+    build: ./backend/audio-analyzer
+    container_name: innovacx-audio-analyzer
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
     networks:
       - innovacx-network
 
