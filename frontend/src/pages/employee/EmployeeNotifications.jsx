@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -39,7 +39,6 @@ function iconForType(type) {
   }
 }
 
-// Token may be stored under one of these keys
 function getAuthToken() {
   return (
     localStorage.getItem("access_token") ||
@@ -56,8 +55,6 @@ export default function EmployeeNotifications() {
   const navigate = useNavigate();
 
   const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
   const [onlyUnread, setOnlyUnread] = useState(false);
@@ -65,44 +62,41 @@ export default function EmployeeNotifications() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function fetchNotifications({ unreadOnly }) {
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  async function fetchNotifications() {
     const token = getAuthToken();
-    if (!token) {
-      setError("Missing auth token. Please log in again.");
-      return;
-    }
+    if (!token) return;
 
     setLoading(true);
     setError("");
 
     try {
-      const url = new URL(`${API_BASE}/employee/notifications`);
-      url.searchParams.set("limit", "500");
-      url.searchParams.set("only_unread", unreadOnly ? "true" : "false");
-
-      const res = await fetch(url.toString(), {
+      const res = await fetch(`${API_BASE}/employee/notifications`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!res.ok) {
         const msg = await res.text();
-        throw new Error(msg || `Failed to load notifications (${res.status})`);
+        throw new Error(msg || "Failed to load notifications");
       }
 
       const data = await res.json();
-      setUnreadCount(Number(data?.unreadCount || 0));
-      setNotifications(Array.isArray(data?.notifications) ? data.notifications : []);
+      setNotifications(data.notifications || []);
     } catch (e) {
       setError(e?.message || "Failed to load notifications.");
+      setNotifications([]);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    fetchNotifications({ unreadOnly: onlyUnread });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onlyUnread]);
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
@@ -131,45 +125,32 @@ export default function EmployeeNotifications() {
     const token = getAuthToken();
     if (!token) return;
 
-    // optimistic UI
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    setUnreadCount(0);
 
     try {
-      const res = await fetch(`${API_BASE}/employee/notifications/read-all`, {
+      await fetch(`${API_BASE}/employee/notifications/read-all`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!res.ok) {
-        // revert by refetch
-        await fetchNotifications({ unreadOnly: onlyUnread });
-      }
-    } catch {
-      await fetchNotifications({ unreadOnly: onlyUnread });
-    }
+    } catch {}
   };
 
-  const markOneRead = async (notificationId) => {
+  const markOneRead = async (id) => {
     const token = getAuthToken();
     if (!token) return;
 
     try {
-      await fetch(`${API_BASE}/employee/notifications/${notificationId}/read`, {
+      await fetch(`${API_BASE}/employee/notifications/${id}/read`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-    } catch {
-      // ignore; UI is already updated optimistically
-    }
+    } catch {}
   };
 
   const onNotificationClick = async (n) => {
-    // optimistic
     setNotifications((prev) =>
       prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
     );
-    if (!n.read) setUnreadCount((c) => Math.max(0, c - 1));
 
     await markOneRead(n.id);
 
@@ -191,7 +172,6 @@ export default function EmployeeNotifications() {
               className="filterPillBtn empNotifs__actionBtn"
               onClick={markAllRead}
               disabled={loading || notifications.length === 0}
-              title={notifications.length === 0 ? "No notifications" : "Mark all as read"}
             >
               Mark all as read
             </button>
@@ -245,7 +225,9 @@ export default function EmployeeNotifications() {
                 className={`empNotifs__item ${n.read ? "read" : "unread"} ${
                   n.ticketId || n.reportId ? "clickable" : ""
                 }`}
-                onClick={() => (n.ticketId || n.reportId ? onNotificationClick(n) : null)}
+                onClick={() =>
+                  n.ticketId || n.reportId ? onNotificationClick(n) : null
+                }
               >
                 <div className="empNotifs__left">
                   <div className="empNotifs__icon">{iconForType(n.type)}</div>

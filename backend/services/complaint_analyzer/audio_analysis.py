@@ -87,7 +87,7 @@ class AudioAnalysisPipeline:
                 try:
                     if self.vad.is_speech(frame, sample_rate):
                         speech_frames.append(frame)
-                except Exception as e:
+                except Exception:
                     speech_frames.append(frame)
         
         speech_percentage = (len(speech_frames) / total_frames * 100) if total_frames > 0 else 0
@@ -279,12 +279,12 @@ def main():
     
     # Check if file exists
     if not os.path.exists(audio_path):
-        print(f"❌ ERROR: Audio file not found!")
+        print("❌ ERROR: Audio file not found!")
         print(f"   Looking for: {audio_path}")
-        print(f"\n💡 Make sure:")
-        print(f"   1. The file exists at that location")
-        print(f"   2. The path is correct")
-        print(f"   3. You have permission to read the file")
+        print("\n💡 Make sure:")
+        print("   1. The file exists at that location")
+        print("   2. The path is correct")
+        print("   3. You have permission to read the file")
         print("\n" + "="*70 + "\n")
         return
     

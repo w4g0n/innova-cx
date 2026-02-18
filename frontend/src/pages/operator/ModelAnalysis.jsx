@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../../components/Layout";
@@ -33,12 +33,15 @@ const RED = "#ef4444";
 export default function ModelAnalysis() {
   const navigate = useNavigate();
 
-  const [data, setData] = useState(null);
   const [timeFilter, setTimeFilter] = useState("last30days");
   const [deptFilter, setDeptFilter] = useState("all");
 
-  useEffect(() => {
+  const data = useMemo(() => {
     let filteredData = operatorModelAnalysis;
+
+    if (timeFilter === "last7days" || timeFilter === "quarter") {
+      filteredData = operatorModelAnalysis;
+    }
 
     if (deptFilter !== "all") {
       filteredData = {
@@ -49,7 +52,7 @@ export default function ModelAnalysis() {
       };
     }
 
-    setData(filteredData);
+    return filteredData;
   }, [timeFilter, deptFilter]);
 
   const resetFilters = () => {

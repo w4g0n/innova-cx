@@ -6,7 +6,7 @@ No model loading required - works out of the box.
 """
 
 import time
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 NEGATIVE_KEYWORDS = [
     "broken", "not working", "emergency", "urgent", "terrible",

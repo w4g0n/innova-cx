@@ -1,30 +1,27 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { sendChatMessage } from "../../services/api";
 
 export default function useNovaChatbot({ onGoToForm } = {}) {
   const listRef = useRef(null);
+  const initialMessage = () => [
+    {
+      id: `b-${Date.now()}`,
+      from: "bot",
+      text: "Hi! I’m Nova. How can I help you today?",
+    },
+  ];
 
   const [stage, setStage] = useState("start");
   const [hasChosenType, setHasChosenType] = useState(false);
   const [text, setText] = useState("");
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(initialMessage);
 
   const resetSession = () => {
     setStage("start");
     setHasChosenType(false);
     setText("");
-    setMessages([
-      {
-        id: `b-${Date.now()}`,
-        from: "bot",
-        text: "Hi! I’m Nova. How can I help you today?",
-      },
-    ]);
+    setMessages(initialMessage());
   };
-
-  useEffect(() => {
-    resetSession();
-  }, []);
 
   const pushUser = (t) => {
     setMessages((prev) => [

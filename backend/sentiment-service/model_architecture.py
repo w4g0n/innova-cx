@@ -13,7 +13,6 @@ import torch
 import torch.nn as nn
 from transformers import RobertaModel
 from typing import Dict, List
-from dataclasses import dataclass
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -150,7 +149,7 @@ class RoBERTaMultiTaskModel(nn.Module):
             nn.Sigmoid()  # Each keyword independently in [0, 1]
         )
         
-        logger.info(f"✓ Built 3 task heads:")
+        logger.info("✓ Built 3 task heads:")
         logger.info(f"  - Sentiment: {self.hidden_size}→{hidden_dim}→1")
         logger.info(f"  - Urgency:   {self.hidden_size}→{hidden_dim}→1")
         logger.info(f"  - Keywords:  {self.hidden_size}→{hidden_dim}→{self.num_keywords}")
@@ -247,7 +246,7 @@ def create_model(
         model.freeze_base_encoder()
     
     trainable, total = count_parameters(model)
-    logger.info(f"✓ Model parameters:")
+    logger.info("✓ Model parameters:")
     logger.info(f"  Trainable: {trainable:,}")
     logger.info(f"  Total:     {total:,}")
     logger.info(f"  Trainable: {trainable/total*100:.1f}%")

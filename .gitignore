@@ -93,3 +93,13 @@ tmp/
 temp/
 *.tmp
 EOF
+
+# Ignore ML data contents but keep folders
+ai-models/FeatureEngineeringAgent/data/raw/*
+ai-models/FeatureEngineeringAgent/data/processed/*
+ai-models/FeatureEngineeringAgent/models/*
+
+# Do not ignore the placeholder files
+!ai-models/FeatureEngineeringAgent/data/raw/.gitkeep
+!ai-models/FeatureEngineeringAgent/data/processed/.gitkeep
+!ai-models/FeatureEngineeringAgent/models/.gitkeep

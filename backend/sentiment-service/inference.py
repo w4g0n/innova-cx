@@ -14,11 +14,10 @@ from transformers import RobertaTokenizer
 from pathlib import Path
 import time
 import logging
+from model_architecture import RoBERTaMultiTaskModel, keyword_indices_to_words
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-from model_architecture import RoBERTaMultiTaskModel, keyword_indices_to_words
 
 
 # ==============================================================================
@@ -155,7 +154,7 @@ class MLModelWrapper:
     def __init__(self, model_dir: str, device: str = 'cpu'):
         logger.info(f"📦 Loading model from: {model_dir}")
         self.predictor = MultiTaskPredictor(model_dir, device=device)
-        logger.info(f"✓ Model ready")
+        logger.info("✓ Model ready")
     
     def predict_sentiment(self, text: str) -> dict:
         """
