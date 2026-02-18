@@ -1,55 +1,75 @@
 import numpy as np
+import joblib
+import os
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import LeaveOneOut
+from sklearn.metrics import f1_score
 from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import classification_report, f1_score
-
 
 EMBED_PATH = "data/processed/embeddings/"
+BASE_MODEL_PATH = "models/"
 
 
-def load_split(split):
-    X = np.load(EMBED_PATH + f"X_{split}.npy")
-    y = np.load(EMBED_PATH + f"y_{split}.npy")
-    return X, y
+def evaluate_model(model, X, y):
+    loo = LeaveOneOut()
+    preds = []
+
+    for train_idx, test_idx in loo.split(X):
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train = y[train_idx]
+
+        model.fit(X_train, y_train)
+        pred = model.predict(X_test)
+        preds.append(pred[0])
+
+    return f1_score(y, preds, average="macro")
 
 
-def evaluate_model(name, model, X_val, y_val):
-    preds = model.predict(X_val)
-    macro_f1 = f1_score(y_val, preds, average="macro")
+def train_target(X, y_raw, target_name):
+    print(f"\n===== {target_name.upper()} =====")
 
-    print(f"\n===== {name} =====")
-    print("Macro F1:", round(macro_f1, 4))
-    print(classification_report(y_val, preds))
+    target_path = os.path.join(BASE_MODEL_PATH, target_name)
+    os.makedirs(target_path, exist_ok=True)
+
+    le = LabelEncoder()
+    y = le.fit_transform(y_raw)
+
+    print("Classes:", le.classes_)
+    print("Samples:", len(y))
+
+    models = {
+        "logistic": LogisticRegression(max_iter=1000),
+        "svm": LinearSVC(),
+        "rf": RandomForestClassifier(n_estimators=100, random_state=42)
+    }
+
+    print("\nLOOCV Results:")
+
+    for name, model in models.items():
+        score = evaluate_model(model, X, y)
+        print(f"{name}: Macro F1 = {round(score, 4)}")
+
+    print("\nTraining final models on full dataset...")
+
+    for name, model in models.items():
+        model.fit(X, y)
+        joblib.dump(model, os.path.join(target_path, f"{name}.pkl"))
+        print(f"{name} saved.")
+
+    joblib.dump(le, os.path.join(target_path, "label_encoder.pkl"))
+    print("Label encoder saved.")
 
 
 def main():
-    # Load embeddings
-    X_train, y_train = load_split("train")
-    X_val, y_val = load_split("val")
+    X = np.load(EMBED_PATH + "X.npy")
 
-    # Encode labels to integers
-    le = LabelEncoder()
-    y_train_enc = le.fit_transform(y_train)
-    y_val_enc = le.transform(y_val)
+    y_business = np.load(EMBED_PATH + "y_business_impact.npy")
+    y_safety = np.load(EMBED_PATH + "y_safety_concern.npy")
 
-    print("Classes:", le.classes_)
-
-    # 1. Logistic Regression
-    log_reg = LogisticRegression(max_iter=1000)
-    log_reg.fit(X_train, y_train_enc)
-    evaluate_model("Logistic Regression", log_reg, X_val, y_val_enc)
-
-    # 2. Linear SVM
-    svm = LinearSVC()
-    svm.fit(X_train, y_train_enc)
-    evaluate_model("Linear SVM", svm, X_val, y_val_enc)
-
-    # 3. Random Forest
-    rf = RandomForestClassifier(n_estimators=200, random_state=42)
-    rf.fit(X_train, y_train_enc)
-    evaluate_model("Random Forest", rf, X_val, y_val_enc)
+    train_target(X, y_business, "business_impact")
+    train_target(X, y_safety, "safety_concern")
 
 
 if __name__ == "__main__":
