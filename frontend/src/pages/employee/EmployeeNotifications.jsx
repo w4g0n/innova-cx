@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -43,14 +43,10 @@ function iconForType(type) {
 export default function EmployeeNotifications() {
   const navigate = useNavigate();
 
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState(() => data.notifications || []);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
   const [onlyUnread, setOnlyUnread] = useState(false);
-
-  useEffect(() => {
-    setNotifications(data.notifications || []);
-  }, []);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();

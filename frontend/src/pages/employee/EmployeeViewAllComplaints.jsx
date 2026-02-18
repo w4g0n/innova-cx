@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -50,21 +50,13 @@ const toDate = (raw) => {
 export default function EmployeeViewAllComplaints() {
   const navigate = useNavigate();
 
-  const [tickets, setTickets] = useState([]);
+  const [tickets] = useState(() => ticketsData.tickets || []);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [priorityFilter, setPriorityFilter] = useState("All Priorities");
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [showDateFilter, setShowDateFilter] = useState(false);
-
-  useEffect(() => {
-    try {
-      setTickets(ticketsData.tickets || []);
-    } catch (err) {
-      console.error("Error loading local tickets JSON:", err);
-    }
-  }, []);
 
   const normalizedTickets = useMemo(() => {
     return (tickets || []).map((t) => {

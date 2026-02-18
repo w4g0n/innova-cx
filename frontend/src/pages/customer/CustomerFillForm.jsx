@@ -92,7 +92,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
 
   const [voiceStage, setVoiceStage] = useState("idle");
   const [draftTranscript, setDraftTranscript] = useState("");
-  const [sentimentAnalysis, setSentimentAnalysis] = useState(null);
 
   useEffect(() => {
     if (initialType === "Complaint" || initialType === "Inquiry") {
@@ -112,7 +111,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
-    } catch {
+    } catch (err) {
+      console.debug("Failed to cleanup media stream:", err);
     }
   };
 
@@ -215,18 +215,14 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
         setDraftTranscript(data?.transcript || "");
         setVoiceStage("review");
 
-        if (data?.sentiment) {
-          setSentimentAnalysis(data.sentiment);
-        } else if (data?.transcript) {
+        if (data?.transcript) {
           try {
-            const sentiment = await analyzeCombinedSentiment(
+            await analyzeCombinedSentiment(
               data.transcript,
               data.audio_features || null
             );
-            setSentimentAnalysis(sentiment);
           } catch (sentimentErr) {
             console.warn("Sentiment analysis unavailable:", sentimentErr);
-            setSentimentAnalysis(null);
           }
         }
       } catch (err) {
@@ -276,7 +272,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
 
   const discardTranscript = () => {
     setDraftTranscript("");
-    setSentimentAnalysis(null);
     setVoiceStage("idle");
   };
 
@@ -288,7 +283,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     }
     setMessage((prev) => (prev ? `${prev}\n${t}` : t));
     setDraftTranscript("");
-    setSentimentAnalysis(null);
     setVoiceStage("idle");
   };
 
