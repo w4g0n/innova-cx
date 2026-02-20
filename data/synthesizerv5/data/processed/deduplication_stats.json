@@ -1,0 +1,21 @@
+{
+  "initial_count": 3000,
+  "before_quality_filter": 3000,
+  "after_quality_filter": 3000,
+  "low_quality_removed": 0,
+  "min_length_threshold": 10,
+  "original_count": 3000,
+  "after_exact_dedup": 2989,
+  "exact_duplicates_removed": 11,
+  "exact_duplicate_pct": 0.37,
+  "before_near_dedup": 2989,
+  "after_near_dedup": 2137,
+  "near_duplicates_removed": 852,
+  "near_duplicate_pct": 28.5,
+  "total_clusters": 2137,
+  "multi_member_clusters": 199,
+  "similarity_threshold": 0.92,
+  "final_count": 2137,
+  "total_removed": 863,
+  "total_removed_pct": 28.77
+}
