@@ -1,3 +1,13 @@
+# Make sure command-style targets always run (even when files/folders share names)
+.PHONY: \
+	backend backend-build \
+	frontend frontend-build \
+	chatbot chatbot-build \
+	audio audio-build \
+	feature-agent feature-agent-build \
+	dev dev-build \
+	down
+
 # =========================
 # BACKEND + DATABASE
 # =========================
@@ -10,12 +20,12 @@ backend-build:
 
 
 # =========================
-# FRONTEND (UI + TRANSCRIBER + SENTIMENT)
+# FRONTEND + BACKEND + DATABASE
 # =========================
-# Frontend profile now includes:
+# Frontend profile includes:
 # - frontend
-# - whisper
-# - sentiment
+# - backend
+# - postgres
 
 frontend:
 	docker compose --profile frontend up
@@ -59,7 +69,7 @@ feature-agent-build:
 
 # =========================
 # FULL DEV STACK
-# (Frontend + Transcriber + Sentiment + Chatbot + Backend + DB)
+# (Frontend + Backend + DB + Transcriber + Sentiment + Chatbot)
 # =========================
 
 dev:

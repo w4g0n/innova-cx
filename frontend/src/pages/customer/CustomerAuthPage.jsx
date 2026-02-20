@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "./CustomerAuthPage.css";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
 export default function CustomerAuthPage() {
   const navigate = useNavigate();
 
@@ -30,7 +32,7 @@ export default function CustomerAuthPage() {
     const checkTOTPStatus = async () => {
       try {
         const res = await fetch(
-          `${import.meta.env.VITE_API_BASE_URL}/auth/totp-status`,
+          `${API_BASE}/auth/totp-status`,
           {
             headers: { Authorization: `Bearer ${loginToken}` },
           }
@@ -43,7 +45,7 @@ export default function CustomerAuthPage() {
 
         if (data.needsSetup) {
           const qrRes = await fetch(
-            `${import.meta.env.VITE_API_BASE_URL}/auth/totp-setup`,
+            `${API_BASE}/auth/totp-setup`,
             {
               headers: { Authorization: `Bearer ${loginToken}` },
             }
@@ -98,7 +100,7 @@ export default function CustomerAuthPage() {
 
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/auth/totp-verify`,
+        `${API_BASE}/auth/totp-verify`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -122,7 +124,7 @@ export default function CustomerAuthPage() {
           // Mark setup complete if needed
           if (needsSetup) {
             await fetch(
-              `${import.meta.env.VITE_API_BASE_URL}/auth/totp-setup-complete`,
+              `${API_BASE}/auth/totp-setup-complete`,
               {
                 method: "POST",
                 headers: { Authorization: `Bearer ${loginToken}` },

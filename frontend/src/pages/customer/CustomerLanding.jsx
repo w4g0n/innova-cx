@@ -6,7 +6,6 @@ import CustomerFillForm from "./CustomerFillForm";
 import useNovaChatbot from "./chatbot.js";
 import { getDisplayNameFromEmail, getInitialsFromEmail } from "../../utils/userDisplay";
 import { getToken, getUser, authHeader } from "../../utils/auth";
-import { getInitialsFromEmail } from "../../utils/userDisplay";
 
 export default function CustomerLanding() {
   const navigate = useNavigate();

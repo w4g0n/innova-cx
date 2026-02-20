@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import logo from "../assets/nova-logo.png";
 import "./Login.css";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
 export default function Login() {
   const navigate = useNavigate();
 
@@ -15,11 +17,8 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const base = import.meta.env.VITE_API_BASE_URL;
-      if (!base) throw new Error("Missing VITE_API_BASE_URL in .env");
-
       // Step 1: Login with email/password
-      const res = await fetch(`${base}/auth/login`, {
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

@@ -25,6 +25,7 @@ DO $$ BEGIN
     'Assigned',
     'Escalated',
     'Overdue',
+    'Reopened',
     'Resolved'
   );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
