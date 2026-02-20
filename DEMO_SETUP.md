@@ -7,13 +7,21 @@ Quick setup guide for running the InnovaCX demo with all AI services.
 - Docker Desktop running
 - Model files for sentiment analysis (optional, mock mode available)
 
-## 1. Start All Services
+## 1. Start Demo Services
+
+```bash
+docker-compose --profile dev up --build -d
+```
+
+This starts: **frontend** (5173), **chatbot** (8001), **whisper** (3001), **sentiment** (8002)
+
+To run only the app + API + database (without chatbot/whisper/sentiment):
 
 ```bash
 docker-compose --profile frontend up --build -d
 ```
 
-This starts: **frontend** (5173), **chatbot** (8001), **whisper** (3001), **sentiment** (8002)
+This starts: **frontend** (5173), **backend** (8000), **postgres** (5433)
 
 ## 2. First Run - Chatbot Model Download
 
@@ -41,7 +49,7 @@ SENTIMENT_MODEL_PATH=C:/Users/ali/Desktop/Model
 2. Rebuild:
 
 ```bash
-docker-compose --profile frontend up --build sentiment -d
+docker-compose --profile dev up --build sentiment -d
 ```
 
 3. Verify:

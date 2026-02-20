@@ -4,6 +4,11 @@ import PageHeader from "../../components/common/PageHeader";
 import { useNavigate } from "react-router-dom";
 import "./CustomerChatbot.css";
 
+const CHATBOT_BASE_URL =
+  import.meta.env.VITE_CHATBOT_BASE_URL ||
+  import.meta.env.VITE_CHATBOT_URL ||
+  "http://localhost:8001";
+
 export default function CustomerChatbot() {
   const navigate = useNavigate();
   const listRef = useRef(null);
@@ -106,7 +111,7 @@ export default function CustomerChatbot() {
   // CHATBOT API (Inquiry only)
   // ===============================
   const sendToChatbot = async (message) => {
-    const res = await fetch("http://chatbot:8000/api/chat", {
+    const res = await fetch(`${CHATBOT_BASE_URL}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

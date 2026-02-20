@@ -9,6 +9,7 @@ and now it uses make commands to run those profiles
 FOR BACKEND:
 make backend
 runs: docker compose --profile backend up
+starts: backend + frontend + database
 
 make backend-build 
 runs: docker compose --profile backend up --build
@@ -19,6 +20,7 @@ FOR FRONT END:
 Note: (this runs vite no need to do npm run dev anymore)
 make frontend
 runs: docker compose --profile frontend up
+starts: frontend + backend + database
 
 make frontend-build 
 runs: docker compose --profile frontend up --build
@@ -45,10 +47,10 @@ runs: docker compose --profile chatbot up --build
 
 FOR DEV:
 make dev
-runs: docker compose --profile backend --profile frontend up
+runs: docker compose --profile dev up
 
 make dev-build
-runs: docker compose --profile backend --profile frontend up --build
+runs: docker compose --profile dev up --build
 
 Dev profile (single profile that runs everything):
 docker compose --profile dev up

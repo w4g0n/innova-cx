@@ -1,6 +1,6 @@
 services:
   postgres:
-    profiles: ["backend", "dev"]
+    profiles: ["frontend", "backend", "dev"]
     image: postgres:14-alpine
     container_name: innovacx-db
     restart: unless-stopped
@@ -22,7 +22,7 @@ services:
       retries: 10
 
   backend:
-    profiles: ["backend", "dev"]
+    profiles: ["frontend", "backend", "dev"]
     build: ./backend
     container_name: innovacx-backend
     restart: unless-stopped
@@ -37,7 +37,7 @@ services:
       - innovacx-network
 
   chatbot:
-    profiles: ["dev"]
+    profiles: ["chatbot", "dev"]
     build: ./backend/chatbot
     container_name: innovacx-chatbot
     restart: unless-stopped
@@ -53,7 +53,7 @@ services:
       - innovacx-network
 
   whisper:
-    profiles: ["frontend", "dev"]
+    profiles: ["audio", "dev"]
     build: ./backend/audio-transcriber/whisper
     container_name: innovacx-whisper
     restart: unless-stopped
@@ -63,7 +63,7 @@ services:
       - innovacx-network
 
   sentiment:
-    profiles: ["frontend", "dev"]
+    profiles: ["dev"]
     build: ./backend/sentiment-service
     container_name: innovacx-sentiment
     restart: unless-stopped
@@ -92,10 +92,11 @@ services:
 
 
   frontend:
-    profiles: ["frontend", "dev"]
+    profiles: ["frontend", "backend", "dev"]
     build: ./frontend
     container_name: innovacx-frontend
     environment:
+      VITE_API_BASE_URL: http://localhost:8000
       VITE_CHATBOT_BASE_URL: http://localhost:8001
       VITE_WHISPER_BASE_URL: http://localhost:3001
       VITE_SENTIMENT_URL: http://localhost:8002
@@ -105,8 +106,7 @@ services:
     ports:
       - "5173:5173"
     depends_on:
-      - whisper
-      - sentiment
+      - backend
     networks:
       - innovacx-network
 
