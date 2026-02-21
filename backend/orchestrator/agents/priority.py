@@ -14,6 +14,7 @@ import logging
 sys.path.insert(0, "/app/dspy")
 
 import dspy  # noqa: E402
+from dspy.utils import DummyLM  # noqa: E402
 from langchain_core.runnables import RunnableLambda  # noqa: E402
 from signals import build_priority_signals  # noqa: E402
 from priority_signature import PriorityDecision  # noqa: E402
@@ -21,25 +22,22 @@ from priority_signature import PriorityDecision  # noqa: E402
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# DSPy configuration
-# DummyLM always returns the configured answers — replace for production.
+# DSPy configuration — matches project convention in ai-models/DSPY/runPriority.py
+# DummyLM returns the configured answer for every call.
+# Replace with a real LM for production priority scoring.
 # ---------------------------------------------------------------------------
-try:
-    dummy_lm = dspy.utils.DummyLM([{"priority": "3"}])
-    dspy.configure(lm=dummy_lm)
-except Exception as exc:
-    logger.warning("Could not configure DSPy DummyLM: %s", exc)
+dspy.settings.configure(lm=DummyLM(answers={"priority": "3"}))
 
 predictor = dspy.Predict(PriorityDecision)
 
 
 def _safe_priority(value) -> int:
-    """Convert DSPy output to a valid int in [1, 5]."""
+    """Convert DSPy output to a valid int in [1, 5], default 3 on any error."""
     try:
-        p = int(value)
+        p = int(str(value).strip())
         return max(1, min(5, p))
-    except (TypeError, ValueError):
-        return 3  # Default mid-priority
+    except (TypeError, ValueError, AttributeError):
+        return 3
 
 
 async def score_priority(state: dict) -> dict:
@@ -60,15 +58,19 @@ async def score_priority(state: dict) -> dict:
         keywords=state.get("keywords", []),
     )
 
-    result = predictor(
-        text_sentiment=signals.text_sentiment,
-        audio_sentiment=signals.audio_sentiment,
-        urgency=signals.urgency,
-        department=signals.department,
-        keywords=signals.keywords,
-    )
+    try:
+        result = predictor(
+            text_sentiment=signals.text_sentiment,
+            audio_sentiment=signals.audio_sentiment,
+            urgency=signals.urgency,
+            department=signals.department,
+            keywords=signals.keywords,
+        )
+        state["priority_score"] = _safe_priority(result.priority)
+    except Exception as exc:
+        logger.warning("DSPy predictor failed (%s) — defaulting priority to 3", exc)
+        state["priority_score"] = 3
 
-    state["priority_score"] = _safe_priority(result.priority)
     return state
 
 

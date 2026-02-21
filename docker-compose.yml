@@ -28,6 +28,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,6 +89,12 @@ services:
       - "8003:8003"
     networks:
       - innovacx-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8003/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   orchestrator:
     profiles: ["backend", "dev"]
@@ -98,9 +105,12 @@ services:
     restart: unless-stopped
     environment:
       PYTHONPATH: /app
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
     depends_on:
-      - backend
-      - classifier
+      backend:
+        condition: service_started
+      classifier:
+        condition: service_healthy
     ports:
       - "8004:8004"
     networks:

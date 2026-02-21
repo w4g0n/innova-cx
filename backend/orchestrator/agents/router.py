@@ -39,9 +39,10 @@ async def route_and_store(state: dict) -> dict:
                 f"{CHATBOT_URL}/api/chat",
                 json={"message": state["text"]},
             )
-            data = response.json() if response.is_success else {}
+            response.raise_for_status()
+            data = response.json()
         # Chatbot returns {"reply": "..."}
-        state["chatbot_response"] = data.get("reply", data.get("response", ""))
+        state["chatbot_response"] = data.get("reply", "")
         state["ticket_id"] = None
         return state
 

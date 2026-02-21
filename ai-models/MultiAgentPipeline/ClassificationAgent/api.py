@@ -45,13 +45,13 @@ predictor = None
 
 _COMPLAINT_KEYWORDS = re.compile(
     r"\b("
-    r"broken|not working|broken down|out of order|broken|failed|failure|"
-    r"broken|issue|problem|not working|leaking|leak|crack|cracks|"
-    r"broken|damaged|damage|malfunction|stopped|stopped working|"
-    r"broken|flickering|no power|no electricity|no water|no heat|no ac|no air|"
-    r"broken|dirty|dirty|smell|smells|pest|rats|roaches|"
-    r"broken|unsafe|emergency|danger|urgent|immediately|"
-    r"broken|complaint|complain|report|reporting|broken"
+    r"broken|not working|broken down|out of order|failed|failure|"
+    r"issue|problem|leaking|leak|crack|cracks|"
+    r"damaged|damage|malfunction|stopped working|"
+    r"flickering|no power|no electricity|no water|no heat|no ac|no air|"
+    r"dirty|smell|smells|pest|rats|roaches|"
+    r"unsafe|emergency|danger|urgent|immediately|"
+    r"complaint|complain|report|reporting"
     r")\b",
     re.IGNORECASE,
 )
