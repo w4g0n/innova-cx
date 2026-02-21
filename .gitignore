@@ -104,3 +104,4 @@ ai-models/FeatureEngineeringAgent/models/*
 !ai-models/FeatureEngineeringAgent/data/processed/.gitkeep
 !ai-models/FeatureEngineeringAgent/models/.gitkeep
 ai-models/MultiAgentPipeline/SentimentAnalysisAgent/src/models/sentiment-v7/model.pt
+.claude/worktrees/jolly-goldstine/
