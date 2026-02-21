@@ -36,7 +36,7 @@ async def transcribe(state: dict) -> dict:
         data = response.json()
 
     state["text"] = data.get("transcript", "")
-    state["transcription_confidence"] = data.get("confidence", 1.0)
+    state["transcription_confidence"] = data.get("audio_score", 1.0)
     # Preserve any audio_features returned by Whisper
     if data.get("audio_features"):
         state["audio_features"] = data["audio_features"]

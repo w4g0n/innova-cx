@@ -1872,8 +1872,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     model_priority,
                     model_confidence,
                     created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING id;
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW());
                 """,
                 (
                     ticket_code,
