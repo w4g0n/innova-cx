@@ -5,6 +5,7 @@
 	chatbot chatbot-build \
 	audio audio-build \
 	feature-agent feature-agent-build \
+	orchestrator orchestrator-build \
 	dev dev-build \
 	down
 
@@ -65,6 +66,18 @@ feature-agent:
 
 feature-agent-build:
 	docker compose --profile feature-engineering up --build
+
+
+# =========================
+# ORCHESTRATOR
+# (Classifier + Orchestrator + Backend + DB + Whisper + Sentiment)
+# =========================
+
+orchestrator:
+	docker compose --profile backend up orchestrator
+
+orchestrator-build:
+	docker compose --profile backend up --build orchestrator
 
 
 # =========================

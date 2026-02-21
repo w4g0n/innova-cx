@@ -17,6 +17,9 @@ const API_CONFIG = {
     import.meta.env.VITE_CHATBOT_BASE_URL ||
     import.meta.env.VITE_CHATBOT_URL ||
     "http://localhost:8001",
+  orchestrator:
+    import.meta.env.VITE_ORCHESTRATOR_URL ||
+    "http://localhost:8004",
 };
 
 /**
@@ -129,6 +132,53 @@ export async function checkSentimentHealth() {
   return response.json();
 }
 
+/**
+ * Submit a text complaint or inquiry via the orchestrator.
+ * The orchestrator classifies, analyzes sentiment, scores priority,
+ * and either creates a ticket (complaint) or returns a chatbot reply (inquiry).
+ *
+ * @param {string} text - The complaint or inquiry text
+ * @returns {Promise<{type: string, ticket_id?: string|null, chatbot_response?: string, priority?: number, department?: string, sentiment?: number, classification_confidence?: number}>}
+ */
+export async function submitTextComplaint(text) {
+  const body = new URLSearchParams({ text });
+  const response = await fetch(`${API_CONFIG.orchestrator}/process/text`, {
+    method: "POST",
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error("Orchestrator text processing failed");
+  }
+
+  return response.json();
+}
+
+/**
+ * Submit an audio complaint via the orchestrator.
+ * The orchestrator transcribes, classifies, analyzes sentiment, scores priority,
+ * and creates a ticket.
+ *
+ * @param {Blob} audioBlob - The audio recording
+ * @param {string} filename - Filename hint for the server
+ * @returns {Promise<{type: string, ticket_id?: string|null, priority?: number, department?: string, sentiment?: number}>}
+ */
+export async function submitAudioComplaint(audioBlob, filename = "recording.webm") {
+  const form = new FormData();
+  form.append("audio", audioBlob, filename);
+
+  const response = await fetch(`${API_CONFIG.orchestrator}/process/audio`, {
+    method: "POST",
+    body: form,
+  });
+
+  if (!response.ok) {
+    throw new Error("Orchestrator audio processing failed");
+  }
+
+  return response.json();
+}
+
 export default {
   transcribeAudio,
   analyzeSentiment,
@@ -136,4 +186,6 @@ export default {
   processAudioComplaint,
   sendChatMessage,
   checkSentimentHealth,
+  submitTextComplaint,
+  submitAudioComplaint,
 };
