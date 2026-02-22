@@ -104,21 +104,33 @@ async def process_text(
     }
 
     result = await pipeline.ainvoke(state)
-    logger.info(
-        "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f impact=%s safety=%s severity=%s urgency=%s priority=%s/%s ticket_id=%s",
-        result.get("label"),
-        float(result.get("class_confidence", 0.0) or 0.0),
-        float(result.get("text_sentiment", 0.0) or 0.0),
-        float(result.get("audio_sentiment", 0.0) or 0.0),
-        float(result.get("sentiment_score_numeric", 0.0) or 0.0),
-        result.get("business_impact"),
-        result.get("safety_concern"),
-        result.get("issue_severity"),
-        result.get("issue_urgency"),
-        result.get("priority_label"),
-        result.get("priority_score"),
-        result.get("ticket_id"),
-    )
+    if result.get("label") == "inquiry":
+        logger.info(
+            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f ticket_id=%s chatbot=%s",
+            result.get("label"),
+            float(result.get("class_confidence", 0.0) or 0.0),
+            float(result.get("text_sentiment", 0.0) or 0.0),
+            float(result.get("audio_sentiment", 0.0) or 0.0),
+            float(result.get("sentiment_score_numeric", 0.0) or 0.0),
+            result.get("ticket_id"),
+            "ok" if result.get("chatbot_response") else "empty",
+        )
+    else:
+        logger.info(
+            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f impact=%s safety=%s severity=%s urgency=%s priority=%s/%s ticket_id=%s",
+            result.get("label"),
+            float(result.get("class_confidence", 0.0) or 0.0),
+            float(result.get("text_sentiment", 0.0) or 0.0),
+            float(result.get("audio_sentiment", 0.0) or 0.0),
+            float(result.get("sentiment_score_numeric", 0.0) or 0.0),
+            result.get("business_impact"),
+            result.get("safety_concern"),
+            result.get("issue_severity"),
+            result.get("issue_urgency"),
+            result.get("priority_label"),
+            result.get("priority_score"),
+            result.get("ticket_id"),
+        )
     return _build_response(result)
 
 
