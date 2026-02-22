@@ -7,7 +7,7 @@ Provides text sentiment analysis using RoBERTa model or mock mode.
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Optional
 import os
 import logging
 
@@ -38,8 +38,6 @@ class TextInput(BaseModel):
 
 class SentimentResponse(BaseModel):
     text_sentiment: float
-    text_urgency: float
-    keywords: List[str]
     category: str
     processing_time_ms: float
     mock_mode: bool
@@ -55,7 +53,6 @@ class CombinedResponse(BaseModel):
     audio_sentiment: Optional[float]
     combined_sentiment: float
     urgency: float
-    keywords: List[str]
     confidence: float
     mock_mode: bool
 
@@ -107,8 +104,7 @@ async def startup():
                         "text_sentiment": result["text_sentiment"],
                         "audio_sentiment": audio_sentiment,
                         "combined_sentiment": round(combined, 3),
-                        "urgency": result["text_urgency"],
-                        "keywords": result["keywords"],
+                        "urgency": 0.5,
                         "confidence": 0.95,
                     }
 
@@ -147,16 +143,14 @@ async def analyze_text(input: TextInput):
     result = predictor.predict(input.text)
 
     logger.info(
-        "Sentiment (text) score=%.3f urgency=%.3f category=%s mock=%s",
+        "Sentiment (text) score=%.3f category=%s mock=%s",
         result["text_sentiment"],
-        result["text_urgency"],
         categorize_sentiment(result["text_sentiment"]),
         USE_MOCK,
     )
     print(
-        "🧠 ### SENTIMENT (TEXT) ### score={:.3f} urgency={:.3f} category={} mock={}".format(
+        "🧠 ### SENTIMENT (TEXT) ### score={:.3f} category={} mock={}".format(
             result["text_sentiment"],
-            result["text_urgency"],
             categorize_sentiment(result["text_sentiment"]),
             USE_MOCK,
         ),
@@ -165,8 +159,6 @@ async def analyze_text(input: TextInput):
 
     return SentimentResponse(
         text_sentiment=result["text_sentiment"],
-        text_urgency=result["text_urgency"],
-        keywords=result["keywords"],
         category=categorize_sentiment(result["text_sentiment"]),
         processing_time_ms=result["processing_time_ms"],
         mock_mode=USE_MOCK
@@ -210,7 +202,6 @@ async def analyze_combined(input: CombinedInput):
         audio_sentiment=result.get("audio_sentiment"),
         combined_sentiment=result["combined_sentiment"],
         urgency=result["urgency"],
-        keywords=result["keywords"],
         confidence=result["confidence"],
         mock_mode=USE_MOCK
     )
