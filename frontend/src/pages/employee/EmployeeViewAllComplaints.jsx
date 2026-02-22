@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
@@ -61,18 +60,15 @@ function getStoredToken() {
 }
 
 export default function EmployeeViewAllComplaints() {
-  const navigate = useNavigate();
-
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All Status");
-  const [priorityFilter, setPriorityFilter] = useState("All Priorities");
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
-  const [dateRange, setDateRange] = useState({ from: "", to: "" });
-  const [showDateFilter, setShowDateFilter] = useState(false);
+  const [searchTerm] = useState("");
+  const [statusFilter] = useState("All Status");
+  const [priorityFilter] = useState("All Priorities");
+  const [sortConfig] = useState({ key: null, direction: null });
+  const [dateRange] = useState({ from: "", to: "" });
 
   useEffect(() => {
     const fetchTickets = async () => {
@@ -120,16 +116,6 @@ export default function EmployeeViewAllComplaints() {
       };
     });
   }, [tickets]);
-
-  const handleSort = (key) => {
-    let direction = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") direction = "desc";
-    else if (sortConfig.key === key && sortConfig.direction === "desc") {
-      key = null;
-      direction = null;
-    }
-    setSortConfig({ key, direction });
-  };
 
   const filteredTickets = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
