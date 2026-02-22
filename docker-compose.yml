@@ -38,7 +38,7 @@ services:
 
   chatbot:
     profiles: ["chatbot", "dev"]
-    build: ./backend/chatbot
+    build: ./backend/ChatbotAgent
     container_name: innovacx-chatbot
     restart: unless-stopped
     environment:
@@ -54,7 +54,7 @@ services:
 
   whisper:
     profiles: ["audio", "dev"]
-    build: ./backend/audio-transcriber/whisper
+    build: ./ai-models/MultiAgentPipeline/AudioAnalysisAndTranscriberAgent/whisper
     container_name: innovacx-whisper
     restart: unless-stopped
     ports:
