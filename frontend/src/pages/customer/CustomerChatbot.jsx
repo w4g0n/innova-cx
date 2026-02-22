@@ -2,12 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import { useNavigate } from "react-router-dom";
+import { sendChatMessage } from "../../services/api";
 import "./CustomerChatbot.css";
-
-const CHATBOT_BASE_URL =
-  import.meta.env.VITE_CHATBOT_BASE_URL ||
-  import.meta.env.VITE_CHATBOT_URL ||
-  "http://localhost:8001";
 
 export default function CustomerChatbot() {
   const navigate = useNavigate();
@@ -111,18 +107,7 @@ export default function CustomerChatbot() {
   // CHATBOT API (Inquiry only)
   // ===============================
   const sendToChatbot = async (message) => {
-    const res = await fetch(`${CHATBOT_BASE_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message,
-        mode: "inquiry",
-      }),
-    });
-
-    if (!res.ok) throw new Error("Chatbot API failed");
-
-    const data = await res.json();
+    const data = await sendChatMessage(message, "inquiry");
     return data.reply;
   };
 

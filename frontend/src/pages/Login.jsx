@@ -18,7 +18,7 @@ export default function Login() {
 
     try {
       // Step 1: Login with email/password
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -58,6 +58,13 @@ export default function Login() {
 
   return (
     <div className="loginBg">
+      <button
+        type="button"
+        onClick={() => navigate("/skip")}
+        style={{ position: "absolute", top: 12, right: 12, zIndex: 10 }}
+      >
+        Skip
+      </button>
       <div className="loginWrapper">
         <section className="loginLeft">
           <div className="loginOverlay" />

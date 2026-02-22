@@ -5,18 +5,14 @@
  */
 
 const API_CONFIG = {
-  whisper:
-    import.meta.env.VITE_WHISPER_BASE_URL ||
-    import.meta.env.VITE_WHISPER_URL ||
-    "http://localhost:3001",
+  backend:
+    import.meta.env.VITE_BACKEND_BASE_URL ||
+    import.meta.env.VITE_API_BASE_URL ||
+    "http://localhost:8000",
   sentiment:
     import.meta.env.VITE_SENTIMENT_BASE_URL ||
     import.meta.env.VITE_SENTIMENT_URL ||
     "http://localhost:8002",
-  chatbot:
-    import.meta.env.VITE_CHATBOT_BASE_URL ||
-    import.meta.env.VITE_CHATBOT_URL ||
-    "http://localhost:8001",
   orchestrator:
     import.meta.env.VITE_ORCHESTRATOR_URL ||
     "http://localhost:8004",
@@ -32,7 +28,7 @@ export async function transcribeAudio(audioBlob, filename = "recording.mp4") {
   const formData = new FormData();
   formData.append("audio", audioBlob, filename);
 
-  const response = await fetch(`${API_CONFIG.whisper}/transcribe`, {
+  const response = await fetch(`${API_CONFIG.backend}/api/transcriber/transcribe`, {
     method: "POST",
     body: formData,
   });
@@ -110,7 +106,7 @@ export async function processAudioComplaint(audioBlob) {
  * @returns {Promise<{reply: string}>}
  */
 export async function sendChatMessage(message, mode = "inquiry") {
-  const response = await fetch(`${API_CONFIG.chatbot}/api/chat`, {
+  const response = await fetch(`${API_CONFIG.backend}/api/chatbot/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, mode }),
@@ -140,8 +136,17 @@ export async function checkSentimentHealth() {
  * @param {string} text - The complaint or inquiry text
  * @returns {Promise<{type: string, ticket_id?: string|null, chatbot_response?: string, priority?: number, department?: string, sentiment?: number, classification_confidence?: number}>}
  */
-export async function submitTextComplaint(text) {
+export async function submitTextComplaint(text, options = {}) {
   const body = new URLSearchParams({ text });
+  if (options.ticket_type) {
+    body.set("ticket_type", options.ticket_type);
+  }
+  if (typeof options.has_audio === "boolean") {
+    body.set("has_audio", String(options.has_audio));
+  }
+  if (options.audio_features) {
+    body.set("audio_features", JSON.stringify(options.audio_features));
+  }
   const response = await fetch(`${API_CONFIG.orchestrator}/process/text`, {
     method: "POST",
     body,
@@ -164,19 +169,15 @@ export async function submitTextComplaint(text) {
  * @returns {Promise<{type: string, ticket_id?: string|null, priority?: number, department?: string, sentiment?: number}>}
  */
 export async function submitAudioComplaint(audioBlob, filename = "recording.webm") {
-  const form = new FormData();
-  form.append("audio", audioBlob, filename);
-
-  const response = await fetch(`${API_CONFIG.orchestrator}/process/audio`, {
-    method: "POST",
-    body: form,
-  });
-
-  if (!response.ok) {
-    throw new Error("Orchestrator audio processing failed");
+  const transcription = await transcribeAudio(audioBlob, filename);
+  const transcript = (transcription?.transcript || "").trim();
+  if (!transcript) {
+    throw new Error("Audio transcription returned empty transcript");
   }
-
-  return response.json();
+  return submitTextComplaint(transcript, {
+    has_audio: true,
+    audio_features: transcription?.audio_features || null,
+  });
 }
 
 export default {
