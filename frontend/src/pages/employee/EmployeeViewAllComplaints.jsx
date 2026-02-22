@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
@@ -64,11 +65,40 @@ export default function EmployeeViewAllComplaints() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [searchTerm] = useState("");
-  const [statusFilter] = useState("All Status");
-  const [priorityFilter] = useState("All Priorities");
-  const [sortConfig] = useState({ key: null, direction: null });
-  const [dateRange] = useState({ from: "", to: "" });
+  // ─── STUBS — Employee "Tickets Viewer and Management" page (/employee/complaints) ────────────
+  // These controls are fully designed and the data layer is complete, but the UI elements
+  // (search bar, filter dropdowns, date picker, sortable column headers) have not yet been
+  // added to the JSX return below.
+  //
+  // HOW TO ACTIVATE a stub:
+  //   • Remove the leading _ from any setter/variable you are wiring up — that's all it takes.
+  //   • PillSearch  → onChange={_setSearchTerm}
+  //   • PillSelect  → onChange={_setStatusFilter} / onChange={_setPriorityFilter}
+  //   • Date inputs → onChange for from/to wired to _setDateRange({ ...dateRange, from/to: v })
+  //   • Date filter toggle button → onClick={_setShowDateFilter(s => !s)}, show when _showDateFilter
+  //   • Column <th> → onClick={() => _handleSort("fieldKey")} (supported keys listed on the handler)
+  //   • Row clicks  → onClick={() => _navigate(`/employee/details/${t.ticketId}`)}
+  //
+  // All filtering + sorting logic in filteredTickets already reads these values — no changes
+  // needed there once the setters are wired up.
+  // ────────────────────────────────────────────────────────────────────────────────────────────
+  const _navigate = useNavigate();
+  const [searchTerm, _setSearchTerm] = useState("");
+  const [statusFilter, _setStatusFilter] = useState("All Status");
+  const [priorityFilter, _setPriorityFilter] = useState("All Priorities");
+  const [sortConfig, _setSortConfig] = useState({ key: null, direction: null });
+  const [dateRange, _setDateRange] = useState({ from: "", to: "" });
+  const [_showDateFilter, _setShowDateFilter] = useState(false);
+
+  // STUB: column sort handler — attach to <th onClick={() => _handleSort("fieldKey")} />.
+  // Supported sort keys: "priority", "status", "issueDate", "responseTime", "resolutionTime".
+  // Clicking the same column again toggles asc ↔ desc. First click on a new column is asc.
+  const _handleSort = (key) => {
+    _setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+    }));
+  };
 
   useEffect(() => {
     const fetchTickets = async () => {
