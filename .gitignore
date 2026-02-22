@@ -74,9 +74,14 @@ docker-compose.override.yml
 ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/raw/*
 ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/*
 ai-models/MultiAgentPipeline/FeatureEngineeringAgent/models/*
+ai-models/MultiAgentPipeline/FeatureEngineeringAgent/app/test_inputs/*
 !ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/raw/.gitkeep
 !ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/.gitkeep
+!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/embeddings/
+ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/embeddings/*
+!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/embeddings/.gitkeep
 !ai-models/MultiAgentPipeline/FeatureEngineeringAgent/models/.gitkeep
+!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/app/test_inputs/.gitkeep
 
 # Project-specific
 ai-models/MultiAgentPipeline/SentimentAnalysisAgent/src/models/sentiment-v7/model.pt
