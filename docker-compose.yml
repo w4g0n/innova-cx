@@ -28,6 +28,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,7 +39,7 @@ services:
 
   chatbot:
     profiles: ["chatbot", "dev"]
-    build: ./backend/chatbot
+    build: ./backend/ChatbotAgent
     container_name: innovacx-chatbot
     restart: unless-stopped
     environment:
@@ -53,8 +54,8 @@ services:
       - innovacx-network
 
   whisper:
-    profiles: ["audio", "dev"]
-    build: ./backend/audio-transcriber/whisper
+    profiles: ["audio", "backend", "dev"]
+    build: ./ai-models/MultiAgentPipeline/AudioAnalysisAndTranscriberAgent/whisper
     container_name: innovacx-whisper
     restart: unless-stopped
     ports:
@@ -63,7 +64,7 @@ services:
       - innovacx-network
 
   sentiment:
-    profiles: ["dev"]
+    profiles: ["backend", "dev"]
     build: ./backend/sentiment-service
     container_name: innovacx-sentiment
     restart: unless-stopped
@@ -74,6 +75,44 @@ services:
       - ${SENTIMENT_MODEL_PATH:-./backend/sentiment-service/models}:/app/models
     ports:
       - "8002:8002"
+    networks:
+      - innovacx-network
+
+  classifier:
+    profiles: ["backend", "dev"]
+    build: ./ai-models/MultiAgentPipeline/ClassificationAgent
+    container_name: innovacx-classifier
+    restart: unless-stopped
+    environment:
+      USE_MOCK_CLASSIFIER: "${USE_MOCK_CLASSIFIER:-true}"
+    ports:
+      - "8003:8003"
+    networks:
+      - innovacx-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8003/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  orchestrator:
+    profiles: ["backend", "dev"]
+    build:
+      context: .
+      dockerfile: backend/orchestrator/Dockerfile
+    container_name: innovacx-orchestrator
+    restart: unless-stopped
+    environment:
+      PYTHONPATH: /app
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
+    depends_on:
+      backend:
+        condition: service_started
+      classifier:
+        condition: service_healthy
+    ports:
+      - "8004:8004"
     networks:
       - innovacx-network
 
@@ -100,6 +139,7 @@ services:
       VITE_CHATBOT_BASE_URL: http://localhost:8001
       VITE_WHISPER_BASE_URL: http://localhost:3001
       VITE_SENTIMENT_URL: http://localhost:8002
+      VITE_ORCHESTRATOR_URL: http://localhost:8004
     volumes:
       - ./frontend:/app
       - /app/node_modules
