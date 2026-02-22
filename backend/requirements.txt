@@ -14,6 +14,7 @@ pydantic-settings==2.1.0
 bcrypt==4.1.3
 pyotp==2.8.0
 qrcode[pil]
+httpx==0.28.1
 
 
 # We'll add AI/ML libraries later as needed:

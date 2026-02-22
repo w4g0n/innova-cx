@@ -80,5 +80,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t innovacx-backend ./backend
-      - run: docker build -t innovacx-whisper ./ai-models/MultiAgentPipeline/AudioAnalysisAndTranscriberAgent/whisper
-      - run: docker build -t innovacx-chatbot ./backend/ChatbotAgent
+      - run: docker build -t innovacx-whisper ./backend/services/transcriber
+      - run: docker build -t innovacx-chatbot ./backend/services/chatbot

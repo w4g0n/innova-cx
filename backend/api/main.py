@@ -16,8 +16,9 @@ import bcrypt
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import OperationalError
+import httpx
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -94,8 +95,9 @@ def _load_recurrence_feature_module():
     module_path = (
         Path(__file__).resolve().parents[2]
         / "ai-models"
+        / "legacy"
         / "MultiAgentPipeline"
-        / "FeatureEngineeringAgent"
+        / "FeatureEngineeringAgent_runtime"
         / "app"
         / "recurrence_feature.py"
     )
@@ -1872,6 +1874,11 @@ class OrchestratorComplaintRequest(BaseModel):
     classification_confidence: Optional[float] = None
 
 
+class ChatbotProxyRequest(BaseModel):
+    message: str
+    mode: Optional[str] = "inquiry"
+
+
 @api.post("/complaints")
 def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
     """
@@ -1936,6 +1943,70 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             )
 
     return {"ticket_id": ticket_code}
+
+
+@api.post("/chatbot/chat")
+async def proxy_chatbot_chat(body: ChatbotProxyRequest):
+    """
+    Frontend-facing chatbot proxy.
+    Keeps chatbot service private behind backend API.
+    """
+    chatbot_url = os.getenv("CHATBOT_URL", "http://chatbot:8000")
+    local_fallback = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001")
+
+    payload = {"message": body.message, "mode": body.mode}
+    last_error = None
+
+    for base in [chatbot_url, local_fallback]:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(f"{base}/api/chat", json=payload)
+                response.raise_for_status()
+                data = response.json()
+                return {"reply": data.get("reply", "")}
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    raise HTTPException(status_code=503, detail=f"Chatbot service unavailable: {last_error}")
+
+
+@api.post("/transcriber/transcribe")
+@api.post("/whisper/transcribe")
+async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
+    """
+    Frontend-facing transcriber proxy.
+    Forwards multipart audio to transcriber service and returns transcript.
+    """
+    transcriber_url = os.getenv("TRANSCRIBER_URL", "http://transcriber:3001")
+    local_fallback = os.getenv("TRANSCRIBER_URL_LOCAL", "http://localhost:3001")
+
+    audio_bytes = await audio.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded audio file is empty")
+
+    file_name = audio.filename or "recording.webm"
+    content_type = audio.content_type or "audio/webm"
+    last_error = None
+
+    for base in [transcriber_url, local_fallback]:
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{base}/transcribe",
+                    files={"audio": (file_name, audio_bytes, content_type)},
+                )
+                response.raise_for_status()
+                data = response.json()
+                return {
+                    "transcript": data.get("transcript", ""),
+                    "audio_features": data.get("audio_features"),
+                }
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    raise HTTPException(status_code=503, detail=f"Transcriber service unavailable: {last_error}")
 
 
 # =========================================================

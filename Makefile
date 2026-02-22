@@ -1,32 +1,15 @@
 # Make sure command-style targets always run (even when files/folders share names)
 .PHONY: \
-	backend backend-build \
 	frontend frontend-build \
-	chatbot chatbot-build \
-	audio audio-build \
+	pipeline pipeline-build \
 	feature-agent feature-agent-build \
-	orchestrator orchestrator-build \
 	dev dev-build \
 	down
 
 # =========================
-# BACKEND + DATABASE
+# PROFILE 1: FRONTEND
+# (Frontend + Backend + DB)
 # =========================
-
-backend:
-	docker compose --profile backend up
-
-backend-build:
-	docker compose --profile backend up --build
-
-
-# =========================
-# FRONTEND + BACKEND + DATABASE
-# =========================
-# Frontend profile includes:
-# - frontend
-# - backend
-# - postgres
 
 frontend:
 	docker compose --profile frontend up
@@ -36,30 +19,18 @@ frontend-build:
 
 
 # =========================
-# OPTIONAL: CHATBOT ONLY
-# (useful for debugging, not required for normal use)
+# PROFILE 2: PIPELINE
+# (Frontend + Backend + DB + Classifier + Orchestrator)
 # =========================
 
-chatbot:
-	docker compose --profile chatbot up
+pipeline:
+	docker compose --profile pipeline up
 
-chatbot-build:
-	docker compose --profile chatbot up --build
-
-
-# =========================
-# OPTIONAL: AUDIO (WHISPER) ONLY
-# =========================
-
-audio:
-	docker compose --profile audio up
-
-audio-build:
-	docker compose --profile audio up --build
+pipeline-build:
+	docker compose --profile pipeline up --build
 
 
-
-# Feature Engineering Agent:
+# Feature Engineering Agent (optional):
 
 feature-agent:
 	docker compose --profile feature-engineering up
@@ -69,20 +40,8 @@ feature-agent-build:
 
 
 # =========================
-# ORCHESTRATOR
-# (Classifier + Orchestrator + Backend + DB + Whisper + Sentiment)
-# =========================
-
-orchestrator:
-	docker compose --profile backend up orchestrator
-
-orchestrator-build:
-	docker compose --profile backend up --build orchestrator
-
-
-# =========================
-# FULL DEV STACK
-# (Frontend + Backend + DB + Transcriber + Sentiment + Chatbot)
+# PROFILE 3: DEV
+# (Frontend + Backend + DB + Orchestrator + Classifier + Chatbot + Transcriber)
 # =========================
 
 dev:
@@ -97,4 +56,4 @@ dev-build:
 # =========================
 
 down:
-	docker compose down --remove-orphans
+	COMPOSE_PROFILES=frontend,pipeline,dev,feature-engineering docker compose down --remove-orphans

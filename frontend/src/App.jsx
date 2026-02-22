@@ -5,6 +5,7 @@ import ProtectedRoute from "./auth/ProtectedRoute";
 
 const Login = lazy(() => import("./pages/Login"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const SkipViewSelector = lazy(() => import("./pages/SkipViewSelector"));
 
 const CustomerLanding = lazy(() => import("./pages/customer/CustomerLanding"));
 const CustomerNotifications = lazy(() =>
@@ -68,6 +69,7 @@ export default function App() {
         <Routes>
           
           <Route path="/" element={<Login />} />
+          <Route path="/skip" element={<SkipViewSelector />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
 
           <Route path="/" element={<Login />} />

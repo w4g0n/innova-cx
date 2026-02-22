@@ -34,6 +34,7 @@ htmlcov/
 .env.local
 .env.*.local
 *.env
+!backend/.env
 
 # Runtime / temp
 uploads/
@@ -71,28 +72,30 @@ docker-compose.override.yml
 *.ipynb
 
 # FeatureEngineeringAgent data and models (keep placeholder files only)
-ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/raw/*
-ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/*
-ai-models/MultiAgentPipeline/FeatureEngineeringAgent/models/*
-ai-models/MultiAgentPipeline/FeatureEngineeringAgent/app/test_inputs/*
-!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/raw/.gitkeep
-!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/.gitkeep
-!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/embeddings/
-ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/embeddings/*
-!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/embeddings/.gitkeep
-!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/models/.gitkeep
-!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/app/test_inputs/.gitkeep
+ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/data/raw/*
+ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/data/processed/*
+ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/models/*
+ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/app/test_inputs/*
+!ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/data/raw/.gitkeep
+!ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/data/processed/.gitkeep
+!ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/data/processed/embeddings/
+ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/data/processed/embeddings/*
+!ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/data/processed/embeddings/.gitkeep
+!ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/models/.gitkeep
+!ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/app/test_inputs/.gitkeep
+ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent/deployment_state/*
+!ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent/deployment_state/.gitkeep
 
 # Terraform
 terraform.tfvars
 *.tfvars
 
 # Project-specific
-ai-models/MultiAgentPipeline/SentimentAnalysisAgent/src/models/sentiment-v7/model.pt
+ai-models/legacy/MultiAgentPipeline/SentimentAnalysisAgent_runtime/src/models/sentiment-v7/model.pt
 .claude/worktrees/
  
 # PrioritizationAgent test artifacts (keep folder placeholders only)
-ai-models/MultiAgentPipeline/PrioritizationAgent/test_outputs/*
-ai-models/MultiAgentPipeline/PrioritizationAgent/test_inputs/*
-!ai-models/MultiAgentPipeline/PrioritizationAgent/test_outputs/.gitkeep
-!ai-models/MultiAgentPipeline/PrioritizationAgent/test_inputs/.gitkeep
+ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/test_outputs/*
+ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/test_inputs/*
+!ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/test_outputs/.gitkeep
+!ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/test_inputs/.gitkeep

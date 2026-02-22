@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
-import { analyzeCombinedSentiment, analyzeSentiment, transcribeAudio } from "../../services/api";
+import { submitTextComplaint, transcribeAudio } from "../../services/api";
 import { getDisplayNameFromEmail } from "../../utils/userDisplay";
 import "./CustomerFillForm.css";
 
@@ -25,7 +25,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     [email]
   );
 
-  const [type, setType] = useState("Complaint");
+  const [type, setType] = useState("Auto");
   const [mode, setMode] = useState("Text");
   const [assetType, setAssetType] = useState("Office");
   const [subject, setSubject] = useState("");
@@ -91,6 +91,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
 
   const [voiceStage, setVoiceStage] = useState("idle");
   const [draftTranscript, setDraftTranscript] = useState("");
+  const [latestAudioFeatures, setLatestAudioFeatures] = useState(null);
 
   useEffect(() => {
     if (initialType === "Complaint" || initialType === "Inquiry") {
@@ -115,71 +116,42 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     }
   };
 
-  const buildPayload = () => ({
-    name: nameFromEmail,
-    email,
-    type,
-    asset_type: assetType,
-    subject,
-    details: message,
-    attachments: attachments.map((f) => ({
-      name: f.name,
-      type: f.type,
-      size: f.size,
-      lastModified: f.lastModified,
-    })),
-  });
-
-  const attachSentiment = async (payload) => {
-    if (!message.trim()) return payload;
-    try {
-      const sentiment = await analyzeSentiment(message);
-      return { ...payload, sentiment };
-    } catch (err) {
-      console.error("[Sentiment] FAILED:", err);
-      return payload;
-    }
-  };
-
   const resetForm = () => {
     setSubject("");
     setMessage("");
     setAssetType("Office");
-    setType("Complaint");
+    setType("Auto");
     setMode("Text");
     setAttachments([]);
     setIsRecording(false);
     setIsTranscribing(false);
     setVoiceStage("idle");
     setDraftTranscript("");
+    setLatestAudioFeatures(null);
     cleanupStream();
   };
 
-  // 🔥 Updated submit function to POST to backend
+  // Submit ticket details to orchestrator pipeline
   const submit = async (e) => {
     e.preventDefault();
-
-    const payload = await attachSentiment(buildPayload());
-    const token = localStorage.getItem("access_token");
-
+    const details = (message || "").trim();
+    if (!details) {
+      alert("Please provide ticket details before submitting.");
+      return;
+    }
 
     try {
-      const res = await fetch("http://localhost:8000/api/customer/tickets", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
+      const orchestratorResult = await submitTextComplaint(details, {
+        ticket_type: type === "Auto" ? null : type.toLowerCase(),
+        has_audio: mode === "Audio",
+        audio_features: mode === "Audio" ? latestAudioFeatures : null,
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Failed to create ticket");
+      if (orchestratorResult?.type === "complaint") {
+        alert(`Ticket submitted and processed. Ticket ID: ${orchestratorResult.ticket_id || "N/A"}`);
+      } else {
+        alert(`Inquiry processed. Reply: ${orchestratorResult?.chatbot_response || "No reply"}`);
       }
-
-      const data = await res.json();
-      alert(`Ticket created successfully! Ticket ID: ${data.ticket.ticketId}`);
 
       resetForm();
 
@@ -232,18 +204,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
         const filename = mimeType.includes("mp4") ? "mic.mp4" : "mic.webm";
         const data = await transcribeAudio(blob, filename);
         setDraftTranscript(data?.transcript || "");
+        setLatestAudioFeatures(data?.audio_features || null);
         setVoiceStage("review");
-
-        if (data?.transcript) {
-          try {
-            await analyzeCombinedSentiment(
-              data.transcript,
-              data.audio_features || null
-            );
-          } catch (sentimentErr) {
-            console.warn("Sentiment analysis unavailable:", sentimentErr);
-          }
-        }
       } catch (err) {
         console.error("Transcription failed:", err);
         alert("Transcription failed (demo). Please try again.");
@@ -342,6 +304,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
                     onChange={setType}
                     ariaLabel="Select request type"
                     options={[
+                      { value: "Auto", label: "Auto (classify)" },
                       { value: "Complaint", label: "Complaint" },
                       { value: "Inquiry", label: "Inquiry" },
                     ]}
@@ -374,7 +337,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Short summary (e.g., Access card not working)"
-              required
             />
           </div>
 
