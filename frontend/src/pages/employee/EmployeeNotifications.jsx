@@ -132,7 +132,9 @@ export default function EmployeeNotifications() {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-    } catch {}
+    } catch {
+      // network error — silently ignore, notification state unchanged
+    }
   };
 
   const markOneRead = async (id) => {
@@ -144,7 +146,9 @@ export default function EmployeeNotifications() {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-    } catch {}
+    } catch {
+      // network error — silently ignore, notification state unchanged
+    }
   };
 
   const onNotificationClick = async (n) => {

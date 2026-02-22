@@ -18,7 +18,7 @@ _tokenizer = AutoTokenizer.from_pretrained(
 _model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     token=HF_TOKEN,
-    torch_dtype=torch.float32,
+    torch_dtype=torch.bfloat16,
 )
 
 logger.info("Model loaded.")

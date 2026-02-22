@@ -1,90 +1,91 @@
 """
-Multi-Task Inference
+Sentiment Inference (V7)
 
-Predicts 3 things from text:
-1. text_sentiment: -1 to +1
-2. text_urgency: 0 to 1
-3. keywords: List of extracted keywords
+Loads a trained RoBERTaSentimentModel and returns text_sentiment only.
+text_urgency and keywords have been removed — they are handled by
+downstream agents (Feature Engineering, Fuzzy Prioritization).
 
-This REPLACES your current inference.py
+Public API (used by ml_wrapper.py via SignalExtractor):
+
+    predictor = SentimentPredictor(model_dir)
+    result = predictor.predict("The AC has been broken for three days")
+    # result['text_sentiment'] -> float in [-1, +1]
 """
 
 import torch
 from transformers import RobertaTokenizer
 from pathlib import Path
+from dataclasses import dataclass
 import time
 import logging
+import sys
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from model_architecture_UPDATED import RoBERTaMultiTaskModel, keyword_indices_to_words
+from model_architecture import RoBERTaSentimentModel
 
 
 # ==============================================================================
-# INFERENCE CLASS
+# PREDICTION DATACLASS
 # ==============================================================================
 
-class MultiTaskPredictor:
+@dataclass
+class SentimentPrediction:
+    """Result returned by SentimentPredictor.predict()"""
+    text_sentiment: float       # [-1, +1]
+    processing_time_ms: float
+
+
+# ==============================================================================
+# PREDICTOR
+# ==============================================================================
+
+class SentimentPredictor:
     """
-    Loads trained model and predicts sentiment, urgency, and keywords.
+    Loads trained model and tokenizer from disk, runs inference.
     """
-    
-    def __init__(
-        self,
-        model_dir: str,
-        device: str = 'cpu',
-        keyword_threshold: float = 0.5
-    ):
+
+    def __init__(self, model_dir: str, device: str = 'cpu'):
         """
-        Initialize predictor.
-        
         Args:
-            model_dir: Directory with model.pt and tokenizer files
-            device: 'cpu' or 'cuda'
-            keyword_threshold: Probability threshold for keyword extraction
+            model_dir: Directory containing model.pt and tokenizer files
+            device:    'cpu' or 'cuda'
         """
         self.device = device
-        self.keyword_threshold = keyword_threshold
-        
         model_path = Path(model_dir)
+
         if not model_path.exists():
-            raise ValueError(f"❌ Model directory not found: {model_dir}")
-        
-        # Load tokenizer
-        logger.info(f"📝 Loading tokenizer from: {model_dir}")
+            raise ValueError(f"Model directory not found: {model_dir}")
+
+        logger.info(f"Loading tokenizer from: {model_dir}")
         self.tokenizer = RobertaTokenizer.from_pretrained(model_dir)
-        
-        # Load model
-        logger.info(f"🤖 Loading model from: {model_dir}")
-        self.model = RoBERTaMultiTaskModel()
+
+        logger.info(f"Loading model from: {model_dir}")
+        self.model = RoBERTaSentimentModel()
         self.model.load_state_dict(
             torch.load(model_path / 'model.pt', map_location=device)
         )
         self.model = self.model.to(device)
         self.model.eval()
-        
-        logger.info(f"✓ Model loaded on {device}")
-    
+
+        logger.info(f"Model ready on {device}")
+
     def predict(self, text: str) -> dict:
         """
-        Predict sentiment, urgency, and keywords for text.
-        
+        Predict sentiment for a single text.
+
         Args:
-            text: Input complaint text
-        
+            text: Input transcript / complaint text
+
         Returns:
             {
-                'text_sentiment': float in [-1, 1],
-                'text_urgency': float in [0, 1],
-                'keywords': list of strings,
-                'keyword_scores': dict {keyword: probability},
+                'text_sentiment': float in [-1, +1],
                 'processing_time_ms': float
             }
         """
-        start_time = time.time()
-        
-        # Tokenize
+        t0 = time.time()
+
         encoding = self.tokenizer(
             text,
             max_length=128,
@@ -92,90 +93,57 @@ class MultiTaskPredictor:
             truncation=True,
             return_tensors='pt'
         )
-        
+
         input_ids = encoding['input_ids'].to(self.device)
         attention_mask = encoding['attention_mask'].to(self.device)
-        
-        # Predict
+
         with torch.no_grad():
-            outputs = self.model(input_ids, attention_mask)
-        
-        # Extract outputs
-        sentiment = outputs['sentiment'].item()
-        urgency = outputs['urgency'].item()
-        keyword_probs = outputs['keywords'][0].cpu().numpy()  # [50]
-        
-        # Extract keywords above threshold
-        keyword_indices = [i for i, prob in enumerate(keyword_probs) 
-                          if prob >= self.keyword_threshold]
-        keywords = keyword_indices_to_words(keyword_indices)
-        
-        # Keyword scores dict
-        keyword_scores = {
-            keyword_indices_to_words([i])[0]: float(keyword_probs[i])
-            for i in range(len(keyword_probs))
-            if keyword_probs[i] >= self.keyword_threshold
-        }
-        
-        processing_time = (time.time() - start_time) * 1000  # ms
-        
+            sentiment = self.model(input_ids, attention_mask)
+
         return {
-            'text_sentiment': sentiment,
-            'text_urgency': urgency,
-            'keywords': keywords,
-            'keyword_scores': keyword_scores,
-            'processing_time_ms': processing_time
+            'text_sentiment': float(sentiment.item()),
+            'processing_time_ms': (time.time() - t0) * 1000
         }
-    
+
     def predict_batch(self, texts: list) -> list:
-        """Predict for multiple texts"""
+        """Predict sentiment for a list of texts."""
         return [self.predict(text) for text in texts]
 
 
 # ==============================================================================
-# SIMPLIFIED API (Like your current ml_wrapper.py)
+# SIGNAL EXTRACTOR  (backward-compatible shim for ml_wrapper.py)
 # ==============================================================================
 
-class MLModelWrapper:
+class _SignalResult:
+    """Minimal result object that ml_wrapper.py accesses as result.text_sentiment."""
+    def __init__(self, text_sentiment: float):
+        self.text_sentiment = text_sentiment
+
+
+class SignalExtractor:
     """
-    Simplified wrapper compatible with your existing code.
-    
-    Usage:
-        model = MLModelWrapper('models/multi-task-model')
-        result = model.predict_sentiment("The AC is broken")
-        
-        # result = {
-        #     'text_sentiment': -0.75,
-        #     'text_urgency': 0.82,
-        #     'keywords': ["AC", "broken"],
-        #     'processing_time_ms': 21.5
-        # }
+    Thin compatibility wrapper so ml_wrapper.py keeps working unchanged.
+
+    ml_wrapper.py does:
+        result = self.extractor.extract_signals(text)
+        float(result.text_sentiment)
+
+    or for a list:
+        results = self.extractor.extract_signals(texts)
+        for r in results: float(r.text_sentiment)
     """
-    
+
     def __init__(self, model_dir: str, device: str = 'cpu'):
-        logger.info(f"📦 Loading model from: {model_dir}")
-        self.predictor = MultiTaskPredictor(model_dir, device=device)
-        logger.info(f"✓ Model ready")
-    
-    def predict_sentiment(self, text: str) -> dict:
-        """
-        Predict sentiment + urgency + keywords.
-        
-        Returns:
-            {
-                'sentiment': float (backward compatible),
-                'text_sentiment': float,
-                'text_urgency': float,
-                'keywords': list,
-                'processing_time_ms': float
-            }
-        """
-        result = self.predictor.predict(text)
-        
-        # Add backward-compatible 'sentiment' key
-        result['sentiment'] = result['text_sentiment']
-        
-        return result
+        self._predictor = SentimentPredictor(model_dir, device=device)
+
+    def extract_signals(self, text_or_texts):
+        if isinstance(text_or_texts, list):
+            return [
+                _SignalResult(r['text_sentiment'])
+                for r in self._predictor.predict_batch(text_or_texts)
+            ]
+        result = self._predictor.predict(text_or_texts)
+        return _SignalResult(result['text_sentiment'])
 
 
 # ==============================================================================
@@ -183,60 +151,19 @@ class MLModelWrapper:
 # ==============================================================================
 
 if __name__ == "__main__":
-    import sys
-    
     if len(sys.argv) < 3:
-        print("\nUsage: python inference_UPDATED.py <model_dir> <text>")
-        print("\nExample:")
-        print('  python inference_UPDATED.py models/multi-task-model "The AC is broken"')
-        print()
+        print("\nUsage: python inference.py <model_dir> <text>")
+        print('\nExample: python inference.py models/sentiment-v7 "The AC is broken"')
         sys.exit(1)
-    
+
     model_dir = sys.argv[1]
-    text = sys.argv[2]
-    
-    # Load model
-    predictor = MultiTaskPredictor(model_dir)
-    
-    # Predict
-    print("\n" + "="*70)
-    print("Multi-Task Inference")
-    print("="*70)
-    print(f"\nInput: {text}")
-    print("\nPredicting...")
-    
+    text = " ".join(sys.argv[2:])
+
+    predictor = SentimentPredictor(model_dir)
     result = predictor.predict(text)
-    
-    print("\n" + "="*70)
-    print("Results:")
-    print("="*70)
-    print(f"\n💭 Sentiment:  {result['text_sentiment']:+.3f}", end="")
-    if result['text_sentiment'] < -0.6:
-        print("  (very negative)")
-    elif result['text_sentiment'] < -0.2:
-        print("  (negative)")
-    elif result['text_sentiment'] < 0.2:
-        print("  (neutral)")
-    elif result['text_sentiment'] < 0.6:
-        print("  (positive)")
-    else:
-        print("  (very positive)")
-    
-    print(f"🚨 Urgency:    {result['text_urgency']:.3f}", end="")
-    if result['text_urgency'] < 0.4:
-        print("  (low)")
-    elif result['text_urgency'] < 0.7:
-        print("  (medium)")
-    else:
-        print("  (high)")
-    
-    print(f"\n🏷️ Keywords:   {', '.join(result['keywords']) if result['keywords'] else 'None'}")
-    
-    if result['keyword_scores']:
-        print("\n📊 Keyword Scores:")
-        for keyword, score in sorted(result['keyword_scores'].items(), 
-                                     key=lambda x: x[1], reverse=True):
-            print(f"   {keyword}: {score:.2f}")
-    
-    print(f"\n⚡ Processing:  {result['processing_time_ms']:.1f}ms")
-    print("\n" + "="*70)
+
+    print("\n" + "=" * 60)
+    print(f"Input:           {text}")
+    print(f"text_sentiment:  {result['text_sentiment']:+.4f}")
+    print(f"Processing time: {result['processing_time_ms']:.1f} ms")
+    print("=" * 60)

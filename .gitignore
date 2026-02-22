@@ -77,3 +77,7 @@ ai-models/MultiAgentPipeline/FeatureEngineeringAgent/models/*
 !ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/raw/.gitkeep
 !ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/.gitkeep
 !ai-models/MultiAgentPipeline/FeatureEngineeringAgent/models/.gitkeep
+
+# Project-specific
+ai-models/MultiAgentPipeline/SentimentAnalysisAgent/src/models/sentiment-v7/model.pt
+.claude/worktrees/

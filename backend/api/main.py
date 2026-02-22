@@ -1654,7 +1654,6 @@ def get_manager_trends(
     priority: str = Query("All Priorities")
 ):
     # ---------- TIME RANGE ----------
-    now = datetime.utcnow()
     if timeRange == "This Month":
         month_start = fetch_one("SELECT date_trunc('month', now()) AS start")["start"]
     elif timeRange == "Last 3 Months":
@@ -1857,6 +1856,87 @@ def get_manager_trends(
         "categories": categories,
         "table": table
     }
+
+# =========================================================
+# Internal Orchestrator Endpoint (no JWT — Docker-network only)
+# =========================================================
+
+class OrchestratorComplaintRequest(BaseModel):
+    transcript: str
+    sentiment: Optional[float] = None
+    audio_sentiment: Optional[float] = None
+    priority: int = 3
+    department: str = "general"
+    keywords: Optional[List[str]] = []
+    label: str = "complaint"
+    classification_confidence: Optional[float] = None
+
+
+@api.post("/complaints")
+def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
+    """
+    Internal endpoint called by the orchestrator service.
+    Creates a ticket using the system user account (no JWT required).
+    Relies on Docker-network isolation for security.
+    """
+    system_email = os.getenv("SYSTEM_USER_EMAIL", "customer1@innova.cx")
+
+    row = fetch_one(
+        "SELECT id FROM users WHERE email = %s LIMIT 1",
+        (system_email,),
+    )
+    if not row:
+        raise HTTPException(
+            status_code=503,
+            detail=f"System user '{system_email}' not found. "
+                   "Set SYSTEM_USER_EMAIL to a valid user.",
+        )
+
+    system_user_id = row["id"]
+    ticket_code = f"CX-{int(time.time())}"
+
+    priority_map = {1: "Low", 2: "Low", 3: "Medium", 4: "High", 5: "Critical"}
+    priority_label = priority_map.get(body.priority, "Medium")
+
+    subject = f"[{body.department.title()}] Automated complaint"
+    details = body.transcript or "(no transcript)"
+
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO tickets (
+                    ticket_code,
+                    ticket_type,
+                    subject,
+                    details,
+                    priority,
+                    status,
+                    created_by_user_id,
+                    sentiment_score,
+                    sentiment_label,
+                    model_priority,
+                    model_confidence,
+                    created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW());
+                """,
+                (
+                    ticket_code,
+                    "Complaint",
+                    subject,
+                    details,
+                    priority_label,
+                    "Unassigned",
+                    system_user_id,
+                    body.sentiment,
+                    "orchestrator",
+                    priority_label,
+                    body.classification_confidence,
+                ),
+            )
+
+    return {"ticket_id": ticket_code}
+
 
 # =========================================================
 # Attach router LAST
