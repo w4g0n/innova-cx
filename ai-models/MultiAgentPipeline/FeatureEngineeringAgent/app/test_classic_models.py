@@ -1,9 +1,16 @@
 import joblib
 import numpy as np
+import os
 from sentence_transformers import SentenceTransformer
 
 BASE_MODEL_PATH = "models/"
 EMBED_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+TARGETS = [
+    ("business_impact", "Business Impact"),
+    ("safety_concern", "Safety Concern"),
+    ("issue_severity", "Issue Severity"),
+    ("issue_urgency", "Issue Urgency"),
+]
 
 
 def load_models(target_name):
@@ -23,9 +30,13 @@ def load_models(target_name):
 def main():
 
     embedder = SentenceTransformer(EMBED_MODEL_NAME)
-
-    business_models, business_le = load_models("business_impact")
-    safety_models, safety_le = load_models("safety_concern")
+    models_by_target = {}
+    for target_name, label in TARGETS:
+        target_path = BASE_MODEL_PATH + target_name + "/"
+        if not os.path.exists(target_path):
+            print(f"Skipping {label}: model directory not found ({target_path})")
+            continue
+        models_by_target[target_name] = (label, *load_models(target_name))
 
     test_cases = [
 
@@ -100,17 +111,12 @@ please escalate immediately."""
 
         embedding = embedder.encode([text], convert_to_numpy=True)
 
-        print("\nBusiness Impact Predictions:")
-        for name, model in business_models.items():
-            pred = model.predict(embedding)
-            label = business_le.inverse_transform(pred)[0]
-            print(f"  {name}: {label}")
-
-        print("\nSafety Concern Predictions:")
-        for name, model in safety_models.items():
-            pred = model.predict(embedding)
-            label = safety_le.inverse_transform(pred)[0]
-            print(f"  {name}: {label}")
+        for target_name, (display_label, target_models, label_encoder) in models_by_target.items():
+            print(f"\n{display_label} Predictions:")
+            for model_name, model in target_models.items():
+                pred = model.predict(embedding)
+                target_label = label_encoder.inverse_transform(pred)[0]
+                print(f"  {model_name}: {target_label}")
 
 
 if __name__ == "__main__":

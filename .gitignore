@@ -1,9 +1,7 @@
-# Create/overwrite the .gitignore file
-cat > .gitignore << 'EOF'
-# macOS
+# macOS / OS
 .DS_Store
-.AppleDouble
-.LSOverride
+Thumbs.db
+Desktop.ini
 
 # Node
 node_modules/
@@ -21,14 +19,15 @@ __pycache__/
 *$py.class
 *.so
 .Python
-whisper-env/
 venv/
 env/
 ENV/
+whisper-env/
 *.egg-info/
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
 
 # Env files
 .env
@@ -36,70 +35,45 @@ htmlcov/
 .env.*.local
 *.env
 
-# Runtime data
+# Runtime / temp
 uploads/
 transcripts/
+logs/
+tmp/
+temp/
+*.tmp
 *.log
-
-# AWS
-.aws-credentials
-aws-config/
-*.pem
 
 # Database
 *.sqlite
 *.db
 migrations/versions/
 
-# ML Models
+# ML artifacts
 mlruns/
 models/checkpoints/
 *.h5
 *.pkl
 *.joblib
 
-# IDEs
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS generated files
-Thumbs.db
-Desktop.ini
-
 # Docker
 docker-compose.override.yml
 
-# Jupyter Notebooks
+# Jupyter
 .ipynb_checkpoints/
 *.ipynb
 
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-
-# Testing
-.coverage
-htmlcov/
-.pytest_cache/
-.tox/
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-EOF
-
-# Ignore ML data contents but keep folders
-ai-models/FeatureEngineeringAgent/data/raw/*
-ai-models/FeatureEngineeringAgent/data/processed/*
-ai-models/FeatureEngineeringAgent/models/*
-
-# Do not ignore the placeholder files
-!ai-models/FeatureEngineeringAgent/data/raw/.gitkeep
-!ai-models/FeatureEngineeringAgent/data/processed/.gitkeep
-!ai-models/FeatureEngineeringAgent/models/.gitkeep
+# FeatureEngineeringAgent data and models (keep placeholder files only)
+ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/raw/*
+ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/*
+ai-models/MultiAgentPipeline/FeatureEngineeringAgent/models/*
+!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/raw/.gitkeep
+!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/.gitkeep
+!ai-models/MultiAgentPipeline/FeatureEngineeringAgent/models/.gitkeep
