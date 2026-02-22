@@ -6,7 +6,10 @@ import json
 import hmac
 import base64
 import hashlib
+import importlib.util
 from datetime import datetime, timezone
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, Optional, List
 
 import bcrypt
@@ -84,6 +87,45 @@ def execute(sql: str, params: Optional[tuple] = None) -> int:
         with conn.cursor() as cur:
             cur.execute(sql, params or ())
             return cur.rowcount
+
+
+@lru_cache(maxsize=1)
+def _load_recurrence_feature_module():
+    module_path = (
+        Path(__file__).resolve().parents[2]
+        / "ai-models"
+        / "MultiAgentPipeline"
+        / "FeatureEngineeringAgent"
+        / "app"
+        / "recurrence_feature.py"
+    )
+    if not module_path.exists():
+        return None
+
+    spec = importlib.util.spec_from_file_location("feature_engineering_recurrence", module_path)
+    if spec is None or spec.loader is None:
+        return None
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def predict_is_recurring(user_id: str, subject: str, details: str) -> bool:
+    module = _load_recurrence_feature_module()
+    fallback = False
+    if not module or not hasattr(module, "compute_is_recurring_from_db"):
+        return fallback
+
+    try:
+        return bool(module.compute_is_recurring_from_db(
+            dsn=get_dsn(),
+            user_id=str(user_id),
+            subject=subject,
+            details=details,
+        ))
+    except Exception:
+        return fallback
 
 
 # =========================================================
@@ -1318,6 +1360,8 @@ def create_customer_ticket(
 ):
     # Generate a unique ticket code (could also use DB sequence)
     ticket_code = f"CX-{int(time.time())}-{user['id']}"
+    is_recurring = predict_is_recurring(user_id=user["id"], subject=body.subject, details=body.details)
+    model_suggestion = json.dumps({"is_recurring": is_recurring})
 
     # Insert ticket into database
     ticket_id = None
@@ -1333,8 +1377,9 @@ def create_customer_ticket(
                     priority,
                     status,
                     created_by_user_id,
+                    model_suggestion,
                     created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING id;
                 """,
                 (
@@ -1345,6 +1390,7 @@ def create_customer_ticket(
                     "Low",
                     "Unassigned",
                     user["id"],
+                    model_suggestion,
                 ),
             )
             ticket_id = cur.fetchone()[0]
@@ -1368,6 +1414,7 @@ def create_customer_ticket(
             "subject": body.subject,
             "priority": "Normal",
             "status": "New",
+            "is_recurring": is_recurring,
         },
     }
 
