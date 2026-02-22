@@ -90,4 +90,9 @@ terraform.tfvars
 # Project-specific
 ai-models/MultiAgentPipeline/SentimentAnalysisAgent/src/models/sentiment-v7/model.pt
 .claude/worktrees/
-infrastructure/gcp/.terraform/providers/registry.terraform.io/hashicorp/google/5.45.2/windows_amd64/terraform-provider-google_v5.45.2_x5.exe
+ 
+# PrioritizationAgent test artifacts (keep folder placeholders only)
+ai-models/MultiAgentPipeline/PrioritizationAgent/test_outputs/*
+ai-models/MultiAgentPipeline/PrioritizationAgent/test_inputs/*
+!ai-models/MultiAgentPipeline/PrioritizationAgent/test_outputs/.gitkeep
+!ai-models/MultiAgentPipeline/PrioritizationAgent/test_inputs/.gitkeep
