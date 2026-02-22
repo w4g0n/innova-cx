@@ -4,8 +4,8 @@ import "./CustomerLanding.css";
 import novaLogo from "../../assets/nova-logo.png";
 import CustomerFillForm from "./CustomerFillForm";
 import useNovaChatbot from "./chatbot.js";
-import { getDisplayNameFromEmail, getInitialsFromEmail } from "../../utils/userDisplay";
-import { getToken, getUser, authHeader } from "../../utils/auth";
+import { getInitialsFromEmail } from "../../utils/userDisplay";
+import { getToken, getUser } from "../../utils/auth";
 
 export default function CustomerLanding() {
   const navigate = useNavigate();
@@ -50,15 +50,11 @@ export default function CustomerLanding() {
 
   const [novaView, setNovaView] = useState("chat");
 
-  const [user, setUser] = useState({});
+  const [user] = useState(() => getUser() || {});
   const [notifications, setNotifications] = useState([]);
 
   // Fetch user and notifications from API
   useEffect(() => {
-    const authUser = getUser();
-    if (authUser) {
-      setUser(authUser);
-    }
     async function fetchNotifications() {
       try {
         const token = getToken();

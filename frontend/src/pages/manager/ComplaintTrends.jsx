@@ -35,39 +35,40 @@ export default function ComplaintTrends() {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    const params = new URLSearchParams({ timeRange, department, priority });
 
-    const params = new URLSearchParams({
-      timeRange,
-      department,
-      priority,
-    });
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
 
-    fetch(`http://localhost:8000/manager/trends?${params.toString()}`, {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then((res) => {
+      try {
+        const res = await fetch(
+          `http://localhost:8000/manager/trends?${params.toString()}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
         if (res.status === 401) {
           navigate("/login");
           return;
         }
         if (!res.ok) throw new Error("Failed to load trends");
-        return res.json();
-      })
-      .then((data) => {
+
+        const data = await res.json();
         setApiData(data);
-      })
-      .catch((err) => {
+      } catch (err) {
         setError(err.message);
         setApiData(null);
-      })
-      .finally(() => {
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    fetchData();
   }, [timeRange, department, priority, navigate]);
 
   // ------------------- Normalize Data for UI -------------------

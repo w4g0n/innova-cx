@@ -63,17 +63,9 @@ export default function EmployeeDashboard() {
   const token = getStoredToken();
   const mfaToken = sessionStorage.getItem("mfa_token");
 
-  // If user has temporary MFA token → force verification
-  if (!token && mfaToken) {
-    return <Navigate to="/verify" replace />;
-  }
-
-  // If no auth at all → go to login
-  if (!token && !mfaToken) {
-    return <Navigate to="/" replace />;
-  }
-
   useEffect(() => {
+    if (!token) return;
+
     let cancelled = false;
 
     async function load() {
@@ -83,7 +75,7 @@ export default function EmployeeDashboard() {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            Authorization: `Bearer ${token}`,
           },
         });
 
@@ -127,6 +119,14 @@ export default function EmployeeDashboard() {
       cancelled = true;
     };
   }, [token]);
+
+  // 🔐 MFA + Auth Enforcement (after hooks)
+  if (!token && mfaToken) {
+    return <Navigate to="/verify" replace />;
+  }
+  if (!token && !mfaToken) {
+    return <Navigate to="/" replace />;
+  }
 
   if (loading)
     return (

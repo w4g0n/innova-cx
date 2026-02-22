@@ -1607,7 +1607,6 @@ def get_manager_trends(
     priority: str = Query("All Priorities")
 ):
     # ---------- TIME RANGE ----------
-    now = datetime.utcnow()
     if timeRange == "This Month":
         month_start = fetch_one("SELECT date_trunc('month', now()) AS start")["start"]
     elif timeRange == "Last 3 Months":
