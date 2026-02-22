@@ -1,7 +1,7 @@
 """
 Step 6 — Router
 ================
-Final step: routes inquiries to the chatbot and creates tickets for complaints.
+Final step: persists both complaints and inquiries as tickets.
 """
 
 import httpx
@@ -31,25 +31,36 @@ def infer_department(keywords: list[str]) -> str:
 
 async def route_and_store(state: dict) -> dict:
     """
-    Inquiry → chatbot  (POST /api/chat)
-    Complaint → backend ticket  (POST /api/complaints)
+    Inquiry → backend ticket (POST /api/complaints)
+    Complaint → backend ticket (POST /api/complaints)
     """
     if state["label"] == "inquiry":
+        state["chatbot_response"] = None
+        inquiry_payload = {
+            "transcript": state["text"],
+            "sentiment": state.get("text_sentiment", 0.0),
+            "audio_sentiment": state.get("audio_sentiment", 0.0),
+            "priority": state.get("priority_score", 3),
+            "department": "general",
+            "keywords": state.get("keywords", []),
+            "label": "inquiry",
+            "classification_confidence": state.get("class_confidence", 1.0),
+        }
+
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{BACKEND_URL}/api/chatbot/chat",
-                    json={"message": state["text"], "mode": "inquiry"},
+                    f"{BACKEND_URL}/api/complaints",
+                    json=inquiry_payload,
                 )
                 response.raise_for_status()
                 data = response.json()
-            # Backend chatbot proxy returns {"reply": "..."}
-            state["chatbot_response"] = data.get("reply", "")
+            state["ticket_id"] = data.get("ticket_id")
+            logger.info("router | inquiry ticket created ticket_id=%s", state.get("ticket_id"))
         except Exception as exc:
-            logger.warning("router | chatbot proxy unavailable: %s", exc)
-            state["chatbot_response"] = "Chatbot service is unavailable right now."
-        state["ticket_id"] = None
-        logger.info("router | inquiry routed to chatbot proxy")
+            logger.warning("router | inquiry ticket creation failed: %s", exc)
+            state["ticket_id"] = None
+
         return state
 
     # Complaint path — infer department if not set

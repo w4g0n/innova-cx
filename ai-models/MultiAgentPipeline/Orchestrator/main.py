@@ -106,14 +106,15 @@ async def process_text(
     result = await pipeline.ainvoke(state)
     if result.get("label") == "inquiry":
         logger.info(
-            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f ticket_id=%s chatbot=%s",
+            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f priority=%s/%s ticket_id=%s",
             result.get("label"),
             float(result.get("class_confidence", 0.0) or 0.0),
             float(result.get("text_sentiment", 0.0) or 0.0),
             float(result.get("audio_sentiment", 0.0) or 0.0),
             float(result.get("sentiment_score_numeric", 0.0) or 0.0),
+            result.get("priority_label"),
+            result.get("priority_score"),
             result.get("ticket_id"),
-            "ok" if result.get("chatbot_response") else "empty",
         )
     else:
         logger.info(
@@ -142,7 +143,9 @@ def _build_response(result: dict) -> dict:
     if result.get("label") == "inquiry":
         return {
             "type": "inquiry",
-            "chatbot_response": result.get("chatbot_response"),
+            "ticket_id": result.get("ticket_id"),
+            "priority": result.get("priority_score"),
+            "priority_label": result.get("priority_label"),
         }
     return {
         "type": "complaint",

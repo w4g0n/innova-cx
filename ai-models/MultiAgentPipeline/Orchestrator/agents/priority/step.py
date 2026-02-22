@@ -18,10 +18,10 @@ from src.inference import prioritize as fuzzy_prioritize  # noqa: E402
 
 
 PRIORITY_TO_SCORE = {
-    "low": 2,
-    "medium": 3,
-    "high": 4,
-    "critical": 5,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4,
 }
 
 SENTIMENT_BUCKET_TO_VALUE = {
@@ -32,8 +32,8 @@ SENTIMENT_BUCKET_TO_VALUE = {
 
 
 async def score_priority(state: dict) -> dict:
-    if state.get("label") != "complaint":
-        logger.info("priority | skipped (label=%s)", state.get("label"))
+    if state.get("label") not in {"complaint", "inquiry"}:
+        logger.info("priority | skipped (unsupported label=%s)", state.get("label"))
         return state
 
     sentiment_input = str(state.get("sentiment_score", "neutral")).strip().lower()

@@ -25,6 +25,26 @@ MODEL_STATE_DIR = Path(
 TARGETS = ["business_impact", "safety_concern", "issue_severity", "issue_urgency"]
 logger = logging.getLogger(__name__)
 
+SAFETY_KEYWORDS = (
+    "fire",
+    "smoke",
+    "gas leak",
+    "electrical",
+    "electric shock",
+    "shock",
+    "sparking",
+    "short circuit",
+    "flood",
+    "water leak",
+    "leak",
+    "hazard",
+    "unsafe",
+    "emergency",
+    "alarm",
+    "chemical",
+    "toxic",
+)
+
 
 def _normalize_level(v: str, default: str = "medium") -> str:
     s = str(v or "").strip().lower()
@@ -42,6 +62,11 @@ def _to_bool(value, default=False) -> bool:
     if s in {"false", "0", "no", "n"}:
         return False
     return default
+
+
+def _has_safety_signal(text: str) -> bool:
+    t = str(text or "").lower()
+    return any(keyword in t for keyword in SAFETY_KEYWORDS)
 
 
 @lru_cache(maxsize=1)
@@ -86,20 +111,31 @@ async def engineer_features(state: dict) -> dict:
     issue_severity = _predict_target(artifacts, "issue_severity", text) or "medium"
     issue_urgency = _predict_target(artifacts, "issue_urgency", text) or "medium"
 
+    severity_norm = _normalize_level(issue_severity, default="medium")
+    safety_from_model = _to_bool(safety_concern, default=False)
+    safety_from_keywords = _has_safety_signal(text)
+    safety_from_severity = severity_norm in {"high", "critical"}
+
     state["business_impact"] = _normalize_level(business_impact, default="medium")
-    state["safety_concern"] = _to_bool(safety_concern, default=False)
-    state["issue_severity"] = _normalize_level(issue_severity, default="medium")
+    # Conservative safety flag to reduce false positives:
+    # require model positive + concrete safety signal.
+    state["safety_concern"] = bool(
+        safety_from_model and (safety_from_keywords or safety_from_severity)
+    )
+    state["issue_severity"] = severity_norm
     state["issue_urgency"] = _normalize_level(issue_urgency, default="medium")
 
     # Recurrence currently comes from upstream ticket context or defaults False.
     state["is_recurring"] = _to_bool(state.get("is_recurring"), default=False)
     logger.info(
-        "feature_engineering | business_impact=%s safety_concern=%s issue_severity=%s issue_urgency=%s is_recurring=%s",
+        "feature_engineering | business_impact=%s safety_concern=%s issue_severity=%s issue_urgency=%s is_recurring=%s safety_model=%s safety_keywords=%s",
         state["business_impact"],
         state["safety_concern"],
         state["issue_severity"],
         state["issue_urgency"],
         state["is_recurring"],
+        safety_from_model,
+        safety_from_keywords,
     )
 
     return state

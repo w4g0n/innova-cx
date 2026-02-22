@@ -1,30 +1,11 @@
-import { useMemo, useState, useEffect, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useState, useRef } from "react";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
 import { submitTextComplaint, transcribeAudio } from "../../services/api";
-import { getDisplayNameFromEmail } from "../../utils/userDisplay";
 import "./CustomerFillForm.css";
 
-export default function CustomerFillForm({ embedded = false, onCancel, initialType }) {
-  const location = useLocation();
-
-  const user = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem("user") || "{}");
-    } catch {
-      return {};
-    }
-  }, []);
-
-  const email = (user?.email || "").trim();
-
-  const nameFromEmail = useMemo(
-    () => getDisplayNameFromEmail(email, "Customer"),
-    [email]
-  );
-
+export default function CustomerFillForm({ embedded = false, onCancel }) {
   const [type, setType] = useState("Auto");
   const [mode, setMode] = useState("Text");
   const [assetType, setAssetType] = useState("Office");
@@ -93,18 +74,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
   const [draftTranscript, setDraftTranscript] = useState("");
   const [latestAudioFeatures, setLatestAudioFeatures] = useState(null);
 
-  useEffect(() => {
-    if (initialType === "Complaint" || initialType === "Inquiry") {
-      setType(initialType);
-    }
-  }, [initialType]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const t = params.get("type");
-    if (t === "Complaint" || t === "Inquiry") setType(t);
-  }, [location.search]);
-
   const cleanupStream = () => {
     try {
       if (streamRef.current) {
@@ -147,7 +116,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
         audio_features: mode === "Audio" ? latestAudioFeatures : null,
       });
 
-      if (orchestratorResult?.type === "complaint") {
+      if (orchestratorResult?.ticket_id) {
         alert(`Ticket submitted and processed. Ticket ID: ${orchestratorResult.ticket_id || "N/A"}`);
       } else {
         alert(`Inquiry processed. Reply: ${orchestratorResult?.chatbot_response || "No reply"}`);
@@ -279,20 +248,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
       />
 
       <form className="custFormCard" onSubmit={submit}>
-        <div className="custFormAutoGrid">
-          <div className="custField">
-            <label className="custLabel">User</label>
-            <input className="custInput" value={nameFromEmail} disabled />
-          </div>
-
-          <div className="custField">
-            <label className="custLabel">Email</label>
-            <input className="custInput" value={email || "—"} disabled />
-          </div>
-        </div>
-
-        <div className="custFormSpacer" />
-
         <div className="custFormGrid">
           <div className="custField custField--span2">
             <div className="custTwoPillsRow">
@@ -313,7 +268,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
               </div>
 
               <div className="custTwoPillsItem">
-                <label className="custLabel">Asset Type</label>
+                <label className="custLabel">Asset</label>
                 <div className="custPillHolder">
                   <PillSelect
                     value={assetType}
@@ -331,17 +286,17 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
           </div>
 
           <div className="custField custField--span2">
-            <label className="custLabel">Subject</label>
+            <label className="custLabel">Subject (optional)</label>
             <input
               className="custInput"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="Short summary (e.g., Access card not working)"
+              placeholder="Optional short summary (e.g., Access card not working)"
             />
           </div>
 
           <div className="custField custField--span2">
-            <label className="custLabel">Details input</label>
+            <label className="custLabel">Input Method</label>
             <div className="custModeRow">
               <button
                 type="button"
