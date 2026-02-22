@@ -73,6 +73,10 @@ def _predict_target(artifacts, target: str, text: str):
 
 
 async def engineer_features(state: dict) -> dict:
+    if state.get("label") != "complaint":
+        logger.info("feature_engineering | skipped (label=%s)", state.get("label"))
+        return state
+
     text = str(state.get("text") or "").strip()
     artifacts = _load_artifacts()
 
