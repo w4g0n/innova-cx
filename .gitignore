@@ -86,3 +86,9 @@ ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/embeddings/*
 # Project-specific
 ai-models/MultiAgentPipeline/SentimentAnalysisAgent/src/models/sentiment-v7/model.pt
 .claude/worktrees/
+
+# PrioritizationAgent test artifacts (keep folder placeholders only)
+ai-models/MultiAgentPipeline/PrioritizationAgent/test_outputs/*
+ai-models/MultiAgentPipeline/PrioritizationAgent/test_inputs/*
+!ai-models/MultiAgentPipeline/PrioritizationAgent/test_outputs/.gitkeep
+!ai-models/MultiAgentPipeline/PrioritizationAgent/test_inputs/.gitkeep
