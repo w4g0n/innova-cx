@@ -1902,10 +1902,12 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
     system_user_id = row["id"]
     ticket_code = f"CX-{int(time.time())}"
 
-    priority_map = {1: "Low", 2: "Low", 3: "Medium", 4: "High", 5: "Critical"}
+    priority_map = {1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
     priority_label = priority_map.get(body.priority, "Medium")
 
-    subject = f"[{body.department.title()}] Automated complaint"
+    label = (body.label or "complaint").strip().lower()
+    ticket_type = "Inquiry" if label == "inquiry" else "Complaint"
+    subject = f"[{body.department.title()}] Automated {ticket_type.lower()}"
     details = body.transcript or "(no transcript)"
 
     with db_connect() as conn:
@@ -1929,7 +1931,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 """,
                 (
                     ticket_code,
-                    "Complaint",
+                    ticket_type,
                     subject,
                     details,
                     priority_label,

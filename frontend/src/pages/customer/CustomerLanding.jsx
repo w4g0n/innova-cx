@@ -27,7 +27,6 @@ export default function CustomerLanding() {
       resetSession();
       setEmbeddedFormType(type || "Complaint");
       if (!isOpen) setIsOpen(true);
-      if (!isExpanded) setIsExpanded(true);
       setNovaView("form");
     },
   });
@@ -155,7 +154,6 @@ export default function CustomerLanding() {
     closeAllPopovers();
 
     if (!isOpen) setIsOpen(true);
-    if (!isExpanded) setIsExpanded(true);
 
     setNovaView((prev) => {
       const next = prev === "form" ? "chat" : "form";
@@ -170,6 +168,11 @@ export default function CustomerLanding() {
       if (!next) setNovaView("chat");
       return next;
     });
+  };
+
+  const minimizeWidget = () => {
+    setIsOpen(false);
+    setIsExpanded(false);
   };
 
   const speechRef = useRef(null);
@@ -435,11 +438,17 @@ export default function CustomerLanding() {
                 type="button"
                 className="novaIconBtn"
                 onClick={toggleExpand}
-                aria-label={isExpanded ? "Minimize" : "Maximize"}
+                aria-label={isExpanded ? "Exit fullscreen" : "Enter fullscreen"}
               >
                 {isExpanded ? (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M6 11H18V13H6V11Z" fill="currentColor" />
+                    <path
+                      d="M9 3H3v6M15 3h6v6M21 15v6h-6M3 15v6h6"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 ) : (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -452,6 +461,17 @@ export default function CustomerLanding() {
                     />
                   </svg>
                 )}
+              </button>
+
+              <button
+                type="button"
+                className="novaIconBtn"
+                onClick={minimizeWidget}
+                aria-label="Minimize"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 11H18V13H6V11Z" fill="currentColor" />
+                </svg>
               </button>
 
               <button
