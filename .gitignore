@@ -83,10 +83,14 @@ ai-models/MultiAgentPipeline/FeatureEngineeringAgent/data/processed/embeddings/*
 !ai-models/MultiAgentPipeline/FeatureEngineeringAgent/models/.gitkeep
 !ai-models/MultiAgentPipeline/FeatureEngineeringAgent/app/test_inputs/.gitkeep
 
+# Terraform
+terraform.tfvars
+*.tfvars
+
 # Project-specific
 ai-models/MultiAgentPipeline/SentimentAnalysisAgent/src/models/sentiment-v7/model.pt
 .claude/worktrees/
-
+ 
 # PrioritizationAgent test artifacts (keep folder placeholders only)
 ai-models/MultiAgentPipeline/PrioritizationAgent/test_outputs/*
 ai-models/MultiAgentPipeline/PrioritizationAgent/test_inputs/*
