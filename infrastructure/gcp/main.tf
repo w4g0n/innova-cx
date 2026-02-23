@@ -26,7 +26,7 @@ resource "google_compute_firewall" "innovacx_ports" {
 
   allow {
     protocol = "tcp"
-    ports    = ["22", "80", "443", "5173", "8000", "8001", "8002", "3001"]
+    ports    = ["22", "80", "443", "5173", "8000", "8001", "8003", "8004", "3001"]
   }
 
   source_ranges = ["0.0.0.0/0"]

@@ -239,6 +239,7 @@ def predict_is_recurring(user_id: str, subject: str, details: str) -> bool:
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "86400"))  # 24h
 DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "true").lower() == "true"
+DISABLE_MFA = os.getenv("DISABLE_MFA", "false").lower() == "true"
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -456,6 +457,20 @@ def login(body: LoginRequest):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     execute("UPDATE users SET last_login_at = NOW() WHERE id = %s", (user["id"],))
+
+    # Bypass TOTP when explicitly disabled (dev/demo only — set DISABLE_MFA=true in .env on VM)
+    if DISABLE_MFA:
+        access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "requiresSetup": False,
+            "user": {
+                "id": str(user["id"]),
+                "email": user["email"],
+                "role": user["role"],
+            },
+        }
 
     # Generate secret if missing
     if not user.get("totp_secret"):
