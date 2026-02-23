@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   ticket_type         ticket_type NOT NULL DEFAULT 'Complaint',
   status              ticket_status NOT NULL DEFAULT 'Unassigned',
   priority            ticket_priority NOT NULL DEFAULT 'Medium',
+  asset_type          TEXT NOT NULL DEFAULT 'General',
   department_id       UUID REFERENCES departments(id) ON DELETE SET NULL,
   created_by_user_id  UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   assigned_to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -142,6 +143,8 @@ CREATE TABLE IF NOT EXISTS tickets (
   resolved_at         TIMESTAMPTZ,
   respond_due_at      TIMESTAMPTZ,
   resolve_due_at      TIMESTAMPTZ,
+  respond_time_left_seconds INTEGER,
+  resolve_time_left_seconds INTEGER,
   respond_breached    BOOLEAN NOT NULL DEFAULT FALSE,
   resolve_breached    BOOLEAN NOT NULL DEFAULT FALSE,
   sentiment_score     NUMERIC(4,3),
@@ -156,6 +159,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_priority    ON tickets(priority);
+CREATE INDEX IF NOT EXISTS idx_tickets_asset_type  ON tickets(asset_type);
 CREATE INDEX IF NOT EXISTS idx_tickets_created_at  ON tickets(created_at);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee    ON tickets(assigned_to_user_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_creator     ON tickets(created_by_user_id);

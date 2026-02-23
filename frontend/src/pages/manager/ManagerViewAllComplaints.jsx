@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ManagerViewAllComplaints.css";
 
@@ -9,13 +9,21 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
+import {
+  isSkipToken,
+  skipManagerComplaints,
+  skipManagerEmployees,
+} from "../../data/skipViewData";
 
 export default function ManagerViewComplaints() {
-  const navigate = useNavigate();
+  const token = localStorage.getItem("access_token");
+  const useSkipData = !token || isSkipToken(token);
 
   // Tickets & Employees
-  const [rows, setRows] = useState([]);
-  const [employees, setEmployees] = useState([]);
+  const [rows, setRows] = useState(() => (useSkipData ? skipManagerComplaints : []));
+  const [employees, setEmployees] = useState(() =>
+    useSkipData ? skipManagerEmployees.map((e) => e.name) : []
+  );
 
   // Filters & Search
   const [search, setSearch] = useState("");
@@ -36,11 +44,7 @@ export default function ManagerViewComplaints() {
 
   // Fetch tickets & employees with session token
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      navigate("/login");
-      return;
-    }
+    if (useSkipData) return;
 
     const headers = {
       "Content-Type": "application/json",
@@ -50,21 +54,33 @@ export default function ManagerViewComplaints() {
     // Fetch complaints
     fetch("http://127.0.0.1:8000/manager/complaints", { headers })
       .then((res) => {
-        if (res.status === 401) navigate("/login");
+        if (res.status === 401) {
+          setRows(skipManagerComplaints);
+          return null;
+        }
         return res.json();
       })
       .then((data) => data && setRows(data || []))
-      .catch((err) => console.error("Failed to fetch tickets:", err));
+      .catch((err) => {
+        console.error("Failed to fetch tickets:", err);
+        setRows(skipManagerComplaints);
+      });
 
     // Fetch employees for assignment modal
     fetch("http://127.0.0.1:8000/manager/employees", { headers })
       .then((res) => {
-        if (res.status === 401) navigate("/login");
+        if (res.status === 401) {
+          setEmployees(skipManagerEmployees.map((e) => e.name));
+          return null;
+        }
         return res.json();
       })
       .then((data) => data && setEmployees(data.map((e) => e.name)))
-      .catch((err) => console.error("Failed to fetch employees:", err));
-  }, [navigate]);
+      .catch((err) => {
+        console.error("Failed to fetch employees:", err);
+        setEmployees(skipManagerEmployees.map((e) => e.name));
+      });
+  }, [token, useSkipData]);
 
   // ------------------- Menu / Modal Handlers -------------------
   const toggleMenu = (ticketId) => setOpenMenuFor((prev) => (prev === ticketId ? null : ticketId));

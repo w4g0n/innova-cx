@@ -112,6 +112,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
     try {
       const orchestratorResult = await submitTextComplaint(details, {
         ticket_type: type === "Auto" ? null : type.toLowerCase(),
+        asset_type: assetType,
         has_audio: mode === "Audio",
         audio_features: mode === "Audio" ? latestAudioFeatures : null,
       });
@@ -252,14 +253,14 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
           <div className="custField custField--span2">
             <div className="custTwoPillsRow">
               <div className="custTwoPillsItem">
-                <label className="custLabel">Type</label>
+                <label className="custLabel">Ticket Type (optional)</label>
                 <div className="custPillHolder">
                   <PillSelect
                     value={type}
                     onChange={setType}
                     ariaLabel="Select request type"
                     options={[
-                      { value: "Auto", label: "Auto (classify)" },
+                      { value: "Auto", label: "Auto" },
                       { value: "Complaint", label: "Complaint" },
                       { value: "Inquiry", label: "Inquiry" },
                     ]}

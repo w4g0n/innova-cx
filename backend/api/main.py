@@ -3,6 +3,8 @@
 import os
 import time
 import json
+import logging
+import asyncio
 import hmac
 import base64
 import hashlib
@@ -26,6 +28,12 @@ import pyotp  # for RFC 6238 TOTP
 import qrcode
 import io
 
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
+_sla_heartbeat_task: Optional[asyncio.Task] = None
+_has_sla_policy_fn = False
 
 
 # =========================================================
@@ -65,6 +73,91 @@ def db_connect():
         return psycopg2.connect(get_dsn())
     except OperationalError as e:
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+
+
+def _ensure_runtime_schema_compatibility() -> None:
+    """
+    Keeps backend compatible with older DB volumes that skipped newer SQL scripts.
+    """
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_type TEXT;")
+                cur.execute("UPDATE tickets SET asset_type = 'General' WHERE asset_type IS NULL OR btrim(asset_type) = '';")
+                cur.execute("ALTER TABLE tickets ALTER COLUMN asset_type SET DEFAULT 'General';")
+                cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority_assigned_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS respond_time_left_seconds INTEGER;")
+                cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolve_time_left_seconds INTEGER;")
+    except Exception as exc:
+        logger.warning("db_compat | failed to apply compatibility DDL: %s", exc)
+
+
+def _detect_sla_policy_function() -> bool:
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT to_regprocedure('apply_ticket_sla_policies()') IS NOT NULL AS exists;")
+                row = cur.fetchone() or {}
+                return bool(row.get("exists"))
+    except Exception:
+        return False
+
+
+def _apply_sla_policies_once(log_result: bool = False, source: str = "request") -> None:
+    """
+    Applies time-based SLA policies (escalation/overdue) if migration is installed.
+    Safe no-op when function is unavailable.
+    """
+    if not _has_sla_policy_fn:
+        return
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT apply_ticket_sla_policies() AS result;")
+                row = cur.fetchone() or {}
+                if log_result:
+                    logger.info(
+                        "sla_heartbeat | source=%s interval_s=%s result=%s",
+                        source,
+                        SLA_HEARTBEAT_SECONDS,
+                        row.get("result"),
+                    )
+    except Exception:
+        return
+
+
+async def _sla_heartbeat_loop() -> None:
+    while True:
+        await asyncio.to_thread(_apply_sla_policies_once, True, "timer")
+        await asyncio.sleep(SLA_HEARTBEAT_SECONDS)
+
+
+@app.on_event("startup")
+async def _start_sla_heartbeat() -> None:
+    global _sla_heartbeat_task, _has_sla_policy_fn
+    _ensure_runtime_schema_compatibility()
+    _has_sla_policy_fn = _detect_sla_policy_function()
+    if not _has_sla_policy_fn:
+        logger.warning("sla_heartbeat | disabled (apply_ticket_sla_policies() not found)")
+        return
+    if SLA_HEARTBEAT_SECONDS <= 0:
+        logger.info("sla_heartbeat | disabled (SLA_HEARTBEAT_SECONDS=%s)", SLA_HEARTBEAT_SECONDS)
+        return
+    if _sla_heartbeat_task is None or _sla_heartbeat_task.done():
+        _sla_heartbeat_task = asyncio.create_task(_sla_heartbeat_loop())
+        logger.info("sla_heartbeat | started interval_s=%s", SLA_HEARTBEAT_SECONDS)
+
+
+@app.on_event("shutdown")
+async def _stop_sla_heartbeat() -> None:
+    global _sla_heartbeat_task
+    if _sla_heartbeat_task and not _sla_heartbeat_task.done():
+        _sla_heartbeat_task.cancel()
+        try:
+            await _sla_heartbeat_task
+        except asyncio.CancelledError:
+            pass
+    _sla_heartbeat_task = None
 
 
 def fetch_one(sql: str, params: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
@@ -114,6 +207,16 @@ def _load_recurrence_feature_module():
 
 
 def predict_is_recurring(user_id: str, subject: str, details: str) -> bool:
+    try:
+        sql_based = fetch_one(
+            "SELECT compute_is_recurring_ticket(%s, %s, %s) AS is_recurring",
+            (user_id, subject, details),
+        )
+        if sql_based and "is_recurring" in sql_based:
+            return bool(sql_based["is_recurring"])
+    except Exception:
+        pass
+
     module = _load_recurrence_feature_module()
     fallback = False
     if not module or not hasattr(module, "compute_is_recurring_from_db"):
@@ -577,6 +680,7 @@ def employee_tickets(user: Dict[str, Any] = Depends(require_employee)):
           t.priority,
           t.status,
           t.created_at,
+          t.priority_assigned_at,
           t.assigned_at,
           t.first_response_at,
           t.resolved_at
@@ -591,17 +695,19 @@ def employee_tickets(user: Dict[str, Any] = Depends(require_employee)):
     tickets = []
     for r in rows:
         created_at = r.get("created_at")
+        priority_assigned_at = r.get("priority_assigned_at")
         assigned_at = r.get("assigned_at")
         first_response_at = r.get("first_response_at")
         resolved_at = r.get("resolved_at")
 
         issue_date = created_at.date().isoformat() if created_at else ""
 
-        resp_base = assigned_at or created_at
+        resp_base = priority_assigned_at or assigned_at or created_at
         resp_mins = diff_minutes(first_response_at, resp_base)
         response_time = minutes_to_label(resp_mins)
 
-        res_mins = diff_minutes(resolved_at, created_at)
+        res_base = priority_assigned_at or created_at
+        res_mins = diff_minutes(resolved_at, res_base)
         resolution_time = minutes_to_label(res_mins)
 
         tickets.append(
@@ -637,9 +743,9 @@ def employee_sla(
           COUNT(*) FILTER (WHERE first_response_at IS NOT NULL AND respond_due_at IS NOT NULL AND first_response_at <= respond_due_at) AS responded_on_time,
           COUNT(*) FILTER (WHERE resolved_at IS NOT NULL) AS resolved,
           COUNT(*) FILTER (WHERE resolved_at IS NOT NULL AND resolve_due_at IS NOT NULL AND resolved_at <= resolve_due_at) AS resolved_on_time,
-          AVG(EXTRACT(EPOCH FROM (first_response_at - COALESCE(assigned_at, created_at))) / 60.0)
+          AVG(EXTRACT(EPOCH FROM (first_response_at - COALESCE(priority_assigned_at, assigned_at, created_at))) / 60.0)
             FILTER (WHERE first_response_at IS NOT NULL) AS avg_response_mins,
-          AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 60.0)
+          AVG(EXTRACT(EPOCH FROM (resolved_at - COALESCE(priority_assigned_at, created_at))) / 60.0)
             FILTER (WHERE resolved_at IS NOT NULL) AS avg_resolution_mins
         FROM tickets
         WHERE assigned_to_user_id = %s
@@ -799,6 +905,7 @@ def employee_ticket_details(
           t.priority,
           t.status,
           t.created_at,
+          t.priority_assigned_at,
           t.assigned_at,
           t.first_response_at,
           t.resolved_at,
@@ -847,17 +954,19 @@ def employee_ticket_details(
     )
 
     created_at = row.get("created_at")
+    priority_assigned_at = row.get("priority_assigned_at")
     assigned_at = row.get("assigned_at")
     first_response_at = row.get("first_response_at")
     resolved_at = row.get("resolved_at")
 
     issue_date = created_at.date().isoformat() if created_at else ""
 
-    resp_base = assigned_at or created_at
+    resp_base = priority_assigned_at or assigned_at or created_at
     resp_mins = diff_minutes(first_response_at, resp_base)
     response_time = minutes_to_label(resp_mins)
 
-    res_mins = diff_minutes(resolved_at, created_at)
+    res_base = priority_assigned_at or created_at
+    res_mins = diff_minutes(resolved_at, res_base)
     resolution_time = minutes_to_label(res_mins)
 
     ticket = {
@@ -892,6 +1001,69 @@ def employee_ticket_details(
     }
 
     return {"ticket": ticket}
+
+
+@api.post("/employee/tickets/{ticket_code}/resolve")
+def employee_resolve_ticket(
+    ticket_code: str,
+    user: Dict[str, Any] = Depends(require_employee),
+):
+    user_id = user["id"]
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                UPDATE tickets
+                SET
+                  status = 'Resolved',
+                  first_response_at = COALESCE(first_response_at, now()),
+                  resolved_at = COALESCE(resolved_at, now()),
+                  resolved_by_user_id = %s
+                WHERE ticket_code = %s
+                  AND assigned_to_user_id = %s
+                RETURNING id, ticket_code, status, resolved_at;
+                """,
+                (user_id, ticket_code, user_id),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Ticket not found or not assigned to this employee")
+
+            cur.execute(
+                """
+                INSERT INTO ticket_updates (
+                  ticket_id,
+                  author_user_id,
+                  update_type,
+                  message,
+                  from_status,
+                  to_status
+                )
+                VALUES (%s, %s, %s, %s, NULL, %s);
+                """,
+                (
+                    row["id"],
+                    user_id,
+                    "status_change",
+                    "Ticket resolved by employee.",
+                    row["status"],
+                ),
+            )
+
+    logger.info(
+        "ticket_status_update | ticket_id=%s status=%s resolved_at=%s",
+        row["ticket_code"],
+        row["status"],
+        row["resolved_at"],
+    )
+
+    return {
+        "ok": True,
+        "ticketId": row["ticket_code"],
+        "status": row["status"],
+        "resolvedAt": row["resolved_at"].isoformat() if row.get("resolved_at") else None,
+    }
 
 # =========================================================
 # Employee Reports (AutoGeneratedReports.jsx)
@@ -1126,6 +1298,7 @@ def customer_mytickets(
           ticket_type,
           status,
           created_at,
+          priority_assigned_at,
           assigned_at,
           first_response_at,
           resolved_at
@@ -1140,15 +1313,17 @@ def customer_mytickets(
     tickets = []
     for r in rows:
         created_at = r.get("created_at")
+        priority_assigned_at = r.get("priority_assigned_at")
         assigned_at = r.get("assigned_at")
         first_response_at = r.get("first_response_at")
         resolved_at = r.get("resolved_at")
 
         issue_date = created_at.date().isoformat() if created_at else ""
-        resp_base = assigned_at or created_at
+        resp_base = priority_assigned_at or assigned_at or created_at
         resp_mins = diff_minutes(first_response_at, resp_base)
         response_time = minutes_to_label(resp_mins)
-        res_mins = diff_minutes(resolved_at, created_at)
+        res_base = priority_assigned_at or created_at
+        res_mins = diff_minutes(resolved_at, res_base)
         resolution_time = minutes_to_label(res_mins)
 
         tickets.append(
@@ -1187,6 +1362,7 @@ def customer_ticket_details(
           t.priority,
           t.status,
           t.created_at,
+          t.priority_assigned_at,
           t.assigned_at,
           t.first_response_at,
           t.resolved_at,
@@ -1232,15 +1408,17 @@ def customer_ticket_details(
     )
 
     created_at = row.get("created_at")
+    priority_assigned_at = row.get("priority_assigned_at")
     assigned_at = row.get("assigned_at")
     first_response_at = row.get("first_response_at")
     resolved_at = row.get("resolved_at")
 
     issue_date = created_at.date().isoformat() if created_at else ""
-    resp_base = assigned_at or created_at
+    resp_base = priority_assigned_at or assigned_at or created_at
     resp_mins = diff_minutes(first_response_at, resp_base)
     response_time = minutes_to_label(resp_mins)
-    res_mins = diff_minutes(resolved_at, created_at)
+    res_base = priority_assigned_at or created_at
+    res_mins = diff_minutes(resolved_at, res_base)
     resolution_time = minutes_to_label(res_mins)
 
     ticket = {
@@ -1376,12 +1554,13 @@ def create_customer_ticket(
                     ticket_type,
                     subject,
                     details,
+                    asset_type,
                     priority,
                     status,
                     created_by_user_id,
                     model_suggestion,
                     created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING id;
                 """,
                 (
@@ -1389,6 +1568,7 @@ def create_customer_ticket(
                     body.type,         
                     body.subject,
                     body.details,
+                    body.asset_type,
                     "Low",
                     "Unassigned",
                     user["id"],
@@ -1472,6 +1652,7 @@ def get_complaints():
             t.priority,
             t.created_at,
             t.updated_at,
+            t.priority_assigned_at,
             t.assigned_at,
             t.first_response_at,
             t.resolved_at,
@@ -1485,10 +1666,11 @@ def get_complaints():
     result = []
     for t in tickets:
         issue_date = t["created_at"].date().isoformat() if t.get("created_at") else ""
-        resp_base = t.get("assigned_at") or t.get("created_at")
+        resp_base = t.get("priority_assigned_at") or t.get("assigned_at") or t.get("created_at")
         resp_mins = diff_minutes(t.get("first_response_at"), resp_base)
         respond_time = minutes_to_label(resp_mins)
-        res_mins = diff_minutes(t.get("resolved_at"), t.get("created_at"))
+        res_base = t.get("priority_assigned_at") or t.get("created_at")
+        res_mins = diff_minutes(t.get("resolved_at"), res_base)
         resolve_time = minutes_to_label(res_mins)
 
         assignee = t.get("assignee_name") or "—"
@@ -1608,6 +1790,7 @@ def get_manager_complaint_details(ticket_id: str):
             t.details,
             t.priority,
             t.created_at,
+            t.priority_assigned_at,
             t.assigned_at,
             t.first_response_at,
             t.resolved_at,
@@ -1623,10 +1806,11 @@ def get_manager_complaint_details(ticket_id: str):
         return {"error": "Ticket not found"}
 
     issue_date = ticket["created_at"].date().isoformat() if ticket.get("created_at") else ""
-    resp_base = ticket.get("assigned_at") or ticket.get("created_at")
+    resp_base = ticket.get("priority_assigned_at") or ticket.get("assigned_at") or ticket.get("created_at")
     resp_mins = diff_minutes(ticket.get("first_response_at"), resp_base)
     respond_time = minutes_to_label(resp_mins)
-    res_mins = diff_minutes(ticket.get("resolved_at"), ticket.get("created_at"))
+    res_base = ticket.get("priority_assigned_at") or ticket.get("created_at")
+    res_mins = diff_minutes(ticket.get("resolved_at"), res_base)
     resolve_time = minutes_to_label(res_mins)
 
     assignee = ticket.get("assignee_name") or "—"
@@ -1733,7 +1917,7 @@ def get_manager_trends(
     avg_response = fetch_one(
         f"""
         SELECT
-          AVG(EXTRACT(EPOCH FROM (t.first_response_at - t.created_at)) / 60) AS mins
+          AVG(EXTRACT(EPOCH FROM (t.first_response_at - COALESCE(t.priority_assigned_at, t.created_at))) / 60) AS mins
         FROM tickets t
         JOIN departments d ON d.id = t.department_id
         WHERE t.first_response_at IS NOT NULL
@@ -1746,7 +1930,7 @@ def get_manager_trends(
     avg_resolve = fetch_one(
         f"""
         SELECT
-          AVG(EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 86400) AS days
+          AVG(EXTRACT(EPOCH FROM (t.resolved_at - COALESCE(t.priority_assigned_at, t.created_at))) / 86400) AS days
         FROM tickets t
         JOIN departments d ON d.id = t.department_id
         WHERE t.resolved_at IS NOT NULL
@@ -1831,10 +2015,10 @@ def get_manager_trends(
             ) * 100.0 / NULLIF(COUNT(*), 0)
           ) AS within_sla,
           ROUND(
-            AVG(EXTRACT(EPOCH FROM (t.first_response_at - t.created_at)) / 60)
+            AVG(EXTRACT(EPOCH FROM (t.first_response_at - COALESCE(t.priority_assigned_at, t.created_at))) / 60)
           ) AS avg_response,
           ROUND(
-            AVG(EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 86400), 1
+            AVG(EXTRACT(EPOCH FROM (t.resolved_at - COALESCE(t.priority_assigned_at, t.created_at))) / 86400), 1
           ) AS avg_resolve
         FROM tickets t
         JOIN departments d ON d.id = t.department_id
@@ -1864,13 +2048,16 @@ def get_manager_trends(
 # =========================================================
 
 class OrchestratorComplaintRequest(BaseModel):
-    transcript: str
+    ticket_id: Optional[str] = None
+    transcript: Optional[str] = None
+    asset_type: Optional[str] = None
     sentiment: Optional[float] = None
     audio_sentiment: Optional[float] = None
-    priority: int = 3
-    department: str = "general"
+    priority: Optional[int] = None
+    department: Optional[str] = None
     keywords: Optional[List[str]] = []
-    label: str = "complaint"
+    label: Optional[str] = None
+    status: Optional[str] = None
     classification_confidence: Optional[float] = None
 
 
@@ -1900,18 +2087,139 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
         )
 
     system_user_id = row["id"]
-    ticket_code = f"CX-{int(time.time())}"
+    incoming_ticket_code = (body.ticket_id or "").strip() or None
 
     priority_map = {1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
-    priority_label = priority_map.get(body.priority, "Medium")
+    priority_label = priority_map.get(body.priority) if body.priority is not None else None
 
-    label = (body.label or "complaint").strip().lower()
-    ticket_type = "Inquiry" if label == "inquiry" else "Complaint"
-    subject = f"[{body.department.title()}] Automated {ticket_type.lower()}"
-    details = body.transcript or "(no transcript)"
+    label = (body.label or "").strip().lower() or None
+    ticket_type = "Inquiry" if label == "inquiry" else ("Complaint" if label else None)
+    requested_asset_type = (body.asset_type or "").strip() or None
+    requested_department = (body.department or "").strip() or None
+    normalized_status = (body.status or "").strip() or None
+    allowed_statuses = {
+        "Open",
+        "In Progress",
+        "Unassigned",
+        "Assigned",
+        "Escalated",
+        "Overdue",
+        "Reopened",
+        "Resolved",
+    }
+    if normalized_status and normalized_status not in allowed_statuses:
+        raise HTTPException(status_code=422, detail=f"Invalid status '{normalized_status}'")
 
     with db_connect() as conn:
         with conn.cursor() as cur:
+            department_id = None
+            if requested_department:
+                cur.execute(
+                    "SELECT id FROM departments WHERE LOWER(name) = LOWER(%s) LIMIT 1",
+                    (requested_department,),
+                )
+                dept_row = cur.fetchone()
+                if dept_row:
+                    department_id = dept_row[0]
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO departments (name)
+                        VALUES (%s)
+                        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+                        RETURNING id;
+                        """,
+                        (requested_department,),
+                    )
+                    department_id = cur.fetchone()[0]
+
+            if incoming_ticket_code:
+                cur.execute(
+                    "SELECT id FROM tickets WHERE ticket_code = %s LIMIT 1",
+                    (incoming_ticket_code,),
+                )
+                existing = cur.fetchone()
+                if existing:
+                    subject_update = None
+                    if requested_department and ticket_type:
+                        subject_update = f"[{requested_department.title()}] Automated {ticket_type.lower()}"
+
+                    details_update = body.transcript if body.transcript else None
+                    now_utc = datetime.now(timezone.utc) if priority_label else None
+                    sentiment_label_update = "orchestrator" if body.sentiment is not None else None
+
+                    cur.execute(
+                        """
+                        UPDATE tickets
+                        SET
+                          ticket_type = COALESCE(%s, ticket_type),
+                          subject = COALESCE(%s, subject),
+                          details = COALESCE(%s, details),
+                          asset_type = COALESCE(%s, asset_type),
+                          priority = COALESCE(%s, priority),
+                          status = COALESCE(%s, status),
+                          department_id = COALESCE(%s, department_id),
+                          sentiment_score = COALESCE(%s, sentiment_score),
+                          sentiment_label = COALESCE(%s, sentiment_label),
+                          model_priority = COALESCE(%s, model_priority),
+                          model_department_id = COALESCE(%s, model_department_id),
+                          model_confidence = COALESCE(%s, model_confidence),
+                          priority_assigned_at = COALESCE(%s, priority_assigned_at)
+                        WHERE ticket_code = %s
+                        RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
+                        """,
+                        (
+                            ticket_type,
+                            subject_update,
+                            details_update,
+                            requested_asset_type,
+                            priority_label,
+                            normalized_status,
+                            department_id,
+                            body.sentiment,
+                            sentiment_label_update,
+                            priority_label,
+                            department_id,
+                            body.classification_confidence,
+                            now_utc,
+                            incoming_ticket_code,
+                        ),
+                    )
+                    updated = cur.fetchone()
+                    logger.info(
+                        "orchestrator_ticket_update | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
+                        updated[0],
+                        updated[1],
+                        updated[2],
+                        updated[3],
+                        requested_department,
+                        updated[4],
+                        updated[5],
+                        updated[6],
+                    )
+                    return {
+                        "ticket_id": updated[0],
+                        "status": updated[1],
+                        "priority": updated[2],
+                        "asset_type": updated[3],
+                        "department": requested_department,
+                        "priority_assigned_at": updated[4].isoformat() if updated[4] else None,
+                        "respond_due_at": updated[5].isoformat() if updated[5] else None,
+                        "resolve_due_at": updated[6].isoformat() if updated[6] else None,
+                    }
+
+            if not body.transcript:
+                raise HTTPException(status_code=422, detail="transcript is required when creating a new ticket")
+
+            ticket_code = f"CX-{int(time.time())}"
+            ticket_type_create = ticket_type or "Complaint"
+            priority_create = priority_label or "Medium"
+            status_create = normalized_status or "Open"
+            asset_type_create = requested_asset_type or "General"
+            department_name_create = requested_department or "General"
+            subject = f"[{department_name_create.title()}] Automated {ticket_type_create.lower()}"
+            details = body.transcript
+
             cur.execute(
                 """
                 INSERT INTO tickets (
@@ -1919,32 +2227,60 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     ticket_type,
                     subject,
                     details,
+                    asset_type,
                     priority,
                     status,
                     created_by_user_id,
+                    department_id,
                     sentiment_score,
                     sentiment_label,
                     model_priority,
+                    model_department_id,
                     model_confidence,
                     created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW());
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
                 """,
                 (
                     ticket_code,
-                    ticket_type,
+                    ticket_type_create,
                     subject,
                     details,
-                    priority_label,
-                    "Unassigned",
+                    asset_type_create,
+                    priority_create,
+                    status_create,
                     system_user_id,
+                    department_id,
                     body.sentiment,
                     "orchestrator",
                     priority_label,
+                    department_id,
                     body.classification_confidence,
                 ),
             )
+            created = cur.fetchone()
+            logger.info(
+                "orchestrator_ticket_create | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
+                created[0],
+                created[1],
+                created[2],
+                created[3],
+                requested_department,
+                created[4],
+                created[5],
+                created[6],
+            )
 
-    return {"ticket_id": ticket_code}
+    return {
+        "ticket_id": created[0],
+        "status": created[1],
+        "priority": created[2],
+        "asset_type": created[3],
+        "department": requested_department,
+        "priority_assigned_at": created[4].isoformat() if created[4] else None,
+        "respond_due_at": created[5].isoformat() if created[5] else None,
+        "resolve_due_at": created[6].isoformat() if created[6] else None,
+    }
 
 
 @api.post("/chatbot/chat")

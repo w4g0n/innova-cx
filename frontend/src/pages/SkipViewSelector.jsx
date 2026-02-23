@@ -1,15 +1,8 @@
 import { useNavigate } from "react-router-dom";
+import { SKIP_ACCOUNTS } from "../data/skip";
 
-const VIEW_CONFIG = [
-  { label: "Customer View", role: "customer", path: "/customer" },
-  { label: "Employee View", role: "employee", path: "/employee" },
-  { label: "Manager View", role: "manager", path: "/manager" },
-  { label: "Operator View", role: "operator", path: "/operator" },
-];
-
-function setBypassSession(role) {
-  const email = `skip-${role}@local.dev`;
-  const token = `skip-token-${role}`;
+function setBypassSession(account) {
+  const token = `skip-token-${account.role}`;
 
   sessionStorage.removeItem("mfa_token");
   sessionStorage.removeItem("mfa_user");
@@ -19,10 +12,10 @@ function setBypassSession(role) {
   localStorage.setItem(
     "user",
     JSON.stringify({
-      id: `skip-${role}`,
-      email,
-      role,
-      full_name: `Skip ${role}`,
+      id: account.id,
+      email: account.email,
+      role: account.role,
+      full_name: account.full_name,
       access_token: token,
       token_type: "bypass",
     })
@@ -32,9 +25,9 @@ function setBypassSession(role) {
 export default function SkipViewSelector() {
   const navigate = useNavigate();
 
-  const handleSelect = (role, path) => {
-    setBypassSession(role);
-    navigate(path);
+  const handleSelect = (account) => {
+    setBypassSession(account);
+    navigate(account.path);
   };
 
   return (
@@ -42,16 +35,16 @@ export default function SkipViewSelector() {
       <div style={{ textAlign: "center" }}>
         <h2>Choose a view</h2>
         <p>Skip login and open directly:</p>
-        {VIEW_CONFIG.map((view) => (
-          <p key={view.role}>
+        {SKIP_ACCOUNTS.map((account) => (
+          <p key={account.id}>
             <a
-              href={view.path}
+              href={account.path}
               onClick={(e) => {
                 e.preventDefault();
-                handleSelect(view.role, view.path);
+                handleSelect(account);
               }}
             >
-              {view.label}
+              {account.label}
             </a>
           </p>
         ))}

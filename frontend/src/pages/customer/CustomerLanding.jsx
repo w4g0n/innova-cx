@@ -17,9 +17,6 @@ export default function CustomerLanding() {
     messages,
     text,
     setText,
-    stage,
-    hasChosenType,
-    handleSelect,
     handleSend,
     resetSession,
   } = useNovaChatbot({
@@ -513,72 +510,65 @@ export default function CustomerLanding() {
                     </div>
                   ))}
 
-                  {!hasChosenType && (
-                    <div className="novaQuickRow">
-                      <button onClick={() => handleSelect("complaint")}>Complaint</button>
-                      <button onClick={() => handleSelect("inquiry")}>Inquiry</button>
-                    </div>
-                  )}
                 </div>
 
-                {hasChosenType && stage === "inquiry" && (
-                  <div className="novaComposerWrap">
-                    {voiceActive && (
-                      <div className={`novaVoiceBar ${voiceBusy ? "isBusy" : ""}`}>
-                        <div className="novaVoiceLeft">
-                          <div className="novaVoiceText">
-                            {voiceBusy ? "Transcribing…" : (voiceDraft.trim() ? "Review & insert" : "Listening…")}
-                          </div>
-                          <div className="novaWaves" aria-hidden="true">
-                            <span className="novaWave" />
-                            <span className="novaWave" />
-                            <span className="novaWave" />
-                            <span className="novaWave" />
-                            <span className="novaWave" />
-                          </div>
+                <div className="novaComposerWrap">
+                  {voiceActive && (
+                    <div className={`novaVoiceBar ${voiceBusy ? "isBusy" : ""}`}>
+                      <div className="novaVoiceLeft">
+                        <div className="novaVoiceText">
+                          {voiceBusy ? "Transcribing…" : (voiceDraft.trim() ? "Review & insert" : "Listening…")}
                         </div>
-
-                        <div className="novaVoiceActions">
-                          <button
-                            type="button"
-                            className="novaVoiceIconBtn cancel"
-                            onClick={cancelVoice}
-                            aria-label="Cancel recording"
-                            disabled={voiceBusy}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                              <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                            </svg>
-                          </button>
-
-                          <button
-                            type="button"
-                            className="novaVoiceIconBtn confirm"
-                            onClick={confirmVoice}
-                            aria-label="Insert transcript"
-                            disabled={voiceBusy}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                              <path
-                                d="M20 6L9 17l-5-5"
-                                stroke="currentColor"
-                                strokeWidth="2.4"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </button>
+                        <div className="novaWaves" aria-hidden="true">
+                          <span className="novaWave" />
+                          <span className="novaWave" />
+                          <span className="novaWave" />
+                          <span className="novaWave" />
+                          <span className="novaWave" />
                         </div>
                       </div>
-                    )}
-                    <form
-                      className="novaComposer"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        handleSend(text);
-                        setText("");
-                      }}
-                    >
+
+                      <div className="novaVoiceActions">
+                        <button
+                          type="button"
+                          className="novaVoiceIconBtn cancel"
+                          onClick={cancelVoice}
+                          aria-label="Cancel recording"
+                          disabled={voiceBusy}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          </svg>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="novaVoiceIconBtn confirm"
+                          onClick={confirmVoice}
+                          aria-label="Insert transcript"
+                          disabled={voiceBusy}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path
+                              d="M20 6L9 17l-5-5"
+                              stroke="currentColor"
+                              strokeWidth="2.4"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <form
+                    className="novaComposer"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSend(text);
+                      setText("");
+                    }}
+                  >
 
                       <button
                         type="button"
@@ -617,9 +607,8 @@ export default function CustomerLanding() {
                       />
 
                       <button type="submit">Send</button>
-                    </form>
-                  </div>
-                )}
+                  </form>
+                </div>
 
                 {showCloseConfirm && (
                   <div className="novaCloseModal">

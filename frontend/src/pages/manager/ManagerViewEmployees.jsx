@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import KpiCard from "../../components/common/KpiCard";
+import { isSkipToken, skipManagerEmployees } from "../../data/skipViewData";
 import "./ManagerViewEmployees.css";
 
 const API_BASE = "http://127.0.0.1:8000";
@@ -19,7 +20,16 @@ export default function ManagerViewEmployees() {
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      navigate("/login");
+      setEmployees(skipManagerEmployees);
+      setLoading(false);
+      setError("");
+      return;
+    }
+
+    if (isSkipToken(token)) {
+      setEmployees(skipManagerEmployees);
+      setLoading(false);
+      setError("");
       return;
     }
 
@@ -33,7 +43,8 @@ export default function ManagerViewEmployees() {
         });
 
         if (res.status === 401) {
-          navigate("/login");
+          setEmployees(skipManagerEmployees);
+          setError("");
           return;
         }
 
@@ -44,7 +55,9 @@ export default function ManagerViewEmployees() {
         const data = await res.json();
         setEmployees(Array.isArray(data) ? data : data.employees || []);
       } catch (err) {
-        setError(err.message || "Failed to load employees.");
+        console.error(err);
+        setEmployees(skipManagerEmployees);
+        setError("");
       } finally {
         setLoading(false);
       }
