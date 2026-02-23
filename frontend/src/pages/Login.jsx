@@ -33,6 +33,29 @@ export default function Login() {
 
       const data = await res.json();
 
+      // DISABLE_MFA bypass: backend returns token_type "bearer" when DISABLE_MFA=true in .env
+      // To re-enable full MFA: remove DISABLE_MFA from .env and restart backend —
+      //   sed -i '/DISABLE_MFA/d' ~/innova-cx/.env
+      //   docker-compose --profile pipeline restart backend
+      if (data.token_type === "bearer") {
+        localStorage.setItem("access_token", data.access_token);
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            id: data.user.id,
+            email: data.user.email,
+            role: data.user.role,
+            full_name: data.user.full_name,
+            token_type: data.token_type,
+          })
+        );
+        const role = data.user.role;
+        navigate(role === "customer" ? "/customer/dashboard" : `/${role}`, {
+          replace: true,
+        });
+        return;
+      }
+
       // Step 2: Store a temporary token for MFA verification
       // This is NOT the final JWT — only used for OTP verification
       sessionStorage.setItem("mfa_token", data.access_token);
