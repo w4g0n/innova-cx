@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { sendChatMessage } from "../../services/api";
 
-export default function useNovaChatbot({ onGoToForm } = {}) {
+export default function useNovaChatbot() {
   const listRef = useRef(null);
   const initialMessage = () => [
     {
@@ -23,13 +23,6 @@ export default function useNovaChatbot({ onGoToForm } = {}) {
     setMessages((prev) => [
       ...prev,
       { id: `u-${Date.now()}`, from: "user", text: t },
-    ]);
-  };
-
-  const pushBot = (t) => {
-    setMessages((prev) => [
-      ...prev,
-      { id: `b-${Date.now()}`, from: "bot", text: t },
     ]);
   };
 

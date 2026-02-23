@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ManagerDashboard.css";
 
@@ -8,28 +8,24 @@ import KpiCard from "../../components/common/KpiCard";
 import { isSkipToken, skipManagerKpis } from "../../data/skipViewData";
 
 export default function ManagerDashboard() {
-  const navigate = useNavigate();
+  const token = localStorage.getItem("access_token");
+  const useSkipData = !token || isSkipToken(token);
 
   // State to hold backend KPIs
-  const [kpis, setKpis] = useState({
-    open_complaints: 0,
-    in_progress: 0,
-    resolved_today: 0,
-    active_employees: 0,
-    pending_approvals: 0,
-  });
+  const [kpis, setKpis] = useState(() =>
+    useSkipData
+      ? skipManagerKpis
+      : {
+          open_complaints: 0,
+          in_progress: 0,
+          resolved_today: 0,
+          active_employees: 0,
+          pending_approvals: 0,
+        }
+  );
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token"); // assuming JWT stored here
-    if (!token) {
-      setKpis(skipManagerKpis);
-      return;
-    }
-
-    if (isSkipToken(token)) {
-      setKpis(skipManagerKpis);
-      return;
-    }
+    if (useSkipData) return;
 
     fetch("http://localhost:8000/manager", {
       headers: {
@@ -51,7 +47,7 @@ export default function ManagerDashboard() {
         console.error("Failed to fetch KPIs:", err);
         setKpis(skipManagerKpis);
       });
-  }, [navigate]);
+  }, [token, useSkipData]);
 
   return (
     <Layout role="manager">

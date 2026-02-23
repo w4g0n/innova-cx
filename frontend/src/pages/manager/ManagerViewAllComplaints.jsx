@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ManagerViewAllComplaints.css";
 
@@ -16,11 +16,14 @@ import {
 } from "../../data/skipViewData";
 
 export default function ManagerViewComplaints() {
-  const navigate = useNavigate();
+  const token = localStorage.getItem("access_token");
+  const useSkipData = !token || isSkipToken(token);
 
   // Tickets & Employees
-  const [rows, setRows] = useState([]);
-  const [employees, setEmployees] = useState([]);
+  const [rows, setRows] = useState(() => (useSkipData ? skipManagerComplaints : []));
+  const [employees, setEmployees] = useState(() =>
+    useSkipData ? skipManagerEmployees.map((e) => e.name) : []
+  );
 
   // Filters & Search
   const [search, setSearch] = useState("");
@@ -41,18 +44,7 @@ export default function ManagerViewComplaints() {
 
   // Fetch tickets & employees with session token
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      setRows(skipManagerComplaints);
-      setEmployees(skipManagerEmployees.map((e) => e.name));
-      return;
-    }
-
-    if (isSkipToken(token)) {
-      setRows(skipManagerComplaints);
-      setEmployees(skipManagerEmployees.map((e) => e.name));
-      return;
-    }
+    if (useSkipData) return;
 
     const headers = {
       "Content-Type": "application/json",
@@ -88,7 +80,7 @@ export default function ManagerViewComplaints() {
         console.error("Failed to fetch employees:", err);
         setEmployees(skipManagerEmployees.map((e) => e.name));
       });
-  }, [navigate]);
+  }, [token, useSkipData]);
 
   // ------------------- Menu / Modal Handlers -------------------
   const toggleMenu = (ticketId) => setOpenMenuFor((prev) => (prev === ticketId ? null : ticketId));
