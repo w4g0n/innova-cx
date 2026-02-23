@@ -510,8 +510,8 @@ body {
   position: fixed;
   bottom: 76px;
   right: 18px;
-  width: 360px;
-  height: 520px;
+  width: 420px;
+  height: 620px;
   background: #ffffff;
   border-radius: 16px;
   border: 1px solid rgba(0, 0, 0, 0.12);
@@ -522,6 +522,15 @@ body {
   transform: translateY(0) scale(1);
   transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
   z-index: 1001;
+}
+
+@media (max-width: 540px) {
+  .novaWidget {
+    right: 12px;
+    left: 12px;
+    width: auto;
+    height: 76vh;
+  }
 }
 
 .novaWidget.expanded {

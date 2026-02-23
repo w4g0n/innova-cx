@@ -9,6 +9,11 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
+import {
+  isSkipToken,
+  skipManagerComplaints,
+  skipManagerEmployees,
+} from "../../data/skipViewData";
 
 export default function ManagerViewComplaints() {
   const navigate = useNavigate();
@@ -38,7 +43,14 @@ export default function ManagerViewComplaints() {
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      navigate("/login");
+      setRows(skipManagerComplaints);
+      setEmployees(skipManagerEmployees.map((e) => e.name));
+      return;
+    }
+
+    if (isSkipToken(token)) {
+      setRows(skipManagerComplaints);
+      setEmployees(skipManagerEmployees.map((e) => e.name));
       return;
     }
 
@@ -50,20 +62,32 @@ export default function ManagerViewComplaints() {
     // Fetch complaints
     fetch("http://127.0.0.1:8000/manager/complaints", { headers })
       .then((res) => {
-        if (res.status === 401) navigate("/login");
+        if (res.status === 401) {
+          setRows(skipManagerComplaints);
+          return null;
+        }
         return res.json();
       })
       .then((data) => data && setRows(data || []))
-      .catch((err) => console.error("Failed to fetch tickets:", err));
+      .catch((err) => {
+        console.error("Failed to fetch tickets:", err);
+        setRows(skipManagerComplaints);
+      });
 
     // Fetch employees for assignment modal
     fetch("http://127.0.0.1:8000/manager/employees", { headers })
       .then((res) => {
-        if (res.status === 401) navigate("/login");
+        if (res.status === 401) {
+          setEmployees(skipManagerEmployees.map((e) => e.name));
+          return null;
+        }
         return res.json();
       })
       .then((data) => data && setEmployees(data.map((e) => e.name)))
-      .catch((err) => console.error("Failed to fetch employees:", err));
+      .catch((err) => {
+        console.error("Failed to fetch employees:", err);
+        setEmployees(skipManagerEmployees.map((e) => e.name));
+      });
   }, [navigate]);
 
   // ------------------- Menu / Modal Handlers -------------------

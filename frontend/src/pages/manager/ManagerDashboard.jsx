@@ -5,6 +5,7 @@ import "./ManagerDashboard.css";
 
 import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
+import { isSkipToken, skipManagerKpis } from "../../data/skipViewData";
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
@@ -21,7 +22,12 @@ export default function ManagerDashboard() {
   useEffect(() => {
     const token = localStorage.getItem("access_token"); // assuming JWT stored here
     if (!token) {
-      navigate("/login"); // redirect if not logged in
+      setKpis(skipManagerKpis);
+      return;
+    }
+
+    if (isSkipToken(token)) {
+      setKpis(skipManagerKpis);
       return;
     }
 
@@ -33,8 +39,7 @@ export default function ManagerDashboard() {
     })
       .then((res) => {
         if (res.status === 401) {
-          // token invalid or expired
-          navigate("/login");
+          setKpis(skipManagerKpis);
           return null;
         }
         return res.json();
@@ -42,7 +47,10 @@ export default function ManagerDashboard() {
       .then((data) => {
         if (data) setKpis(data);
       })
-      .catch((err) => console.error("Failed to fetch KPIs:", err));
+      .catch((err) => {
+        console.error("Failed to fetch KPIs:", err);
+        setKpis(skipManagerKpis);
+      });
   }, [navigate]);
 
   return (

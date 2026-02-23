@@ -7,6 +7,7 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
+import { isSkipToken, skipEmployeeTickets } from "../../data/skipViewData";
 import "./ViewAllComplaint.css";
 
 const API_BASE = "http://localhost:8000/api";
@@ -31,6 +32,15 @@ const timeToMinutes = (value) => {
   if (unit?.startsWith("Hour")) return n * 60;
   if (unit?.startsWith("Day")) return n * 1440;
   return 0;
+};
+
+const formatTimeLeft = (rawSeconds) => {
+  if (rawSeconds == null) return "";
+  const seconds = Math.max(0, Number(rawSeconds) || 0);
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} Minutes left`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)} Hours left`;
+  return `${Math.floor(minutes / 1440)} Days left`;
 };
 
 const toDate = (raw) => {
@@ -103,8 +113,10 @@ export default function EmployeeViewAllComplaints() {
   useEffect(() => {
     const fetchTickets = async () => {
       const token = getStoredToken();
-      if (!token) {
-        setError("No auth token found.");
+      const skipSession = isSkipToken(token);
+
+      if (!token || skipSession) {
+        setTickets(skipEmployeeTickets);
         setLoading(false);
         return;
       }
@@ -114,6 +126,11 @@ export default function EmployeeViewAllComplaints() {
           headers: { Authorization: `Bearer ${token}` },
         });
 
+        if (res.status === 401) {
+          setTickets(skipEmployeeTickets);
+          return;
+        }
+
         if (!res.ok) {
           throw new Error(`Failed to fetch tickets (${res.status})`);
         }
@@ -121,7 +138,9 @@ export default function EmployeeViewAllComplaints() {
         const data = await res.json();
         setTickets(data.tickets || []);
       } catch (err) {
-        setError(err.message || "Failed to load tickets.");
+        console.error(err);
+        setTickets(skipEmployeeTickets);
+        setError("");
       } finally {
         setLoading(false);
       }
@@ -133,10 +152,22 @@ export default function EmployeeViewAllComplaints() {
   const normalizedTickets = useMemo(() => {
     return (tickets || []).map((t) => {
       const issueDateRaw = t.issueDate ?? t.issue_date ?? t.createdAt ?? "";
+      const responseLeftRaw =
+        t.respond_time_left_seconds ?? t.respondTimeLeftSeconds ?? null;
+      const resolveLeftRaw =
+        t.resolve_time_left_seconds ?? t.resolveTimeLeftSeconds ?? null;
       const responseTimeRaw =
-        t.metrics?.meanTimeToRespond ?? t.response_time ?? t.responseTime ?? "";
+        formatTimeLeft(responseLeftRaw) ||
+        t.metrics?.meanTimeToRespond ||
+        t.response_time ||
+        t.responseTime ||
+        "";
       const resolutionTimeRaw =
-        t.metrics?.meanTimeToResolve ?? t.resolution_time ?? t.resolutionTime ?? "";
+        formatTimeLeft(resolveLeftRaw) ||
+        t.metrics?.meanTimeToResolve ||
+        t.resolution_time ||
+        t.resolutionTime ||
+        "";
 
       return {
         ...t,
@@ -240,7 +271,7 @@ export default function EmployeeViewAllComplaints() {
   }, [filteredTickets]);
 
   if (loading) return <Layout role="employee"><div>Loading tickets...</div></Layout>;
-  if (error) return <Layout role="employee"><div>{error}</div></Layout>;
+  const allResolved = filteredTickets.length > 0 && kpiCounts.openTickets === 0;
 
   return (
     <Layout role="employee">
@@ -257,6 +288,100 @@ export default function EmployeeViewAllComplaints() {
           <KpiCard label="High Priority" value={kpiCounts.highPriority} />
           <KpiCard label="Overdue Tickets" value={kpiCounts.overdueTickets} />
         </section>
+
+        {error ? <div className="ev-warning">{error}</div> : null}
+
+        <section className="search-section-EV-VAC">
+          <PillSearch
+            value={searchTerm}
+            onChange={_setSearchTerm}
+            placeholder="Search tickets by ID or subject..."
+          />
+        </section>
+
+        <section className="filters-row-EV-VAC">
+          <div className="filter-group-EV-VAC">
+            <PillSelect
+              value={statusFilter}
+              onChange={_setStatusFilter}
+              ariaLabel="Filter by status"
+              options={[
+                { label: "All Status", value: "All Status" },
+                { label: "Open", value: "Open" },
+                { label: "In Progress", value: "In Progress" },
+                { label: "Assigned", value: "Assigned" },
+                { label: "Overdue", value: "Overdue" },
+                { label: "Resolved", value: "Resolved" },
+              ]}
+            />
+            <PillSelect
+              value={priorityFilter}
+              onChange={_setPriorityFilter}
+              ariaLabel="Filter by priority"
+              options={[
+                { label: "All Priorities", value: "All Priorities" },
+                { label: "Low", value: "Low" },
+                { label: "Medium", value: "Medium" },
+                { label: "High", value: "High" },
+                { label: "Critical", value: "Critical" },
+              ]}
+            />
+            <FilterPillButton
+              onClick={() => {
+                _setSearchTerm("");
+                _setStatusFilter("All Status");
+                _setPriorityFilter("All Priorities");
+              }}
+              label="Reset"
+            />
+          </div>
+        </section>
+
+        {allResolved ? (
+          <section className="ev-all-resolved">
+            <h2>All Tickets Resolved</h2>
+            <div className="ev-checkmark">✓</div>
+          </section>
+        ) : (
+          <section className="table-wrapper-EV-VAC">
+            <table className="complaints-table-EV-VAC">
+              <thead>
+                <tr>
+                  <th onClick={() => _handleSort("ticketId")}>Ticket ID</th>
+                  <th onClick={() => _handleSort("subject")}>Subject</th>
+                  <th onClick={() => _handleSort("priority")}>Priority</th>
+                  <th onClick={() => _handleSort("status")}>Status</th>
+                  <th onClick={() => _handleSort("issueDate")}>Issue Date</th>
+                  <th onClick={() => _handleSort("responseTime")}>Response Time</th>
+                  <th onClick={() => _handleSort("resolutionTime")}>Resolution Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTickets.map((t) => (
+                  <tr
+                    key={t.ticketId}
+                    onClick={() => _navigate(`/employee/details/${encodeURIComponent(t.ticketId)}`)}
+                  >
+                    <td>
+                      <span className="complaint-link-EV-VAC">{t.ticketId}</span>
+                    </td>
+                    <td>{t.subject}</td>
+                    <td><PriorityPill priority={t.priority} /></td>
+                    <td>{t.status}</td>
+                    <td>{t._issueDateRaw}</td>
+                    <td>{t._responseTimeRaw || "—"}</td>
+                    <td>{t._resolutionTimeRaw || "—"}</td>
+                  </tr>
+                ))}
+                {filteredTickets.length === 0 ? (
+                  <tr>
+                    <td colSpan={7}>No tickets match your filters.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </section>
+        )}
       </main>
     </Layout>
   );

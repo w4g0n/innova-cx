@@ -11,6 +11,7 @@ Endpoints:
 
 import logging
 import json
+import httpx
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -34,6 +35,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+BACKEND_URL = "http://backend:8000"
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +77,7 @@ async def process_audio(
 async def process_text(
     text: str = Form(...),
     ticket_type: str | None = Form(default=None),
+    asset_type: str | None = Form(default=None),
     has_audio: bool | None = Form(default=None),
     audio_features: str | None = Form(default=None),
 ):
@@ -96,9 +100,45 @@ async def process_text(
         except json.JSONDecodeError:
             raise HTTPException(status_code=422, detail="audio_features must be valid JSON object")
 
+    selected_type = ticket_type.lower().strip() if ticket_type else None
+    selected_asset = asset_type.strip() if asset_type else None
+
+    initial_payload = {
+        "transcript": text.strip(),
+        "label": selected_type if selected_type in {"complaint", "inquiry"} else "complaint",
+        "asset_type": selected_asset or "General",
+        "department": selected_asset or "general",
+        "status": "Open",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(f"{BACKEND_URL}/api/complaints", json=initial_payload)
+            response.raise_for_status()
+            open_ticket = response.json()
+            ticket_id = open_ticket.get("ticket_id")
+            logger.info(
+                "ticket_status_update | ticket_id=%s status=%s asset_type=%s department=%s priority=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
+                ticket_id,
+                open_ticket.get("status", "Open"),
+                open_ticket.get("asset_type") or initial_payload["asset_type"],
+                open_ticket.get("department") or initial_payload["department"],
+                open_ticket.get("priority"),
+                open_ticket.get("priority_assigned_at"),
+                open_ticket.get("respond_due_at"),
+                open_ticket.get("resolve_due_at"),
+            )
+    except Exception as exc:
+        logger.error("failed to create initial open ticket: %s", exc)
+        raise HTTPException(status_code=503, detail=f"Failed to create initial ticket: {exc}")
+
+    if not ticket_id:
+        raise HTTPException(status_code=503, detail="Failed to create initial ticket: missing ticket_id")
+
     state = {
         "text": text.strip(),
-        "ticket_type": ticket_type.lower().strip() if ticket_type else None,
+        "ticket_id": ticket_id,
+        "ticket_type": selected_type,
+        "asset_type": selected_asset,
         "has_audio": bool(has_audio),
         "audio_features": parsed_audio_features,
     }
@@ -106,7 +146,9 @@ async def process_text(
     result = await pipeline.ainvoke(state)
     if result.get("label") == "inquiry":
         logger.info(
-            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f priority=%s/%s ticket_id=%s",
+            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f "
+            "priority=%s/%s ticket_id=%s status=%s department=%s asset_type=%s "
+            "priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
             result.get("label"),
             float(result.get("class_confidence", 0.0) or 0.0),
             float(result.get("text_sentiment", 0.0) or 0.0),
@@ -115,10 +157,18 @@ async def process_text(
             result.get("priority_label"),
             result.get("priority_score"),
             result.get("ticket_id"),
+            result.get("status"),
+            result.get("department"),
+            result.get("asset_type"),
+            result.get("priority_assigned_at"),
+            result.get("respond_due_at"),
+            result.get("resolve_due_at"),
         )
     else:
         logger.info(
-            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f impact=%s safety=%s severity=%s urgency=%s priority=%s/%s ticket_id=%s",
+            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f "
+            "impact=%s safety=%s severity=%s urgency=%s priority=%s/%s ticket_id=%s "
+            "status=%s department=%s asset_type=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
             result.get("label"),
             float(result.get("class_confidence", 0.0) or 0.0),
             float(result.get("text_sentiment", 0.0) or 0.0),
@@ -131,6 +181,12 @@ async def process_text(
             result.get("priority_label"),
             result.get("priority_score"),
             result.get("ticket_id"),
+            result.get("status"),
+            result.get("department"),
+            result.get("asset_type"),
+            result.get("priority_assigned_at"),
+            result.get("respond_due_at"),
+            result.get("resolve_due_at"),
         )
     return _build_response(result)
 

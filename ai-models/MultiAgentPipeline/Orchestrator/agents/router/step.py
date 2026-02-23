@@ -1,7 +1,7 @@
 """
 Step 6 — Router
 ================
-Final step: persists both complaints and inquiries as tickets.
+Final step: enriches routed ticket with final priority/SLA/department.
 """
 
 import httpx
@@ -20,6 +20,16 @@ DEPARTMENT_KEYWORDS: dict[str, list[str]] = {
 }
 
 
+def _department_from_asset(asset_type: str | None) -> str | None:
+    """
+    Temporary rule: selected asset acts as selected department.
+    """
+    if not asset_type:
+        return None
+    department = str(asset_type).strip()
+    return department or None
+
+
 def infer_department(keywords: list[str]) -> str:
     """Infer department from extracted keywords."""
     kw_lower = [k.lower() for k in keywords]
@@ -36,14 +46,18 @@ async def route_and_store(state: dict) -> dict:
     """
     if state["label"] == "inquiry":
         state["chatbot_response"] = None
+        selected_department = _department_from_asset(state.get("asset_type")) or "general"
         inquiry_payload = {
+            "ticket_id": state.get("ticket_id"),
             "transcript": state["text"],
+            "asset_type": state.get("asset_type") or "General",
             "sentiment": state.get("text_sentiment", 0.0),
             "audio_sentiment": state.get("audio_sentiment", 0.0),
             "priority": state.get("priority_score", 3),
-            "department": "general",
+            "department": selected_department,
             "keywords": state.get("keywords", []),
             "label": "inquiry",
+            "status": "Assigned",
             "classification_confidence": state.get("class_confidence", 1.0),
         }
 
@@ -55,26 +69,49 @@ async def route_and_store(state: dict) -> dict:
                 )
                 response.raise_for_status()
                 data = response.json()
+            state["status"] = data.get("status", state.get("status"))
+            state["department"] = data.get("department", selected_department)
+            state["asset_type"] = data.get("asset_type", inquiry_payload.get("asset_type"))
+            state["priority_label"] = data.get("priority", state.get("priority_label"))
+            state["priority_assigned_at"] = data.get("priority_assigned_at")
+            state["respond_due_at"] = data.get("respond_due_at")
+            state["resolve_due_at"] = data.get("resolve_due_at")
             state["ticket_id"] = data.get("ticket_id")
-            logger.info("router | inquiry ticket created ticket_id=%s", state.get("ticket_id"))
+            logger.info(
+                "ticket_status_update | ticket_id=%s status=%s department=%s asset_type=%s priority=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
+                state.get("ticket_id"),
+                data.get("status", "Assigned"),
+                data.get("department", selected_department),
+                data.get("asset_type", inquiry_payload.get("asset_type")),
+                data.get("priority"),
+                data.get("priority_assigned_at"),
+                data.get("respond_due_at"),
+                data.get("resolve_due_at"),
+            )
         except Exception as exc:
             logger.warning("router | inquiry ticket creation failed: %s", exc)
-            state["ticket_id"] = None
+            state["ticket_id"] = state.get("ticket_id")
 
         return state
 
     # Complaint path — infer department if not set
     if not state.get("department"):
-        state["department"] = infer_department(state.get("keywords", []))
+        state["department"] = (
+            _department_from_asset(state.get("asset_type"))
+            or infer_department(state.get("keywords", []))
+        )
 
     ticket_payload = {
+        "ticket_id": state.get("ticket_id"),
         "transcript": state["text"],
+        "asset_type": state.get("asset_type") or "General",
         "sentiment": state.get("text_sentiment", 0.0),
         "audio_sentiment": state.get("audio_sentiment", 0.0),
         "priority": state.get("priority_score", 3),
         "department": state["department"],
         "keywords": state.get("keywords", []),
         "label": "complaint",
+        "status": "Assigned",
         "classification_confidence": state.get("class_confidence", 1.0),
     }
 
@@ -86,11 +123,24 @@ async def route_and_store(state: dict) -> dict:
         response.raise_for_status()
         data = response.json()
 
+    state["status"] = data.get("status", state.get("status"))
+    state["department"] = data.get("department", state.get("department"))
+    state["asset_type"] = data.get("asset_type", ticket_payload.get("asset_type"))
+    state["priority_label"] = data.get("priority", state.get("priority_label"))
+    state["priority_assigned_at"] = data.get("priority_assigned_at")
+    state["respond_due_at"] = data.get("respond_due_at")
+    state["resolve_due_at"] = data.get("resolve_due_at")
     state["ticket_id"] = data.get("ticket_id")
     logger.info(
-        "router | complaint ticket created ticket_id=%s department=%s",
+        "ticket_status_update | ticket_id=%s status=%s department=%s asset_type=%s priority=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
         state.get("ticket_id"),
-        state.get("department"),
+        data.get("status", "Assigned"),
+        data.get("department", state.get("department")),
+        data.get("asset_type", ticket_payload.get("asset_type")),
+        data.get("priority"),
+        data.get("priority_assigned_at"),
+        data.get("respond_due_at"),
+        data.get("resolve_due_at"),
     )
     return state
 
