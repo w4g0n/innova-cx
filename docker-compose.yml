@@ -29,6 +29,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
+      DISABLE_MFA: "${DISABLE_MFA:-false}"
     depends_on:
       postgres:
         condition: service_healthy
