@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PriorityPill from "../../components/common/PriorityPill";
+import { apiUrl } from "../../config/apiBase";
 import { authHeader } from "../../utils/auth";
 import "./CustomerTicketDetails.css";
 
@@ -13,7 +14,7 @@ export default function CustomerTicketDetails() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`http://localhost:8000/api/customer/tickets/${id}`, {
+    fetch(apiUrl(`/api/customer/tickets/${id}`), {
       headers: authHeader(),
     })
       .then((res) => {

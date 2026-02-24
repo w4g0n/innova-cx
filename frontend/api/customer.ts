@@ -1,7 +1,8 @@
 import axios from "axios";
+import { API_BASE_URL } from "../src/config/apiBase";
 import { authHeader } from "../src/utils/auth";
 
-const BASE_URL = "http://localhost:8000/api/customer";
+const BASE_URL = `${API_BASE_URL}/api/customer`;
 
 export async function getCustomerDashboard() {
   const response = await axios.get(`${BASE_URL}/dashboard`, {

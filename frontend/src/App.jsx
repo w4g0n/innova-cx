@@ -1,11 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 
 import ProtectedRoute from "./auth/ProtectedRoute";
 
 const Login = lazy(() => import("./pages/Login"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
-const SkipViewSelector = lazy(() => import("./pages/SkipViewSelector"));
 
 const CustomerLanding = lazy(() => import("./pages/customer/CustomerLanding"));
 const CustomerNotifications = lazy(() =>
@@ -59,6 +58,24 @@ const ModelAnalysis = lazy(() => import("./pages/operator/ModelAnalysis"));
 const OperatorDashboard = lazy(() => import("./pages/operator/OperatorDashboard"));
 
 export default function App() {
+  useEffect(() => {
+    document.title = "InnovaCX";
+
+    const href = "/innovacx-favicon.svg?v=20260224b";
+    const rels = ["icon", "shortcut icon"];
+
+    rels.forEach((rel) => {
+      let link = document.querySelector(`link[rel='${rel}']`);
+      if (!link) {
+        link = document.createElement("link");
+        link.setAttribute("rel", rel);
+        document.head.appendChild(link);
+      }
+      link.setAttribute("href", href);
+      link.setAttribute("type", "image/svg+xml");
+    });
+  }, []);
+
   return (
     <BrowserRouter>
       <Suspense
@@ -67,9 +84,7 @@ export default function App() {
         }
       >
         <Routes>
-          
           <Route path="/" element={<Login />} />
-          <Route path="/skip" element={<SkipViewSelector />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
 
           <Route path="/" element={<Login />} />

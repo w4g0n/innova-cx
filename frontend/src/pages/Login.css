@@ -138,6 +138,43 @@
   box-shadow: 0 0 0 4px rgba(108, 33, 217, 0.12);
 }
 
+.passwordField {
+  position: relative;
+}
+
+.passwordInput {
+  padding-right: 72px;
+}
+
+.passwordToggleBtn {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: #6c21d9;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.passwordToggleBtn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.loginError {
+  margin: -4px 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b42318;
+}
+
 .forgotLink {
   width: 100%;
   background: transparent;

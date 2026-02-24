@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
+import { apiUrl } from "../../config/apiBase";
 import "./TicketDetails.css";
 
-const API_BASE = "http://localhost:8000/api";
+const API_BASE = apiUrl("/api");
 
 // Token may be stored under one of these keys
 function getAuthToken() {

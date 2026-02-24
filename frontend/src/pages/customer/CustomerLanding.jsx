@@ -4,6 +4,7 @@ import "./CustomerLanding.css";
 import novaLogo from "../../assets/nova-logo.png";
 import CustomerFillForm from "./CustomerFillForm";
 import useNovaChatbot from "./chatbot.js";
+import { apiUrl } from "../../config/apiBase";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { getToken, getUser } from "../../utils/auth";
 
@@ -54,7 +55,7 @@ export default function CustomerLanding() {
     async function fetchNotifications() {
       try {
         const token = getToken();
-        const res = await fetch("http://localhost:8000/api/customer/notifications", {
+        const res = await fetch(apiUrl("/api/customer/notifications"), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {

@@ -5,39 +5,31 @@ import "./ManagerDashboard.css";
 
 import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
-import { isSkipToken, skipManagerKpis } from "../../data/skipViewData";
+import { apiUrl } from "../../config/apiBase";
 
 export default function ManagerDashboard() {
   const token = localStorage.getItem("access_token");
-  const useSkipData = !token || isSkipToken(token);
 
   // State to hold backend KPIs
-  const [kpis, setKpis] = useState(() =>
-    useSkipData
-      ? skipManagerKpis
-      : {
-          open_complaints: 0,
-          in_progress: 0,
-          resolved_today: 0,
-          active_employees: 0,
-          pending_approvals: 0,
-        }
-  );
+  const [kpis, setKpis] = useState({
+    open_complaints: 0,
+    in_progress: 0,
+    resolved_today: 0,
+    active_employees: 0,
+    pending_approvals: 0,
+  });
 
   useEffect(() => {
-    if (useSkipData) return;
+    if (!token) return;
 
-    fetch("http://localhost:8000/manager", {
+    fetch(apiUrl("/manager"), {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`, // pass token in header
       },
     })
       .then((res) => {
-        if (res.status === 401) {
-          setKpis(skipManagerKpis);
-          return null;
-        }
+        if (res.status === 401) return null;
         return res.json();
       })
       .then((data) => {
@@ -45,9 +37,8 @@ export default function ManagerDashboard() {
       })
       .catch((err) => {
         console.error("Failed to fetch KPIs:", err);
-        setKpis(skipManagerKpis);
       });
-  }, [token, useSkipData]);
+  }, [token]);
 
   return (
     <Layout role="manager">

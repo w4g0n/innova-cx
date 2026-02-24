@@ -275,6 +275,57 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_convo   ON chat_messages(conversati
 CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at);
 
 -- -------------------------
+-- Chatbot session + analytics
+-- -------------------------
+CREATE TABLE IF NOT EXISTS sessions (
+  session_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  current_state  TEXT NOT NULL DEFAULT 'greeting',
+  context        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  history        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
+
+DROP TRIGGER IF EXISTS trg_sessions_updated_at ON sessions;
+CREATE TRIGGER trg_sessions_updated_at
+BEFORE UPDATE ON sessions
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS user_chat_logs (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id       UUID REFERENCES sessions(session_id) ON DELETE SET NULL,
+  user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  message          TEXT NOT NULL,
+  intent_detected  TEXT,
+  aggression_flag  BOOLEAN NOT NULL DEFAULT FALSE,
+  aggression_score NUMERIC(5,4),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_chat_logs_session ON user_chat_logs(session_id);
+CREATE INDEX IF NOT EXISTS idx_user_chat_logs_user ON user_chat_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_chat_logs_created ON user_chat_logs(created_at);
+
+CREATE TABLE IF NOT EXISTS bot_response_logs (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id       UUID REFERENCES sessions(session_id) ON DELETE SET NULL,
+  response         TEXT NOT NULL,
+  response_type    TEXT,
+  state_at_time    TEXT,
+  sql_query_used   TEXT,
+  kb_match_score   NUMERIC(8,5),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_bot_response_logs_session ON bot_response_logs(session_id);
+CREATE INDEX IF NOT EXISTS idx_bot_response_logs_created ON bot_response_logs(created_at);
+
+-- -------------------------
 -- Notifications
 -- -------------------------
 CREATE TABLE IF NOT EXISTS notifications (

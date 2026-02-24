@@ -5,6 +5,7 @@ import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import PriorityPill from "../../components/common/PriorityPill";
+import { apiUrl } from "../../config/apiBase";
 import "./EmployeeNotifications.css";
 
 function formatTime(isoString) {
@@ -49,7 +50,7 @@ function getAuthToken() {
   );
 }
 
-const API_BASE = "http://localhost:8000/api";
+const API_BASE = apiUrl("/api");
 
 export default function EmployeeNotifications() {
   const navigate = useNavigate();
