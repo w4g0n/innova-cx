@@ -6,6 +6,7 @@ import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
+import { apiUrl } from "../../config/apiBase";
 import "./Approvals.css";
 
 export default function Approvals() {
@@ -30,7 +31,7 @@ export default function Approvals() {
       Authorization: `Bearer ${token}`,
     };
 
-    fetch("http://localhost:8000/manager/approvals", { headers })
+    fetch(apiUrl("/manager/approvals"), { headers })
       .then((res) => {
         if (res.status === 401) navigate("/login");
         return res.json();

@@ -41,9 +41,23 @@ _has_sla_policy_fn = False
 # =========================================================
 app = FastAPI(title="InnovaCX API (DB-backed)", version="0.1.0")
 
+
+def _parse_allowed_origins() -> List[str]:
+    configured = os.getenv("ALLOWED_ORIGINS", "").strip()
+    if configured:
+        return [origin.strip() for origin in configured.split(",") if origin.strip()]
+    return [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://34.38.76.62:5173",
+    ]
+
+
+ALLOWED_ORIGINS = _parse_allowed_origins()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://34.38.76.62:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -2078,7 +2092,8 @@ class OrchestratorComplaintRequest(BaseModel):
 
 class ChatbotProxyRequest(BaseModel):
     message: str
-    mode: Optional[str] = "inquiry"
+    user_id: str
+    session_id: Optional[str] = None
 
 
 @api.post("/complaints")
@@ -2307,7 +2322,11 @@ async def proxy_chatbot_chat(body: ChatbotProxyRequest):
     chatbot_url = os.getenv("CHATBOT_URL", "http://chatbot:8000")
     local_fallback = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001")
 
-    payload = {"message": body.message, "mode": body.mode}
+    payload = {
+        "message": body.message,
+        "user_id": body.user_id,
+        "session_id": body.session_id,
+    }
     last_error = None
 
     for base in [chatbot_url, local_fallback]:
@@ -2316,7 +2335,14 @@ async def proxy_chatbot_chat(body: ChatbotProxyRequest):
                 response = await client.post(f"{base}/api/chat", json=payload)
                 response.raise_for_status()
                 data = response.json()
-                return {"reply": data.get("reply", "")}
+                return {
+                    "session_id": data.get("session_id"),
+                    "response": data.get("response", ""),
+                    "response_type": data.get("response_type", "unknown"),
+                    "show_buttons": data.get("show_buttons", []),
+                    # Backward-compatible key for older UIs.
+                    "reply": data.get("response", ""),
+                }
         except Exception as exc:
             last_error = exc
             continue

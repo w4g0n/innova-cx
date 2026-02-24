@@ -1,24 +1,26 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/nova-logo.png";
+import { apiUrl } from "../config/apiBase";
 import "./Login.css";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 export default function Login() {
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoginError("");
     setLoading(true);
 
     try {
       // Step 1: Login with email/password
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
+      const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -26,8 +28,11 @@ export default function Login() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.detail || "Login failed. Check your credentials.");
-        setLoading(false);
+        if (res.status === 401) {
+          setLoginError("Incorrect email or password.");
+        } else {
+          setLoginError(err.detail || "Unable to log in right now. Please try again.");
+        }
         return;
       }
 
@@ -73,7 +78,7 @@ export default function Login() {
       navigate("/verify");
     } catch (error) {
       console.error("Login error:", error);
-      alert("Network error or backend not running.");
+      setLoginError("Cannot reach the server. Check backend URL/CORS and try again.");
     } finally {
       setLoading(false);
     }
@@ -81,13 +86,6 @@ export default function Login() {
 
   return (
     <div className="loginBg">
-      <button
-        type="button"
-        onClick={() => navigate("/skip")}
-        style={{ position: "absolute", top: 12, right: 12, zIndex: 10 }}
-      >
-        Skip
-      </button>
       <div className="loginWrapper">
         <section className="loginLeft">
           <div className="loginOverlay" />
@@ -113,22 +111,74 @@ export default function Login() {
                 type="email"
                 placeholder="Enter your Email here"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (loginError) setLoginError("");
+                }}
                 required
               />
             </div>
 
             <div className="field">
               <label className="label">Password</label>
-              <input
-                className="input"
-                type="password"
-                placeholder="Enter your Password here"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="passwordField">
+                <input
+                  className="input passwordInput"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your Password here"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (loginError) setLoginError("");
+                  }}
+                  required
+                />
+                <button
+                  type="button"
+                  className="passwordToggleBtn"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M3 3l18 18M10.58 10.59A2 2 0 0012 14a2 2 0 001.41-.58M9.88 5.09A9.77 9.77 0 0112 5c5 0 9 7 9 7a17.59 17.59 0 01-3.24 3.93M6.1 6.1A17.3 17.3 0 003 12s4 7 9 7a9.8 9.8 0 004.25-.95"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="3"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
+
+            {loginError && (
+              <p className="loginError" role="alert">
+                {loginError}
+              </p>
+            )}
 
             <button
               type="button"

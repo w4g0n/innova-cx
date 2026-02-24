@@ -4,10 +4,10 @@ import { Link, useNavigate } from "react-router-dom";
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import KpiCard from "../../components/common/KpiCard";
-import { isSkipToken, skipManagerEmployees } from "../../data/skipViewData";
+import { apiUrl } from "../../config/apiBase";
 import "./ManagerViewEmployees.css";
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = apiUrl("");
 
 export default function ManagerViewEmployees() {
   const navigate = useNavigate();
@@ -20,16 +20,9 @@ export default function ManagerViewEmployees() {
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      setEmployees(skipManagerEmployees);
+      setEmployees([]);
       setLoading(false);
-      setError("");
-      return;
-    }
-
-    if (isSkipToken(token)) {
-      setEmployees(skipManagerEmployees);
-      setLoading(false);
-      setError("");
+      setError("Unauthorized. Please log in again.");
       return;
     }
 
@@ -43,8 +36,8 @@ export default function ManagerViewEmployees() {
         });
 
         if (res.status === 401) {
-          setEmployees(skipManagerEmployees);
-          setError("");
+          setEmployees([]);
+          setError("Unauthorized. Please log in again.");
           return;
         }
 
@@ -56,8 +49,8 @@ export default function ManagerViewEmployees() {
         setEmployees(Array.isArray(data) ? data : data.employees || []);
       } catch (err) {
         console.error(err);
-        setEmployees(skipManagerEmployees);
-        setError("");
+        setEmployees([]);
+        setError("Failed to load employees.");
       } finally {
         setLoading(false);
       }

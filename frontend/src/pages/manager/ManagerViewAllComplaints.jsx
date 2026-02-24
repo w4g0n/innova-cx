@@ -9,21 +9,14 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
-import {
-  isSkipToken,
-  skipManagerComplaints,
-  skipManagerEmployees,
-} from "../../data/skipViewData";
+import { apiUrl } from "../../config/apiBase";
 
 export default function ManagerViewComplaints() {
   const token = localStorage.getItem("access_token");
-  const useSkipData = !token || isSkipToken(token);
 
   // Tickets & Employees
-  const [rows, setRows] = useState(() => (useSkipData ? skipManagerComplaints : []));
-  const [employees, setEmployees] = useState(() =>
-    useSkipData ? skipManagerEmployees.map((e) => e.name) : []
-  );
+  const [rows, setRows] = useState([]);
+  const [employees, setEmployees] = useState([]);
 
   // Filters & Search
   const [search, setSearch] = useState("");
@@ -44,7 +37,7 @@ export default function ManagerViewComplaints() {
 
   // Fetch tickets & employees with session token
   useEffect(() => {
-    if (useSkipData) return;
+    if (!token) return;
 
     const headers = {
       "Content-Type": "application/json",
@@ -52,35 +45,29 @@ export default function ManagerViewComplaints() {
     };
 
     // Fetch complaints
-    fetch("http://127.0.0.1:8000/manager/complaints", { headers })
+    fetch(apiUrl("/manager/complaints"), { headers })
       .then((res) => {
-        if (res.status === 401) {
-          setRows(skipManagerComplaints);
-          return null;
-        }
+        if (res.status === 401) return null;
         return res.json();
       })
       .then((data) => data && setRows(data || []))
       .catch((err) => {
         console.error("Failed to fetch tickets:", err);
-        setRows(skipManagerComplaints);
+        setRows([]);
       });
 
     // Fetch employees for assignment modal
-    fetch("http://127.0.0.1:8000/manager/employees", { headers })
+    fetch(apiUrl("/manager/employees"), { headers })
       .then((res) => {
-        if (res.status === 401) {
-          setEmployees(skipManagerEmployees.map((e) => e.name));
-          return null;
-        }
+        if (res.status === 401) return null;
         return res.json();
       })
       .then((data) => data && setEmployees(data.map((e) => e.name)))
       .catch((err) => {
         console.error("Failed to fetch employees:", err);
-        setEmployees(skipManagerEmployees.map((e) => e.name));
+        setEmployees([]);
       });
-  }, [token, useSkipData]);
+  }, [token]);
 
   // ------------------- Menu / Modal Handlers -------------------
   const toggleMenu = (ticketId) => setOpenMenuFor((prev) => (prev === ticketId ? null : ticketId));

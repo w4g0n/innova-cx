@@ -7,6 +7,7 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import PriorityPill from "../../components/common/PriorityPill";
 import FilterPillButton from "../../components/common/FilterPillButton";
+import { apiUrl } from "../../config/apiBase";
 import { getToken, authHeader } from "../../utils/auth";
 import "./CustomerHistory.css";
 
@@ -26,7 +27,7 @@ export default function CustomerHistory() {
       if (!token) return;
 
       try {
-        const res = await fetch("http://localhost:8000/api/customer/mytickets", {
+        const res = await fetch(apiUrl("/api/customer/mytickets"), {
           headers: authHeader(),
         });
 

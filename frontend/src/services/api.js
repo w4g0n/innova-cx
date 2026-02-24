@@ -3,19 +3,25 @@
  *
  * Centralizes all backend API calls for the InnovaCX application.
  */
+import { API_BASE_URL, apiUrl } from "../config/apiBase";
+
+function inferServiceBase(port, fallbackLocalhost) {
+  if (typeof window !== "undefined" && window.location?.hostname) {
+    const protocol = window.location.protocol === "https:" ? "https" : "http";
+    return `${protocol}://${window.location.hostname}:${port}`;
+  }
+  return fallbackLocalhost;
+}
 
 const API_CONFIG = {
-  backend:
-    import.meta.env.VITE_BACKEND_BASE_URL ||
-    import.meta.env.VITE_API_BASE_URL ||
-    "http://localhost:8000",
+  backend: API_BASE_URL,
   sentiment:
     import.meta.env.VITE_SENTIMENT_BASE_URL ||
     import.meta.env.VITE_SENTIMENT_URL ||
-    "http://localhost:8002",
+    inferServiceBase(8002, "http://localhost:8002"),
   orchestrator:
     import.meta.env.VITE_ORCHESTRATOR_URL ||
-    "http://localhost:8004",
+    inferServiceBase(8004, "http://localhost:8004"),
 };
 
 /**
@@ -102,14 +108,19 @@ export async function processAudioComplaint(audioBlob) {
 /**
  * Send message to chatbot
  * @param {string} message - User message
- * @param {string} mode - Chat mode (inquiry/complaint)
- * @returns {Promise<{reply: string}>}
+ * @param {{userId: string, sessionId?: string|null}} options
+ * @returns {Promise<{session_id: string, response: string, response_type: string, show_buttons: string[], reply: string}>}
  */
-export async function sendChatMessage(message, mode = "inquiry") {
-  const response = await fetch(`${API_CONFIG.backend}/api/chatbot/chat`, {
+export async function sendChatMessage(message, options = {}) {
+  const { userId, sessionId = null } = options;
+  if (!userId) {
+    throw new Error("sendChatMessage requires options.userId");
+  }
+
+  const response = await fetch(apiUrl("/api/chatbot/chat"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, mode }),
+    body: JSON.stringify({ message, user_id: userId, session_id: sessionId }),
   });
 
   if (!response.ok) {

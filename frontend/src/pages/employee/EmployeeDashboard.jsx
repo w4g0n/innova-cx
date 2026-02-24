@@ -4,7 +4,7 @@ import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import PriorityPill from "../../components/common/PriorityPill";
-import { isSkipToken, skipEmployeeTickets } from "../../data/skipViewData";
+import { apiUrl } from "../../config/apiBase";
 import "./EmployeeDashboard.css";
 
 function monthKeyToReportId(monthKey) {
@@ -71,25 +71,8 @@ export default function EmployeeDashboard() {
 
     async function load() {
       setLoading(true);
-      if (isSkipToken(token)) {
-        if (!cancelled) {
-          setEmployee({ name: "Demo Employee" });
-          setKpis({
-            ticketsAssigned: 3,
-            inProgress: 2,
-            resolvedThisMonth: 14,
-            critical: 0,
-            overdue: 0,
-            newToday: 1,
-          });
-          setTickets(skipEmployeeTickets);
-          setReports([{ month: "2026-02", label: "February 2026" }]);
-          setLoading(false);
-        }
-        return;
-      }
       try {
-        const res = await fetch("http://localhost:8000/api/employee/dashboard", {
+        const res = await fetch(apiUrl("/api/employee/dashboard"), {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -114,17 +97,17 @@ export default function EmployeeDashboard() {
         console.error("Error loading dashboard data:", err);
 
         if (!cancelled) {
-          setEmployee({ name: "Demo Employee" });
+          setEmployee({ name: "Employee" });
           setKpis({
-            ticketsAssigned: 3,
-            inProgress: 2,
-            resolvedThisMonth: 14,
+            ticketsAssigned: 0,
+            inProgress: 0,
+            resolvedThisMonth: 0,
             critical: 0,
             overdue: 0,
-            newToday: 1,
+            newToday: 0,
           });
-          setTickets(skipEmployeeTickets);
-          setReports([{ month: "2026-02", label: "February 2026" }]);
+          setTickets([]);
+          setReports([]);
         }
       } finally {
         if (!cancelled) setLoading(false);

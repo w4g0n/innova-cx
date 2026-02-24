@@ -7,6 +7,7 @@ import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
+import { apiUrl } from "../../config/apiBase";
 
 export default function ComplaintTrends() {
   const navigate = useNavigate();
@@ -43,7 +44,7 @@ export default function ComplaintTrends() {
 
       try {
         const res = await fetch(
-          `http://localhost:8000/manager/trends?${params.toString()}`,
+          apiUrl(`/manager/trends?${params.toString()}`),
           {
             headers: {
               "Content-Type": "application/json",

@@ -6,11 +6,11 @@ import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
+import { apiUrl } from "../../config/apiBase";
 import PriorityPill from "../../components/common/PriorityPill";
-import { isSkipToken, skipEmployeeTickets } from "../../data/skipViewData";
 import "./ViewAllComplaint.css";
 
-const API_BASE = "http://localhost:8000/api";
+const API_BASE = apiUrl("/api");
 
 const priorityOrder = { Critical: 4, High: 3, Medium: 2, Low: 1 };
 
@@ -113,10 +113,9 @@ export default function EmployeeViewAllComplaints() {
   useEffect(() => {
     const fetchTickets = async () => {
       const token = getStoredToken();
-      const skipSession = isSkipToken(token);
-
-      if (!token || skipSession) {
-        setTickets(skipEmployeeTickets);
+      if (!token) {
+        setTickets([]);
+        setError("Unauthorized. Please log in again.");
         setLoading(false);
         return;
       }
@@ -127,7 +126,8 @@ export default function EmployeeViewAllComplaints() {
         });
 
         if (res.status === 401) {
-          setTickets(skipEmployeeTickets);
+          setTickets([]);
+          setError("Unauthorized. Please log in again.");
           return;
         }
 
@@ -139,8 +139,8 @@ export default function EmployeeViewAllComplaints() {
         setTickets(data.tickets || []);
       } catch (err) {
         console.error(err);
-        setTickets(skipEmployeeTickets);
-        setError("");
+        setTickets([]);
+        setError("Failed to load tickets.");
       } finally {
         setLoading(false);
       }

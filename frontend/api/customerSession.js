@@ -1,4 +1,5 @@
 // src/api/customer.js
+import { API_BASE_URL } from "../src/config/apiBase";
 
 export function getStoredToken() {
   try {
@@ -11,7 +12,7 @@ export function getStoredToken() {
   }
 }
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const BASE_URL = API_BASE_URL;
 
 export async function fetchCustomerDashboard() {
   const token = getStoredToken();
