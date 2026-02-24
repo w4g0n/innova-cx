@@ -102,6 +102,9 @@ def _ensure_runtime_schema_compatibility() -> None:
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority_assigned_at TIMESTAMPTZ;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS respond_time_left_seconds INTEGER;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolve_time_left_seconds INTEGER;")
+                # Ensure MFA columns exist even on older volumes
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
     except Exception as exc:
         logger.warning("db_compat | failed to apply compatibility DDL: %s", exc)
 
@@ -146,34 +149,6 @@ async def _sla_heartbeat_loop() -> None:
         await asyncio.sleep(SLA_HEARTBEAT_SECONDS)
 
 
-@app.on_event("startup")
-async def _start_sla_heartbeat() -> None:
-    global _sla_heartbeat_task, _has_sla_policy_fn
-    _ensure_runtime_schema_compatibility()
-    _has_sla_policy_fn = _detect_sla_policy_function()
-    if not _has_sla_policy_fn:
-        logger.warning("sla_heartbeat | disabled (apply_ticket_sla_policies() not found)")
-        return
-    if SLA_HEARTBEAT_SECONDS <= 0:
-        logger.info("sla_heartbeat | disabled (SLA_HEARTBEAT_SECONDS=%s)", SLA_HEARTBEAT_SECONDS)
-        return
-    if _sla_heartbeat_task is None or _sla_heartbeat_task.done():
-        _sla_heartbeat_task = asyncio.create_task(_sla_heartbeat_loop())
-        logger.info("sla_heartbeat | started interval_s=%s", SLA_HEARTBEAT_SECONDS)
-
-
-@app.on_event("shutdown")
-async def _stop_sla_heartbeat() -> None:
-    global _sla_heartbeat_task
-    if _sla_heartbeat_task and not _sla_heartbeat_task.done():
-        _sla_heartbeat_task.cancel()
-        try:
-            await _sla_heartbeat_task
-        except asyncio.CancelledError:
-            pass
-    _sla_heartbeat_task = None
-
-
 def fetch_one(sql: str, params: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -197,56 +172,6 @@ def execute(sql: str, params: Optional[tuple] = None) -> int:
             return cur.rowcount
 
 
-@lru_cache(maxsize=1)
-def _load_recurrence_feature_module():
-    module_path = (
-        Path(__file__).resolve().parents[2]
-        / "ai-models"
-        / "legacy"
-        / "MultiAgentPipeline"
-        / "FeatureEngineeringAgent_runtime"
-        / "app"
-        / "recurrence_feature.py"
-    )
-    if not module_path.exists():
-        return None
-
-    spec = importlib.util.spec_from_file_location("feature_engineering_recurrence", module_path)
-    if spec is None or spec.loader is None:
-        return None
-
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def predict_is_recurring(user_id: str, subject: str, details: str) -> bool:
-    try:
-        sql_based = fetch_one(
-            "SELECT compute_is_recurring_ticket(%s, %s, %s) AS is_recurring",
-            (user_id, subject, details),
-        )
-        if sql_based and "is_recurring" in sql_based:
-            return bool(sql_based["is_recurring"])
-    except Exception:
-        pass
-
-    module = _load_recurrence_feature_module()
-    fallback = False
-    if not module or not hasattr(module, "compute_is_recurring_from_db"):
-        return fallback
-
-    try:
-        return bool(module.compute_is_recurring_from_db(
-            dsn=get_dsn(),
-            user_id=str(user_id),
-            subject=subject,
-            details=details,
-        ))
-    except Exception:
-        return fallback
-
-
 # =========================================================
 # Auth helpers (bcrypt + JWT)
 # =========================================================
@@ -254,6 +179,9 @@ JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "86400"))  # 24h
 DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "true").lower() == "true"
 DISABLE_MFA = os.getenv("DISABLE_MFA", "false").lower() == "true"
+
+DEV_SEED_USERS = os.getenv("DEV_SEED_USERS", "true").lower() == "true"
+DEV_SEED_PASSWORD = os.getenv("DEV_SEED_PASSWORD", "Innova@2025")
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -306,6 +234,113 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
+def _ensure_dev_seed_users() -> None:
+    """
+    Permanent fix: ensure demo users exist even when DB volume already exists.
+    Idempotent: safe to run on every startup.
+    """
+    if not DEV_SEED_USERS:
+        logger.info("dev_seed | disabled (DEV_SEED_USERS=false)")
+        return
+
+    demo_users = [
+        ("customer1@innova.cx", "customer"),
+        ("manager@innova.cx", "manager"),
+        ("operator@innova.cx", "operator"),
+        ("ahmed@innova.cx", "employee"),
+        ("maria@innova.cx", "employee"),
+        ("omar@innova.cx", "employee"),
+        ("sara@innova.cx", "employee"),
+        ("bilal@innova.cx", "employee"),
+        ("fatima@innova.cx", "employee"),
+        ("yousef@innova.cx", "employee"),
+        ("khalid@innova.cx", "employee"),
+    ]
+
+    # Optional display names (won't break anything if missing)
+    demo_names = {
+        "customer1@innova.cx": "Customer One",
+        "manager@innova.cx": "Manager",
+        "operator@innova.cx": "Operator",
+        "ahmed@innova.cx": "Ahmed Hassan",
+        "maria@innova.cx": "Maria Lopez",
+        "omar@innova.cx": "Omar Ali",
+        "sara@innova.cx": "Sara Ahmed",
+        "bilal@innova.cx": "Bilal Khan",
+        "fatima@innova.cx": "Fatima Noor",
+        "yousef@innova.cx": "Yousef Karim",
+        "khalid@innova.cx": "Khalid Musa",
+    }
+
+    try:
+        pw_hash = hash_password(DEV_SEED_PASSWORD)
+
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                for email, role in demo_users:
+                    cur.execute(
+                        """
+                        INSERT INTO users (email, password_hash, role, is_active, mfa_enabled)
+                        VALUES (%s, %s, %s, TRUE, FALSE)
+                        ON CONFLICT (email) DO UPDATE
+                        SET
+                          password_hash = EXCLUDED.password_hash,
+                          role = EXCLUDED.role,
+                          is_active = TRUE,
+                          mfa_enabled = FALSE;
+                        """,
+                        (email, pw_hash, role),
+                    )
+
+                # Ensure profiles exist (safe no-op if already there)
+                for email, _role in demo_users:
+                    full_name = demo_names.get(email, email)
+                    cur.execute(
+                        """
+                        INSERT INTO user_profiles (user_id, full_name)
+                        SELECT id, %s FROM users WHERE email = %s
+                        ON CONFLICT (user_id) DO NOTHING;
+                        """,
+                        (full_name, email),
+                    )
+
+        logger.info("dev_seed | ensured demo users + profiles (password=%s)", DEV_SEED_PASSWORD)
+    except Exception as exc:
+        logger.warning("dev_seed | failed: %s", exc)
+
+
+@app.on_event("startup")
+async def _start_sla_heartbeat() -> None:
+    global _sla_heartbeat_task, _has_sla_policy_fn
+    _ensure_runtime_schema_compatibility()
+
+    # ✅ permanent dev seed (works even with existing DB volume)
+    _ensure_dev_seed_users()
+
+    _has_sla_policy_fn = _detect_sla_policy_function()
+    if not _has_sla_policy_fn:
+        logger.warning("sla_heartbeat | disabled (apply_ticket_sla_policies() not found)")
+        return
+    if SLA_HEARTBEAT_SECONDS <= 0:
+        logger.info("sla_heartbeat | disabled (SLA_HEARTBEAT_SECONDS=%s)", SLA_HEARTBEAT_SECONDS)
+        return
+    if _sla_heartbeat_task is None or _sla_heartbeat_task.done():
+        _sla_heartbeat_task = asyncio.create_task(_sla_heartbeat_loop())
+        logger.info("sla_heartbeat | started interval_s=%s", SLA_HEARTBEAT_SECONDS)
+
+
+@app.on_event("shutdown")
+async def _stop_sla_heartbeat() -> None:
+    global _sla_heartbeat_task
+    if _sla_heartbeat_task and not _sla_heartbeat_task.done():
+        _sla_heartbeat_task.cancel()
+        try:
+            await _sla_heartbeat_task
+        except asyncio.CancelledError:
+            pass
+    _sla_heartbeat_task = None
+
+
 # =========================================================
 # Auth dependencies
 # =========================================================
@@ -322,7 +357,8 @@ def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dic
     token = _get_bearer_token(authorization)
     payload = verify_jwt(token)
     user = fetch_one(
-        "SELECT id, email, role, is_active FROM users WHERE id = %s",
+        # ✅ include totp_secret + mfa_enabled so totp_setup can work correctly
+        "SELECT id, email, role, is_active, totp_secret, mfa_enabled FROM users WHERE id = %s",
         (payload.get("sub"),),
     )
     if not user or not user.get("is_active"):

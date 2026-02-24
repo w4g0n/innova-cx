@@ -38,10 +38,35 @@ export default function Login() {
 
       const data = await res.json();
 
+      // ✅ DEV FORCE-BYPASS MFA:
+      // If your backend has DISABLE_MFA=true (or you're testing locally),
+      // skip /verify and go straight to the dashboard.
+      // Re-enable MFA later by restoring the "MFA flow" block below.
+      sessionStorage.removeItem("mfa_token");
+      sessionStorage.removeItem("mfa_user");
+
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          id: data.user?.id,
+          email: data.user?.email,
+          role: data.user?.role,
+          full_name: data.user?.full_name,
+          token_type: data.token_type,
+        })
+      );
+
+      const role = data.user?.role;
+      navigate(role === "customer" ? "/customer/dashboard" : `/${role}`, { replace: true });
+      return;
+
+      /*
+      ==========================
+      ✅ MFA flow (RESTORE LATER)
+      ==========================
+
       // DISABLE_MFA bypass: backend returns token_type "bearer" when DISABLE_MFA=true in .env
-      // To re-enable full MFA: remove DISABLE_MFA from .env and restart backend —
-      //   sed -i '/DISABLE_MFA/d' ~/innova-cx/.env
-      //   docker-compose --profile pipeline restart backend
       if (data.token_type === "bearer") {
         localStorage.setItem("access_token", data.access_token);
         localStorage.setItem(
@@ -54,6 +79,7 @@ export default function Login() {
             token_type: data.token_type,
           })
         );
+
         const role = data.user.role;
         navigate(role === "customer" ? "/customer/dashboard" : `/${role}`, {
           replace: true,
@@ -76,6 +102,7 @@ export default function Login() {
 
       // Step 3: Redirect to MFA verification page
       navigate("/verify");
+      */
     } catch (error) {
       console.error("Login error:", error);
       setLoginError("Cannot reach the server. Check backend URL/CORS and try again.");

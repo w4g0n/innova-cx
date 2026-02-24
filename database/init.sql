@@ -7,7 +7,7 @@ BEGIN;
 -- -------------------------
 -- Extensions
 -- -------------------------
-CREATE EXTENSION IF NOT EXISTS pgcrypto; -- gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS pgcrypto; -- gen_random_uuid() + crypt()
 CREATE EXTENSION IF NOT EXISTS citext;   -- case-insensitive email
 
 -- -------------------------
@@ -100,7 +100,6 @@ ADD COLUMN IF NOT EXISTS totp_secret TEXT;
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
-
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id       UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   full_name     TEXT NOT NULL,
@@ -156,6 +155,29 @@ CREATE TABLE IF NOT EXISTS tickets (
   final_resolution    TEXT,
   resolved_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- =============================================================================
+-- Suggested Resolution + Retraining schema
+-- =============================================================================
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS ticket_resolution_feedback (
+    id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    ticket_id            UUID        NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    employee_user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    decision             TEXT        NOT NULL CHECK (decision IN ('accepted', 'declined_custom')),
+    suggested_resolution TEXT,
+    employee_resolution  TEXT,
+    final_resolution     TEXT        NOT NULL,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_resolution_feedback_ticket
+    ON ticket_resolution_feedback (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_resolution_feedback_employee
+    ON ticket_resolution_feedback (employee_user_id);
 
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_priority    ON tickets(priority);
@@ -307,9 +329,13 @@ CREATE TABLE IF NOT EXISTS user_chat_logs (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE user_chat_logs
+ADD COLUMN IF NOT EXISTS ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_user_chat_logs_session ON user_chat_logs(session_id);
 CREATE INDEX IF NOT EXISTS idx_user_chat_logs_user ON user_chat_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_chat_logs_created ON user_chat_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_user_chat_logs_ticket ON user_chat_logs(ticket_id);
 
 CREATE TABLE IF NOT EXISTS bot_response_logs (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -322,8 +348,12 @@ CREATE TABLE IF NOT EXISTS bot_response_logs (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE bot_response_logs
+ADD COLUMN IF NOT EXISTS ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_bot_response_logs_session ON bot_response_logs(session_id);
 CREATE INDEX IF NOT EXISTS idx_bot_response_logs_created ON bot_response_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_bot_response_logs_ticket ON bot_response_logs(ticket_id);
 
 -- -------------------------
 -- Notifications
@@ -455,19 +485,21 @@ INSERT INTO departments (name) VALUES
   ('Maintenance')
 ON CONFLICT (name) DO NOTHING;
 
+-- ✅ Use real bcrypt-compatible hashes from pgcrypto (fresh volumes work)
 INSERT INTO users (email, password_hash, role) VALUES
-  ('customer1@innova.cx', 'HASHED_PASSWORD', 'customer'),
-  ('manager@innova.cx',   'HASHED_PASSWORD', 'manager'),
-  ('operator@innova.cx',  'HASHED_PASSWORD', 'operator'),
-  ('ahmed@innova.cx',     'HASHED_PASSWORD', 'employee'),
-  ('maria@innova.cx',     'HASHED_PASSWORD', 'employee'),
-  ('omar@innova.cx',      'HASHED_PASSWORD', 'employee'),
-  ('sara@innova.cx',      'HASHED_PASSWORD', 'employee'),
-  ('bilal@innova.cx',     'HASHED_PASSWORD', 'employee'),
-  ('fatima@innova.cx',    'HASHED_PASSWORD', 'employee'),
-  ('yousef@innova.cx',    'HASHED_PASSWORD', 'employee'),
-  ('khalid@innova.cx',    'HASHED_PASSWORD', 'employee')
+  ('customer1@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer'),
+  ('manager@innova.cx',   crypt('Innova@2025', gen_salt('bf', 12)), 'manager'),
+  ('operator@innova.cx',  crypt('Innova@2025', gen_salt('bf', 12)), 'operator'),
+  ('ahmed@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
+  ('maria@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
+  ('omar@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
+  ('sara@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
+  ('bilal@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
+  ('fatima@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
+  ('yousef@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
+  ('khalid@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee')
 ON CONFLICT (email) DO NOTHING;
+
 
 -- Profiles
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
