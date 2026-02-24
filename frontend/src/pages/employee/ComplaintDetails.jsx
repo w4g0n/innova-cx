@@ -25,8 +25,54 @@ export default function ComplaintDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [modalType, setModalType] = useState(null); // "reroute", "rescore", "escalate", "resolve"
+  const [resolveDecision, setResolveDecision] = useState("accepted");
+  const [resolutionSuggestion, setResolutionSuggestion] = useState("");
+  const [finalResolution, setFinalResolution] = useState("");
+  const [stepsTaken, setStepsTaken] = useState("");
+  const [resolveBusy, setResolveBusy] = useState(false);
+  const [resolveError, setResolveError] = useState("");
+  const [suggestionBusy, setSuggestionBusy] = useState(false);
 
   const closeModal = () => setModalType(null);
+
+  useEffect(() => {
+    if (modalType !== "resolve") return;
+    setResolveDecision("accepted");
+    setFinalResolution("");
+    setStepsTaken("");
+    setResolveError("");
+  }, [modalType]);
+
+  useEffect(() => {
+    async function loadSuggestion() {
+      if (modalType !== "resolve" || !id) return;
+      const token = getAuthToken();
+      if (!token) return;
+
+      setResolveError("");
+      setSuggestionBusy(true);
+      try {
+        const res = await fetch(
+          `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/resolution-suggestion`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) {
+          const msg = await res.text();
+          throw new Error(msg || `Failed to get suggested resolution (${res.status})`);
+        }
+        const data = await res.json();
+        const suggestion = (data?.suggestedResolution || "").trim();
+        setResolutionSuggestion(suggestion);
+        setFinalResolution(suggestion);
+      } catch (e) {
+        setResolveError(e?.message || "Could not fetch suggested resolution.");
+      } finally {
+        setSuggestionBusy(false);
+      }
+    }
+
+    loadSuggestion();
+  }, [modalType, id]);
 
   useEffect(() => {
     async function load() {
@@ -141,18 +187,42 @@ export default function ComplaintDetails() {
         case "resolve":
           return (
             <>
-              <label>Model’s Suggested Resolution</label>
-              <div className="model-suggestion">{ticket.modelSuggestion || "-"}</div>
-              <label>Suggested Resolution</label>
+              <label>Model Suggested Resolution (Falcon)</label>
+              <div className="model-suggestion">
+                {suggestionBusy ? "Generating..." : (resolutionSuggestion || "No suggestion available.")}
+              </div>
+              <label>Resolution Decision</label>
+              <div className="select-wrapper modal-dropdown">
+                <select
+                  value={resolveDecision}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setResolveDecision(next);
+                    if (next === "accepted") {
+                      setFinalResolution(resolutionSuggestion || "");
+                    }
+                  }}
+                >
+                  <option value="accepted">Accept Suggested Resolution</option>
+                  <option value="declined_custom">Decline and Write My Own</option>
+                </select>
+              </div>
+              <label>Final Resolution</label>
               <textarea
                 className="modal-textarea"
+                value={finalResolution}
+                onChange={(e) => setFinalResolution(e.target.value)}
                 placeholder="Describe the final resolution provided..."
+                disabled={resolveDecision === "accepted"}
               />
               <label>Steps Taken to Resolve</label>
               <textarea
                 className="modal-textarea"
+                value={stepsTaken}
+                onChange={(e) => setStepsTaken(e.target.value)}
                 placeholder="List the steps taken to resolve this issue..."
               />
+              {resolveError && <div style={{ color: "#b42318", marginTop: 8 }}>{resolveError}</div>}
               <label>Attachments (optional)</label>
               <div className="modal-upload-box">
                 <input type="file" multiple />
@@ -181,13 +251,58 @@ export default function ComplaintDetails() {
             <button className="modal-btn cancel" onClick={closeModal}>Cancel</button>
             <button
               className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
-              onClick={() => {
-                // endpoints for these actions can be added next
-                closeModal();
-                alert("Saved (UI only). Backend action endpoints can be added next.");
+              onClick={async () => {
+                if (type !== "resolve") {
+                  closeModal();
+                  alert("Saved (UI only). Backend action endpoints can be added next.");
+                  return;
+                }
+
+                const token = getAuthToken();
+                if (!token) {
+                  setResolveError("Missing auth token. Please log in again.");
+                  return;
+                }
+                setResolveBusy(true);
+                setResolveError("");
+                try {
+                  const payload = {
+                    decision: resolveDecision,
+                    final_resolution: resolveDecision === "declined_custom" ? finalResolution.trim() : undefined,
+                    steps_taken: stepsTaken.trim() || undefined,
+                  };
+                  const res = await fetch(
+                    `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/resolve`,
+                    {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                      },
+                      body: JSON.stringify(payload),
+                    }
+                  );
+                  if (!res.ok) {
+                    const msg = await res.text();
+                    throw new Error(msg || `Failed to resolve ticket (${res.status})`);
+                  }
+                  const data = await res.json();
+                  setTicket((prev) => ({
+                    ...prev,
+                    status: data?.status || "Resolved",
+                    modelSuggestion: resolutionSuggestion || prev?.modelSuggestion,
+                  }));
+                  closeModal();
+                  alert("Ticket resolved successfully.");
+                } catch (e) {
+                  setResolveError(e?.message || "Could not resolve ticket.");
+                } finally {
+                  setResolveBusy(false);
+                }
               }}
+              disabled={resolveBusy || suggestionBusy}
             >
-              {submitText}
+              {resolveBusy ? "Saving..." : submitText}
             </button>
           </div>
         </div>

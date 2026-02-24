@@ -5,3 +5,9 @@ torch>=2.0.0
 accelerate
 fastapi
 uvicorn
+sqlalchemy
+langchain
+langchain-community
+langchain-huggingface
+sentence-transformers
+faiss-cpu

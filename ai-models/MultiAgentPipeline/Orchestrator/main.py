@@ -76,6 +76,7 @@ async def process_audio(
 @app.post("/process/text")
 async def process_text(
     text: str = Form(...),
+    ticket_id: str | None = Form(default=None),
     ticket_type: str | None = Form(default=None),
     asset_type: str | None = Form(default=None),
     has_audio: bool | None = Form(default=None),
@@ -105,6 +106,7 @@ async def process_text(
 
     initial_payload = {
         "transcript": text.strip(),
+        "ticket_id": ticket_id.strip() if ticket_id else None,
         "label": selected_type if selected_type in {"complaint", "inquiry"} else "complaint",
         "asset_type": selected_asset or "General",
         "department": selected_asset or "general",
