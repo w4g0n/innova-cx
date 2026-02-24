@@ -8,10 +8,7 @@ import asyncio
 import hmac
 import base64
 import hashlib
-import importlib.util
 from datetime import datetime, timezone
-from functools import lru_cache
-from pathlib import Path
 from typing import Any, Dict, Optional, List
 
 import bcrypt
@@ -377,6 +374,15 @@ def require_customer(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[s
         raise HTTPException(status_code=403, detail="Forbidden")
     return user
 
+# =========================================================
+# Recurring complaint prediction (stub)
+# =========================================================
+def predict_is_recurring(*, user_id: str, subject: str, details: str) -> bool:
+    """
+    Temporary stub for recurring-complaint prediction.
+    Replace with real ML/model logic later.
+    """
+    return False
 
 # =========================================================
 # Helpers for response/resolution time
