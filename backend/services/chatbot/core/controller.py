@@ -23,7 +23,6 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
     session = load_session(session_id)
     state   = session["current_state"]
     history = session["history"]
-    context = session["context"]
 
     is_init = user_text == "__init__"
 
