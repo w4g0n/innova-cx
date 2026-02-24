@@ -45,6 +45,7 @@ services:
     container_name: innovacx-chatbot
     restart: unless-stopped
     environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       HF_TOKEN: ${HF_TOKEN:-}
       HF_HOME: /app/hf_cache
       CHATBOT_MODEL: ${CHATBOT_MODEL:-tiiuae/Falcon3-1B-Instruct}

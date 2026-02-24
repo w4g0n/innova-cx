@@ -13,10 +13,21 @@ export default function useNovaChatbot() {
 
   const [text, setText] = useState("");
   const [messages, setMessages] = useState(initialMessage);
+  const [sessionId, setSessionId] = useState(null);
+
+  const user = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}");
+    } catch {
+      return {};
+    }
+  })();
+  const userId = user?.id || "";
 
   const resetSession = () => {
     setText("");
     setMessages(initialMessage());
+    setSessionId(null);
   };
 
   const pushUser = (t) => {
@@ -27,8 +38,26 @@ export default function useNovaChatbot() {
   };
 
   const sendToChatbot = async (message) => {
-    const data = await sendChatMessage(message, "inquiry");
-    return data.reply;
+    let sid = sessionId;
+    if (!sid) {
+      const initData = await sendChatMessage("__init__", {
+        userId,
+        sessionId: null,
+      });
+      sid = initData?.session_id || null;
+      if (sid) {
+        setSessionId(sid);
+      }
+    }
+
+    const data = await sendChatMessage(message, {
+      userId,
+      sessionId: sid,
+    });
+    if (data?.session_id && data.session_id !== sid) {
+      setSessionId(data.session_id);
+    }
+    return data?.response || data?.reply || "";
   };
 
   const handleSend = async (value) => {

@@ -99,6 +99,23 @@ def _ensure_runtime_schema_compatibility() -> None:
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority_assigned_at TIMESTAMPTZ;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS respond_time_left_seconds INTEGER;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolve_time_left_seconds INTEGER;")
+                cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;")
+                cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;")
+                cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;")
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS ticket_resolution_feedback (
+                      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+                      employee_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                      decision TEXT NOT NULL CHECK (decision IN ('accepted', 'declined_custom')),
+                      suggested_resolution TEXT,
+                      employee_resolution TEXT,
+                      final_resolution TEXT NOT NULL,
+                      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
+                    """
+                )
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
@@ -383,6 +400,98 @@ def predict_is_recurring(*, user_id: str, subject: str, details: str) -> bool:
     Replace with real ML/model logic later.
     """
     return False
+
+
+CHATBOT_URL = os.getenv("CHATBOT_URL", "http://chatbot:8000")
+CHATBOT_URL_LOCAL = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001")
+
+
+def _generate_resolution_suggestion(ticket: Dict[str, Any]) -> str:
+    payload = {
+        "ticket_code": ticket.get("ticket_code"),
+        "ticket_type": ticket.get("ticket_type") or "Complaint",
+        "subject": ticket.get("subject") or "No subject",
+        "details": ticket.get("details") or "",
+        "asset_type": ticket.get("asset_type") or "General",
+        "priority": ticket.get("priority") or "Medium",
+        "department": ticket.get("department_name") or "General",
+        "status": ticket.get("status") or "Assigned",
+    }
+    last_error = None
+    for base in [CHATBOT_URL, CHATBOT_URL_LOCAL]:
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.post(f"{base}/api/suggest-resolution", json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+                suggestion = str(data.get("suggested_resolution") or "").strip()
+                if suggestion:
+                    return suggestion
+        except Exception as exc:
+            last_error = exc
+            continue
+    raise HTTPException(status_code=503, detail=f"Resolution suggestion service unavailable: {last_error}")
+
+
+def _trigger_resolution_retraining() -> None:
+    for base in [CHATBOT_URL, CHATBOT_URL_LOCAL]:
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.post(f"{base}/api/retrain-resolution-model", json={"max_examples": 12})
+                resp.raise_for_status()
+                logger.info("resolution_retrain | triggered via %s", base)
+                return
+        except Exception:
+            continue
+    logger.warning("resolution_retrain | failed to trigger retraining endpoint")
+
+
+def _generate_suggestion_if_ready(ticket_code: str) -> None:
+    """
+    Generate and persist suggested resolution once ticket has both:
+      - first priority assignment timestamp
+      - assigned department
+    """
+    row = fetch_one(
+        """
+        SELECT
+          t.id,
+          t.ticket_code,
+          t.ticket_type,
+          t.subject,
+          t.details,
+          t.asset_type,
+          t.priority,
+          t.status,
+          t.priority_assigned_at,
+          t.suggested_resolution,
+          d.name AS department_name
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.ticket_code = %s
+        LIMIT 1;
+        """,
+        (ticket_code,),
+    )
+    if not row:
+        return
+    if not row.get("priority_assigned_at") or not row.get("department_name"):
+        return
+    if str(row.get("suggested_resolution") or "").strip():
+        return
+
+    suggestion = _generate_resolution_suggestion(row)
+    execute(
+        """
+        UPDATE tickets
+        SET
+          suggested_resolution = %s,
+          suggested_resolution_model = %s,
+          suggested_resolution_generated_at = now()
+        WHERE id = %s;
+        """,
+        (suggestion, "falcon", row["id"]),
+    )
 
 # =========================================================
 # Helpers for response/resolution time
@@ -958,6 +1067,66 @@ def employee_notifications_mark_all_read(
 
     return {"ok": True}
 
+class EmployeeResolveRequest(BaseModel):
+    decision: str
+    final_resolution: Optional[str] = None
+    steps_taken: Optional[str] = None
+
+
+@api.get("/employee/tickets/{ticket_code}/resolution-suggestion")
+def employee_resolution_suggestion(
+    ticket_code: str,
+    user: Dict[str, Any] = Depends(require_employee),
+):
+    user_id = user["id"]
+    row = fetch_one(
+        """
+        SELECT
+          t.id,
+          t.ticket_code,
+          t.ticket_type,
+          t.subject,
+          t.details,
+          t.asset_type,
+          t.priority,
+          t.status,
+          t.priority_assigned_at,
+          t.suggested_resolution,
+          d.name AS department_name
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.ticket_code = %s
+          AND t.assigned_to_user_id = %s
+        LIMIT 1;
+        """,
+        (ticket_code, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Ticket not found or not assigned to this employee")
+    if not row.get("priority_assigned_at") or not row.get("department_name"):
+        raise HTTPException(
+            status_code=409,
+            detail="Suggested resolution is available after priority and department are assigned",
+        )
+
+    suggestion = str(row.get("suggested_resolution") or "").strip()
+    if not suggestion:
+        suggestion = _generate_resolution_suggestion(row)
+        execute(
+            """
+            UPDATE tickets
+            SET
+              suggested_resolution = %s,
+              suggested_resolution_model = %s,
+              suggested_resolution_generated_at = now()
+            WHERE id = %s;
+            """,
+            (suggestion, "falcon", row["id"]),
+        )
+
+    return {"ticketId": row["ticket_code"], "suggestedResolution": suggestion}
+
+
 @api.get("/employee/tickets/{ticket_code}")
 def employee_ticket_details(
     ticket_code: str,
@@ -980,6 +1149,7 @@ def employee_ticket_details(
           t.assigned_at,
           t.first_response_at,
           t.resolved_at,
+          t.suggested_resolution,
           t.model_suggestion,
           up.full_name AS submitter_name,
           up.phone     AS submitter_phone,
@@ -1045,7 +1215,7 @@ def employee_ticket_details(
         "priority": row.get("priority"),
         "status": row.get("status"),
         "issueDate": issue_date,
-        "modelSuggestion": row.get("model_suggestion"),
+        "modelSuggestion": row.get("suggested_resolution") or row.get("model_suggestion"),
         "metrics": {
             "meanTimeToRespond": response_time,
             "meanTimeToResolve": resolution_time,
@@ -1077,12 +1247,42 @@ def employee_ticket_details(
 @api.post("/employee/tickets/{ticket_code}/resolve")
 def employee_resolve_ticket(
     ticket_code: str,
+    body: EmployeeResolveRequest,
     user: Dict[str, Any] = Depends(require_employee),
 ):
     user_id = user["id"]
+    decision = (body.decision or "").strip().lower()
+    if decision not in {"accepted", "declined_custom"}:
+        raise HTTPException(status_code=422, detail="decision must be 'accepted' or 'declined_custom'")
 
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                  id, ticket_code, status, suggested_resolution
+                FROM tickets
+                WHERE ticket_code = %s
+                  AND assigned_to_user_id = %s
+                LIMIT 1;
+                """,
+                (ticket_code, user_id),
+            )
+            existing = cur.fetchone()
+            if not existing:
+                raise HTTPException(status_code=404, detail="Ticket not found or not assigned to this employee")
+
+            suggested_resolution = str(existing.get("suggested_resolution") or "").strip()
+            if decision == "accepted":
+                if not suggested_resolution:
+                    raise HTTPException(status_code=409, detail="No suggested resolution available to accept")
+                final_resolution = suggested_resolution
+            else:
+                final_resolution = (body.final_resolution or "").strip()
+                if not final_resolution:
+                    raise HTTPException(status_code=422, detail="final_resolution is required when declining suggestion")
+
+            from_status = existing["status"]
             cur.execute(
                 """
                 UPDATE tickets
@@ -1090,16 +1290,18 @@ def employee_resolve_ticket(
                   status = 'Resolved',
                   first_response_at = COALESCE(first_response_at, now()),
                   resolved_at = COALESCE(resolved_at, now()),
-                  resolved_by_user_id = %s
-                WHERE ticket_code = %s
-                  AND assigned_to_user_id = %s
-                RETURNING id, ticket_code, status, resolved_at;
+                  resolved_by_user_id = %s,
+                  final_resolution = %s
+                WHERE id = %s
+                RETURNING id, ticket_code, status, resolved_at, final_resolution;
                 """,
-                (user_id, ticket_code, user_id),
+                (
+                    user_id,
+                    final_resolution,
+                    existing["id"],
+                ),
             )
             row = cur.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail="Ticket not found or not assigned to this employee")
 
             cur.execute(
                 """
@@ -1111,16 +1313,55 @@ def employee_resolve_ticket(
                   from_status,
                   to_status
                 )
-                VALUES (%s, %s, %s, %s, NULL, %s);
+                VALUES (%s, %s, %s, %s, %s, %s);
                 """,
                 (
                     row["id"],
                     user_id,
                     "status_change",
-                    "Ticket resolved by employee.",
+                    "Ticket resolved by employee using AI suggestion."
+                    if decision == "accepted"
+                    else "Ticket resolved by employee with custom resolution.",
+                    from_status,
                     row["status"],
                 ),
             )
+
+            cur.execute(
+                """
+                INSERT INTO ticket_resolution_feedback (
+                  ticket_id,
+                  employee_user_id,
+                  decision,
+                  suggested_resolution,
+                  employee_resolution,
+                  final_resolution
+                )
+                VALUES (%s, %s, %s, %s, %s, %s);
+                """,
+                (
+                    row["id"],
+                    user_id,
+                    decision,
+                    suggested_resolution or None,
+                    (body.final_resolution or "").strip() or None,
+                    final_resolution,
+                ),
+            )
+
+            if (body.steps_taken or "").strip():
+                cur.execute(
+                    """
+                    INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, notes)
+                    VALUES (
+                      %s,
+                      COALESCE((SELECT MAX(step_no) FROM ticket_work_steps WHERE ticket_id = %s), 0) + 1,
+                      %s,
+                      %s
+                    );
+                    """,
+                    (row["id"], row["id"], user_id, body.steps_taken.strip()),
+                )
 
     logger.info(
         "ticket_status_update | ticket_id=%s status=%s resolved_at=%s",
@@ -1128,11 +1369,14 @@ def employee_resolve_ticket(
         row["status"],
         row["resolved_at"],
     )
+    _trigger_resolution_retraining()
 
     return {
         "ok": True,
         "ticketId": row["ticket_code"],
         "status": row["status"],
+        "decision": decision,
+        "finalResolution": row.get("final_resolution"),
         "resolvedAt": row["resolved_at"].isoformat() if row.get("resolved_at") else None,
     }
 
@@ -2207,11 +2451,12 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
 
             if incoming_ticket_code:
                 cur.execute(
-                    "SELECT id FROM tickets WHERE ticket_code = %s LIMIT 1",
+                    "SELECT id, priority_assigned_at FROM tickets WHERE ticket_code = %s LIMIT 1",
                     (incoming_ticket_code,),
                 )
                 existing = cur.fetchone()
                 if existing:
+                    had_priority_before = existing[1] is not None
                     subject_update = None
                     if requested_department and ticket_type:
                         subject_update = f"[{requested_department.title()}] Automated {ticket_type.lower()}"
@@ -2269,6 +2514,15 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         updated[5],
                         updated[6],
                     )
+                    if (not had_priority_before) and updated[4]:
+                        try:
+                            _generate_suggestion_if_ready(updated[0])
+                        except Exception as exc:
+                            logger.warning(
+                                "suggested_resolution | generation failed at first priority assignment ticket=%s err=%s",
+                                updated[0],
+                                exc,
+                            )
                     return {
                         "ticket_id": updated[0],
                         "status": updated[1],
@@ -2309,8 +2563,9 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     model_priority,
                     model_department_id,
                     model_confidence,
+                    priority_assigned_at,
                     created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
                 """,
                 (
@@ -2328,6 +2583,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     priority_label,
                     department_id,
                     body.classification_confidence,
+                    datetime.now(timezone.utc),
                 ),
             )
             created = cur.fetchone()
@@ -2342,6 +2598,15 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 created[5],
                 created[6],
             )
+            if created[4]:
+                try:
+                    _generate_suggestion_if_ready(created[0])
+                except Exception as exc:
+                    logger.warning(
+                        "suggested_resolution | generation failed at ticket creation ticket=%s err=%s",
+                        created[0],
+                        exc,
+                    )
 
     return {
         "ticket_id": created[0],

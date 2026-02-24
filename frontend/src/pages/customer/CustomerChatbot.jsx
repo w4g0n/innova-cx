@@ -5,16 +5,20 @@ import { useNavigate } from "react-router-dom";
 import { sendChatMessage } from "../../services/api";
 import "./CustomerChatbot.css";
 
+const BUTTON_TEXT = {
+  create_ticket: "Create a Ticket",
+  track_ticket: "Track My Ticket",
+};
+
+const BUTTON_MESSAGE = {
+  create_ticket: "I want to create a new ticket",
+  track_ticket: "I want to follow up on an existing ticket",
+};
+
 export default function CustomerChatbot() {
   const navigate = useNavigate();
   const listRef = useRef(null);
 
-  // ===============================
-  // Whisper / Audio state
-  // ===============================
-  // ===============================
-  // User info
-  // ===============================
   const user = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("user") || "{}");
@@ -22,6 +26,8 @@ export default function CustomerChatbot() {
       return {};
     }
   }, []);
+
+  const userId = user?.id || "";
 
   const nameFromEmail = useMemo(() => {
     const email = (user?.email || "").trim();
@@ -35,15 +41,9 @@ export default function CustomerChatbot() {
       .join(" ");
   }, [user]);
 
-  // ===============================
-  // Chat state
-  // ===============================
-  const [stage, setStage] = useState("start"); 
-  // start | inquiry | complaintChoice | done
-
-  const [hasChosenType, setHasChosenType] = useState(false);
   const [text, setText] = useState("");
-
+  const [chatSessionId, setChatSessionId] = useState(null);
+  const [actionButtons, setActionButtons] = useState([]);
   const [messages, setMessages] = useState([
     {
       id: "m1",
@@ -56,11 +56,8 @@ export default function CustomerChatbot() {
     const el = listRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [messages, actionButtons]);
 
-  // ===============================
-  // Helpers
-  // ===============================
   const pushUser = (t) => {
     setMessages((prev) => [
       ...prev,
@@ -83,89 +80,84 @@ export default function CustomerChatbot() {
     navigate("/customer/fill-form");
   };
 
-  // ===============================
-  // Selection logic
-  // ===============================
-  const handleSelect = (type) => {
-    setHasChosenType(true);
-
-    if (type === "complaint") {
-      pushBot(
-        "Got it. You can submit the complaint here in chat, or you can fill a form instead. Which do you prefer?"
-      );
-      setStage("complaintChoice");
-      return;
-    }
-
-    if (type === "inquiry") {
-      pushBot("Sure — what can I help you with?");
-      setStage("inquiry");
-    }
-  };
-
-  // ===============================
-  // CHATBOT API (Inquiry only)
-  // ===============================
   const sendToChatbot = async (message) => {
-    const data = await sendChatMessage(message, "inquiry");
-    return data.reply;
+    let sid = chatSessionId;
+    if (!sid) {
+      const initData = await sendChatMessage("__init__", {
+        userId,
+        sessionId: null,
+      });
+      sid = initData?.session_id || null;
+      if (sid) {
+        setChatSessionId(sid);
+      }
+    }
+
+    const data = await sendChatMessage(message, {
+      userId,
+      sessionId: sid,
+    });
+    if (data?.session_id && data.session_id !== sid) {
+      setChatSessionId(data.session_id);
+    }
+    return data;
   };
 
-  // ===============================
-  // Send message
-  // ===============================
+  const sendAndRender = async (message) => {
+    pushUser(message);
+    pushBot("…");
+
+    const data = await sendToChatbot(message);
+    const botText = data?.response || data?.reply || "I could not generate a response.";
+    setMessages((prev) => [
+      ...prev.slice(0, -1),
+      {
+        id: `b-${Date.now()}`,
+        from: "bot",
+        text: botText,
+      },
+    ]);
+    setActionButtons(Array.isArray(data?.show_buttons) ? data.show_buttons : []);
+  };
+
+  const handleSelect = async (type) => {
+    try {
+      const message =
+        type === "complaint"
+          ? "I want to create a new ticket"
+          : "I want to follow up on an existing ticket";
+      await sendAndRender(message);
+    } catch (err) {
+      console.error(err);
+      pushBot("Sorry — the chatbot service is unavailable right now.");
+    }
+  };
+
   const handleSend = async (e) => {
     e.preventDefault();
-
-    if (stage === "done") return;
-
     const t = text.trim();
     if (!t) return;
 
-    pushUser(t);
     setText("");
-
-    // ---------- INQUIRY (BACKEND ONLY) ----------
-    if (stage === "inquiry") {
-      try {
-        pushBot("…");
-
-        const realReply = await sendToChatbot(t);
-        setMessages((prev) => [
-          ...prev.slice(0, -1),
-          {
-            id: `b-${Date.now()}`,
-            from: "bot",
-            text: realReply,
-          },
-        ]);
-      } catch (err) {
-        console.error(err);
-        pushBot("Sorry — the chatbot service is unavailable right now.");
-      }
-      return;
-    }
-
-    // ---------- COMPLAINT ----------
-    if (stage === "complaintChoice") {
-      if (t.toLowerCase().includes("form")) {
-        pushBot("No problem — taking you to the complaint form now.");
-        setTimeout(() => goToForm("Complaint"), 500);
-        setStage("done");
-        return;
-      }
-
-      pushBot(
-        "Thanks for the details. Please submit this complaint using the form so it can be tracked properly."
-      );
-      setTimeout(() => goToForm("Complaint"), 700);
-      setStage("done");
+    try {
+      await sendAndRender(t);
+    } catch (err) {
+      console.error(err);
+      pushBot("Sorry — the chatbot service is unavailable right now.");
     }
   };
 
-  // ===============================
-  // JSX
-  // ===============================
+  const handleActionButton = async (button) => {
+    const message = BUTTON_MESSAGE[button];
+    if (!message) return;
+    try {
+      await sendAndRender(message);
+    } catch (err) {
+      console.error(err);
+      pushBot("Sorry — the chatbot service is unavailable right now.");
+    }
+  };
+
   return (
     <Layout role="customer">
       <div className="custChatPage">
@@ -178,21 +170,14 @@ export default function CustomerChatbot() {
 
         <section className="custChatShellV2">
           <div className="custChatPanelV2">
-            {!hasChosenType && (
-              <div className="custQuickTop">
-                <div className="custQuickTopHint">
-                  Choose one to get started:
-                </div>
-                <div className="custQuickTopBtns">
-                  <button onClick={() => handleSelect("complaint")}>
-                    Complaint
-                  </button>
-                  <button onClick={() => handleSelect("inquiry")}>
-                    Inquiry
-                  </button>
-                </div>
+            <div className="custQuickTop">
+              <div className="custQuickTopHint">Quick start:</div>
+              <div className="custQuickTopBtns">
+                <button onClick={() => handleSelect("complaint")}>Create Ticket</button>
+                <button onClick={() => handleSelect("inquiry")}>Track Ticket</button>
+                <button onClick={() => goToForm("Complaint")}>Open Form</button>
               </div>
-            )}
+            </div>
 
             <div className="custChatList" ref={listRef}>
               {messages.map((m) => (
@@ -202,19 +187,24 @@ export default function CustomerChatbot() {
               ))}
             </div>
 
+            {actionButtons.length > 0 && (
+              <div className="custQuickTopBtns" style={{ marginTop: 10 }}>
+                {actionButtons.map((btn) => (
+                  <button key={btn} onClick={() => handleActionButton(btn)}>
+                    {BUTTON_TEXT[btn] || btn}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <form className="custComposer" onSubmit={handleSend}>
               <textarea
                 className="custInput"
                 value={text}
-                placeholder="Type or speak your message…"
+                placeholder="Type your message..."
                 onChange={(e) => setText(e.target.value)}
-                disabled={stage === "done"}
               />
-              <button
-                type="submit"
-                className="primaryPillBtn"
-                disabled={stage === "done"}
-              >
+              <button type="submit" className="primaryPillBtn">
                 Send
               </button>
             </form>

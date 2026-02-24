@@ -817,4 +817,9 @@ VALUES
 ON CONFLICT (key) DO UPDATE
 SET value=EXCLUDED.value;
 
+-- -------------------------
+-- Suggested Resolution schema
+-- -------------------------
+\ir services/suggested.sql
+
 COMMIT;
