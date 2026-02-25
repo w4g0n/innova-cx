@@ -379,7 +379,7 @@ export default function CustomerLanding() {
             </div>
 
             <div className="hero-body">
-              <button className="btn-hero">Learn More</button>
+              <button className="btn-hero" onClick={() => navigate("/customer/about")}>About Us</button>
               <p className="hero-desc">
                We are transforming customer support with smart ticket prioritization. Using sentiment and audio analysis, our system identifies urgent issues and high-value customers, helping teams respond faster and more effectively.
               </p>
