@@ -16,7 +16,8 @@ COPY . .
 
 RUN mkdir -p /app/hf_cache
 ENV HF_HOME=/app/hf_cache
+RUN chmod +x /app/start_chatbot.sh
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/start_chatbot.sh"]
