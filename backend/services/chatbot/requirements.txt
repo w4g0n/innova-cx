@@ -6,6 +6,7 @@ accelerate
 fastapi
 uvicorn
 sqlalchemy
+psycopg2-binary
 langchain
 langchain-community
 langchain-huggingface

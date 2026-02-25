@@ -2,7 +2,6 @@
 .PHONY: \
 	frontend frontend-build \
 	pipeline pipeline-build \
-	feature-agent feature-agent-build \
 	dev dev-build \
 	down
 
@@ -20,7 +19,7 @@ frontend-build:
 
 # =========================
 # PROFILE 2: PIPELINE
-# (Frontend + Backend + DB + Classifier + Orchestrator)
+# (Frontend + Backend + DB + Orchestrator)
 # =========================
 
 pipeline:
@@ -29,19 +28,9 @@ pipeline:
 pipeline-build:
 	docker compose --profile pipeline up --build
 
-
-# Feature Engineering Agent (optional):
-
-feature-agent:
-	docker compose --profile feature-engineering up
-
-feature-agent-build:
-	docker compose --profile feature-engineering up --build
-
-
 # =========================
 # PROFILE 3: DEV
-# (Frontend + Backend + DB + Orchestrator + Classifier + Chatbot + Transcriber)
+# (Frontend + Backend + DB + Orchestrator + Chatbot + Transcriber)
 # =========================
 
 dev:
@@ -56,4 +45,4 @@ dev-build:
 # =========================
 
 down:
-	COMPOSE_PROFILES=frontend,pipeline,dev,feature-engineering docker compose down --remove-orphans
+	COMPOSE_PROFILES=frontend,pipeline,dev docker compose down --remove-orphans

@@ -6,7 +6,7 @@ Each step receives the full state dict and returns an updated state dict.
 
 Flow:
     submitted ticket details (text + optional audio features)
-        → [1] classifier_step    (DistilRoBERTa, port 8003; skip if type provided)
+        → [1] classifier_step    (in-process heuristic; skip if type provided)
         → (complaint + audio ticket) [2] audio_analysis_step (audioanalysis module)
         → (complaint) [3] sentiment_step  (sentimentanalysis module)
         → (complaint) [4] sentiment_combiner_step (sentimentcombiner module)

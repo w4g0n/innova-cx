@@ -66,18 +66,6 @@ services:
     networks:
       - innovacx-network
 
-  classifier:
-    profiles: ["pipeline", "dev"]
-    build: ./ai-models/legacy/MultiAgentPipeline/ClassificationAgent
-    container_name: innovacx-classifier
-    restart: unless-stopped
-    environment:
-      USE_MOCK_CLASSIFIER: "${USE_MOCK_CLASSIFIER:-true}"
-    ports:
-      - "8003:8003"
-    networks:
-      - innovacx-network
-
   orchestrator:
     profiles: ["pipeline", "dev"]
     build:
@@ -91,26 +79,10 @@ services:
     depends_on:
       backend:
         condition: service_started
-      classifier:
-        condition: service_started
     ports:
       - "8004:8004"
     networks:
       - innovacx-network
-
-  feature-engineering:
-    profiles: ["feature-engineering"]
-    build:
-      context: ./ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime
-    container_name: innovacx-feature-engineering
-    volumes:
-      - ./ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/app:/app/app
-      - ./ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/data:/app/data
-      - ./ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/models:/app/models
-    networks:
-      - innovacx-network
-    restart: unless-stopped
-
 
   frontend:
     profiles: ["frontend", "pipeline", "dev"]
