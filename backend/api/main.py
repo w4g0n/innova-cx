@@ -47,6 +47,9 @@ def _parse_allowed_origins() -> List[str]:
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://34.38.76.62:5173",
+        "http://innovacx.net",
+        "http://innovacx.net:5173",
+        "http://www.innovacx.net",
     ]
 
 
