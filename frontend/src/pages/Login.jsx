@@ -104,8 +104,9 @@ export default function Login() {
       navigate("/verify");
       */
     } catch (error) {
-      console.error("Login error:", error);
-      setLoginError("Cannot reach the server. Check backend URL/CORS and try again.");
+      const target = apiUrl("/api/auth/login");
+      console.error("Login error:", error, "| target URL:", target);
+      setLoginError(`Cannot reach the server at ${target}. Make sure the backend is running on that address.`);
     } finally {
       setLoading(false);
     }
