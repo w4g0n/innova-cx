@@ -1,41 +1,31 @@
-BEGIN;
+-- Runtime utility script (no CREATE/ALTER DDL).
+-- The function `compute_is_recurring_ticket(...)` is created in database/init.sql.
+--
+-- Usage (manual run with parameters):
+--   \set user_id  '00000000-0000-0000-0000-000000000000'
+--   \set subject  'Air conditioning not working'
+--   \set details  'AC stopped cooling in office area'
+--   \i database/scripts/is_recurring.sql
+--
+-- If no params are provided, this script does nothing (safe during init include).
 
-CREATE OR REPLACE FUNCTION compute_is_recurring_ticket(
-  p_user_id UUID,
-  p_subject TEXT,
-  p_details TEXT,
-  p_window_days INTEGER DEFAULT 180
-)
-RETURNS BOOLEAN AS $$
-DECLARE
-  normalized_subject TEXT := lower(trim(COALESCE(p_subject, '')));
-  exact_subject_count INTEGER := 0;
-BEGIN
-  IF p_user_id IS NULL THEN
-    RETURN FALSE;
-  END IF;
+\if :{?user_id}
+SELECT compute_is_recurring_ticket(
+  :'user_id'::uuid,
+  COALESCE(:'subject', ''),
+  COALESCE(:'details', '')
+) AS is_recurring;
 
-  SELECT COUNT(*)
-  INTO exact_subject_count
-  FROM tickets t
-  WHERE t.created_by_user_id = p_user_id
-    AND t.created_at >= now() - make_interval(days => p_window_days)
-    AND lower(trim(COALESCE(t.subject, ''))) = normalized_subject;
-
-  IF exact_subject_count > 0 THEN
-    RETURN TRUE;
-  END IF;
-
-  -- Fallback: check simple token overlap on details when subject wasn't matched.
-  RETURN EXISTS (
-    SELECT 1
-    FROM tickets t
-    WHERE t.created_by_user_id = p_user_id
-      AND t.created_at >= now() - make_interval(days => p_window_days)
-      AND tsvector_to_array(to_tsvector('simple', COALESCE(t.details, ''))) &&
-          tsvector_to_array(to_tsvector('simple', COALESCE(p_details, '')))
-  );
-END;
-$$ LANGUAGE plpgsql STABLE;
-
-COMMIT;
+-- Optional visibility query: show similar recent tickets for the same user.
+SELECT
+  ticket_code,
+  subject,
+  created_at,
+  status,
+  priority
+FROM tickets
+WHERE created_by_user_id = :'user_id'::uuid
+  AND created_at >= now() - interval '180 days'
+ORDER BY created_at DESC
+LIMIT 20;
+\endif

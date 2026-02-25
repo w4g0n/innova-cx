@@ -394,14 +394,39 @@ def require_customer(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[s
     return user
 
 # =========================================================
-# Recurring complaint prediction (stub)
+# Recurring complaint prediction
 # =========================================================
 def predict_is_recurring(*, user_id: str, subject: str, details: str) -> bool:
     """
-    Temporary stub for recurring-complaint prediction.
-    Replace with real ML/model logic later.
+    Uses SQL function `compute_is_recurring_ticket(...)` when available.
+    Falls back to False if the function is not installed or DB is unavailable.
     """
-    return False
+    if not user_id:
+        return False
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT to_regprocedure('compute_is_recurring_ticket(uuid,text,text,integer)')
+                           IS NOT NULL AS exists;
+                    """
+                )
+                exists_row = cur.fetchone() or {}
+                if not bool(exists_row.get("exists")):
+                    return False
+
+                cur.execute(
+                    """
+                    SELECT compute_is_recurring_ticket(%s::uuid, %s, %s) AS is_recurring;
+                    """,
+                    (user_id, subject or "", details or ""),
+                )
+                result = cur.fetchone() or {}
+                return bool(result.get("is_recurring"))
+    except Exception as exc:
+        logger.warning("recurring_check | fallback_to_false err=%s", exc)
+        return False
 
 
 CHATBOT_URL = os.getenv("CHATBOT_URL", "http://chatbot:8000")
