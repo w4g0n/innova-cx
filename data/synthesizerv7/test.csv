@@ -1,0 +1,101 @@
+id,issue_text,actual_business_impact,actual_safety_concern,actual_issue_severity,actual_issue_urgency,business_impact_logistic,business_impact_svm,business_impact_randomforest,safety_concern_logistic,safety_concern_svm,safety_concern_randomforest,issue_severity_logistic,issue_severity_svm,issue_severity_randomforest,issue_urgency_logistic,issue_urgency_svm,issue_urgency_randomforest
+1,The office AC has stopped working again and the meeting rooms are too hot to use.,high,False,low,low,low,low,low,True,True,True,medium,medium,medium,low,low,low
+2,The elevator in Tower B keeps stalling between floors during business hours.,low,False,high,low,low,low,low,True,True,True,high,high,high,low,low,low
+3,We have no water pressure in our restroom since this morning.,low,False,low,low,low,high,low,True,True,True,high,high,medium,low,low,low
+4,The parking gate is not opening for authorized vehicles and traffic is backing up.,low,False,low,low,low,low,low,True,True,True,medium,medium,medium,medium,medium,low
+5,Lights in our warehouse flicker constantly and staff are struggling to work safely.,low,False,low,low,high,high,low,True,True,True,high,high,medium,low,low,low
+6,The internet drops every 15 minutes and our operations team cannot process orders.,high,False,high,high,high,high,low,True,True,True,medium,medium,medium,low,low,low
+7,A ceiling tile collapsed in our corridor and nearly hit an employee.,low,True,critical,critical,low,low,low,True,True,True,low,low,medium,low,low,low
+8,The fire alarm triggered three times today without any fire and caused panic.,low,True,high,critical,low,low,low,False,False,True,medium,critical,medium,low,critical,low
+9,The main entrance door lock is broken and does not secure properly at night.,low,False,low,low,low,low,low,False,False,False,medium,medium,medium,low,low,low
+10,Sewage smell is coming from the pantry drain and spreading across our office.,low,False,low,low,low,low,low,True,True,True,medium,medium,medium,medium,low,low
+11,Our unit has repeated electrical tripping whenever we run standard equipment.,low,False,high,low,low,low,low,True,True,True,low,low,low,low,low,low
+12,The loading dock shutter is jammed half open and deliveries are blocked.,high,False,high,high,low,low,low,True,True,True,low,low,medium,critical,critical,low
+13,Water is leaking from the ceiling directly above our server rack.,low,False,high,high,low,high,low,True,True,True,medium,medium,medium,low,low,low
+14,The emergency exit sign lights are not functioning on our floor.,low,True,high,high,low,low,low,True,False,True,medium,medium,medium,low,low,low
+15,We found exposed wires near the reception area where customers stand.,low,True,high,low,low,low,low,True,True,True,low,low,medium,low,low,low
+16,The restroom plumbing is overflowing and the hallway floor is slippery.,low,True,low,low,low,low,low,True,True,True,low,low,medium,medium,critical,low
+17,Our fire extinguisher cabinet is empty in two zones of the warehouse.,low,True,critical,critical,low,low,low,True,True,True,high,high,high,medium,medium,low
+18,The glass door hinge is loose and the panel is at risk of falling.,low,True,low,high,low,low,low,True,True,True,medium,medium,medium,medium,critical,low
+19,We reported mold growth last month and it has now spread to all corners.,low,True,high,low,low,low,low,True,True,True,low,high,medium,critical,critical,critical
+20,The HVAC is blowing dusty air and multiple staff are getting headaches.,low,False,low,low,low,low,low,True,True,True,high,high,medium,critical,critical,low
+21,The basement is flooding again after light rain and vehicles are at risk.,low,True,critical,high,low,low,low,True,True,True,low,low,medium,low,low,low
+22,The loading bay lights are out and night unloading is unsafe.,low,True,high,high,low,low,low,True,True,True,low,low,high,low,low,low
+23,The access card system is offline and unknown people entered our floor.,low,False,low,low,low,low,low,True,True,True,high,high,medium,medium,low,low
+24,We hear sparking sounds from the distribution board every evening.,low,True,critical,critical,low,low,low,True,True,True,medium,medium,medium,low,low,low
+25,The building intercom is not working so visitors cannot be verified.,high,False,high,high,low,low,low,False,False,True,medium,medium,medium,low,low,low
+26,The pest problem in our storage room has worsened despite previous treatment.,low,False,medium,medium,low,low,low,True,True,True,low,critical,critical,high,high,low
+27,The escalator handrail has stopped moving but steps continue to run.,low,False,low,low,low,low,low,True,True,True,low,low,medium,low,low,low
+28,The lobby floor tiles are broken and customers have tripped twice.,low,False,low,low,low,low,low,True,True,True,low,low,medium,critical,critical,low
+29,The backup generator failed during outage and our cold storage inventory spoiled.,high,False,high,high,low,low,low,True,True,True,high,high,high,low,low,low
+30,The office temperature is stuck at 31C and productivity is dropping sharply.,medium,False,low,low,low,low,low,True,True,True,medium,medium,medium,medium,low,low
+31,We are seeing water stains on walls and paint bubbling in multiple rooms.,low,False,low,low,low,low,low,True,True,True,high,high,medium,critical,critical,low
+32,The smoke detector near our pantry is hanging loose from the ceiling.,low,True,high,high,low,low,low,True,True,True,low,medium,medium,medium,low,low
+33,Our goods lift is out of service and we cannot move inventory upstairs.,high,False,high,high,low,low,low,True,True,True,low,low,high,low,low,low
+34,The main drain outside our unit is clogged and wastewater is pooling.,low,False,low,low,low,low,low,True,True,True,critical,critical,low,medium,low,low
+35,Security cameras in our corridor are offline for the second day.,low,False,low,low,low,low,low,True,True,True,medium,medium,medium,medium,low,low
+36,The door closer on emergency exit is broken and the door stays open.,low,True,high,high,low,low,low,True,True,True,medium,medium,medium,medium,low,low
+37,We have intermittent power surges damaging our desktop monitors.,medium,False,medium,medium,high,high,low,True,True,True,low,low,medium,low,low,low
+38,The service road lights are off and staff feel unsafe leaving at night.,low,True,high,high,low,low,low,True,True,True,low,low,medium,low,low,low
+39,We discovered cracked concrete near the loading dock edge.,low,False,low,low,low,low,low,True,True,True,high,high,medium,low,low,low
+40,The roof leak above our archive room has damaged important documents.,low,False,high,high,low,low,low,True,True,True,low,low,medium,medium,low,low
+41,Our dispatch team cannot print shipping labels because network printers are down.,high,False,high,high,high,high,low,True,True,True,low,high,medium,low,low,low
+42,The air conditioner is dripping water onto the reception desk repeatedly.,medium,False,medium,medium,low,low,low,True,True,True,high,high,medium,low,low,low
+43,The stairwell has no lighting after 7 PM and is dangerous.,low,True,low,low,low,low,low,False,False,True,low,low,medium,critical,critical,low
+44,We found a strong gas-like odor near the maintenance closet.,low,True,critical,critical,low,low,low,True,True,True,high,high,medium,low,low,low
+45,The automatic doors close too quickly and have hit customers twice.,low,False,low,low,low,low,low,True,True,True,low,low,medium,critical,critical,low
+46,The kitchen exhaust fan is broken and smoke fills our workspace.,low,True,high,high,low,low,low,True,True,True,low,low,medium,low,low,low
+47,Our workshop ventilation failed and workers are struggling to breathe comfortably.,high,False,high,high,medium,medium,low,True,True,True,low,low,medium,low,low,low
+48,The water heater in staff washroom is overheating and making loud noises.,low,False,low,low,low,low,low,True,True,True,high,high,medium,low,low,low
+49,There is a loose manhole cover near our entrance causing vehicle damage.,low,False,low,low,high,high,low,True,True,True,high,high,medium,low,low,low
+50,We have recurring rodent sightings in the pantry and storage area.,low,False,low,medium,low,low,low,True,True,True,low,critical,critical,low,low,low
+51,The freight elevator buttons are unresponsive and goods are delayed.,medium,False,high,medium,low,low,low,True,True,True,low,low,medium,low,low,low
+52,The corridor AC units are leaking and floor mats are soaked daily.,low,False,high,high,low,low,low,True,True,True,low,high,medium,low,low,low
+53,The office WiFi is unstable and calls keep dropping during meetings.,medium,False,medium,medium,low,low,low,True,True,True,high,high,high,medium,low,low
+54,Our power sockets near desks are dead and half the team cannot work.,high,False,high,high,high,high,low,True,True,True,low,medium,medium,low,low,low
+55,Fire exit pathway is blocked by maintenance materials for two days.,high,True,high,critical,low,low,low,False,False,True,medium,medium,medium,medium,medium,medium
+56,The sprinkler pipe is dripping in our retail area during open hours.,medium,True,medium,medium,low,low,low,True,True,True,high,high,high,low,low,low
+57,The washroom door lock is broken and cannot be secured from inside.,high,False,high,high,low,low,low,True,True,True,medium,medium,medium,low,low,low
+58,We experienced a brief smoke incident from a faulty light fixture.,low,True,high,high,low,low,low,True,True,True,medium,medium,medium,low,low,low
+59,The loading dock ramp is uneven and pallet jacks are tipping.,low,False,low,low,low,low,low,True,True,True,low,low,medium,critical,critical,low
+60,The alarm panel shows fault status continuously with no technician response.,low,False,medium,low,low,low,low,False,False,True,high,critical,medium,critical,critical,low
+61,The floor near the server room is wet from AC condensation again.,low,False,low,low,low,low,low,True,True,True,low,low,medium,medium,low,low
+62,We have no hot water in staff facilities for over a week.,low,False,low,low,low,low,low,True,True,True,high,high,medium,high,high,high
+63,The reception ceiling fan is making grinding noises and may detach.,low,False,low,low,low,low,low,True,True,True,low,low,medium,medium,critical,low
+64,Access control for our restricted room is bypassing without card authentication.,low,False,low,low,low,high,low,True,True,True,low,low,medium,medium,medium,low
+65,The rooftop drainage is blocked and water is seeping into offices below.,high,False,high,high,low,low,low,True,True,True,low,low,medium,low,low,low
+66,The perimeter fence gate latch is broken and stays unlocked overnight.,low,False,low,low,low,low,low,True,True,True,low,low,medium,critical,critical,low
+67,We found black mold behind cabinets and employees are reporting allergies.,low,True,high,low,low,low,low,True,True,True,high,high,medium,low,critical,low
+68,The emergency staircase handrail is loose and unsafe.,low,True,high,high,low,low,low,True,True,True,low,low,medium,critical,critical,low
+69,Our UPS backup failed and systems shut down unexpectedly during outage.,high,False,high,high,medium,medium,low,True,True,True,high,high,high,low,low,low
+70,The parking basement has standing water with visible electrical conduits nearby.,low,True,critical,low,low,low,low,True,True,True,medium,medium,medium,low,low,low
+71,The call bell at our service counter is not working and customers leave.,medium,False,medium,medium,low,low,low,False,False,True,medium,critical,medium,low,low,low
+72,Repeated voltage drops are interrupting our production line daily.,high,False,low,low,high,high,low,True,True,True,low,high,medium,low,low,low
+73,The fire door near Unit C is wedged open and cannot auto-close.,high,True,high,critical,low,low,low,True,True,True,medium,medium,medium,low,low,low
+74,We are hearing water hammer and pipe vibration from ceiling lines.,low,False,low,low,low,low,low,True,True,True,medium,high,medium,low,low,low
+75,The office doorframe is cracked and the door no longer aligns.,low,False,low,low,low,low,low,True,False,True,medium,medium,medium,medium,critical,low
+76,Our warehouse temperature control is failing and sensitive stock is degrading.,medium,False,low,low,low,medium,low,True,True,True,high,high,medium,low,low,low
+77,The external signboard is loose after wind and could fall.,low,False,low,low,low,low,low,True,True,True,low,low,medium,medium,low,low
+78,The stair treads are chipped and slippery in wet conditions.,low,True,low,low,low,low,low,True,True,True,medium,critical,medium,low,critical,low
+79,We had a minor electric shock from a metal cabinet connected to faulty wiring.,low,True,critical,critical,low,medium,low,True,True,True,low,low,low,low,low,low
+80,The restroom exhaust has failed and odor is affecting nearby work areas.,high,False,high,high,high,high,low,True,True,True,medium,low,medium,low,low,low
+81,The shutter motor overheats and stops midway during opening.,low,False,high,low,low,low,low,True,True,True,high,high,high,low,low,low
+82,Security patrol did not respond to an unauthorized person report for 40 minutes.,low,True,critical,critical,low,low,low,False,False,True,medium,medium,medium,medium,high,low
+83,The building PA system is inaudible on our floor during announcements.,low,False,low,low,low,high,low,True,True,True,high,high,high,low,low,low
+84,There is recurring seepage under our vinyl flooring causing bubbles.,low,False,low,medium,high,high,low,True,True,True,high,high,medium,low,low,low
+85,The HVAC thermostat is unresponsive and cannot be adjusted.,high,False,high,high,high,high,low,True,True,True,medium,medium,medium,low,low,low
+86,A section of false ceiling is sagging above customer seating.,low,False,low,low,medium,medium,low,True,True,True,low,low,medium,medium,critical,low
+87,The dock leveler is malfunctioning and trucks cannot be unloaded safely.,high,False,high,high,high,high,low,True,True,True,medium,medium,medium,low,low,low
+88,We have intermittent outage on one phase causing machine errors.,medium,False,medium,medium,low,high,low,True,True,True,low,low,high,low,low,low
+89,The emergency lighting battery packs are depleted and not charging.,low,False,high,high,low,low,low,True,True,True,medium,medium,medium,low,low,low
+90,The front walkway drain backs up every afternoon and floods the entrance.,low,True,low,low,low,low,low,True,True,True,low,low,medium,medium,low,low
+91,Our meeting room has no ventilation and CO2 levels feel very high.,low,False,low,low,low,low,low,False,False,True,low,low,medium,low,critical,low
+92,The roller door sensor is faulty and closes while people are passing.,low,False,low,low,low,low,low,True,True,True,medium,medium,medium,low,low,low
+93,We observed sparks from the breaker panel during reset attempts.,low,False,low,low,low,low,low,True,True,True,high,high,high,low,low,low
+94,The building smell of burning plastic appears nightly near our unit.,low,True,critical,critical,low,low,low,True,True,True,low,low,low,medium,low,low
+95,Repeated burglary attempts happened because the rear gate lock is broken.,low,True,critical,critical,high,high,low,True,True,True,low,low,medium,low,low,low
+96,The chilled water line leak has returned and soaked our storage racks.,low,False,high,high,low,low,low,True,True,True,high,high,medium,low,low,low
+97,The janitor closet tap cannot be shut and water is running nonstop.,high,False,high,high,low,high,low,True,True,True,medium,medium,medium,low,low,low
+98,The disabled access ramp surface is cracked and unsafe for wheelchairs.,low,True,high,high,low,low,low,True,True,True,low,low,medium,medium,critical,low
+99,Our complaint about non-functioning fire hose reels is still unresolved.,low,True,critical,critical,high,high,low,False,False,True,medium,critical,medium,medium,low,low
+100,The electrical room door is unlocked and accessible to unauthorized staff.,low,True,critical,critical,low,low,low,True,True,True,low,low,medium,medium,low,low

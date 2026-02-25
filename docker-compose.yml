@@ -48,9 +48,11 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       HF_TOKEN: ${HF_TOKEN:-}
       HF_HOME: /app/hf_cache
-      CHATBOT_MODEL: ${CHATBOT_MODEL:-tiiuae/Falcon3-1B-Instruct}
+      CHATBOT_MODEL_SOURCE: ${CHATBOT_MODEL_SOURCE:-tiiuae/Falcon3-1B-Instruct}
+      CHATBOT_MODEL_LOCAL_DIR: /app/models/falcon3-1b-instruct
     volumes:
       - hf_cache:/app/hf_cache
+      - chatbot_models:/app/models
     ports:
       - "8001:8000"
     networks:
@@ -104,6 +106,7 @@ services:
 volumes:
   postgres_data:
   hf_cache:
+  chatbot_models:
 
 networks:
   innovacx-network:
