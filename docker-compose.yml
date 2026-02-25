@@ -30,7 +30,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
       DISABLE_MFA: "${DISABLE_MFA:-false}"
-      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://innovacx.net}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,8 +89,8 @@ services:
     build: ./frontend
     container_name: innovacx-frontend
     environment:
-      VITE_API_BASE_URL: http://innovacx.net
-      VITE_ORCHESTRATOR_URL: http://innovacx.net
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+      VITE_ORCHESTRATOR_URL: ${VITE_ORCHESTRATOR_URL:-}
     volumes:
       - ./frontend:/app
       - /app/node_modules
