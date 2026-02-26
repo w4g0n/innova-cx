@@ -199,6 +199,21 @@ def load_model(model_name: str, quantization: str = "auto"):
             print(f"[WARN] Could not enable 8-bit quantization: {exc}")
             print("[WARN] Falling back to standard precision load")
 
+    def _load_standard_gpu_then_cpu():
+        standard_gpu_kwargs = {
+            "trust_remote_code": True,
+            "torch_dtype": torch.float16 if torch.cuda.is_available() else torch.float32,
+            "device_map": "auto",
+        }
+        try:
+            print("[WARN] Trying non-quantized GPU load before CPU fallback")
+            return AutoModelForCausalLM.from_pretrained(model_name, **standard_gpu_kwargs)
+        except Exception as gpu_exc:
+            print(f"[WARN] Non-quantized GPU load failed: {gpu_exc}")
+            cpu_kwargs = {"trust_remote_code": True}
+            print("[WARN] Falling back to CPU load")
+            return AutoModelForCausalLM.from_pretrained(model_name, **cpu_kwargs)
+
     try:
         model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
     except ValueError as exc:
@@ -218,11 +233,7 @@ def load_model(model_name: str, quantization: str = "auto"):
             except Exception as offload_exc:
                 print(f"[WARN] 8-bit offload retry failed: {offload_exc}")
                 print("[WARN] Falling back to compatibility loader")
-                fallback_kwargs = dict(load_kwargs)
-                fallback_kwargs.pop("quantization_config", None)
-                fallback_kwargs.pop("device_map", None)
-                fallback_kwargs.pop("torch_dtype", None)
-                model = AutoModelForCausalLM.from_pretrained(model_name, **fallback_kwargs)
+                model = _load_standard_gpu_then_cpu()
         elif "not supported for `4-bit` or `8-bit` bitsandbytes models" in str(exc):
             # Some transformers/accelerate combinations attempt model.to(...) when
             # device_map is provided. Retry without device_map to avoid dispatch_model.
@@ -234,24 +245,18 @@ def load_model(model_name: str, quantization: str = "auto"):
             except Exception as retry_exc:
                 print(f"[WARN] 8-bit retry without device_map failed: {retry_exc}")
                 print("[WARN] Falling back to compatibility loader")
-                fallback_kwargs = dict(load_kwargs)
-                fallback_kwargs.pop("quantization_config", None)
-                fallback_kwargs.pop("device_map", None)
-                fallback_kwargs.pop("torch_dtype", None)
-                model = AutoModelForCausalLM.from_pretrained(model_name, **fallback_kwargs)
+                model = _load_standard_gpu_then_cpu()
         else:
             raise
     except TypeError as exc:
         # Compatibility fallback for older/newer transformers/model wrappers.
         print(f"[WARN] Model load args not accepted ({exc}); retrying with compatibility fallback")
-        fallback_kwargs = dict(load_kwargs)
-        fallback_kwargs.pop("torch_dtype", None)
         try:
+            fallback_kwargs = dict(load_kwargs)
+            fallback_kwargs.pop("torch_dtype", None)
             model = AutoModelForCausalLM.from_pretrained(model_name, **fallback_kwargs)
         except TypeError:
-            fallback_kwargs.pop("quantization_config", None)
-            fallback_kwargs.pop("device_map", None)
-            model = AutoModelForCausalLM.from_pretrained(model_name, **fallback_kwargs)
+            model = _load_standard_gpu_then_cpu()
     model.eval()
     print(f"Model loaded on: {next(model.parameters()).device}")
     return tokenizer, model
