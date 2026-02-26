@@ -262,7 +262,7 @@ def generate_ticket(
     model,
     system_prompt: str,
     user_prompt: str,
-    max_new_tokens: int = 512,
+    max_new_tokens: int = 256,
     retries: int = 3,
 ) -> dict | None:
     """
@@ -273,6 +273,8 @@ def generate_ticket(
         {"role": "system", "content": system_prompt},
         {"role": "user",   "content": user_prompt},
     ]
+
+    current_max_new_tokens = max_new_tokens
 
     for attempt in range(retries):
         try:
@@ -286,10 +288,12 @@ def generate_ticket(
                 # Newer transformers may return either a tensor or a BatchEncoding.
                 if isinstance(chat_inputs, torch.Tensor):
                     model_inputs = chat_inputs.to(model.device)
+                    attention_mask = torch.ones_like(model_inputs)
                     prompt_len = model_inputs.shape[-1]
                     output_ids = model.generate(
                         model_inputs,
-                        max_new_tokens=max_new_tokens,
+                        attention_mask=attention_mask,
+                        max_new_tokens=current_max_new_tokens,
                         do_sample=True,
                         temperature=0.9,       # High temperature = more diversity
                         top_p=0.95,
@@ -298,10 +302,12 @@ def generate_ticket(
                     )
                 else:
                     model_inputs = chat_inputs.to(model.device)
+                    if "attention_mask" not in model_inputs:
+                        model_inputs["attention_mask"] = torch.ones_like(model_inputs["input_ids"])
                     prompt_len = model_inputs["input_ids"].shape[-1]
                     output_ids = model.generate(
                         **model_inputs,
-                        max_new_tokens=max_new_tokens,
+                        max_new_tokens=current_max_new_tokens,
                         do_sample=True,
                         temperature=0.9,       # High temperature = more diversity
                         top_p=0.95,
@@ -319,6 +325,18 @@ def generate_ticket(
                 time.sleep(0.5)
                 continue
             print(f"  [WARN] Failed after {retries} attempts: {e}")
+            return None
+        except torch.OutOfMemoryError:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            if attempt < retries - 1 and current_max_new_tokens > 64:
+                current_max_new_tokens = max(64, current_max_new_tokens // 2)
+                print(
+                    f"  [WARN] CUDA OOM while generating; retrying with max_new_tokens={current_max_new_tokens}"
+                )
+                time.sleep(0.25)
+                continue
+            print("  [WARN] Generation failed due to CUDA OOM")
             return None
 
 
@@ -398,6 +416,7 @@ def main():
         help="Model quantization mode (default: auto; uses 8bit on CUDA)",
     )
     parser.add_argument("--dry-run",    action="store_true", help="Generate only 10 tickets for testing")
+    parser.add_argument("--max-new-tokens", type=int, default=256, help="Max generated tokens per ticket")
     parser.add_argument("--complaints", type=int, default=TARGET_COMPLAINTS)
     parser.add_argument("--inquiries",  type=int, default=TARGET_INQUIRIES)
     args = parser.parse_args()
@@ -447,7 +466,13 @@ def main():
 
         user_prompt = build_user_prompt(ticket_type, domain, style, issue_hint)
 
-        result = generate_ticket(tokenizer, model, system_prompt, user_prompt)
+        result = generate_ticket(
+            tokenizer,
+            model,
+            system_prompt,
+            user_prompt,
+            max_new_tokens=args.max_new_tokens,
+        )
 
         if result:
             results.append(build_result_row(ticket_type, domain, result))

@@ -119,12 +119,18 @@ DEFAULT_OUTPUT_PATH = "output/predictions.csv"
 # CLASSIFIER (same logic as Phase 2)
 # ─────────────────────────────────────────────
 
-def load_classifier(model_name: str = MODEL_NAME, quantization: str = "auto"):
-    device = 0 if torch.cuda.is_available() else -1
+def load_classifier(
+    model_name: str = MODEL_NAME,
+    quantization: str = "auto",
+    force_cpu: bool = False,
+):
+    device = -1 if force_cpu else (0 if torch.cuda.is_available() else -1)
     device_label = "GPU" if device == 0 else "CPU"
     print(f"\nLoading classifier on {device_label}...")
 
-    use_8bit = quantization == "8bit" or (quantization == "auto" and torch.cuda.is_available())
+    use_8bit = (not force_cpu) and (
+        quantization == "8bit" or (quantization == "auto" and torch.cuda.is_available())
+    )
     pipe_kwargs = {
         "task": "zero-shot-classification",
         "model": model_name,
@@ -243,10 +249,31 @@ def normalise_truth_columns(df: pd.DataFrame) -> None:
         df[f"{col}_truth"] = df[col].apply(lambda value: normalise_label(col, value))
 
 
-def predict_all(classifier, texts: list[str]) -> pd.DataFrame:
+def predict_all(
+    classifier,
+    texts: list[str],
+    model_name: str,
+    quantization: str,
+) -> pd.DataFrame:
     predictions = []
+    active_classifier = classifier
+    cpu_fallback_classifier = None
     for text in tqdm(texts, total=len(texts), desc="Classifying"):
-        pred = classify_ticket(classifier, text)
+        try:
+            pred = classify_ticket(active_classifier, text)
+        except torch.OutOfMemoryError:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            print("  [WARN] CUDA OOM during Phase 3 evaluation")
+            if cpu_fallback_classifier is None:
+                print("  [WARN] Loading CPU fallback classifier for remaining rows")
+                cpu_fallback_classifier = load_classifier(
+                    model_name=model_name,
+                    quantization="none",
+                    force_cpu=True,
+                )
+            active_classifier = cpu_fallback_classifier
+            pred = classify_ticket(active_classifier, text)
         predictions.append({col: normalise_label(col, value) for col, value in pred.items()})
     return pd.DataFrame(predictions)
 
@@ -367,7 +394,12 @@ def main():
     classifier = load_classifier(args.model, args.quantization)
 
     # ── Run predictions ──
-    pred_df = predict_all(classifier, df["text"].tolist())
+    pred_df = predict_all(
+        classifier,
+        df["text"].tolist(),
+        model_name=args.model,
+        quantization=args.quantization,
+    )
     for col in LABEL_COLUMNS:
         df[f"{col}_pred"] = pred_df[col]
 

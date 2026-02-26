@@ -69,6 +69,20 @@ python data/synthesizerv7/phase1-generate.py \
   --quantization 8bit
 ```
 
+If GPU memory is tight, lower generation length:
+
+```bash
+python data/synthesizerv7/phase1-generate.py \
+  --dataset data/synthesizerv7/input.csv \
+  --output data/synthesizerv7/output/unlabeled.csv \
+  --quantization 8bit \
+  --max-new-tokens 128
+```
+
+All model phases (1/2/3) now include automatic runtime fallback:
+- Try GPU (and 8-bit if enabled)
+- If CUDA OOM happens during processing, they switch to CPU fallback and continue
+
 Dry run:
 
 ```bash

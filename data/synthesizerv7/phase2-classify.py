@@ -114,12 +114,14 @@ LABEL_CONFIGS = {
 # CLASSIFIER
 # ─────────────────────────────────────────────
 
-def load_classifier(model_name: str, quantization: str = "auto"):
-    device = 0 if torch.cuda.is_available() else -1
+def load_classifier(model_name: str, quantization: str = "auto", force_cpu: bool = False):
+    device = -1 if force_cpu else (0 if torch.cuda.is_available() else -1)
     device_label = "GPU" if device == 0 else "CPU"
     print(f"\nLoading {model_name} on {device_label}...")
 
-    use_8bit = quantization == "8bit" or (quantization == "auto" and torch.cuda.is_available())
+    use_8bit = (not force_cpu) and (
+        quantization == "8bit" or (quantization == "auto" and torch.cuda.is_available())
+    )
     pipe_kwargs: dict[str, Any] = {
         "task": "zero-shot-classification",
         "model": model_name,
@@ -286,6 +288,7 @@ def main():
 
     # ── Load classifier ──
     classifier = load_classifier(args.model, args.quantization)
+    cpu_fallback_classifier = None
 
     # ── Classify complaints only ──
     complaint_mask = df["ticket_type"] == "complaint"
@@ -306,7 +309,21 @@ def main():
         desc="Classifying complaints",
     ):
         row_dict = row._asdict()
-        labels = classify_ticket(classifier, row_dict["text"])
+        try:
+            labels = classify_ticket(classifier, row_dict["text"])
+        except torch.OutOfMemoryError:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            print("  [WARN] CUDA OOM during Phase 2 classification")
+            if cpu_fallback_classifier is None:
+                print("  [WARN] Loading CPU fallback classifier for remaining rows")
+                cpu_fallback_classifier = load_classifier(
+                    args.model,
+                    quantization="none",
+                    force_cpu=True,
+                )
+            classifier = cpu_fallback_classifier
+            labels = classify_ticket(classifier, row_dict["text"])
         labeled_rows.append({**row_dict, **labels})
 
         # Checkpoint every 100 rows
