@@ -1,6 +1,6 @@
 """
 Downloads and stores Synthesizer v7 models into local folders:
-  - models/generator/phi-4
+  - models/generator/phi-3.5-mini-instruct
   - models/classifier/deberta-v3-base-mnli-fever-anli
 
 Usage:
@@ -15,7 +15,7 @@ from huggingface_hub import snapshot_download
 
 
 BASE_DIR = Path(__file__).resolve().parent
-GENERATOR_DIR = BASE_DIR / "models" / "generator" / "phi-4"
+GENERATOR_DIR = BASE_DIR / "models" / "generator" / "phi-3.5-mini-instruct"
 CLASSIFIER_DIR = BASE_DIR / "models" / "classifier" / "deberta-v3-base-mnli-fever-anli"
 
 
@@ -48,7 +48,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    download("microsoft/phi-4", GENERATOR_DIR, force=args.force)
+    download("microsoft/Phi-3.5-mini-instruct", GENERATOR_DIR, force=args.force)
     download("MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli", CLASSIFIER_DIR, force=args.force)
     print("All models downloaded.")
 

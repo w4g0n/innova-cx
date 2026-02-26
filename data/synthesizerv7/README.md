@@ -3,7 +3,7 @@
 Four-phase synthetic data pipeline:
 
 1. `phase1-generate.py`  
-Generates synthetic support tickets (`unlabeled.csv`) with Phi-4.
+Generates synthetic support tickets (`unlabeled.csv`) with Phi-3.5 Mini.
 Default target size: 10,000 rows (7,500 complaints + 2,500 inquiries).
 2. `phase2-classify.py`  
 Adds complaint labels with DeBERTa zero-shot NLI (`labeled.csv`).
@@ -38,7 +38,7 @@ python data/synthesizerv7/setup_models.py
 
 This downloads:
 
-- `microsoft/phi-4` to `data/synthesizerv7/models/generator/phi-4/`
+- `microsoft/Phi-3.5-mini-instruct` to `data/synthesizerv7/models/generator/phi-3.5-mini-instruct/`
 - `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` to `data/synthesizerv7/models/classifier/deberta-v3-base-mnli-fever-anli/`
 
 Download behavior:
@@ -167,7 +167,7 @@ python data/synthesizerv7/phase4-deduplicate.py \
 
 Each script first checks for local model directories:
 
-- Generator: `data/synthesizerv7/models/generator/phi-4/`
+- Generator: `data/synthesizerv7/models/generator/phi-3.5-mini-instruct/`
 - Classifier: `data/synthesizerv7/models/classifier/deberta-v3-base-mnli-fever-anli/`
 
 If present, local paths are used.  

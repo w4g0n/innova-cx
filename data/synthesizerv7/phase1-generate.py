@@ -1,5 +1,5 @@
 """
-Phase 1 — Synthetic Ticket Generation using Phi-4
+Phase 1 — Synthetic Ticket Generation using Phi-3.5 Mini
 ==================================================
 Generates 10,000 support tickets (7,500 complaints + 2,500 inquiries)
 across multiple domains with leasing/tenant support as the primary domain.
@@ -95,8 +95,8 @@ LEASING_ISSUES = [
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
-GENERATOR_MODEL_DIR = BASE_DIR / "models" / "generator" / "phi-4"
-REMOTE_MODEL_NAME = "microsoft/phi-4"
+GENERATOR_MODEL_DIR = BASE_DIR / "models" / "generator" / "phi-3.5-mini-instruct"
+REMOTE_MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
 MODEL_NAME = str(GENERATOR_MODEL_DIR) if GENERATOR_MODEL_DIR.exists() else REMOTE_MODEL_NAME
 PRIMARY_DOMAIN = "office leasing and tenant support"
 LENGTH_HINTS = (
@@ -266,7 +266,7 @@ def generate_ticket(
     retries: int = 3,
 ) -> dict | None:
     """
-    Calls Phi-4 with the given prompts and parses the JSON response.
+    Calls Phi-3.5 Mini with the given prompts and parses the JSON response.
     Retries up to `retries` times on parse failure.
     """
     messages = [
@@ -405,7 +405,7 @@ def build_result_row(ticket_type: str, domain: str, generated: dict[str, Any]) -
 # ─────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Phase 1: Synthetic ticket generation with Phi-4")
+    parser = argparse.ArgumentParser(description="Phase 1: Synthetic ticket generation with Phi-3.5 Mini")
     parser.add_argument("--dataset",    required=True,  help="Path to dataset.csv (must have 'transcript' column)")
     parser.add_argument("--output",     default="output/unlabeled.csv", help="Path to save generated CSV")
     parser.add_argument("--model",      default=MODEL_NAME, help="HuggingFace model name")
