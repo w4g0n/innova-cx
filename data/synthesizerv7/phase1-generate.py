@@ -285,6 +285,8 @@ def generate_ticket(
     user_prompt: str,
     max_new_tokens: int = 256,
     retries: int = 3,
+    temperature: float = 0.7,
+    top_p: float = 0.9,
 ) -> dict | None:
     """
     Calls Phi-3.5 Mini with the given prompts and parses the JSON response.
@@ -316,8 +318,8 @@ def generate_ticket(
                         attention_mask=attention_mask,
                         max_new_tokens=current_max_new_tokens,
                         do_sample=True,
-                        temperature=0.9,       # High temperature = more diversity
-                        top_p=0.95,
+                        temperature=temperature,
+                        top_p=top_p,
                         repetition_penalty=1.1,
                         pad_token_id=tokenizer.eos_token_id,
                     )
@@ -330,8 +332,8 @@ def generate_ticket(
                         **model_inputs,
                         max_new_tokens=current_max_new_tokens,
                         do_sample=True,
-                        temperature=0.9,       # High temperature = more diversity
-                        top_p=0.95,
+                        temperature=temperature,
+                        top_p=top_p,
                         repetition_penalty=1.1,
                         pad_token_id=tokenizer.eos_token_id,
                     )
@@ -438,6 +440,9 @@ def main():
     )
     parser.add_argument("--dry-run",    action="store_true", help="Generate only 10 tickets for testing")
     parser.add_argument("--max-new-tokens", type=int, default=256, help="Max generated tokens per ticket")
+    parser.add_argument("--retries", type=int, default=4, help="Retries per ticket on invalid JSON/OOM")
+    parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
+    parser.add_argument("--top-p", type=float, default=0.9, help="Nucleus sampling top-p")
     parser.add_argument("--complaints", type=int, default=TARGET_COMPLAINTS)
     parser.add_argument("--inquiries",  type=int, default=TARGET_INQUIRIES)
     args = parser.parse_args()
@@ -493,6 +498,9 @@ def main():
             system_prompt,
             user_prompt,
             max_new_tokens=args.max_new_tokens,
+            retries=args.retries,
+            temperature=args.temperature,
+            top_p=args.top_p,
         )
 
         if result:
