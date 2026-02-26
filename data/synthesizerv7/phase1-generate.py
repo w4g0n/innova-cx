@@ -184,7 +184,7 @@ def load_model(model_name: str, quantization: str = "auto"):
 
     use_8bit = quantization == "8bit" or (quantization == "auto" and torch.cuda.is_available())
     load_kwargs = {
-        "dtype": torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        "torch_dtype": torch.bfloat16 if torch.cuda.is_available() else torch.float32,
         "device_map": "auto",
         "trust_remote_code": True,
     }
@@ -199,7 +199,19 @@ def load_model(model_name: str, quantization: str = "auto"):
             print(f"[WARN] Could not enable 8-bit quantization: {exc}")
             print("[WARN] Falling back to standard precision load")
 
-    model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
+    try:
+        model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
+    except TypeError as exc:
+        # Compatibility fallback for older/newer transformers/model wrappers.
+        print(f"[WARN] Model load args not accepted ({exc}); retrying with compatibility fallback")
+        fallback_kwargs = dict(load_kwargs)
+        fallback_kwargs.pop("torch_dtype", None)
+        try:
+            model = AutoModelForCausalLM.from_pretrained(model_name, **fallback_kwargs)
+        except TypeError:
+            fallback_kwargs.pop("quantization_config", None)
+            fallback_kwargs.pop("device_map", None)
+            model = AutoModelForCausalLM.from_pretrained(model_name, **fallback_kwargs)
     model.eval()
     print(f"Model loaded on: {next(model.parameters()).device}")
     return tokenizer, model

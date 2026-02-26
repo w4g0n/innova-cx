@@ -146,7 +146,16 @@ def load_classifier(model_name: str = MODEL_NAME, quantization: str = "auto"):
     else:
         pipe_kwargs["device"] = device
 
-    clf = pipeline(**pipe_kwargs)
+    try:
+        clf = pipeline(**pipe_kwargs)
+    except TypeError as exc:
+        print(f"[WARN] Pipeline args not accepted ({exc}); retrying with compatibility fallback")
+        fallback_kwargs = {
+            "task": "zero-shot-classification",
+            "model": model_name,
+            "device": device,
+        }
+        clf = pipeline(**fallback_kwargs)
     print("Classifier ready")
     return clf
 
