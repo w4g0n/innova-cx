@@ -29,6 +29,7 @@ import io
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
+CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "120"))
 _sla_heartbeat_task: Optional[asyncio.Task] = None
 _has_sla_policy_fn = False
 
@@ -2665,7 +2666,7 @@ async def proxy_chatbot_chat(body: ChatbotProxyRequest):
 
     for base in [chatbot_url, local_fallback]:
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=CHATBOT_PROXY_TIMEOUT_SECONDS) as client:
                 response = await client.post(f"{base}/api/chat", json=payload)
                 response.raise_for_status()
                 data = response.json()

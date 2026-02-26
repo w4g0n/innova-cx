@@ -1,7 +1,7 @@
 """
 Phase 1 — Synthetic Ticket Generation using Phi-4
 ==================================================
-Generates 2,500 support tickets (2,000 complaints + 500 inquiries)
+Generates 10,000 support tickets (7,500 complaints + 2,500 inquiries)
 across multiple domains with leasing/tenant support as the primary domain.
 
 Requirements:
@@ -34,8 +34,8 @@ warnings.filterwarnings("ignore")
 # CONFIGURATION
 # ─────────────────────────────────────────────
 
-TARGET_COMPLAINTS = 2000
-TARGET_INQUIRIES = 500
+TARGET_COMPLAINTS = 7500
+TARGET_INQUIRIES = 2500
 
 # Domain distribution (must sum to 1.0)
 DOMAIN_DISTRIBUTION = {
@@ -184,7 +184,7 @@ def load_model(model_name: str):
 
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
         device_map="auto",
         trust_remote_code=True,
     )
@@ -228,25 +228,41 @@ def generate_ticket(
 
     for attempt in range(retries):
         try:
-            input_ids = tokenizer.apply_chat_template(
+            chat_inputs = tokenizer.apply_chat_template(
                 messages,
                 add_generation_prompt=True,
                 return_tensors="pt",
-            ).to(model.device)
+            )
 
             with torch.no_grad():
-                output_ids = model.generate(
-                    input_ids,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=True,
-                    temperature=0.9,       # High temperature = more diversity
-                    top_p=0.95,
-                    repetition_penalty=1.1,
-                    pad_token_id=tokenizer.eos_token_id,
-                )
+                # Newer transformers may return either a tensor or a BatchEncoding.
+                if isinstance(chat_inputs, torch.Tensor):
+                    model_inputs = chat_inputs.to(model.device)
+                    prompt_len = model_inputs.shape[-1]
+                    output_ids = model.generate(
+                        model_inputs,
+                        max_new_tokens=max_new_tokens,
+                        do_sample=True,
+                        temperature=0.9,       # High temperature = more diversity
+                        top_p=0.95,
+                        repetition_penalty=1.1,
+                        pad_token_id=tokenizer.eos_token_id,
+                    )
+                else:
+                    model_inputs = chat_inputs.to(model.device)
+                    prompt_len = model_inputs["input_ids"].shape[-1]
+                    output_ids = model.generate(
+                        **model_inputs,
+                        max_new_tokens=max_new_tokens,
+                        do_sample=True,
+                        temperature=0.9,       # High temperature = more diversity
+                        top_p=0.95,
+                        repetition_penalty=1.1,
+                        pad_token_id=tokenizer.eos_token_id,
+                    )
 
             # Decode only the newly generated tokens
-            new_tokens = output_ids[0][input_ids.shape[-1]:]
+            new_tokens = output_ids[0][prompt_len:]
             raw = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
             return parse_generated_json(raw)
 
