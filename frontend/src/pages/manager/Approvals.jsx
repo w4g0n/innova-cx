@@ -53,16 +53,36 @@ export default function Approvals() {
   }, [navigate]);
 
   // ------------------- Actions -------------------
-  const approve = (requestId) => {
-    setRows((prev) =>
-      prev.map((r) => (r.requestId === requestId ? { ...r, status: "Approved" } : r))
-    );
-  };
+  const decide = async (requestId, decision) => {
+    const token = localStorage.getItem("access_token");
+    if (!token) { navigate("/login"); return; }
 
-  const reject = (requestId) => {
+    // Optimistic update
     setRows((prev) =>
-      prev.map((r) => (r.requestId === requestId ? { ...r, status: "Rejected" } : r))
+      prev.map((r) => (r.requestId === requestId ? { ...r, status: decision } : r))
     );
+
+    try {
+      const res = await fetch(apiUrl(`/manager/approvals/${requestId}`), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ decision }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Failed (${res.status})`);
+      }
+    } catch (e) {
+      // Rollback optimistic update on failure
+      setRows((prev) =>
+        prev.map((r) => (r.requestId === requestId ? { ...r, status: "Pending" } : r))
+      );
+      alert(e.message || "Failed to save decision. Please try again.");
+    }
   };
 
   // ------------------- Filtering -------------------
@@ -200,7 +220,7 @@ export default function Approvals() {
                       <button
                         className="actionBtn actionBtn--primary"
                         type="button"
-                        onClick={() => approve(r.requestId)}
+                        onClick={() => decide(r.requestId, "Approved")}
                         disabled={r.status !== "Pending"}
                       >
                         Approve
@@ -208,7 +228,7 @@ export default function Approvals() {
                       <button
                         className="actionBtn"
                         type="button"
-                        onClick={() => reject(r.requestId)}
+                        onClick={() => decide(r.requestId, "Rejected")}
                         disabled={r.status !== "Pending"}
                       >
                         Reject

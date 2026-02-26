@@ -703,19 +703,23 @@ INSERT INTO departments (name) VALUES
 ON CONFLICT (name) DO NOTHING;
 
 -- ✅ Use real bcrypt-compatible hashes from pgcrypto (fresh volumes work)
-INSERT INTO users (email, password_hash, role) VALUES
-  ('customer1@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer'),
-  ('manager@innova.cx',   crypt('Innova@2025', gen_salt('bf', 12)), 'manager'),
-  ('operator@innova.cx',  crypt('Innova@2025', gen_salt('bf', 12)), 'operator'),
-  ('ahmed@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
-  ('maria@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
-  ('omar@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
-  ('sara@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
-  ('bilal@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
-  ('fatima@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
-  ('yousef@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee'),
-  ('khalid@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee')
-ON CONFLICT (email) DO NOTHING;
+-- mfa_enabled = FALSE and totp_secret = NULL so all users get a proper
+-- bearer token on login (no MFA prompt during development/testing)
+INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
+  ('customer1@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
+  ('manager@innova.cx',   crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
+  ('operator@innova.cx',  crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  FALSE, NULL),
+  ('ahmed@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('maria@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('omar@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('sara@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('bilal@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('fatima@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('yousef@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('khalid@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL)
+ON CONFLICT (email) DO UPDATE
+  SET mfa_enabled = FALSE,
+      totp_secret = NULL;
 
 
 -- Profiles
@@ -1041,5 +1045,322 @@ SET value=EXCLUDED.value;
 \ir scripts/sla.sql
 \ir scripts/is_recurring.sql
 \ir services/suggested.sql
+
+-- =========================================================
+-- Dev/Test safety: ensure ticket assignments match current
+-- user UUIDs and MFA is disabled for all seed users.
+-- Safe to run on existing volumes (idempotent).
+-- =========================================================
+
+-- Re-assign seed tickets to correct employee UUIDs
+-- (guards against UUID drift if users were recreated)
+UPDATE tickets
+SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx' LIMIT 1)
+WHERE ticket_code IN ('CX-4630', 'CX-9001', 'CX-9002', 'CX-9003', 'CX-9004', 'CX-9005');
+
+UPDATE tickets
+SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'maria@innova.cx' LIMIT 1)
+WHERE ticket_code = 'CX-3862';
+
+UPDATE tickets
+SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'omar@innova.cx' LIMIT 1)
+WHERE ticket_code = 'CX-4725';
+
+UPDATE tickets
+SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'sara@innova.cx' LIMIT 1)
+WHERE ticket_code = 'CX-4780';
+
+-- Disable MFA for all seed users so login returns a bearer token
+-- (not a temporary token) — required for employee actions to work
+UPDATE users
+SET mfa_enabled = FALSE, totp_secret = NULL
+WHERE email IN (
+  'customer1@innova.cx',
+  'manager@innova.cx',
+  'operator@innova.cx',
+  'ahmed@innova.cx',
+  'maria@innova.cx',
+  'omar@innova.cx',
+  'sara@innova.cx',
+  'bilal@innova.cx',
+  'fatima@innova.cx',
+  'yousef@innova.cx',
+  'khalid@innova.cx'
+);
+
+-- =========================================================
+-- Seed: Employee Monthly Reports for Ahmed Hassan
+-- (nov-2025 through jun-2025, 6 months)
+-- =========================================================
+
+INSERT INTO employee_reports (report_code, employee_user_id, month_label, subtitle, kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
+SELECT code, ahmed_id, label, sub, rating, resolved, sla, avg_resp
+FROM (
+  SELECT
+    (SELECT id FROM users WHERE email = 'ahmed@innova.cx') AS ahmed_id,
+    unnest(ARRAY['nov-2025','oct-2025','sep-2025','aug-2025','jul-2025','jun-2025']) AS code,
+    unnest(ARRAY['November 2025','October 2025','September 2025','August 2025','July 2025','June 2025']) AS label,
+    unnest(ARRAY[
+      'Strong performance with high SLA compliance.',
+      'Consistent resolution rate across all priorities.',
+      'Good month — exceeded SLA targets.',
+      'Handled high volume with stable response times.',
+      'Solid performance with room for improvement.',
+      'Below average month — high ticket volume.'
+    ]) AS sub,
+    unnest(ARRAY['4.7 / 5','4.5 / 5','4.6 / 5','4.4 / 5','4.3 / 5','4.1 / 5']) AS rating,
+    unnest(ARRAY[12, 10, 11, 9, 8, 7]) AS resolved,
+    unnest(ARRAY['92%','88%','90%','85%','83%','80%']) AS sla,
+    unnest(ARRAY['18 Mins','22 Mins','20 Mins','25 Mins','28 Mins','30 Mins']) AS avg_resp
+) sub
+ON CONFLICT (report_code) DO NOTHING;
+
+-- Summary items for nov-2025
+INSERT INTO employee_report_summary_items (report_id, label, value_text)
+SELECT er.id, label, val
+FROM employee_reports er,
+  (VALUES
+    ('Total Assigned','14'), ('Resolved','12'), ('Escalated','1'),
+    ('Pending','1'), ('Avg Priority','High'), ('SLA Breaches','1')
+  ) AS data(label, val)
+WHERE er.report_code = 'nov-2025'
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND NOT EXISTS (
+    SELECT 1 FROM employee_report_summary_items si WHERE si.report_id = er.id
+  );
+
+-- Summary items for oct-2025
+INSERT INTO employee_report_summary_items (report_id, label, value_text)
+SELECT er.id, label, val
+FROM employee_reports er,
+  (VALUES
+    ('Total Assigned','12'), ('Resolved','10'), ('Escalated','1'),
+    ('Pending','1'), ('Avg Priority','Medium'), ('SLA Breaches','2')
+  ) AS data(label, val)
+WHERE er.report_code = 'oct-2025'
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND NOT EXISTS (
+    SELECT 1 FROM employee_report_summary_items si WHERE si.report_id = er.id
+  );
+
+-- Rating components for nov-2025
+INSERT INTO employee_report_rating_components (report_id, name, score, pct)
+SELECT er.id, name, score, pct
+FROM employee_reports er,
+  (VALUES
+    ('Resolution Rate', 4.8, 96),
+    ('SLA Compliance', 4.6, 92),
+    ('Response Speed', 4.7, 94),
+    ('Customer Satisfaction', 4.5, 90)
+  ) AS data(name, score, pct)
+WHERE er.report_code = 'nov-2025'
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND NOT EXISTS (
+    SELECT 1 FROM employee_report_rating_components rc WHERE rc.report_id = er.id
+  );
+
+-- Rating components for oct-2025
+INSERT INTO employee_report_rating_components (report_id, name, score, pct)
+SELECT er.id, name, score, pct
+FROM employee_reports er,
+  (VALUES
+    ('Resolution Rate', 4.6, 92),
+    ('SLA Compliance', 4.4, 88),
+    ('Response Speed', 4.5, 90),
+    ('Customer Satisfaction', 4.3, 86)
+  ) AS data(name, score, pct)
+WHERE er.report_code = 'oct-2025'
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND NOT EXISTS (
+    SELECT 1 FROM employee_report_rating_components rc WHERE rc.report_id = er.id
+  );
+
+-- Weekly breakdown for nov-2025
+INSERT INTO employee_report_weekly (report_id, week_label, assigned, resolved, sla, avg_response, delta_type, delta_text)
+SELECT er.id, wk, asgn, res, s, avg_r, dt, dtxt
+FROM employee_reports er,
+  (VALUES
+    ('Week 1', 4, 4, '100%', '15 Mins', 'positive', '+100%'),
+    ('Week 2', 3, 3, '100%', '18 Mins', 'positive', '+0%'),
+    ('Week 3', 4, 3, '75%',  '20 Mins', 'negative', '-25%'),
+    ('Week 4', 3, 2, '67%',  '22 Mins', 'negative', '-8%')
+  ) AS data(wk, asgn, res, s, avg_r, dt, dtxt)
+WHERE er.report_code = 'nov-2025'
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND NOT EXISTS (
+    SELECT 1 FROM employee_report_weekly ew WHERE ew.report_id = er.id
+  );
+
+-- Weekly breakdown for oct-2025
+INSERT INTO employee_report_weekly (report_id, week_label, assigned, resolved, sla, avg_response, delta_type, delta_text)
+SELECT er.id, wk, asgn, res, s, avg_r, dt, dtxt
+FROM employee_reports er,
+  (VALUES
+    ('Week 1', 3, 3, '100%', '20 Mins', 'positive', '+100%'),
+    ('Week 2', 3, 2, '67%',  '22 Mins', 'negative', '-33%'),
+    ('Week 3', 3, 3, '100%', '19 Mins', 'positive', '+33%'),
+    ('Week 4', 3, 2, '67%',  '26 Mins', 'negative', '-33%')
+  ) AS data(wk, asgn, res, s, avg_r, dt, dtxt)
+WHERE er.report_code = 'oct-2025'
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND NOT EXISTS (
+    SELECT 1 FROM employee_report_weekly ew WHERE ew.report_id = er.id
+  );
+
+-- Notes for nov-2025
+INSERT INTO employee_report_notes (report_id, note)
+SELECT er.id, note
+FROM employee_reports er,
+  (VALUES
+    ('Excellent performance on critical tickets — all resolved within SLA.'),
+    ('One SLA breach in week 4 due to parts delay — documented.')
+  ) AS data(note)
+WHERE er.report_code = 'nov-2025'
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND NOT EXISTS (
+    SELECT 1 FROM employee_report_notes en WHERE en.report_id = er.id
+  );
+
+-- Notes for oct-2025
+INSERT INTO employee_report_notes (report_id, note)
+SELECT er.id, note
+FROM employee_reports er,
+  (VALUES
+    ('Good consistency across all weeks. Slight drop in week 4.'),
+    ('Response time above target — investigate workload balancing.')
+  ) AS data(note)
+WHERE er.report_code = 'oct-2025'
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND NOT EXISTS (
+    SELECT 1 FROM employee_report_notes en WHERE en.report_id = er.id
+  );
+
+-- =========================================================
+-- Seed: Notifications for Ahmed (unread + mixed types)
+-- =========================================================
+
+INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
+SELECT
+  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  'sla_warning',
+  'SLA Warning: CX-9004',
+  'Ticket CX-9004 is overdue. Immediate action required.',
+  'High',
+  (SELECT id FROM tickets WHERE ticket_code = 'CX-9004'),
+  FALSE,
+  now() - interval '2 hours'
+WHERE NOT EXISTS (
+  SELECT 1 FROM notifications n
+  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+    AND n.title = 'SLA Warning: CX-9004'
+);
+
+INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
+SELECT
+  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  'ticket_assignment',
+  'Ticket Assigned: CX-9003',
+  'You have been assigned ticket CX-9003 — Critical priority.',
+  'Critical',
+  (SELECT id FROM tickets WHERE ticket_code = 'CX-9003'),
+  FALSE,
+  now() - interval '1 day'
+WHERE NOT EXISTS (
+  SELECT 1 FROM notifications n
+  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+    AND n.title = 'Ticket Assigned: CX-9003'
+);
+
+INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
+SELECT
+  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  'ticket_assignment',
+  'Ticket Assigned: CX-9001',
+  'You have been assigned a new ticket CX-9001.',
+  'Medium',
+  (SELECT id FROM tickets WHERE ticket_code = 'CX-9001'),
+  TRUE,
+  now() - interval '12 days'
+WHERE NOT EXISTS (
+  SELECT 1 FROM notifications n
+  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+    AND n.title = 'Ticket Assigned: CX-9001'
+);
+
+INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
+SELECT
+  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  'report_ready',
+  'Monthly Report Ready',
+  'Your November 2025 performance report is now available.',
+  NULL,
+  NULL,
+  TRUE,
+  now() - interval '5 days'
+WHERE NOT EXISTS (
+  SELECT 1 FROM notifications n
+  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+    AND n.title = 'Monthly Report Ready'
+);
+
+INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
+SELECT
+  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  'status_change',
+  'Ticket Status Updated: CX-9002',
+  'Ticket CX-9002 has been moved to In Progress.',
+  'High',
+  (SELECT id FROM tickets WHERE ticket_code = 'CX-9002'),
+  FALSE,
+  now() - interval '3 hours'
+WHERE NOT EXISTS (
+  SELECT 1 FROM notifications n
+  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+    AND n.title = 'Ticket Status Updated: CX-9002'
+);
+
+-- =========================================================
+-- Seed: Work steps for CX-9002 (In Progress) and CX-9004 (Overdue)
+-- so their ticket detail pages show Steps Taken section
+-- =========================================================
+
+INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, notes, occurred_at)
+SELECT
+  (SELECT id FROM tickets WHERE ticket_code = 'CX-9002'),
+  1,
+  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  'Initial assessment completed. Issue identified as network switch failure.',
+  now() - interval '2 days'
+WHERE NOT EXISTS (
+  SELECT 1 FROM ticket_work_steps tws
+  WHERE tws.ticket_id = (SELECT id FROM tickets WHERE ticket_code = 'CX-9002')
+    AND tws.step_no = 1
+);
+
+INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, notes, occurred_at)
+SELECT
+  (SELECT id FROM tickets WHERE ticket_code = 'CX-9002'),
+  2,
+  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  'Replacement switch ordered. ETA 48 hours. Temporary workaround applied.',
+  now() - interval '1 day'
+WHERE NOT EXISTS (
+  SELECT 1 FROM ticket_work_steps tws
+  WHERE tws.ticket_id = (SELECT id FROM tickets WHERE ticket_code = 'CX-9002')
+    AND tws.step_no = 2
+);
+
+INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, notes, occurred_at)
+SELECT
+  (SELECT id FROM tickets WHERE ticket_code = 'CX-9004'),
+  1,
+  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  'Ticket overdue. Escalation attempt made — awaiting supervisor response.',
+  now() - interval '5 hours'
+WHERE NOT EXISTS (
+  SELECT 1 FROM ticket_work_steps tws
+  WHERE tws.ticket_id = (SELECT id FROM tickets WHERE ticket_code = 'CX-9004')
+    AND tws.step_no = 1
+);
 
 COMMIT;
