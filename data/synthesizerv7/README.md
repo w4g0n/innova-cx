@@ -60,6 +60,15 @@ python data/synthesizerv7/phase1-generate.py \
   --output data/synthesizerv7/output/unlabeled.csv
 ```
 
+Use 8-bit quantization explicitly (recommended for 16GB GPUs like T4):
+
+```bash
+python data/synthesizerv7/phase1-generate.py \
+  --dataset data/synthesizerv7/input.csv \
+  --output data/synthesizerv7/output/unlabeled.csv \
+  --quantization 8bit
+```
+
 Dry run:
 
 ```bash
@@ -75,6 +84,15 @@ python data/synthesizerv7/phase1-generate.py \
 python data/synthesizerv7/phase2-classify.py \
   --input data/synthesizerv7/output/unlabeled.csv \
   --output data/synthesizerv7/output/labeled.csv
+```
+
+Use 8-bit quantization explicitly:
+
+```bash
+python data/synthesizerv7/phase2-classify.py \
+  --input data/synthesizerv7/output/unlabeled.csv \
+  --output data/synthesizerv7/output/labeled.csv \
+  --quantization 8bit
 ```
 
 Dry run:
@@ -103,6 +121,15 @@ Override output:
 python data/synthesizerv7/phase3-evaluate.py \
   --test data/synthesizerv7/test.csv \
   --output data/synthesizerv7/output/predictions.csv
+```
+
+Use 8-bit quantization explicitly:
+
+```bash
+python data/synthesizerv7/phase3-evaluate.py \
+  --test data/synthesizerv7/test.csv \
+  --output data/synthesizerv7/output/predictions.csv \
+  --quantization 8bit
 ```
 
 ### Phase 4: Deduplicate non-exact duplicates

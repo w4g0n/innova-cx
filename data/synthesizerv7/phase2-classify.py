@@ -10,7 +10,7 @@ Reads the unlabeled.csv produced by Phase 1 and derives:
 Inquiries are passed through with null labels.
 
 Requirements:
-    pip install -r requirements.txt
+    pip install -r data/synthesizerv7/requirements.txt
 
 Usage:
     python phase2_classify.py --input output/unlabeled.csv --output output/labeled.csv
@@ -114,15 +114,34 @@ LABEL_CONFIGS = {
 # CLASSIFIER
 # ─────────────────────────────────────────────
 
-def load_classifier(model_name: str):
+def load_classifier(model_name: str, quantization: str = "auto"):
     device = 0 if torch.cuda.is_available() else -1
     device_label = "GPU" if device == 0 else "CPU"
     print(f"\nLoading {model_name} on {device_label}...")
-    classifier = pipeline(
-        "zero-shot-classification",
-        model=model_name,
-        device=device,
-    )
+
+    use_8bit = quantization == "8bit" or (quantization == "auto" and torch.cuda.is_available())
+    pipe_kwargs: dict[str, Any] = {
+        "task": "zero-shot-classification",
+        "model": model_name,
+    }
+
+    if use_8bit:
+        try:
+            from transformers import BitsAndBytesConfig
+
+            pipe_kwargs["model_kwargs"] = {
+                "quantization_config": BitsAndBytesConfig(load_in_8bit=True),
+                "device_map": "auto",
+            }
+            print("Using 8-bit quantization (bitsandbytes)")
+        except Exception as exc:
+            print(f"[WARN] Could not enable 8-bit quantization: {exc}")
+            print("[WARN] Falling back to standard precision load")
+            pipe_kwargs["device"] = device
+    else:
+        pipe_kwargs["device"] = device
+
+    classifier = pipeline(**pipe_kwargs)
     print("Classifier ready")
     return classifier
 
@@ -205,6 +224,12 @@ def main():
     parser.add_argument("--input",   default="output/unlabeled.csv", help="Path to unlabeled.csv from Phase 1")
     parser.add_argument("--output",  default="output/labeled.csv",   help="Path to save labeled CSV")
     parser.add_argument("--model",   default=MODEL_NAME,             help="HuggingFace NLI model name")
+    parser.add_argument(
+        "--quantization",
+        choices=["auto", "none", "8bit"],
+        default="auto",
+        help="Model quantization mode (default: auto; uses 8bit on CUDA)",
+    )
     parser.add_argument("--dry-run", action="store_true",            help="Classify first 10 complaints only")
     args = parser.parse_args()
 
@@ -222,7 +247,7 @@ def main():
         print(f"\n[DRY RUN] Classifying {len(df)} complaints only")
 
     # ── Load classifier ──
-    classifier = load_classifier(args.model)
+    classifier = load_classifier(args.model, args.quantization)
 
     # ── Classify complaints only ──
     complaint_mask = df["ticket_type"] == "complaint"
