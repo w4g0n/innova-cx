@@ -31,6 +31,7 @@ services:
       SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
       DISABLE_MFA: "${DISABLE_MFA:-false}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
+      CHATBOT_PROXY_TIMEOUT_SECONDS: "${CHATBOT_PROXY_TIMEOUT_SECONDS:-120}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,6 +51,10 @@ services:
       HF_HOME: /app/hf_cache
       CHATBOT_MODEL_SOURCE: ${CHATBOT_MODEL_SOURCE:-tiiuae/Falcon3-1B-Instruct}
       CHATBOT_MODEL_LOCAL_DIR: /app/models/falcon3-1b-instruct
+      CHATBOT_MAX_NEW_TOKENS: "${CHATBOT_MAX_NEW_TOKENS:-96}"
+      CHATBOT_DO_SAMPLE: "${CHATBOT_DO_SAMPLE:-true}"
+      CHATBOT_TEMPERATURE: "${CHATBOT_TEMPERATURE:-0.7}"
+      CHATBOT_TOP_P: "${CHATBOT_TOP_P:-0.9}"
     volumes:
       - hf_cache:/app/hf_cache
       - chatbot_models:/app/models

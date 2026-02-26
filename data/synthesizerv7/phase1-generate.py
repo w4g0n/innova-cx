@@ -1,7 +1,7 @@
 """
 Phase 1 — Synthetic Ticket Generation using Phi-4
 ==================================================
-Generates 2,500 support tickets (2,000 complaints + 500 inquiries)
+Generates 10,000 support tickets (7,500 complaints + 2,500 inquiries)
 across multiple domains with leasing/tenant support as the primary domain.
 
 Requirements:
@@ -34,8 +34,8 @@ warnings.filterwarnings("ignore")
 # CONFIGURATION
 # ─────────────────────────────────────────────
 
-TARGET_COMPLAINTS = 2000
-TARGET_INQUIRIES = 500
+TARGET_COMPLAINTS = 7500
+TARGET_INQUIRIES = 2500
 
 # Domain distribution (must sum to 1.0)
 DOMAIN_DISTRIBUTION = {

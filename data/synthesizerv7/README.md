@@ -4,6 +4,7 @@ Three-phase synthetic data pipeline:
 
 1. `phase1-generate.py`  
 Generates synthetic support tickets (`unlabeled.csv`) with Phi-4.
+Default target size: 10,000 rows (7,500 complaints + 2,500 inquiries).
 2. `phase2-classify.py`  
 Adds complaint labels with DeBERTa zero-shot NLI (`labeled.csv`).
 3. `phase3-evaluate.py`  
