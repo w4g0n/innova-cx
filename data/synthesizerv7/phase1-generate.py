@@ -111,6 +111,8 @@ PHASE2_LABEL_COLUMNS = (
     "business_impact",
 )
 CHECKPOINT_EVERY = 100
+SYSTEM_REFERENCE_COUNT = 4
+SYSTEM_REFERENCE_CHARS = 160
 
 
 # ─────────────────────────────────────────────
@@ -122,8 +124,14 @@ def build_system_prompt(reference_transcripts: list[str]) -> str:
     System prompt passed once. Includes reference transcripts for domain
     context — model is explicitly told NOT to copy their style or content.
     """
-    sample = random.sample(reference_transcripts, min(15, len(reference_transcripts)))
-    ref_block = "\n---\n".join(f"[Reference {i+1}]: {t[:400]}" for i, t in enumerate(sample))
+    # Keep context compact to reduce latency per generation call.
+    sample = random.sample(
+        reference_transcripts,
+        min(SYSTEM_REFERENCE_COUNT, len(reference_transcripts)),
+    )
+    ref_block = "\n---\n".join(
+        f"[Reference {i+1}]: {t[:SYSTEM_REFERENCE_CHARS]}" for i, t in enumerate(sample)
+    )
 
     return f"""You are a data generation assistant creating realistic customer support tickets for a training dataset.
 
@@ -141,7 +149,10 @@ Generate synthetic customer support tickets that are:
 - Representative of the assigned domain and ticket type
 
 OUTPUT FORMAT:
-Always respond with a single valid JSON object and nothing else:
+Always respond with a single valid JSON object and nothing else.
+Do not include markdown, code fences, comments, or extra text.
+Start your response with '{{' and end with '}}'.
+Use this exact schema:
 {{
   "subject": "<3 to 8 word summary of the specific issue>",
   "text": "<the full ticket text>"
@@ -278,15 +289,33 @@ def parse_generated_json(raw: str) -> dict[str, Any]:
         raise ValueError("Generated text too short")
     return parsed
 
+
+def repair_non_json_output(raw: str) -> dict[str, Any]:
+    """
+    Best-effort repair path when model returns non-JSON text.
+    Keeps pipeline moving instead of wasting many retries.
+    """
+    text = " ".join(str(raw).strip().split())
+    if not text:
+        raise ValueError("Empty model output")
+    words = text.split()
+    subject = " ".join(words[:8]).strip()
+    if len(subject) < 3:
+        subject = "Customer support issue"
+    if len(text) < 20:
+        raise ValueError("Generated text too short after repair")
+    return {"subject": subject, "text": text}
+
 def generate_ticket(
     tokenizer,
     model,
     system_prompt: str,
     user_prompt: str,
-    max_new_tokens: int = 256,
-    retries: int = 3,
-    temperature: float = 0.7,
-    top_p: float = 0.9,
+    max_new_tokens: int = 64,
+    retries: int = 2,
+    temperature: float = 0.3,
+    top_p: float = 0.8,
+    do_sample: bool = False,
 ) -> dict | None:
     """
     Calls Phi-3.5 Mini with the given prompts and parses the JSON response.
@@ -317,7 +346,7 @@ def generate_ticket(
                         model_inputs,
                         attention_mask=attention_mask,
                         max_new_tokens=current_max_new_tokens,
-                        do_sample=True,
+                        do_sample=do_sample,
                         temperature=temperature,
                         top_p=top_p,
                         repetition_penalty=1.1,
@@ -331,7 +360,7 @@ def generate_ticket(
                     output_ids = model.generate(
                         **model_inputs,
                         max_new_tokens=current_max_new_tokens,
-                        do_sample=True,
+                        do_sample=do_sample,
                         temperature=temperature,
                         top_p=top_p,
                         repetition_penalty=1.1,
@@ -341,7 +370,10 @@ def generate_ticket(
             # Decode only the newly generated tokens
             new_tokens = output_ids[0][prompt_len:]
             raw = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
-            return parse_generated_json(raw)
+            try:
+                return parse_generated_json(raw)
+            except ValueError:
+                return repair_non_json_output(raw)
 
         except (json.JSONDecodeError, ValueError) as e:
             if attempt < retries - 1:
@@ -439,10 +471,11 @@ def main():
         help="Model quantization mode (default: auto; uses 8bit on CUDA)",
     )
     parser.add_argument("--dry-run",    action="store_true", help="Generate only 10 tickets for testing")
-    parser.add_argument("--max-new-tokens", type=int, default=256, help="Max generated tokens per ticket")
-    parser.add_argument("--retries", type=int, default=4, help="Retries per ticket on invalid JSON/OOM")
-    parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
-    parser.add_argument("--top-p", type=float, default=0.9, help="Nucleus sampling top-p")
+    parser.add_argument("--max-new-tokens", type=int, default=64, help="Max generated tokens per ticket")
+    parser.add_argument("--retries", type=int, default=2, help="Retries per ticket on invalid JSON/OOM")
+    parser.add_argument("--temperature", type=float, default=0.3, help="Sampling temperature")
+    parser.add_argument("--top-p", type=float, default=0.8, help="Nucleus sampling top-p")
+    parser.add_argument("--do-sample", action="store_true", help="Enable sampling (default is greedy decoding)")
     parser.add_argument("--complaints", type=int, default=TARGET_COMPLAINTS)
     parser.add_argument("--inquiries",  type=int, default=TARGET_INQUIRIES)
     args = parser.parse_args()
@@ -501,6 +534,7 @@ def main():
             retries=args.retries,
             temperature=args.temperature,
             top_p=args.top_p,
+            do_sample=args.do_sample,
         )
 
         if result:

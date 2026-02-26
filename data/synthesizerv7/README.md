@@ -76,12 +76,17 @@ python data/synthesizerv7/phase1-generate.py \
   --dataset data/synthesizerv7/input.csv \
   --output data/synthesizerv7/output/unlabeled.csv \
   --quantization 8bit \
-  --max-new-tokens 128
+  --max-new-tokens 64
 ```
 
 All model phases (1/2/3) now include automatic runtime fallback:
 - Try GPU (and 8-bit if enabled)
 - If CUDA OOM happens during processing, they switch to CPU fallback and continue
+
+Phase 1 defaults are tuned for throughput/stability:
+- Greedy decoding by default (`--do-sample` is off)
+- Lower token budget (`--max-new-tokens 64`)
+- Fewer retries (`--retries 2`)
 
 Dry run:
 
