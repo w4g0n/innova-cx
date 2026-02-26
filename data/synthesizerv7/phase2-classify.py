@@ -143,6 +143,35 @@ def load_classifier(model_name: str, quantization: str = "auto"):
 
     try:
         classifier = pipeline(**pipe_kwargs)
+    except ValueError as exc:
+        if "load_in_8bit_fp32_cpu_offload" in str(exc):
+            print("[WARN] VRAM insufficient for pure 8-bit placement; retrying with CPU offload")
+            try:
+                from transformers import BitsAndBytesConfig
+
+                offload_kwargs = {
+                    "task": "zero-shot-classification",
+                    "model": model_name,
+                    "model_kwargs": {
+                        "quantization_config": BitsAndBytesConfig(
+                            load_in_8bit=True,
+                            llm_int8_enable_fp32_cpu_offload=True,
+                        ),
+                        "device_map": "auto",
+                    },
+                }
+                classifier = pipeline(**offload_kwargs)
+            except Exception as offload_exc:
+                print(f"[WARN] 8-bit offload retry failed: {offload_exc}")
+                print("[WARN] Falling back to compatibility loader")
+                fallback_kwargs: dict[str, Any] = {
+                    "task": "zero-shot-classification",
+                    "model": model_name,
+                    "device": device,
+                }
+                classifier = pipeline(**fallback_kwargs)
+        else:
+            raise
     except TypeError as exc:
         print(f"[WARN] Pipeline args not accepted ({exc}); retrying with compatibility fallback")
         fallback_kwargs: dict[str, Any] = {

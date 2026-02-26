@@ -201,6 +201,30 @@ def load_model(model_name: str, quantization: str = "auto"):
 
     try:
         model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
+    except ValueError as exc:
+        # Typical on 16GB GPUs when some quantized modules are auto-dispatched
+        # to CPU/disk without explicit fp32 CPU offload enabled.
+        if "load_in_8bit_fp32_cpu_offload" in str(exc):
+            print("[WARN] VRAM insufficient for pure 8-bit placement; retrying with CPU offload")
+            try:
+                from transformers import BitsAndBytesConfig
+
+                offload_kwargs = dict(load_kwargs)
+                offload_kwargs["quantization_config"] = BitsAndBytesConfig(
+                    load_in_8bit=True,
+                    llm_int8_enable_fp32_cpu_offload=True,
+                )
+                model = AutoModelForCausalLM.from_pretrained(model_name, **offload_kwargs)
+            except Exception as offload_exc:
+                print(f"[WARN] 8-bit offload retry failed: {offload_exc}")
+                print("[WARN] Falling back to compatibility loader")
+                fallback_kwargs = dict(load_kwargs)
+                fallback_kwargs.pop("quantization_config", None)
+                fallback_kwargs.pop("device_map", None)
+                fallback_kwargs.pop("torch_dtype", None)
+                model = AutoModelForCausalLM.from_pretrained(model_name, **fallback_kwargs)
+        else:
+            raise
     except TypeError as exc:
         # Compatibility fallback for older/newer transformers/model wrappers.
         print(f"[WARN] Model load args not accepted ({exc}); retrying with compatibility fallback")
