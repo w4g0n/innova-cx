@@ -19,6 +19,7 @@ const CustomerSettings = lazy(() => import("./pages/customer/CustomerSettings"))
 const CustomerAuthPage = lazy(() =>
   import("./pages/customer/CustomerAuthPage")
 );
+const AboutUs = lazy(() => import("./pages/customer/AboutUs"));
 
 
 
@@ -146,6 +147,15 @@ export default function App() {
             element={
               <ProtectedRoute role="customer">
                 <CustomerSettings />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/customer/about"
+            element={
+              <ProtectedRoute role="customer">
+                <AboutUs />
               </ProtectedRoute>
             }
           />
