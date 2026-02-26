@@ -17,6 +17,9 @@ qrcode[pil]
 httpx==0.28.1
 
 
+# Text-to-Speech (call-centre audio reply)
+edge-tts>=6.1.9
+
 # We'll add AI/ML libraries later as needed:
 # transformers
 # torch

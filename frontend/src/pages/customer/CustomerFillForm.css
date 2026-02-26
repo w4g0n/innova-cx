@@ -551,3 +551,75 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+
+/* ─── Success / audio-reply screen ──────────────────────────────────────────── */
+
+.custSuccessCard {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 40px 28px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.custSuccessIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custSuccessTicketId {
+  font-size: 13px;
+  color: #6b7280;
+  letter-spacing: 0.01em;
+}
+
+.custSuccessTicketId strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.custSuccessText {
+  font-size: 15px;
+  color: #374151;
+  max-width: 480px;
+  line-height: 1.65;
+  margin: 0;
+}
+
+/* Loading state while TTS audio is being fetched */
+.custAudioLoading {
+  font-size: 13px;
+  color: #9ca3af;
+  padding: 6px 0;
+}
+
+/* Replay / Playing button */
+.custAudioBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 22px;
+  border-radius: 999px;
+  border: 1.5px solid #6366f1;
+  background: transparent;
+  color: #6366f1;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.custAudioBtn:hover:not(:disabled) {
+  background: #eef2ff;
+}
+
+.custAudioBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

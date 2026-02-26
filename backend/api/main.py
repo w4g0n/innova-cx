@@ -19,6 +19,7 @@ import httpx
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 import pyotp  # for RFC 6238 TOTP
@@ -2721,6 +2722,109 @@ async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
             continue
 
     raise HTTPException(status_code=503, detail=f"Transcriber service unavailable: {last_error}")
+
+
+# =========================================================
+# TTS — call-centre audio reply
+# =========================================================
+
+# Optional import: if edge-tts is not installed the endpoint returns 503
+# so the rest of the system is never affected.
+try:
+    import edge_tts as _edge_tts
+except ImportError:
+    _edge_tts = None  # type: ignore[assignment]
+
+_TTS_VOICE = "en-US-JennyNeural"  # Microsoft neural voice – professional, clear
+
+_TTS_TEMPLATES: dict = {
+    "ticket_logged": (
+        "Thank you for contacting us. "
+        "Your {ticket_type} has been successfully logged. "
+        "Your ticket ID is {ticket_id}. "
+        "Our team will review your concern and respond as soon as possible."
+    ),
+    "inquiry_handled": (
+        "Thank you for your inquiry. "
+        "Our team has been notified and will get back to you shortly."
+    ),
+    "generic": "{text}",
+}
+
+
+async def _generate_tts_bytes(text: str, voice: str = _TTS_VOICE) -> bytes:
+    """Stream audio from Microsoft Edge TTS and return raw MP3 bytes."""
+    communicate = _edge_tts.Communicate(text, voice)  # type: ignore[union-attr]
+    buf = io.BytesIO()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            buf.write(chunk["data"])
+    buf.seek(0)
+    return buf.read()
+
+
+class TTSSpeakRequest(BaseModel):
+    message_type: Optional[str] = "ticket_logged"
+    ticket_id: Optional[str] = None
+    ticket_type: Optional[str] = "complaint"
+    text: Optional[str] = None  # raw text override; skips template when set
+
+
+@api.post("/tts/speak")
+async def tts_speak(body: TTSSpeakRequest):
+    """
+    Generate a TTS audio reply for call-centre complaint confirmations.
+
+    Returns base64-encoded MP3 audio with the spoken confirmation message.
+    Falls back gracefully with 503 if edge-tts is unavailable, allowing the
+    frontend to use the browser's built-in SpeechSynthesis API instead.
+    """
+    if _edge_tts is None:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "TTS unavailable: edge-tts package not installed"},
+        )
+
+    try:
+        if body.text and body.text.strip():
+            text = body.text.strip()
+        else:
+            template = _TTS_TEMPLATES.get(
+                body.message_type or "ticket_logged",
+                _TTS_TEMPLATES["ticket_logged"],
+            )
+            text = template.format(
+                ticket_id=body.ticket_id or "unknown",
+                ticket_type=body.ticket_type or "complaint",
+                text="",
+            )
+
+        if not text:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "No text provided for synthesis"},
+            )
+
+        audio_bytes = await _generate_tts_bytes(text)
+
+        if not audio_bytes:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "TTS returned empty audio — service may be unavailable"},
+            )
+
+        return {
+            "audio_base64": base64.b64encode(audio_bytes).decode(),
+            "mime_type": "audio/mpeg",
+            "text": text,
+        }
+
+    except Exception as exc:
+        logger.warning("TTS generation failed: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": f"TTS unavailable: {exc}"},
+        )
 
 
 # =========================================================

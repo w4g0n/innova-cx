@@ -1,9 +1,140 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
-import { submitTextComplaint, transcribeAudio } from "../../services/api";
+import { submitTextComplaint, transcribeAudio, getAudioReply } from "../../services/api";
 import "./CustomerFillForm.css";
+
+// ─── AudioReplyPlayer ──────────────────────────────────────────────────────────
+//
+// Fetches TTS audio from the backend after mount (non-blocking relative to the
+// success screen appearing).  Falls back to browser SpeechSynthesis if the
+// backend TTS service is unavailable (e.g. edge-tts not reachable on GCP).
+//
+function AudioReplyPlayer({ ticketId, isInquiry, replyText }) {
+  // "loading" → "playing" → "ready"  (or "fallback" when using SpeechSynthesis)
+  const [uiState, setUiState] = useState("loading");
+  const audioUrlRef = useRef(null);   // object URL for the decoded MP3 blob
+  const audioElemRef = useRef(null);  // current HTMLAudioElement
+
+  // ── Stop any currently playing audio / speech ─────────────────────────────
+  const stopAll = useCallback(() => {
+    if (audioElemRef.current) {
+      audioElemRef.current.pause();
+      audioElemRef.current.onended = null;
+      audioElemRef.current.onerror = null;
+      audioElemRef.current = null;
+    }
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
+
+  // ── Play a previously created blob URL ────────────────────────────────────
+  const playBlobUrl = useCallback(
+    (url) => {
+      stopAll();
+      const audio = new Audio(url);
+      audioElemRef.current = audio;
+      audio.onended = () => setUiState("ready");
+      audio.onerror = () => setUiState("ready");
+      // audio.play() returns a Promise; autoplay may be blocked by the browser
+      // if the user gesture context has expired — handle silently.
+      audio.play().catch(() => setUiState("ready"));
+      setUiState("playing");
+    },
+    [stopAll],
+  );
+
+  // ── Browser SpeechSynthesis fallback ──────────────────────────────────────
+  const playFallback = useCallback(
+    (text) => {
+      if (typeof window === "undefined" || !window.speechSynthesis) {
+        setUiState("fallback");
+        return;
+      }
+      stopAll();
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.onend = () => setUiState("fallback");
+      utt.onerror = () => setUiState("fallback");
+      window.speechSynthesis.speak(utt);
+      setUiState("playing");
+    },
+    [stopAll],
+  );
+
+  // ── Fetch TTS on mount, auto-play when ready ──────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const data = await getAudioReply({
+        ticketId,
+        messageType: isInquiry ? "inquiry_handled" : "ticket_logged",
+        ticketType: "complaint",
+      });
+
+      if (cancelled) return;
+
+      if (data?.audio_base64) {
+        try {
+          // Decode base64 → Uint8Array → Blob → object URL
+          const binary = atob(data.audio_base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: data.mime_type || "audio/mpeg" });
+          const url = URL.createObjectURL(blob);
+          audioUrlRef.current = url;
+          playBlobUrl(url);
+        } catch {
+          playFallback(replyText);
+        }
+      } else {
+        // Backend TTS unavailable — use browser synthesis
+        playFallback(replyText);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      stopAll();
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+    };
+  }, [ticketId, isInquiry, replyText, playBlobUrl, playFallback, stopAll]);
+
+  // ── Replay handler ────────────────────────────────────────────────────────
+  const handleReplay = () => {
+    if (uiState === "playing") return;
+    if (audioUrlRef.current) {
+      playBlobUrl(audioUrlRef.current);
+    } else {
+      playFallback(replyText);
+    }
+  };
+
+  if (uiState === "loading") {
+    return <div className="custAudioLoading">Preparing audio reply…</div>;
+  }
+
+  return (
+    <button
+      className="custAudioBtn"
+      type="button"
+      onClick={handleReplay}
+      disabled={uiState === "playing"}
+      aria-label="Replay audio confirmation"
+    >
+      {uiState === "playing" ? "Playing…" : "▶ Replay"}
+    </button>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────────
 
 export default function CustomerFillForm({ embedded = false, onCancel }) {
   const [type, setType] = useState("Auto");
@@ -74,6 +205,10 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
   const [draftTranscript, setDraftTranscript] = useState("");
   const [latestAudioFeatures, setLatestAudioFeatures] = useState(null);
 
+  // ── Success state: set after submission, triggers success screen ───────────
+  // { ticketId, isInquiry, replyText }
+  const [submitted, setSubmitted] = useState(null);
+
   const cleanupStream = () => {
     try {
       if (streamRef.current) {
@@ -100,7 +235,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
     cleanupStream();
   };
 
-  // Submit ticket details to orchestrator pipeline
+  // ── Submit ─────────────────────────────────────────────────────────────────
   const submit = async (e) => {
     e.preventDefault();
     const details = (message || "").trim();
@@ -117,22 +252,27 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
         audio_features: mode === "Audio" ? latestAudioFeatures : null,
       });
 
-      if (orchestratorResult?.ticket_id) {
-        alert(`Ticket submitted and processed. Ticket ID: ${orchestratorResult.ticket_id || "N/A"}`);
-      } else {
-        alert(`Inquiry processed. Reply: ${orchestratorResult?.chatbot_response || "No reply"}`);
-      }
+      const isInquiry = !orchestratorResult?.ticket_id;
+      const ticketId = orchestratorResult?.ticket_id ?? null;
+
+      // Build a readable fallback text (shown in card + used by SpeechSynthesis
+      // if backend TTS is unavailable).
+      const replyText = isInquiry
+        ? (orchestratorResult?.chatbot_response || "Your inquiry has been received. Our team will respond shortly.")
+        : `Your complaint has been successfully logged. Ticket ID: ${ticketId}. Our team will review your concern and respond as soon as possible.`;
 
       resetForm();
 
-      // Close embedded form if present
-      if (embedded && typeof onCancel === "function") onCancel();
+      // Show success screen — AudioReplyPlayer fetches and plays TTS
+      // independently so the card appears immediately.
+      setSubmitted({ ticketId, isInquiry, replyText });
     } catch (err) {
       console.error("Ticket creation failed:", err);
       alert(`Error creating ticket: ${err.message}`);
     }
   };
 
+  // ── Recording helpers ──────────────────────────────────────────────────────
   const startRecording = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     streamRef.current = stream;
@@ -241,6 +381,58 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
     window.history.back();
   };
 
+  // ── Success screen ─────────────────────────────────────────────────────────
+  if (submitted) {
+    const successContent = (
+      <div className="custFormPage">
+        <PageHeader
+          title="Submission Confirmed"
+          subtitle="Your request has been received."
+        />
+        <div className="custSuccessCard">
+          <div className="custSuccessIcon" aria-hidden="true">
+            <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+              <circle cx="26" cy="26" r="26" fill="#dcfce7" />
+              <path
+                d="M15 26.5l8 8 14-16"
+                stroke="#16a34a"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+
+          {!submitted.isInquiry && (
+            <div className="custSuccessTicketId">
+              Ticket ID: <strong>{submitted.ticketId}</strong>
+            </div>
+          )}
+
+          <p className="custSuccessText">{submitted.replyText}</p>
+
+          <AudioReplyPlayer
+            ticketId={submitted.ticketId}
+            isInquiry={submitted.isInquiry}
+            replyText={submitted.replyText}
+          />
+
+          <button
+            type="button"
+            className="primaryPillBtn"
+            onClick={() => setSubmitted(null)}
+          >
+            Submit Another
+          </button>
+        </div>
+      </div>
+    );
+
+    if (embedded) return successContent;
+    return <Layout role="customer">{successContent}</Layout>;
+  }
+
+  // ── Normal form ────────────────────────────────────────────────────────────
   const content = (
     <div className={`custFormPage ${embedded ? "custFormPage--embedded" : ""}`}>
       <PageHeader
@@ -469,7 +661,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
               required
             />
 
-            
+
             <div className="custAttachSection">
               <div className="custAttachHeader">
                 <div>
