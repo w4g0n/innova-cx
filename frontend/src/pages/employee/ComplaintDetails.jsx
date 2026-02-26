@@ -6,7 +6,6 @@ import "./TicketDetails.css";
 
 const API_BASE = apiUrl("/api");
 
-// Token may be stored under one of these keys
 function getAuthToken() {
   return (
     localStorage.getItem("access_token") ||
@@ -17,21 +16,384 @@ function getAuthToken() {
   );
 }
 
+// ─── AttachmentThumb ────────────────────────────────────────────────────────
+function AttachmentThumb({ url, fileName }) {
+  const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(fileName || "");
+  const [imgError, setImgError] = useState(false);
+
+  if (!url) return null;
+
+  if (isImage && !imgError) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" title={fileName}
+         style={{ display:"block", width:80, height:80, borderRadius:10,
+                  overflow:"hidden", flexShrink:0,
+                  border:"1px solid rgba(0,0,0,0.1)" }}>
+        <img
+          src={url}
+          alt={fileName}
+          style={{ width:"100%", height:"100%", objectFit:"cover" }}
+          onError={() => setImgError(true)}
+        />
+      </a>
+    );
+  }
+
+  return (
+    <a href={url} download={fileName} target="_blank" rel="noopener noreferrer"
+       className="attachment-thumb" title={fileName}
+       style={{ display:"flex", flexDirection:"column", alignItems:"center",
+                justifyContent:"center", width:80, height:80, fontSize:11,
+                color:"#5b21b6", textDecoration:"none", wordBreak:"break-all",
+                padding:4, textAlign:"center", background:"#f5f3ff",
+                borderRadius:10, border:"1px solid rgba(89,36,180,0.15)",
+                flexShrink:0 }}>
+      <span style={{ fontSize:26 }}>{imgError ? "🖼️" : "📎"}</span>
+      <span style={{ marginTop:4, lineHeight:1.2 }}>{fileName}</span>
+    </a>
+  );
+}
+
+// ─── Modal (outside ComplaintDetails so it never remounts on parent re-render)
+function TicketModal({
+  type, ticket, id,
+  // reroute
+  rerouteDepartment, setRerouteDepartment,
+  rerouteReason, setRerouteReason,
+  // rescore
+  rescoreNewPriority, setRescoreNewPriority,
+  rescoreReason, setRescoreReason,
+  // resolve
+  resolveDecision, setResolveDecision,
+  resolutionSuggestion, suggestionBusy,
+  finalResolution, setFinalResolution,
+  stepsTaken, setStepsTaken,
+  resolveError, setResolveError,
+  resolveFiles, setResolveFiles,
+  resolveBusy, setResolveBusy,
+  // shared
+  closeModal, loadTicket, uploadAttachmentsOrThrow,
+}) {
+  if (!type || !ticket) return null;
+
+  const titles = {
+    reroute: "Reroute Ticket",
+    rescore: "Rescore Ticket",
+    escalate: "Escalate Ticket",
+    resolve: "Resolve Ticket",
+  };
+
+  const submitText =
+    type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
+
+  const renderBody = () => {
+    switch (type) {
+      case "reroute":
+        return (
+          <>
+            <label>New Department</label>
+            <div className="select-wrapper modal-dropdown">
+              <select
+                value={rerouteDepartment}
+                onChange={(e) => setRerouteDepartment(e.target.value)}
+              >
+                <option value="" disabled>Select Department</option>
+                <option>Maintenance</option>
+                <option>IT Support</option>
+                <option>Cleaning</option>
+                <option>Security</option>
+                <option>Facilities</option>
+                <option>HR</option>
+                <option>Admin</option>
+                <option>IT</option>
+              </select>
+            </div>
+            <label>Reason for rerouting</label>
+            <textarea
+              className="modal-textarea"
+              value={rerouteReason}
+              onChange={(e) => setRerouteReason(e.target.value)}
+              placeholder="Explain why this ticket should be rerouted..."
+            />
+          </>
+        );
+
+      case "rescore":
+        return (
+          <>
+            <label>New Priority</label>
+            <div className="select-wrapper modal-dropdown">
+              <select
+                value={rescoreNewPriority}
+                onChange={(e) => setRescoreNewPriority(e.target.value)}
+              >
+                <option>Low</option>
+                <option>Medium</option>
+                <option>High</option>
+                <option>Critical</option>
+              </select>
+            </div>
+            <label>Reason for rescoring</label>
+            <textarea
+              className="modal-textarea"
+              value={rescoreReason}
+              onChange={(e) => setRescoreReason(e.target.value)}
+              placeholder="Explain why the model score should be adjusted..."
+            />
+          </>
+        );
+
+      case "escalate":
+        return (
+          <>
+            <label>Escalation Level</label>
+            <div className="select-wrapper modal-dropdown">
+              <select defaultValue="">
+                <option value="" disabled>Select Level</option>
+                <option>Supervisor</option>
+                <option>Department Head</option>
+                <option>Management</option>
+              </select>
+            </div>
+            <label>Reason for Escalation</label>
+            <textarea
+              className="modal-textarea"
+              placeholder="Explain why this ticket must be escalated..."
+            />
+            <label>Additional Notes (optional)</label>
+            <textarea className="modal-textarea" placeholder="Any extra context..." />
+          </>
+        );
+
+      case "resolve":
+        return (
+          <>
+            <label>Model Suggested Resolution (Falcon)</label>
+            <div className="model-suggestion">
+              {suggestionBusy ? "Generating..." : (resolutionSuggestion || "No suggestion available.")}
+            </div>
+
+            <label>Resolution Decision</label>
+            <div className="select-wrapper modal-dropdown">
+              <select
+                value={resolveDecision}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setResolveDecision(next);
+                  if (next === "accepted") setFinalResolution(resolutionSuggestion || "");
+                }}
+              >
+                <option value="accepted">Accept Suggested Resolution</option>
+                <option value="declined_custom">Decline and Write My Own</option>
+              </select>
+            </div>
+
+            <label>Final Resolution</label>
+            <textarea
+              className="modal-textarea"
+              value={finalResolution}
+              onChange={(e) => setFinalResolution(e.target.value)}
+              placeholder="Describe the final resolution provided..."
+              disabled={resolveDecision === "accepted"}
+            />
+
+            <label>Steps Taken to Resolve</label>
+            <textarea
+              className="modal-textarea"
+              value={stepsTaken}
+              onChange={(e) => setStepsTaken(e.target.value)}
+              placeholder="List the steps taken to resolve this issue..."
+            />
+
+            {resolveError && (
+              <div style={{ color: "#b42318", marginTop: 8, whiteSpace: "pre-wrap" }}>
+                {resolveError}
+              </div>
+            )}
+
+            <label>Attachments (optional)</label>
+            <div className="modal-upload-box">
+              <input
+                type="file"
+                multiple
+                onChange={(e) => setResolveFiles(Array.from(e.target.files || []))}
+              />
+              {resolveFiles.length > 0 && (
+                <div style={{ marginTop: 6, fontSize: 13, color: "#5b21b6" }}>
+                  {resolveFiles.length} file(s) selected: {resolveFiles.map((f) => f.name).join(", ")}
+                </div>
+              )}
+            </div>
+
+            {resolveFiles.length > 0 && (
+              <button
+                type="button"
+                className="modal-btn cancel"
+                style={{ marginTop: 10 }}
+                onClick={() => setResolveFiles([])}
+                disabled={resolveBusy || suggestionBusy}
+              >
+                Clear selected files
+              </button>
+            )}
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (type === "rescore") {
+      if (!rescoreNewPriority || !rescoreReason.trim()) {
+        alert("Please select a priority and provide a reason.");
+        return;
+      }
+      const token = getAuthToken();
+      try {
+        const res = await fetch(
+          `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/rescore`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ new_priority: rescoreNewPriority, reason: rescoreReason.trim() }),
+          }
+        );
+        if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
+        setRescoreReason("");
+        closeModal();
+        alert("Rescore request submitted for manager approval.");
+      } catch (e) {
+        alert(e?.message || "Failed to submit rescore request.");
+      }
+      return;
+    }
+
+    if (type === "reroute") {
+      if (!rerouteDepartment || !rerouteReason.trim()) {
+        alert("Please select a department and provide a reason.");
+        return;
+      }
+      const token = getAuthToken();
+      try {
+        const res = await fetch(
+          `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/reroute`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ new_department: rerouteDepartment, reason: rerouteReason.trim() }),
+          }
+        );
+        if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
+        setRerouteDepartment("");
+        setRerouteReason("");
+        closeModal();
+        alert("Reroute request submitted for manager approval.");
+      } catch (e) {
+        alert(e?.message || "Failed to submit reroute request.");
+      }
+      return;
+    }
+
+    if (type === "escalate") {
+      closeModal();
+      alert("Escalate saved (UI only for now).");
+      return;
+    }
+
+    // ── resolve ──
+    const token = getAuthToken();
+    if (!token) { setResolveError("Missing auth token. Please log in again."); return; }
+    if (resolveDecision === "declined_custom" && !finalResolution.trim()) {
+      setResolveError("Final Resolution is required when declining suggestion.");
+      return;
+    }
+
+    setResolveBusy(true);
+    setResolveError("");
+    try {
+      await uploadAttachmentsOrThrow({ ticketCode: id, token, files: resolveFiles });
+
+      const payload = {
+        decision: resolveDecision,
+        final_resolution: resolveDecision === "declined_custom" ? finalResolution.trim() : undefined,
+        steps_taken: stepsTaken.trim() || undefined,
+      };
+
+      const res = await fetch(
+        `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/resolve`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (!res.ok) throw new Error((await res.text()) || `Failed to resolve ticket (${res.status})`);
+
+      await loadTicket();
+      setResolveFiles([]);
+      closeModal();
+      alert("Ticket resolved successfully.");
+    } catch (e) {
+      setResolveError(e?.message || "Could not resolve ticket.");
+    } finally {
+      setResolveBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={closeModal}>
+      <div
+        className={`modal-card ${type === "escalate" ? "modal-red" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <h2>{titles[type]}</h2>
+          <span className="modal-close" onClick={closeModal}>✕</span>
+        </div>
+
+        <div className="modal-body">{renderBody()}</div>
+
+        <div className="modal-footer">
+          <button className="modal-btn cancel" onClick={closeModal}>Cancel</button>
+          <button
+            className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
+            onClick={handleSubmit}
+            disabled={resolveBusy || suggestionBusy}
+          >
+            {resolveBusy ? "Saving..." : submitText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ─────────────────────────────────────────────────────────
 export default function ComplaintDetails() {
-  const { id } = useParams(); // ticket code like "CX-4630"
+  const { id } = useParams();
   const navigate = useNavigate();
 
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [modalType, setModalType] = useState(null); // "reroute", "rescore", "escalate", "resolve"
+  const [modalType, setModalType] = useState(null);
+
   const [resolveDecision, setResolveDecision] = useState("accepted");
   const [resolutionSuggestion, setResolutionSuggestion] = useState("");
   const [finalResolution, setFinalResolution] = useState("");
   const [stepsTaken, setStepsTaken] = useState("");
   const [resolveBusy, setResolveBusy] = useState(false);
   const [resolveError, setResolveError] = useState("");
+  const [resolveFiles, setResolveFiles] = useState([]);
   const [suggestionBusy, setSuggestionBusy] = useState(false);
+
+  const [rescoreNewPriority, setRescoreNewPriority] = useState("Medium");
+  const [rescoreReason, setRescoreReason] = useState("");
+
+  const [rerouteDepartment, setRerouteDepartment] = useState("");
+  const [rerouteReason, setRerouteReason] = useState("");
 
   const closeModal = () => setModalType(null);
 
@@ -48,7 +410,6 @@ export default function ComplaintDetails() {
       if (modalType !== "resolve" || !id) return;
       const token = getAuthToken();
       if (!token) return;
-
       setResolveError("");
       setSuggestionBusy(true);
       try {
@@ -56,10 +417,7 @@ export default function ComplaintDetails() {
           `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/resolution-suggestion`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        if (!res.ok) {
-          const msg = await res.text();
-          throw new Error(msg || `Failed to get suggested resolution (${res.status})`);
-        }
+        if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
         const data = await res.json();
         const suggestion = (data?.suggestedResolution || "").trim();
         setResolutionSuggestion(suggestion);
@@ -70,260 +428,46 @@ export default function ComplaintDetails() {
         setSuggestionBusy(false);
       }
     }
-
     loadSuggestion();
   }, [modalType, id]);
 
-  useEffect(() => {
-    async function load() {
-      const token = getAuthToken();
-      if (!token) {
-        setError("Missing auth token. Please log in again.");
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError("");
-
-      try {
-        const res = await fetch(`${API_BASE}/employee/tickets/${encodeURIComponent(id)}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!res.ok) {
-          const msg = await res.text();
-          throw new Error(msg || `Failed to load ticket (${res.status})`);
-        }
-
-        const data = await res.json();
-        setTicket(data?.ticket || null);
-      } catch (e) {
-        setError(e?.message || "Could not load ticket details.");
-        setTicket(null);
-      } finally {
-        setLoading(false);
-      }
+  const loadTicket = async () => {
+    const token = getAuthToken();
+    if (!token) { setError("Missing auth token."); setLoading(false); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/employee/tickets/${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
+      const data = await res.json();
+      setTicket(data?.ticket || null);
+    } catch (e) {
+      setError(e?.message || "Could not load ticket details.");
+      setTicket(null);
+    } finally {
+      setLoading(false);
     }
-
-    load();
-  }, [id]);
-
-  const Modal = ({ type }) => {
-    if (!type || !ticket) return null;
-
-    const titles = {
-      reroute: "Reroute Ticket",
-      rescore: "Rescore Ticket",
-      escalate: "Escalate Ticket",
-      resolve: "Resolve Ticket",
-    };
-
-    const submitText =
-      type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
-
-    const renderBody = () => {
-      switch (type) {
-        case "reroute":
-          return (
-            <>
-              <label>New Department</label>
-              <div className="select-wrapper modal-dropdown">
-                <select defaultValue="">
-                  <option value="" disabled>Select Department</option>
-                  <option>Maintenance</option>
-                  <option>IT Support</option>
-                  <option>Cleaning</option>
-                  <option>Security</option>
-                </select>
-              </div>
-              <label>Reason for rerouting</label>
-              <textarea
-                className="modal-textarea"
-                placeholder="Explain why this ticket should be rerouted..."
-              />
-            </>
-          );
-        case "rescore":
-          return (
-            <>
-              <label>New Priority</label>
-              <div className="select-wrapper modal-dropdown">
-                <select defaultValue="Medium">
-                  <option>Low</option>
-                  <option>Medium</option>
-                  <option>High</option>
-                  <option>Critical</option>
-                </select>
-              </div>
-              <label>Reason for rescoring</label>
-              <textarea
-                className="modal-textarea"
-                placeholder="Explain why the model’s score should be adjusted..."
-              />
-            </>
-          );
-        case "escalate":
-          return (
-            <>
-              <label>Escalation Level</label>
-              <div className="select-wrapper modal-dropdown">
-                <select defaultValue="">
-                  <option value="" disabled>Select Level</option>
-                  <option>Supervisor</option>
-                  <option>Department Head</option>
-                  <option>Management</option>
-                </select>
-              </div>
-              <label>Reason for Escalation</label>
-              <textarea
-                className="modal-textarea"
-                placeholder="Explain why this ticket must be escalated..."
-              />
-              <label>Additional Notes (optional)</label>
-              <textarea className="modal-textarea" placeholder="Any extra context..." />
-            </>
-          );
-        case "resolve":
-          return (
-            <>
-              <label>Model Suggested Resolution (Falcon)</label>
-              <div className="model-suggestion">
-                {suggestionBusy ? "Generating..." : (resolutionSuggestion || "No suggestion available.")}
-              </div>
-              <label>Resolution Decision</label>
-              <div className="select-wrapper modal-dropdown">
-                <select
-                  value={resolveDecision}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setResolveDecision(next);
-                    if (next === "accepted") {
-                      setFinalResolution(resolutionSuggestion || "");
-                    }
-                  }}
-                >
-                  <option value="accepted">Accept Suggested Resolution</option>
-                  <option value="declined_custom">Decline and Write My Own</option>
-                </select>
-              </div>
-              <label>Final Resolution</label>
-              <textarea
-                className="modal-textarea"
-                value={finalResolution}
-                onChange={(e) => setFinalResolution(e.target.value)}
-                placeholder="Describe the final resolution provided..."
-                disabled={resolveDecision === "accepted"}
-              />
-              <label>Steps Taken to Resolve</label>
-              <textarea
-                className="modal-textarea"
-                value={stepsTaken}
-                onChange={(e) => setStepsTaken(e.target.value)}
-                placeholder="List the steps taken to resolve this issue..."
-              />
-              {resolveError && <div style={{ color: "#b42318", marginTop: 8 }}>{resolveError}</div>}
-              <label>Attachments (optional)</label>
-              <div className="modal-upload-box">
-                <input type="file" multiple />
-              </div>
-            </>
-          );
-        default:
-          return null;
-      }
-    };
-
-    return (
-      <div className="modal-overlay" onClick={closeModal}>
-        <div
-          className={`modal-card ${type === "escalate" ? "modal-red" : ""}`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="modal-header">
-            <h2>{titles[type]}</h2>
-            <span className="modal-close" onClick={closeModal}>✕</span>
-          </div>
-
-          <div className="modal-body">{renderBody()}</div>
-
-          <div className="modal-footer">
-            <button className="modal-btn cancel" onClick={closeModal}>Cancel</button>
-            <button
-              className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
-              onClick={async () => {
-                if (type !== "resolve") {
-                  closeModal();
-                  alert("Saved (UI only). Backend action endpoints can be added next.");
-                  return;
-                }
-
-                const token = getAuthToken();
-                if (!token) {
-                  setResolveError("Missing auth token. Please log in again.");
-                  return;
-                }
-                setResolveBusy(true);
-                setResolveError("");
-                try {
-                  const payload = {
-                    decision: resolveDecision,
-                    final_resolution: resolveDecision === "declined_custom" ? finalResolution.trim() : undefined,
-                    steps_taken: stepsTaken.trim() || undefined,
-                  };
-                  const res = await fetch(
-                    `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/resolve`,
-                    {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                      },
-                      body: JSON.stringify(payload),
-                    }
-                  );
-                  if (!res.ok) {
-                    const msg = await res.text();
-                    throw new Error(msg || `Failed to resolve ticket (${res.status})`);
-                  }
-                  const data = await res.json();
-                  setTicket((prev) => ({
-                    ...prev,
-                    status: data?.status || "Resolved",
-                    modelSuggestion: resolutionSuggestion || prev?.modelSuggestion,
-                  }));
-                  closeModal();
-                  alert("Ticket resolved successfully.");
-                } catch (e) {
-                  setResolveError(e?.message || "Could not resolve ticket.");
-                } finally {
-                  setResolveBusy(false);
-                }
-              }}
-              disabled={resolveBusy || suggestionBusy}
-            >
-              {resolveBusy ? "Saving..." : submitText}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
   };
 
-  if (loading)
-    return (
-      <Layout role="employee">
-        <main className="main">Loading ticket details...</main>
-      </Layout>
-    );
+  useEffect(() => { loadTicket(); }, [id]);
 
-  if (error)
-    return (
-      <Layout role="employee">
-        <main className="main">{error}</main>
-      </Layout>
-    );
+  async function uploadAttachmentsOrThrow({ ticketCode, token, files }) {
+    if (!files || files.length === 0) return;
+    for (const file of files) {
+      const fd = new FormData();
+      fd.append("file", file);
+      const upRes = await fetch(
+        `${API_BASE}/employee/tickets/${encodeURIComponent(ticketCode)}/attachments`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd }
+      );
+      if (!upRes.ok) throw new Error((await upRes.text()) || `Upload failed (${upRes.status})`);
+    }
+  }
 
+  if (loading) return <Layout role="employee"><main className="main">Loading ticket details...</main></Layout>;
+  if (error) return <Layout role="employee"><main className="main">{error}</main></Layout>;
   if (!ticket) return null;
 
   return (
@@ -331,9 +475,7 @@ export default function ComplaintDetails() {
       <main className="main">
         <div className="details-header">
           <div className="header-left">
-            <button className="back-btn" onClick={() => navigate(-1)}>
-              ← Back
-            </button>
+            <button className="back-btn" onClick={() => navigate(-1)}>← Back</button>
             <h1 className="ticket-title">Ticket ID: {ticket.ticketId}</h1>
             <div className="status-row">
               <span className={`header-pill ${(ticket.priority || "").toLowerCase()}-pill`}>
@@ -344,15 +486,9 @@ export default function ComplaintDetails() {
           </div>
 
           <div className="header-actions">
-            <button className="btn-outline" onClick={() => setModalType("rescore")}>
-              Rescore
-            </button>
-            <button className="btn-outline" onClick={() => setModalType("reroute")}>
-              Reroute
-            </button>
-            <button className="btn-primary" onClick={() => setModalType("resolve")}>
-              Resolve
-            </button>
+            <button className="btn-outline" onClick={() => setModalType("rescore")}>Rescore</button>
+            <button className="btn-outline" onClick={() => setModalType("reroute")}>Reroute</button>
+            <button className="btn-primary" onClick={() => setModalType("resolve")}>Resolve</button>
           </div>
         </div>
 
@@ -377,9 +513,14 @@ export default function ComplaintDetails() {
 
             {ticket.attachments?.length > 0 && (
               <div className="attachments">
-                {ticket.attachments.map((att, i) => (
-                  <div key={i} className="attachment-thumb">{att}</div>
-                ))}
+                {ticket.attachments.map((att, i) => {
+                  const fileName = att?.fileName ?? (typeof att === "string" ? att : "");
+                  const rawUrl   = att?.fileUrl ?? null;
+                  const fileUrl  = rawUrl
+                    ? apiUrl(rawUrl)
+                    : fileName ? apiUrl("/uploads/" + fileName) : null;
+                  return <AttachmentThumb key={i} url={fileUrl} fileName={fileName} />;
+                })}
               </div>
             )}
           </div>
@@ -402,7 +543,25 @@ export default function ComplaintDetails() {
         </section>
       </main>
 
-      <Modal type={modalType} />
+      <TicketModal
+        type={modalType}
+        ticket={ticket}
+        id={id}
+        rerouteDepartment={rerouteDepartment} setRerouteDepartment={setRerouteDepartment}
+        rerouteReason={rerouteReason} setRerouteReason={setRerouteReason}
+        rescoreNewPriority={rescoreNewPriority} setRescoreNewPriority={setRescoreNewPriority}
+        rescoreReason={rescoreReason} setRescoreReason={setRescoreReason}
+        resolveDecision={resolveDecision} setResolveDecision={setResolveDecision}
+        resolutionSuggestion={resolutionSuggestion} suggestionBusy={suggestionBusy}
+        finalResolution={finalResolution} setFinalResolution={setFinalResolution}
+        stepsTaken={stepsTaken} setStepsTaken={setStepsTaken}
+        resolveError={resolveError} setResolveError={setResolveError}
+        resolveFiles={resolveFiles} setResolveFiles={setResolveFiles}
+        resolveBusy={resolveBusy} setResolveBusy={setResolveBusy}
+        closeModal={closeModal}
+        loadTicket={loadTicket}
+        uploadAttachmentsOrThrow={uploadAttachmentsOrThrow}
+      />
     </Layout>
   );
 }
