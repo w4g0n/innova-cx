@@ -19,6 +19,8 @@ import httpx
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import pyotp  # for RFC 6238 TOTP
@@ -64,6 +66,11 @@ app.add_middleware(
 )
 
 api = APIRouter(prefix="/api")
+def _ensure_uploads_root() -> str:
+    # Use env var if provided, otherwise default
+    root = os.getenv("UPLOADS_DIR", "/app/uploads")
+    os.makedirs(root, exist_ok=True)
+    return root
 
 
 # =========================================================
@@ -391,6 +398,12 @@ def require_employee(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[s
 
 def require_customer(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     if user.get("role") != "customer":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return user
+
+
+def require_manager(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
     return user
 
@@ -1197,7 +1210,9 @@ def employee_ticket_details(
     # Attachments
     atts = fetch_all(
         """
-        SELECT file_name
+        SELECT
+          file_name,
+          COALESCE(file_url, '/uploads/' || file_name) AS file_url
         FROM ticket_attachments
         WHERE ticket_id = %s
         ORDER BY uploaded_at ASC
@@ -1257,7 +1272,7 @@ def employee_ticket_details(
             "subject": row.get("subject"),
             "details": row.get("details"),
         },
-        "attachments": [a["file_name"] for a in atts] if atts else [],
+        "attachments": [{"fileName": a["file_name"], "fileUrl": a["file_url"]} for a in atts] if atts else [],
         "stepsTaken": [
             {
                 "step": s["step"],
@@ -1270,6 +1285,8 @@ def employee_ticket_details(
     }
 
     return {"ticket": ticket}
+
+
 
 
 @api.post("/employee/tickets/{ticket_code}/resolve")
@@ -1407,6 +1424,214 @@ def employee_resolve_ticket(
         "finalResolution": row.get("final_resolution"),
         "resolvedAt": row["resolved_at"].isoformat() if row.get("resolved_at") else None,
     }
+
+
+# =========================================================
+# Employee: Upload attachment for a ticket
+# =========================================================
+@api.post("/employee/tickets/{ticket_code}/attachments")
+async def employee_upload_attachment(
+    ticket_code: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(require_employee),
+):
+    """
+    Stores an uploaded file under <UPLOADS_DIR>/<ticket_code>/<filename>
+    and records it in ticket_attachments.
+    """
+    user_id = user["id"]
+
+    row = fetch_one(
+        "SELECT id FROM tickets WHERE ticket_code = %s AND assigned_to_user_id = %s LIMIT 1;",
+        (ticket_code, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Ticket not found or not assigned to you")
+
+    ticket_id = row["id"]
+
+    safe_name = os.path.basename(file.filename or "attachment").replace(" ", "_")
+
+    uploads_root = _ensure_uploads_root()
+    upload_dir = os.path.join(uploads_root, ticket_code)
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_path = os.path.join(upload_dir, safe_name)
+
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty upload")
+
+    with open(file_path, "wb") as f_out:
+        f_out.write(contents)
+
+    file_url = f"/uploads/{ticket_code}/{safe_name}"
+
+    execute(
+        """
+        INSERT INTO ticket_attachments (ticket_id, file_name, file_url, uploaded_by)
+        VALUES (%s, %s, %s, %s);
+        """,
+        (ticket_id, safe_name, file_url, user_id),
+    )
+
+    logger.info("attachment_upload | ticket=%s file=%s saved=%s", ticket_code, safe_name, file_path)
+    return {"ok": True, "fileName": safe_name, "fileUrl": file_url}
+
+
+# =========================================================
+# Employee Rescore + Reroute (ComplaintDetails.jsx)
+# =========================================================
+
+class EmployeeRescoreRequest(BaseModel):
+    new_priority: str
+    reason: str
+
+
+class EmployeeRerouteRequest(BaseModel):
+    new_department: str
+    reason: str
+
+
+@api.post("/employee/tickets/{ticket_code}/rescore")
+def employee_rescore_ticket(
+    ticket_code: str,
+    body: EmployeeRescoreRequest,
+    user: Dict[str, Any] = Depends(require_employee),
+):
+    user_id = user["id"]
+    allowed_priorities = {"Low", "Medium", "High", "Critical"}
+    new_priority = (body.new_priority or "").strip()
+    reason = (body.reason or "").strip()
+
+    if new_priority not in allowed_priorities:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid priority. Must be one of: {', '.join(sorted(allowed_priorities))}",
+        )
+    if not reason:
+        raise HTTPException(status_code=422, detail="Reason is required")
+
+    row = fetch_one(
+        """
+        SELECT id, ticket_code, priority
+        FROM tickets
+        WHERE ticket_code = %s AND assigned_to_user_id = %s
+        LIMIT 1;
+        """,
+        (ticket_code, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Ticket not found or not assigned to you")
+
+    current_priority = row["priority"]
+    request_code = f"REQ-{int(time.time() * 1000) % 10000000}"
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO approval_requests (
+                  request_code, ticket_id, request_type,
+                  current_value, requested_value,
+                  request_reason, submitted_by_user_id,
+                  submitted_at, status
+                )
+                VALUES (%s, %s, 'Rescoring', %s, %s, %s, %s, now(), 'Pending')
+                RETURNING request_code;
+                """,
+                (
+                    request_code,
+                    row["id"],
+                    f"Priority: {current_priority}",
+                    f"Priority: {new_priority}",
+                    reason,
+                    user_id,
+                ),
+            )
+            result = cur.fetchone()
+
+    logger.info(
+        "employee_rescore | ticket=%s from=%s to=%s request=%s",
+        ticket_code,
+        current_priority,
+        new_priority,
+        result["request_code"],
+    )
+    return {"ok": True, "requestCode": result["request_code"], "status": "Pending"}
+
+
+@api.post("/employee/tickets/{ticket_code}/reroute")
+def employee_reroute_ticket(
+    ticket_code: str,
+    body: EmployeeRerouteRequest,
+    user: Dict[str, Any] = Depends(require_employee),
+):
+    user_id = user["id"]
+    new_dept_name = (body.new_department or "").strip()
+    reason = (body.reason or "").strip()
+
+    if not new_dept_name:
+        raise HTTPException(status_code=422, detail="New department is required")
+    if not reason:
+        raise HTTPException(status_code=422, detail="Reason is required")
+
+    row = fetch_one(
+        """
+        SELECT t.id, t.ticket_code, d.name AS current_dept
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.ticket_code = %s AND t.assigned_to_user_id = %s
+        LIMIT 1;
+        """,
+        (ticket_code, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Ticket not found or not assigned to you")
+
+    new_dept = fetch_one(
+        "SELECT id, name FROM departments WHERE name = %s LIMIT 1;",
+        (new_dept_name,),
+    )
+    if not new_dept:
+        raise HTTPException(status_code=404, detail=f"Department '{new_dept_name}' not found")
+
+    current_dept = row.get("current_dept") or "Unknown"
+    request_code = f"REQ-{int(time.time() * 1000) % 10000000}"
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO approval_requests (
+                  request_code, ticket_id, request_type,
+                  current_value, requested_value,
+                  request_reason, submitted_by_user_id,
+                  submitted_at, status
+                )
+                VALUES (%s, %s, 'Rerouting', %s, %s, %s, %s, now(), 'Pending')
+                RETURNING request_code;
+                """,
+                (
+                    request_code,
+                    row["id"],
+                    f"Dept: {current_dept}",
+                    f"Dept: {new_dept_name}",
+                    reason,
+                    user_id,
+                ),
+            )
+            result = cur.fetchone()
+
+    logger.info(
+        "employee_reroute | ticket=%s from=%s to=%s request=%s",
+        ticket_code,
+        current_dept,
+        new_dept_name,
+        result["request_code"],
+    )
+    return {"ok": True, "requestCode": result["request_code"], "status": "Pending"}
+
 
 # =========================================================
 # Employee Reports (AutoGeneratedReports.jsx)
@@ -1726,7 +1951,9 @@ def customer_ticket_details(
     # Attachments
     atts = fetch_all(
         """
-        SELECT file_name
+        SELECT
+          file_name,
+          COALESCE(file_url, '/uploads/' || file_name) AS file_url
         FROM ticket_attachments
         WHERE ticket_id = %s
         ORDER BY uploaded_at ASC
@@ -1779,7 +2006,7 @@ def customer_ticket_details(
             "subject": row.get("subject"),
             "details": row.get("details"),
         },
-        "attachments": [a["file_name"] for a in atts] if atts else [],
+        "attachments": [{"fileName": a["file_name"], "fileUrl": a["file_url"]} for a in atts] if atts else [],
 
         # ✅ Added Updates Section
         "updates": [
@@ -2121,6 +2348,96 @@ ORDER BY ar.submitted_at DESC;
         })
 
     return result
+
+
+# =========================================================
+# Manager: Approve / Reject an approval request
+# =========================================================
+
+class ApprovalDecisionRequest(BaseModel):
+    decision: str          # "Approved" or "Rejected"
+    decision_notes: Optional[str] = None
+
+
+@api.patch("/manager/approvals/{request_id}")
+def decide_approval(
+    request_id: str,
+    body: ApprovalDecisionRequest,
+    user: Dict[str, Any] = Depends(require_manager),
+):
+    decision = (body.decision or "").strip()
+    if decision not in ("Approved", "Rejected"):
+        raise HTTPException(status_code=422, detail="decision must be 'Approved' or 'Rejected'")
+
+    # Fetch the approval request
+    ar = fetch_one(
+        """
+        SELECT ar.id, ar.status, ar.request_type, ar.requested_value, ar.ticket_id
+        FROM approval_requests ar
+        WHERE ar.id::text = %s
+        LIMIT 1;
+        """,
+        (request_id,),
+    )
+    if not ar:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    if ar["status"] != "Pending":
+        raise HTTPException(status_code=409, detail="This request has already been decided")
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+            # 1. Update the approval_requests record
+            cur.execute(
+                """
+                UPDATE approval_requests
+                SET
+                    status           = %s,
+                    decided_by_user_id = %s,
+                    decided_at       = now(),
+                    decision_notes   = %s
+                WHERE id::text = %s;
+                """,
+                (decision, user["id"], body.decision_notes or "", request_id),
+            )
+
+            # 2. If approved, apply the change to the ticket
+            if decision == "Approved":
+                req_type = ar["request_type"]          # 'Rescoring' or 'Rerouting'
+                requested = ar["requested_value"] or "" # e.g. "Priority: Critical" / "Dept: Security"
+                ticket_id = ar["ticket_id"]
+
+                if req_type == "Rescoring":
+                    # Extract priority from "Priority: <value>"
+                    new_priority = requested.replace("Priority:", "").strip()
+                    allowed = {"Low", "Medium", "High", "Critical"}
+                    if new_priority in allowed:
+                        cur.execute(
+                            "UPDATE tickets SET priority = %s WHERE id = %s;",
+                            (new_priority, ticket_id),
+                        )
+
+                elif req_type == "Rerouting":
+                    # Extract department name from "Dept: <name>"
+                    new_dept_name = requested.replace("Dept:", "").strip()
+                    cur.execute(
+                        "SELECT id FROM departments WHERE name = %s LIMIT 1;",
+                        (new_dept_name,),
+                    )
+                    dept_row = cur.fetchone()
+                    if dept_row:
+                        cur.execute(
+                            "UPDATE tickets SET department_id = %s WHERE id = %s;",
+                            (dept_row["id"], ticket_id),
+                        )
+
+    logger.info(
+        "approval_decision | request=%s decision=%s by=%s",
+        request_id, decision, user["id"],
+    )
+    return {"ok": True, "requestId": request_id, "decision": decision}
+
+
 # =========================================================
 
 @app.get("/manager/complaints/{ticket_id}")
@@ -2727,3 +3044,22 @@ async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
 # Attach router LAST
 # =========================================================
 app.include_router(api)
+
+# =========================================================
+# Serve uploaded files at GET /uploads/<path>
+# Using FileResponse instead of StaticFiles to avoid the
+# Starlette empty-directory 404 bug.
+# =========================================================
+_uploads_root = os.getenv("UPLOADS_DIR", "/app/uploads")
+os.makedirs(_uploads_root, exist_ok=True)
+
+@app.get("/uploads/{file_path:path}")
+async def serve_upload(file_path: str):
+    full_path = os.path.join(_uploads_root, file_path)
+    full_path = os.path.normpath(full_path)
+    # Security: prevent path traversal outside uploads root
+    if not full_path.startswith(os.path.normpath(_uploads_root)):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    return FileResponse(full_path)
