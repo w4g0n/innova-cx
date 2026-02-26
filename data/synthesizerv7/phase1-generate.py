@@ -223,6 +223,22 @@ def load_model(model_name: str, quantization: str = "auto"):
                 fallback_kwargs.pop("device_map", None)
                 fallback_kwargs.pop("torch_dtype", None)
                 model = AutoModelForCausalLM.from_pretrained(model_name, **fallback_kwargs)
+        elif "not supported for `4-bit` or `8-bit` bitsandbytes models" in str(exc):
+            # Some transformers/accelerate combinations attempt model.to(...) when
+            # device_map is provided. Retry without device_map to avoid dispatch_model.
+            print("[WARN] 8-bit + device_map dispatch is incompatible here; retrying without device_map")
+            retry_kwargs = dict(load_kwargs)
+            retry_kwargs.pop("device_map", None)
+            try:
+                model = AutoModelForCausalLM.from_pretrained(model_name, **retry_kwargs)
+            except Exception as retry_exc:
+                print(f"[WARN] 8-bit retry without device_map failed: {retry_exc}")
+                print("[WARN] Falling back to compatibility loader")
+                fallback_kwargs = dict(load_kwargs)
+                fallback_kwargs.pop("quantization_config", None)
+                fallback_kwargs.pop("device_map", None)
+                fallback_kwargs.pop("torch_dtype", None)
+                model = AutoModelForCausalLM.from_pretrained(model_name, **fallback_kwargs)
         else:
             raise
     except TypeError as exc:
