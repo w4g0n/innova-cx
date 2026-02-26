@@ -1,6 +1,6 @@
 # Synthesizer v7
 
-Three-phase synthetic data pipeline:
+Four-phase synthetic data pipeline:
 
 1. `phase1-generate.py`  
 Generates synthetic support tickets (`unlabeled.csv`) with Phi-4.
@@ -9,12 +9,15 @@ Default target size: 10,000 rows (7,500 complaints + 2,500 inquiries).
 Adds complaint labels with DeBERTa zero-shot NLI (`labeled.csv`).
 3. `phase3-evaluate.py`  
 Evaluates classifier predictions against a labeled test set.
+4. `phase4-deduplicate.py`  
+Removes exact and near-duplicate rows from generated/classified data.
 
 ## Files
 
 - `phase1-generate.py`
 - `phase2-classify.py`
 - `phase3-evaluate.py`
+- `phase4-deduplicate.py`
 - `setup_models.py` (downloads local model copies once)
 - `requirements.txt`
 - `models/` (local model storage)
@@ -100,6 +103,23 @@ Override output:
 python data/synthesizerv7/phase3-evaluate.py \
   --test data/synthesizerv7/test.csv \
   --output data/synthesizerv7/output/predictions.csv
+```
+
+### Phase 4: Deduplicate non-exact duplicates
+
+```bash
+python data/synthesizerv7/phase4-deduplicate.py \
+  --input data/synthesizerv7/output/labeled.csv \
+  --output data/synthesizerv7/output/labeled_deduplicated.csv
+```
+
+Adjust near-duplicate threshold:
+
+```bash
+python data/synthesizerv7/phase4-deduplicate.py \
+  --input data/synthesizerv7/output/labeled.csv \
+  --output data/synthesizerv7/output/labeled_deduplicated.csv \
+  --similarity-threshold 0.92
 ```
 
 ## Model path behavior in scripts
