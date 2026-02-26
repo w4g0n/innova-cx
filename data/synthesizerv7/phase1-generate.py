@@ -5,7 +5,7 @@ Generates 10,000 support tickets (7,500 complaints + 2,500 inquiries)
 across multiple domains with leasing/tenant support as the primary domain.
 
 Requirements:
-    pip install transformers torch accelerate pandas tqdm
+    pip install -r data/synthesizerv7/requirements.txt
 
 Usage:
     python phase1_generate.py --dataset dataset.csv --output output/unlabeled.csv
@@ -178,16 +178,28 @@ Respond with JSON only."""
 # MODEL LOADER
 # ─────────────────────────────────────────────
 
-def load_model(model_name: str):
+def load_model(model_name: str, quantization: str = "auto"):
     print(f"\nLoading {model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
-        device_map="auto",
-        trust_remote_code=True,
-    )
+    use_8bit = quantization == "8bit" or (quantization == "auto" and torch.cuda.is_available())
+    load_kwargs = {
+        "dtype": torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        "device_map": "auto",
+        "trust_remote_code": True,
+    }
+
+    if use_8bit:
+        try:
+            from transformers import BitsAndBytesConfig
+
+            load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
+            print("Using 8-bit quantization (bitsandbytes)")
+        except Exception as exc:
+            print(f"[WARN] Could not enable 8-bit quantization: {exc}")
+            print("[WARN] Falling back to standard precision load")
+
+    model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
     model.eval()
     print(f"Model loaded on: {next(model.parameters()).device}")
     return tokenizer, model
@@ -343,6 +355,12 @@ def main():
     parser.add_argument("--dataset",    required=True,  help="Path to dataset.csv (must have 'transcript' column)")
     parser.add_argument("--output",     default="output/unlabeled.csv", help="Path to save generated CSV")
     parser.add_argument("--model",      default=MODEL_NAME, help="HuggingFace model name")
+    parser.add_argument(
+        "--quantization",
+        choices=["auto", "none", "8bit"],
+        default="auto",
+        help="Model quantization mode (default: auto; uses 8bit on CUDA)",
+    )
     parser.add_argument("--dry-run",    action="store_true", help="Generate only 10 tickets for testing")
     parser.add_argument("--complaints", type=int, default=TARGET_COMPLAINTS)
     parser.add_argument("--inquiries",  type=int, default=TARGET_INQUIRIES)
@@ -367,7 +385,7 @@ def main():
     print(f"\nGeneration plan: {n_complaints} complaints + {n_inquiries} inquiries = {len(plan)} total")
 
     # ── Load model ──
-    tokenizer, model = load_model(args.model)
+    tokenizer, model = load_model(args.model, args.quantization)
 
     # ── Build system prompt (uses random sample of reference transcripts) ──
     system_prompt = build_system_prompt(transcripts)

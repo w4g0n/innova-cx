@@ -17,8 +17,7 @@ Metrics reported per label:
     - Confusion matrix
 
 Requirements:
-    pip install -r requirements.txt
-    pip install scikit-learn
+    pip install -r data/synthesizerv7/requirements.txt
 
 Usage:
     python phase3_evaluate.py --test test.csv
@@ -120,11 +119,34 @@ DEFAULT_OUTPUT_PATH = "output/predictions.csv"
 # CLASSIFIER (same logic as Phase 2)
 # ─────────────────────────────────────────────
 
-def load_classifier(model_name: str = MODEL_NAME):
+def load_classifier(model_name: str = MODEL_NAME, quantization: str = "auto"):
     device = 0 if torch.cuda.is_available() else -1
     device_label = "GPU" if device == 0 else "CPU"
     print(f"\nLoading classifier on {device_label}...")
-    clf = pipeline("zero-shot-classification", model=model_name, device=device)
+
+    use_8bit = quantization == "8bit" or (quantization == "auto" and torch.cuda.is_available())
+    pipe_kwargs = {
+        "task": "zero-shot-classification",
+        "model": model_name,
+    }
+
+    if use_8bit:
+        try:
+            from transformers import BitsAndBytesConfig
+
+            pipe_kwargs["model_kwargs"] = {
+                "quantization_config": BitsAndBytesConfig(load_in_8bit=True),
+                "device_map": "auto",
+            }
+            print("Using 8-bit quantization (bitsandbytes)")
+        except Exception as exc:
+            print(f"[WARN] Could not enable 8-bit quantization: {exc}")
+            print("[WARN] Falling back to standard precision load")
+            pipe_kwargs["device"] = device
+    else:
+        pipe_kwargs["device"] = device
+
+    clf = pipeline(**pipe_kwargs)
     print("Classifier ready")
     return clf
 
@@ -280,6 +302,12 @@ def main():
     parser.add_argument("--test",    required=True,                        help="Path to test CSV with ground truth labels")
     parser.add_argument("--output",  default=DEFAULT_OUTPUT_PATH,          help="Path to save predictions + ground truth CSV")
     parser.add_argument("--model",   default=MODEL_NAME)
+    parser.add_argument(
+        "--quantization",
+        choices=["auto", "none", "8bit"],
+        default="auto",
+        help="Model quantization mode (default: auto; uses 8bit on CUDA)",
+    )
     args = parser.parse_args()
 
     # ── Load test data ──
@@ -298,7 +326,7 @@ def main():
     normalise_truth_columns(df)
 
     # ── Load classifier ──
-    classifier = load_classifier(args.model)
+    classifier = load_classifier(args.model, args.quantization)
 
     # ── Run predictions ──
     pred_df = predict_all(classifier, df["text"].tolist())
