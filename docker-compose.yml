@@ -32,12 +32,14 @@ services:
       DISABLE_MFA: "${DISABLE_MFA:-false}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
       CHATBOT_PROXY_TIMEOUT_SECONDS: "${CHATBOT_PROXY_TIMEOUT_SECONDS:-120}"
+      WATCHFILES_FORCE_POLLING: "true"
     depends_on:
       postgres:
         condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
+      - ./backend:/app
       - uploads_data:/app/uploads
     networks:
       - innovacx-network
@@ -101,6 +103,8 @@ services:
     environment:
       VITE_API_BASE_URL: "${VITE_API_BASE_URL:-}"
       VITE_ORCHESTRATOR_URL: "${VITE_ORCHESTRATOR_URL:-}"
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "250"
     volumes:
       - ./frontend:/app
       - /app/node_modules
