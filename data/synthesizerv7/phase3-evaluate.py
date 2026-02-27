@@ -142,7 +142,6 @@ def load_classifier(
 
             pipe_kwargs["model_kwargs"] = {
                 "quantization_config": BitsAndBytesConfig(load_in_8bit=True),
-                "device_map": "auto",
             }
             print("Using 8-bit quantization (bitsandbytes)")
         except Exception as exc:
