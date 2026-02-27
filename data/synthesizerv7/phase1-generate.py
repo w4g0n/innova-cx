@@ -16,6 +16,7 @@ Usage:
 
 import argparse
 import json
+import importlib
 import random
 import re
 import time
@@ -115,6 +116,9 @@ SYSTEM_REFERENCE_COUNT = 4
 SYSTEM_REFERENCE_CHARS = 160
 MIN_SUBJECT_LEN = 3
 MIN_TEXT_LEN = 20
+MIN_TRANSFORMERS = (4, 46, 0)
+MIN_ACCELERATE = (0, 30, 0)
+MIN_TOKENIZERS = (0, 20, 0)
 
 
 # ─────────────────────────────────────────────
@@ -192,6 +196,31 @@ Respond with JSON only."""
 # ─────────────────────────────────────────────
 
 def load_model(model_name: str, quantization: str = "auto"):
+    def _parse_version(value: str) -> tuple[int, ...]:
+        parts = []
+        for token in re.split(r"[.+-]", value):
+            if token.isdigit():
+                parts.append(int(token))
+            else:
+                break
+        return tuple(parts)
+
+    def _check_min_version(pkg: str, minimum: tuple[int, ...]) -> None:
+        mod = importlib.import_module(pkg)
+        got = _parse_version(getattr(mod, "__version__", "0"))
+        if got < minimum:
+            minimum_str = ".".join(str(n) for n in minimum)
+            got_str = getattr(mod, "__version__", "unknown")
+            raise RuntimeError(
+                f"{pkg}=={got_str} is too old. Required: >= {minimum_str}. "
+                "Run: pip install -U \"transformers>=4.46.0\" "
+                "\"accelerate>=0.30.0\" \"tokenizers>=0.20.0\""
+            )
+
+    _check_min_version("transformers", MIN_TRANSFORMERS)
+    _check_min_version("accelerate", MIN_ACCELERATE)
+    _check_min_version("tokenizers", MIN_TOKENIZERS)
+
     print(f"\nLoading {model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 
@@ -209,9 +238,9 @@ def load_model(model_name: str, quantization: str = "auto"):
                     (
                         "8-bit with auto device map",
                         {
-                            "trust_remote_code": True,
-                            "quantization_config": bnb_cfg,
-                            "device_map": "auto",
+                    "trust_remote_code": True,
+                    "quantization_config": bnb_cfg,
+                    "device_map": "auto",
                         },
                     ),
                     (
@@ -232,7 +261,7 @@ def load_model(model_name: str, quantization: str = "auto"):
                 "standard GPU fp16",
                 {
                     "trust_remote_code": True,
-                    "torch_dtype": torch.float16,
+                    "dtype": torch.float16,
                     "device_map": "auto",
                 },
             )
@@ -243,7 +272,7 @@ def load_model(model_name: str, quantization: str = "auto"):
             "CPU fallback",
             {
                 "trust_remote_code": True,
-                "torch_dtype": torch.float32,
+                "dtype": torch.float32,
             },
         )
     )
@@ -303,6 +332,27 @@ def parse_generated_json(raw: str) -> dict[str, Any]:
             return {"subject": subject, "text": text}
 
     raise ValueError("No valid subject/text JSON payload found in response")
+
+
+def _looks_like_json_blob(value: str) -> bool:
+    lowered = str(value).strip().lower()
+    return (
+        lowered.startswith("json ")
+        or ('"subject"' in lowered and '"text"' in lowered)
+        or lowered.startswith("{")
+    )
+
+
+def sanitize_generated_fields(subject: str, text: str) -> dict[str, str] | None:
+    subject_clean = " ".join(str(subject).split()).strip()
+    text_clean = " ".join(str(text).split()).strip()
+
+    if _looks_like_json_blob(subject_clean) or _looks_like_json_blob(text_clean):
+        return None
+    if len(subject_clean) < MIN_SUBJECT_LEN or len(text_clean) < MIN_TEXT_LEN:
+        return None
+    return {"subject": subject_clean, "text": text_clean}
+
 
 def generate_ticket(
     tokenizer,
@@ -368,7 +418,11 @@ def generate_ticket(
             # Decode only the newly generated tokens
             new_tokens = output_ids[0][prompt_len:]
             raw = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
-            return parse_generated_json(raw), None
+            parsed = parse_generated_json(raw)
+            sanitized = sanitize_generated_fields(parsed["subject"], parsed["text"])
+            if sanitized is None:
+                raise ValueError("Parsed fields are malformed or still JSON-like")
+            return sanitized, None
 
         except (json.JSONDecodeError, ValueError) as e:
             if attempt < retries - 1:

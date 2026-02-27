@@ -7,12 +7,17 @@ Run Synthesizer v7 end-to-end in fixed order:
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pandas as pd
+
+MIN_TRANSFORMERS = (4, 46, 0)
+MIN_ACCELERATE = (0, 30, 0)
+MIN_TOKENIZERS = (0, 20, 0)
 
 
 def run_stage(name: str, cmd: list[str]) -> None:
@@ -28,6 +33,33 @@ def run_stage(name: str, cmd: list[str]) -> None:
 def safe_count_rows(csv_path: Path) -> int | None:
     if not csv_path.exists():
         return None
+
+
+def validate_runtime_dependencies() -> None:
+    def _parse_version(value: str) -> tuple[int, ...]:
+        parts = []
+        for token in value.replace("+", ".").split("."):
+            if token.isdigit():
+                parts.append(int(token))
+            else:
+                break
+        return tuple(parts)
+
+    def _check_min_version(pkg: str, minimum: tuple[int, ...]) -> None:
+        module = importlib.import_module(pkg)
+        got_raw = getattr(module, "__version__", "0")
+        got = _parse_version(got_raw)
+        if got < minimum:
+            required = ".".join(str(v) for v in minimum)
+            raise RuntimeError(
+                f"{pkg}=={got_raw} is too old. Required >= {required}. "
+                "Run: pip install -U \"transformers>=4.46.0\" "
+                "\"accelerate>=0.30.0\" \"tokenizers>=0.20.0\""
+            )
+
+    _check_min_version("transformers", MIN_TRANSFORMERS)
+    _check_min_version("accelerate", MIN_ACCELERATE)
+    _check_min_version("tokenizers", MIN_TOKENIZERS)
     try:
         return int(len(pd.read_csv(csv_path)))
     except Exception:
@@ -35,6 +67,7 @@ def safe_count_rows(csv_path: Path) -> int | None:
 
 
 def main() -> None:
+    validate_runtime_dependencies()
     parser = argparse.ArgumentParser(description="Run Synthesizer v7 full pipeline")
     parser.add_argument("--dataset", default="input.csv", help="Phase 1 reference dataset (must include transcript)")
     parser.add_argument("--test", default="test.csv", help="Phase 3 test/prediction input (issue_text or text)")

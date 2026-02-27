@@ -16,6 +16,12 @@ Default classifier model: `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli`
 pip install -r requirements.txt
 ```
 
+If Phase 1 fails with `SlidingWindowCache` import errors, force-upgrade:
+
+```bash
+pip install -U "transformers>=4.46.0" "accelerate>=0.30.0" "tokenizers>=0.20.0"
+```
+
 ## One-time model download
 
 ```bash

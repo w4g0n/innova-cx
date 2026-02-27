@@ -15,6 +15,7 @@ Expected input schema:
 from __future__ import annotations
 
 import argparse
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,9 @@ REMOTE_MODEL_NAME = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
 MODEL_NAME = str(CLASSIFIER_MODEL_DIR) if CLASSIFIER_MODEL_DIR.exists() else REMOTE_MODEL_NAME
 DEFAULT_OUTPUT_PATH = "output/predictions.csv"
 LABEL_COLUMNS = ["issue_severity", "issue_urgency", "safety_concern", "business_impact"]
+MIN_TRANSFORMERS = (4, 46, 0)
+MIN_ACCELERATE = (0, 30, 0)
+MIN_TOKENIZERS = (0, 20, 0)
 
 LABEL_CONFIGS = {
     "issue_severity": {
@@ -108,7 +112,7 @@ def _build_quantized_classifier(model_name: str):
     model = AutoModelForSequenceClassification.from_pretrained(
         model_name,
         quantization_config=BitsAndBytesConfig(load_in_8bit=True),
-        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+        dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
     )
     return pipeline(
         task="zero-shot-classification",
@@ -143,6 +147,33 @@ def load_classifier(model_name: str, quantization: str = "auto", force_cpu: bool
     )
     print("Classifier ready")
     return clf
+
+
+def validate_runtime_dependencies() -> None:
+    def _parse_version(value: str) -> tuple[int, ...]:
+        parts = []
+        for token in value.replace("+", ".").split("."):
+            if token.isdigit():
+                parts.append(int(token))
+            else:
+                break
+        return tuple(parts)
+
+    def _check_min_version(pkg: str, minimum: tuple[int, ...]) -> None:
+        module = importlib.import_module(pkg)
+        got_raw = getattr(module, "__version__", "0")
+        got = _parse_version(got_raw)
+        if got < minimum:
+            required = ".".join(str(v) for v in minimum)
+            raise RuntimeError(
+                f"{pkg}=={got_raw} is too old. Required >= {required}. "
+                "Run: pip install -U \"transformers>=4.46.0\" "
+                "\"accelerate>=0.30.0\" \"tokenizers>=0.20.0\""
+            )
+
+    _check_min_version("transformers", MIN_TRANSFORMERS)
+    _check_min_version("accelerate", MIN_ACCELERATE)
+    _check_min_version("tokenizers", MIN_TOKENIZERS)
 
 
 def _average_hypothesis_scores(
@@ -206,6 +237,7 @@ def predict_all(classifier, texts: list[str], model_name: str) -> pd.DataFrame:
 
 
 def main():
+    validate_runtime_dependencies()
     parser = argparse.ArgumentParser(
         description="Phase 3: Prediction-only classifier run for issue_text/text CSV"
     )
