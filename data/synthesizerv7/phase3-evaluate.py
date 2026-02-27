@@ -188,12 +188,12 @@ def _average_hypothesis_scores(
 def classify_ticket(classifier, text: str) -> dict[str, Any]:
     results: dict[str, Any] = {}
     for label_name, class_hypotheses in LABEL_CONFIGS.items():
-        all_hypotheses = [
-            hypothesis
-            for hypotheses in class_hypotheses.values()
-            for hypothesis in hypotheses
-        ]
-        output = classifier(text, candidate_labels=all_hypotheses, multi_label=True)
+        all_hypotheses = []
+        for hypotheses in class_hypotheses.values():
+            all_hypotheses.extend(hypotheses)
+
+        # Make hypotheses compete for probability mass per label group.
+        output = classifier(text, candidate_labels=all_hypotheses, multi_label=False)
         score_map = dict(zip(output["labels"], output["scores"]))
         class_scores = _average_hypothesis_scores(score_map, class_hypotheses)
         results[label_name] = max(class_scores, key=class_scores.get)
