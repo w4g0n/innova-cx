@@ -80,7 +80,10 @@
 .sidebar__nav::-webkit-scrollbar { display: none; }
 
 .sidebar__link {
-  display: block;
+  /* flex+center so the active pill shrinks to icon width when collapsed */
+  display: flex;
+  justify-content: center;
+  align-items: center;
   color: rgba(255, 255, 255, 0.85);
   text-decoration: none;
   border-radius: var(--radius-pill);
@@ -101,6 +104,11 @@
     color var(--dur-fast);
   min-height: 40px;
   overflow: hidden;
+}
+
+.sidebar--expanded .sidebar__link {
+  /* restore block so the pill stretches full link width */
+  display: block;
 }
 
 .sidebar--expanded .sidebar__pill {
@@ -157,7 +165,7 @@
   padding-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.09);
   flex-shrink: 0;
-  align-items: center;
+  align-items: stretch;
 }
 
 .sidebar__bottomBtn {
@@ -167,22 +175,24 @@
   padding: 10px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
+  justify-content: flex-start;
+  gap: 12px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   border-radius: var(--radius-pill);
   white-space: nowrap;
-  width: 100%;
+  /* no width: 100% here — icon-sized in collapsed state, centered by parent */
   transition:
     background var(--dur-fast),
     color var(--dur-fast);
   min-height: 40px;
   overflow: hidden;
+  text-align: left; 
 }
 
 .sidebar--expanded .sidebar__bottomBtn {
+  width: 100%;
   justify-content: flex-start;
   padding: 10px 12px;
 }
@@ -222,6 +232,25 @@
   background: rgba(255, 255, 255, 0.18);
   color: #fff;
   border-color: rgba(255, 255, 255, 0.3);
+}
+
+.sidebar__bottomBtn--active {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--sidebar-bg);
+  font-weight: 600;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+}
+
+.sidebar__logoutBtn {
+  background: transparent;
+  transition: all 0.2s ease;
+}
+
+.sidebar__logoutBtn:hover {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--sidebar-bg);
+  font-weight: 600;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
 }
 
 /* Mobile: hide sidebar */

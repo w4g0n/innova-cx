@@ -23,8 +23,6 @@ const AboutUs = lazy(() => import("./pages/customer/AboutUs"));
 
 
 
-
-
 const EmployeeNotifications = lazy(() =>
   import("./pages/employee/EmployeeNotifications")
 );
@@ -36,6 +34,7 @@ const EmployeeDashboard = lazy(() => import("./pages/employee/EmployeeDashboard"
 const EmployeeViewAllComplaints = lazy(() =>
   import("./pages/employee/EmployeeViewAllComplaints")
 );
+const EmployeeSettings = lazy(() => import("./pages/employee/EmployeeSettings"));
 
 const ManagerNotifications = lazy(() =>
   import("./pages/manager/ManagerNotifications")
@@ -50,6 +49,7 @@ const ManagerComplaintDetails = lazy(() =>
   import("./pages/manager/ManagerComplaintDetails")
 );
 const ViewEmployees = lazy(() => import("./pages/manager/ManagerViewEmployees"));
+const ManagerSettings = lazy(() => import("./pages/manager/ManagerSettings"));
 
 const OperatorNotifications = lazy(() =>
   import("./pages/operator/OperatorNotifications")
@@ -58,6 +58,7 @@ const ChatbotAnalysis = lazy(() => import("./pages/operator/ChatbotAnalysis"));
 const ModelAnalysis = lazy(() => import("./pages/operator/ModelAnalysis"));
 const OperatorDashboard = lazy(() => import("./pages/operator/OperatorDashboard"));
 const UsersManagement = lazy(() => import("./pages/operator/UsersManagement"));
+const OperatorSettings = lazy(() => import("./pages/operator/OperatorSettings"));
 
 export default function App() {
   useEffect(() => {
@@ -86,9 +87,6 @@ export default function App() {
         }
       >
         <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-
           <Route path="/" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/verify" element={<CustomerAuthPage />} />
@@ -202,6 +200,14 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/employee/settings"
+            element={
+              <ProtectedRoute role="employee">
+                <EmployeeSettings />
+              </ProtectedRoute>
+            }
+          />
 
           
           <Route
@@ -260,7 +266,14 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
+          <Route
+            path="/manager/settings"
+            element={
+              <ProtectedRoute role="manager">
+                <ManagerSettings />
+              </ProtectedRoute>
+            }
+          />
           
           <Route
             path="/operator"
@@ -299,6 +312,14 @@ export default function App() {
             element={
               <ProtectedRoute role="operator">
                 <OperatorNotifications />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operator/settings"
+            element={
+              <ProtectedRoute role="operator">
+                <OperatorSettings />
               </ProtectedRoute>
             }
           />
