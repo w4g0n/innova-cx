@@ -283,4 +283,4 @@ export default function ManagerComplaintDetails() {
       <Modal type={modalType} ticket={ticket} closeModal={closeModal} />
     </Layout>
   );
-}d
+}

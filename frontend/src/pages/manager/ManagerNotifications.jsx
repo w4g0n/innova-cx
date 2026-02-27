@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -41,12 +41,7 @@ export default function ManagerNotifications() {
 
   const token = localStorage.getItem("access_token");
 
-  useEffect(() => {
-    if (!token) { navigate("/login"); return; }
-    fetchNotifications();
-  }, []);
-
-  async function fetchNotifications() {
+  const fetchNotifications = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -62,7 +57,13 @@ export default function ManagerNotifications() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [token, navigate]);
+
+  useEffect(() => {
+    if (!token) { navigate("/login"); return; }
+    fetchNotifications();
+  }, []);
+
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
@@ -90,7 +91,9 @@ export default function ManagerNotifications() {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-    } catch {}
+    } catch (e) {
+      console.error("Failed to mark all notifications as read:", e);
+    }
   };
 
   const onNotificationClick = async (n) => {
@@ -100,7 +103,9 @@ export default function ManagerNotifications() {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-    } catch {}
+    } catch (e) {
+      console.error("Failed to mark notification as read:", e);
+    }
     if (n.ticketId) navigate(`/manager/complaints/${n.ticketId}`);
   };
 
