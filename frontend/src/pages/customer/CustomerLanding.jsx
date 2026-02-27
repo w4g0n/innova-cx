@@ -137,15 +137,34 @@ export default function CustomerLanding() {
     navigate("/");
   };
 
-  const toggleNotifications = () => {
-    setProfileMenuOpen(false);
-    setNotifOpen((v) => {
-      const next = !v;
-      if (next) {
-        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      }
+  const toggleNotifications = async () => {
+    setProfileMenuOpen(false); // close profile menu
+
+    setNotifOpen((prev) => {
+      const next = !prev; // toggle panel
       return next;
     });
+
+    // Only mark as read when opening the panel
+    if (!notifOpen) { // i.e., opening the panel now
+      try {
+        const token = getToken();
+        // Call API to mark all notifications as read
+        const res = await fetch(apiUrl("/api/customer/notifications?mark_read=true"), {
+          method: "GET", // or POST if you prefer
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (res.ok) {
+          // Update frontend state immediately so badge goes to 0
+          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        } else {
+          console.error("Failed to mark notifications as read");
+        }
+      } catch (err) {
+        console.error("Error marking notifications as read:", err);
+      }
+    }
   };
 
   const toggleFormInChat = () => {

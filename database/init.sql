@@ -79,6 +79,25 @@ CREATE TABLE IF NOT EXISTS departments (
 );
 
 -- -------------------------
+-- User Preferences
+-- -------------------------
+CREATE TABLE IF NOT EXISTS user_preferences (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  language TEXT NOT NULL DEFAULT 'English',
+  dark_mode BOOLEAN NOT NULL DEFAULT FALSE,
+  default_complaint_type TEXT NOT NULL DEFAULT 'General',
+  email_notifications BOOLEAN NOT NULL DEFAULT TRUE,
+  in_app_notifications BOOLEAN NOT NULL DEFAULT TRUE,
+  status_alerts BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER trg_user_preferences_updated_at
+BEFORE UPDATE ON user_preferences
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+-- -------------------------
 -- Users + Profiles (Identity)
 -- -------------------------
 CREATE TABLE IF NOT EXISTS users (
@@ -689,6 +708,20 @@ CREATE TABLE IF NOT EXISTS system_config_kv (
 -- =========================================================
 -- Seed data
 -- =========================================================
+INSERT INTO user_preferences (
+    user_id,
+    language,
+    dark_mode,
+    default_complaint_type,
+    email_notifications,
+    in_app_notifications,
+    status_alerts
+)
+SELECT u.id, 'English', false, 'General', true, true, true
+FROM users u
+WHERE NOT EXISTS (
+    SELECT 1 FROM user_preferences pref WHERE pref.user_id = u.id
+);
 
 INSERT INTO departments (name) VALUES
   ('IT'),

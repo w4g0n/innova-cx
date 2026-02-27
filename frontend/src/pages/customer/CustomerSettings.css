@@ -7,8 +7,9 @@
 
 .customerSettingsTopRow {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
+  align-items: center;      
+  justify-content: space-between; 
+  width: 100%;                 
 }
 
 .customerSettingsBackBtn {
