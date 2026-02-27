@@ -231,7 +231,7 @@ def load_model(model_name: str, quantization: str = "auto"):
         ) from exc
 
     print(f"\nLoading {model_name}...")
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     has_cuda = torch.cuda.is_available()
     use_8bit = quantization == "8bit" or (quantization == "auto" and has_cuda)
@@ -247,15 +247,13 @@ def load_model(model_name: str, quantization: str = "auto"):
                     (
                         "8-bit with auto device map",
                         {
-                    "trust_remote_code": True,
-                    "quantization_config": bnb_cfg,
-                    "device_map": "auto",
+                            "quantization_config": bnb_cfg,
+                            "device_map": "auto",
                         },
                     ),
                     (
                         "8-bit without device map",
                         {
-                            "trust_remote_code": True,
                             "quantization_config": bnb_cfg,
                         },
                     ),
@@ -269,7 +267,6 @@ def load_model(model_name: str, quantization: str = "auto"):
             (
                 "standard GPU fp16",
                 {
-                    "trust_remote_code": True,
                     "dtype": torch.float16,
                     "device_map": "auto",
                 },
@@ -280,7 +277,6 @@ def load_model(model_name: str, quantization: str = "auto"):
         (
             "CPU fallback",
             {
-                "trust_remote_code": True,
                 "dtype": torch.float32,
             },
         )
