@@ -61,15 +61,6 @@ def validate_runtime_dependencies() -> None:
     _check_min_version("accelerate", MIN_ACCELERATE)
     _check_min_version("tokenizers", MIN_TOKENIZERS)
     try:
-        from transformers.cache_utils import SlidingWindowCache  # noqa: F401
-    except Exception as exc:
-        raise RuntimeError(
-            "transformers installation is incompatible with Phi-4 mini "
-            "(missing SlidingWindowCache). Reinstall with this interpreter:\n"
-            "python -m pip install --upgrade --force-reinstall "
-            "\"transformers>=4.55.0\" \"accelerate>=0.34.0\" \"tokenizers>=0.21.0\""
-        ) from exc
-    try:
         return int(len(pd.read_csv(csv_path)))
     except Exception:
         return None

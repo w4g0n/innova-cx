@@ -220,16 +220,6 @@ def load_model(model_name: str, quantization: str = "auto"):
     _check_min_version("transformers", MIN_TRANSFORMERS)
     _check_min_version("accelerate", MIN_ACCELERATE)
     _check_min_version("tokenizers", MIN_TOKENIZERS)
-    try:
-        from transformers.cache_utils import SlidingWindowCache  # noqa: F401
-    except Exception as exc:
-        raise RuntimeError(
-            "Your transformers package is incompatible with Phi-4 mini in this environment "
-            "(missing SlidingWindowCache). Reinstall with this exact interpreter:\n"
-            "python -m pip install --upgrade --force-reinstall "
-            "\"transformers>=4.55.0\" \"accelerate>=0.34.0\" \"tokenizers>=0.21.0\""
-        ) from exc
-
     print(f"\nLoading {model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
