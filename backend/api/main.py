@@ -2025,14 +2025,12 @@ def customer_ticket_details(
 # -----------------------------
 @api.get("/customer/notifications")
 def customer_notifications_popup(
-    limit: int = Query(default=10, ge=1, le=50),  # popup usually shows only top 5-10
+    limit: int = Query(default=10, ge=1, le=50),  # popup shows top N
     only_unread: bool = Query(default=False),
+    mark_read: bool = Query(default=False),  # new param to mark them read
     user: Dict[str, Any] = Depends(require_customer),
 ):
     user_id = user["id"]
-
-    print("Customer notifications called!")
-
     # Fetch notifications
     rows = fetch_all(
         """
@@ -2056,13 +2054,27 @@ def customer_notifications_popup(
         (user_id, only_unread, limit),
     )
 
+    # Mark the fetched notifications as read if requested
+    if mark_read and rows:
+        notification_ids = [r["id"] for r in rows]
+
+        if notification_ids:
+            # dynamically generate placeholders for IN clause
+            placeholders = ", ".join(["%s"] * len(notification_ids))
+            sql = f"""
+            UPDATE notifications
+            SET read = TRUE
+            WHERE id IN ({placeholders});
+            """
+            execute(sql, notification_ids)
+
     # Count unread for badge
     unread_row = fetch_one(
         "SELECT COUNT(*)::int AS unread FROM notifications WHERE user_id = %s AND read = FALSE;",
         (user_id,),
     ) or {"unread": 0}
 
-    # Format for frontend popup
+    # Format for frontend
     notifications = [
         {
             "id": r["id"],
@@ -2166,6 +2178,101 @@ def create_customer_ticket(
             "is_recurring": is_recurring,
         },
     }
+
+# -----------------------------
+# Customer Settings - GET
+# -----------------------------
+@api.get("/customer/setting")
+def get_customer_settings(
+    user: Dict[str, Any] = Depends(require_customer),
+):
+    user_id = user["id"]
+
+    row = fetch_one(
+        """
+        SELECT
+            u.email,
+            u.role,
+            up.full_name,
+            up.phone,
+            pref.language,
+            pref.dark_mode,
+            pref.default_complaint_type,
+            pref.email_notifications,
+            pref.in_app_notifications,
+            pref.status_alerts
+        FROM users u
+        LEFT JOIN user_profiles up ON up.user_id = u.id
+        LEFT JOIN user_preferences pref ON pref.user_id = u.id
+        WHERE u.id = %s
+        """,
+        (user_id,),
+    )
+
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {
+        "account": {
+            "name": row["full_name"],
+            "email": row["email"],
+            "phone": row["phone"],
+            "role": row["role"],
+        },
+        "preferences": {
+            "language": row.get("language", "English"),
+            "darkMode": row.get("dark_mode", False),
+            "defaultComplaintType": row.get("default_complaint_type", "General"),
+            "emailNotifications": row.get("email_notifications", True),
+            "inAppNotifications": row.get("in_app_notifications", True),
+            "statusAlerts": row.get("status_alerts", True),
+        },
+    }
+
+# -----------------------------
+# Customer Settings - UPDATE
+# -----------------------------
+@api.put("/customer/setting")
+def update_customer_settings(
+    payload: Dict[str, Any],
+    user: Dict[str, Any] = Depends(require_customer),
+):
+    user_id = user["id"]
+
+    execute(
+        """
+        INSERT INTO user_preferences (
+            user_id,
+            language,
+            dark_mode,
+            default_complaint_type,
+            email_notifications,
+            in_app_notifications,
+            status_alerts
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (user_id)
+        DO UPDATE SET
+            language = EXCLUDED.language,
+            dark_mode = EXCLUDED.dark_mode,
+            default_complaint_type = EXCLUDED.default_complaint_type,
+            email_notifications = EXCLUDED.email_notifications,
+            in_app_notifications = EXCLUDED.in_app_notifications,
+            status_alerts = EXCLUDED.status_alerts,
+            updated_at = now()
+        """,
+        (
+            user_id,
+            payload.get("language", "English"),
+            payload.get("darkMode", False),
+            payload.get("defaultComplaintType", "General"),
+            payload.get("emailNotifications", True),
+            payload.get("inAppNotifications", True),
+            payload.get("statusAlerts", True),
+        ),
+    )
+
+    return {"success": True}    
 
 # -----------------------------
 # Manager View
