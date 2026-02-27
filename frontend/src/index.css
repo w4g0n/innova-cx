@@ -70,6 +70,17 @@
   --sidebar-width:          260px;
   --sidebar-collapsed:       68px;
   --sidebar-current-width:  260px;
+
+  /* Dark app shell */
+  --app-bg:      #0d0520;
+  --app-surface: #130828;
+  --app-text:    #f0eaf5;
+  --app-muted:   rgba(240, 234, 245, 0.58);
+  --app-accent:  #c084fc;
+  --app-border:  rgba(155, 113, 163, 0.22);
+
+  /* Gradient text */
+  --gradient-text: linear-gradient(135deg, #c084fc 0%, #f0b429 100%);
 }
 
 /*Global Keyframes*/
@@ -86,6 +97,32 @@
 @keyframes shimmer {
   from { background-position: -200% center; }
   to   { background-position:  200% center; }
+}
+
+@keyframes blobFloat {
+  0%,100% {
+    border-radius: 60% 40% 70% 30% / 50% 60% 40% 70%;
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    border-radius: 40% 60% 30% 70% / 70% 40% 60% 30%;
+    transform: translate(18px, -14px) scale(1.04);
+  }
+  66% {
+    border-radius: 70% 30% 50% 50% / 30% 70% 50% 50%;
+    transform: translate(-10px, 18px) scale(0.97);
+  }
+}
+
+@keyframes pulseGlow {
+  0%,100% { box-shadow: 0 0 0 0 rgba(192, 132, 252, 0.35); }
+  50%     { box-shadow: 0 0 0 14px rgba(192, 132, 252, 0); }
+}
+
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 /*Scroll-reveal utility*/

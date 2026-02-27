@@ -57,6 +57,7 @@ const OperatorNotifications = lazy(() =>
 const ChatbotAnalysis = lazy(() => import("./pages/operator/ChatbotAnalysis"));
 const ModelAnalysis = lazy(() => import("./pages/operator/ModelAnalysis"));
 const OperatorDashboard = lazy(() => import("./pages/operator/OperatorDashboard"));
+const UsersManagement = lazy(() => import("./pages/operator/UsersManagement"));
 
 export default function App() {
   useEffect(() => {
@@ -282,6 +283,14 @@ export default function App() {
             element={
               <ProtectedRoute role="operator">
                 <ChatbotAnalysis />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operator/users"
+            element={
+              <ProtectedRoute role="operator">
+                <UsersManagement />
               </ProtectedRoute>
             }
           />

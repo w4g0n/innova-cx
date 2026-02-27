@@ -3,7 +3,7 @@
   align-items: center;
   background: #fdf9ff;
   border-radius: 999px;
-  padding: 16px 20px;
+  padding: 11px 18px;
   border: 1.5px solid #e5d4ff;
   transition: border-color 0.2s;
   width: 100%;
@@ -17,6 +17,7 @@
   margin-right: 10px;
   color: #a855f7;
   font-size: 14px;
+  flex-shrink: 0;
 }
 
 .pillSearch__input {
@@ -26,4 +27,8 @@
   font-size: 14px;
   color: #111827;
   outline: none;
+}
+
+.pillSearch__input::placeholder {
+  color: rgba(17, 17, 17, 0.4);
 }

@@ -1,4 +1,4 @@
-/* ── Pill Select ─────────────────────────────── */
+/* Pill Select */
 .pillSelect {
   position: relative;
   display: inline-flex;
@@ -23,7 +23,7 @@
   cursor: pointer;
   transition:
     border-color var(--dur-fast),
-    box-shadow var(--dur-fast);
+    box-shadow   var(--dur-fast);
 }
 
 .pillSelect__select:hover {
