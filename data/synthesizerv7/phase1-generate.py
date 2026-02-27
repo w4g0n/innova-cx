@@ -1,7 +1,7 @@
 """
-Phase 1 — Synthetic Ticket Generation using Phi-3.5 Mini
-==================================================
-Generates 10,000 support tickets (7,500 complaints + 2,500 inquiries)
+Phase 1 — Synthetic Ticket Generation using Phi-4 Mini
+=======================================================
+Generates support tickets (default: 10,000 = 7,500 complaints + 2,500 inquiries)
 across multiple domains with leasing/tenant support as the primary domain.
 
 Requirements:
@@ -95,8 +95,8 @@ LEASING_ISSUES = [
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
-GENERATOR_MODEL_DIR = BASE_DIR / "models" / "generator" / "phi-3.5-mini-instruct"
-REMOTE_MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
+GENERATOR_MODEL_DIR = BASE_DIR / "models" / "generator" / "phi-4-mini-instruct"
+REMOTE_MODEL_NAME = "microsoft/Phi-4-mini-instruct"
 MODEL_NAME = str(GENERATOR_MODEL_DIR) if GENERATOR_MODEL_DIR.exists() else REMOTE_MODEL_NAME
 PRIMARY_DOMAIN = "office leasing and tenant support"
 LENGTH_HINTS = (
@@ -113,6 +113,8 @@ PHASE2_LABEL_COLUMNS = (
 CHECKPOINT_EVERY = 100
 SYSTEM_REFERENCE_COUNT = 4
 SYSTEM_REFERENCE_CHARS = 160
+MIN_SUBJECT_LEN = 3
+MIN_TEXT_LEN = 20
 
 
 # ─────────────────────────────────────────────
@@ -193,81 +195,73 @@ def load_model(model_name: str, quantization: str = "auto"):
     print(f"\nLoading {model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 
-    use_8bit = quantization == "8bit" or (quantization == "auto" and torch.cuda.is_available())
-    load_kwargs = {
-        "torch_dtype": torch.bfloat16 if torch.cuda.is_available() else torch.float32,
-        "device_map": "auto",
-        "trust_remote_code": True,
-    }
+    has_cuda = torch.cuda.is_available()
+    use_8bit = quantization == "8bit" or (quantization == "auto" and has_cuda)
+    load_attempts: list[tuple[str, dict[str, Any]]] = []
 
-    if use_8bit:
+    if use_8bit and has_cuda:
         try:
             from transformers import BitsAndBytesConfig
 
-            load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
-            print("Using 8-bit quantization (bitsandbytes)")
+            bnb_cfg = BitsAndBytesConfig(load_in_8bit=True)
+            load_attempts.extend(
+                [
+                    (
+                        "8-bit with auto device map",
+                        {
+                            "trust_remote_code": True,
+                            "quantization_config": bnb_cfg,
+                            "device_map": "auto",
+                        },
+                    ),
+                    (
+                        "8-bit without device map",
+                        {
+                            "trust_remote_code": True,
+                            "quantization_config": bnb_cfg,
+                        },
+                    ),
+                ]
+            )
         except Exception as exc:
-            print(f"[WARN] Could not enable 8-bit quantization: {exc}")
-            print("[WARN] Falling back to standard precision load")
+            print(f"[WARN] Could not configure 8-bit quantization: {exc}")
 
-    def _load_standard_gpu_then_cpu():
-        standard_gpu_kwargs = {
-            "trust_remote_code": True,
-            "torch_dtype": torch.float16 if torch.cuda.is_available() else torch.float32,
-            "device_map": "auto",
-        }
+    if has_cuda:
+        load_attempts.append(
+            (
+                "standard GPU fp16",
+                {
+                    "trust_remote_code": True,
+                    "torch_dtype": torch.float16,
+                    "device_map": "auto",
+                },
+            )
+        )
+
+    load_attempts.append(
+        (
+            "CPU fallback",
+            {
+                "trust_remote_code": True,
+                "torch_dtype": torch.float32,
+            },
+        )
+    )
+
+    model = None
+    last_error: Exception | None = None
+    for mode, kwargs in load_attempts:
         try:
-            print("[WARN] Trying non-quantized GPU load before CPU fallback")
-            return AutoModelForCausalLM.from_pretrained(model_name, **standard_gpu_kwargs)
-        except Exception as gpu_exc:
-            print(f"[WARN] Non-quantized GPU load failed: {gpu_exc}")
-            cpu_kwargs = {"trust_remote_code": True}
-            print("[WARN] Falling back to CPU load")
-            return AutoModelForCausalLM.from_pretrained(model_name, **cpu_kwargs)
+            model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+            print(f"Model backend: {mode}")
+            break
+        except Exception as exc:
+            last_error = exc
+            print(f"[WARN] Load attempt failed ({mode}): {exc}")
 
-    try:
-        model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
-    except ValueError as exc:
-        # Typical on 16GB GPUs when some quantized modules are auto-dispatched
-        # to CPU/disk without explicit fp32 CPU offload enabled.
-        if "load_in_8bit_fp32_cpu_offload" in str(exc):
-            print("[WARN] VRAM insufficient for pure 8-bit placement; retrying with CPU offload")
-            try:
-                from transformers import BitsAndBytesConfig
+    if model is None:
+        raise RuntimeError(f"Unable to load generation model: {last_error}")
 
-                offload_kwargs = dict(load_kwargs)
-                offload_kwargs["quantization_config"] = BitsAndBytesConfig(
-                    load_in_8bit=True,
-                    llm_int8_enable_fp32_cpu_offload=True,
-                )
-                model = AutoModelForCausalLM.from_pretrained(model_name, **offload_kwargs)
-            except Exception as offload_exc:
-                print(f"[WARN] 8-bit offload retry failed: {offload_exc}")
-                print("[WARN] Falling back to compatibility loader")
-                model = _load_standard_gpu_then_cpu()
-        elif "not supported for `4-bit` or `8-bit` bitsandbytes models" in str(exc):
-            # Some transformers/accelerate combinations attempt model.to(...) when
-            # device_map is provided. Retry without device_map to avoid dispatch_model.
-            print("[WARN] 8-bit + device_map dispatch is incompatible here; retrying without device_map")
-            retry_kwargs = dict(load_kwargs)
-            retry_kwargs.pop("device_map", None)
-            try:
-                model = AutoModelForCausalLM.from_pretrained(model_name, **retry_kwargs)
-            except Exception as retry_exc:
-                print(f"[WARN] 8-bit retry without device_map failed: {retry_exc}")
-                print("[WARN] Falling back to compatibility loader")
-                model = _load_standard_gpu_then_cpu()
-        else:
-            raise
-    except TypeError as exc:
-        # Compatibility fallback for older/newer transformers/model wrappers.
-        print(f"[WARN] Model load args not accepted ({exc}); retrying with compatibility fallback")
-        try:
-            fallback_kwargs = dict(load_kwargs)
-            fallback_kwargs.pop("torch_dtype", None)
-            model = AutoModelForCausalLM.from_pretrained(model_name, **fallback_kwargs)
-        except TypeError:
-            model = _load_standard_gpu_then_cpu()
     model.eval()
     print(f"Model loaded on: {next(model.parameters()).device}")
     return tokenizer, model
@@ -294,7 +288,7 @@ def parse_generated_json(raw: str) -> dict[str, Any]:
             if "subject" in parsed and "text" in parsed:
                 subject = str(parsed["subject"]).strip()
                 text = str(parsed["text"]).strip()
-                if len(subject) >= 3 and len(text) >= 20:
+                if len(subject) >= MIN_SUBJECT_LEN and len(text) >= MIN_TEXT_LEN:
                     return {"subject": subject, "text": text}
         except json.JSONDecodeError:
             pass
@@ -305,7 +299,7 @@ def parse_generated_json(raw: str) -> dict[str, Any]:
     if subject_match and text_match:
         subject = _unescape_json_string(subject_match.group(1)).strip()
         text = _unescape_json_string(text_match.group(1)).strip()
-        if len(subject) >= 3 and len(text) >= 20:
+        if len(subject) >= MIN_SUBJECT_LEN and len(text) >= MIN_TEXT_LEN:
             return {"subject": subject, "text": text}
 
     raise ValueError("No valid subject/text JSON payload found in response")
@@ -320,9 +314,9 @@ def generate_ticket(
     temperature: float = 0.3,
     top_p: float = 0.8,
     do_sample: bool = False,
-) -> dict | None:
+) -> tuple[dict[str, Any] | None, str | None]:
     """
-    Calls Phi-3.5 Mini with the given prompts and parses the JSON response.
+    Calls Phi-4 Mini with the given prompts and parses the JSON response.
     Retries up to `retries` times on parse failure.
     """
     messages = [
@@ -374,14 +368,14 @@ def generate_ticket(
             # Decode only the newly generated tokens
             new_tokens = output_ids[0][prompt_len:]
             raw = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
-            return parse_generated_json(raw)
+            return parse_generated_json(raw), None
 
         except (json.JSONDecodeError, ValueError) as e:
             if attempt < retries - 1:
                 time.sleep(0.5)
                 continue
             print(f"  [WARN] Failed after {retries} attempts: {e}")
-            return None
+            return None, "parse_fail"
         except torch.OutOfMemoryError:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
@@ -393,7 +387,8 @@ def generate_ticket(
                 time.sleep(0.25)
                 continue
             print("  [WARN] Generation failed due to CUDA OOM")
-            return None
+            return None, "oom_fail"
+    return None, "unknown_fail"
 
 
 # ─────────────────────────────────────────────
@@ -461,7 +456,7 @@ def build_result_row(ticket_type: str, domain: str, generated: dict[str, Any]) -
 # ─────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Phase 1: Synthetic ticket generation with Phi-3.5 Mini")
+    parser = argparse.ArgumentParser(description="Phase 1: Synthetic ticket generation with Phi-4 Mini")
     parser.add_argument("--dataset",    required=True,  help="Path to dataset.csv (must have 'transcript' column)")
     parser.add_argument("--output",     default="output/unlabeled.csv", help="Path to save generated CSV")
     parser.add_argument("--model",      default=MODEL_NAME, help="HuggingFace model name")
@@ -508,7 +503,12 @@ def main():
     # ── Setup ──
     leasing_sampler = LeasingIssueSampler()
     results = []
-    failed = 0
+    stats = {
+        "accepted": 0,
+        "parse_fail": 0,
+        "oom_fail": 0,
+        "unknown_fail": 0,
+    }
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -526,7 +526,7 @@ def main():
 
         user_prompt = build_user_prompt(ticket_type, domain, style, issue_hint)
 
-        result = generate_ticket(
+        result, fail_reason = generate_ticket(
             tokenizer,
             model,
             system_prompt,
@@ -540,8 +540,9 @@ def main():
 
         if result:
             results.append(build_result_row(ticket_type, domain, result))
+            stats["accepted"] += 1
         else:
-            failed += 1
+            stats[fail_reason or "unknown_fail"] += 1
 
         # Checkpoint every 100 rows
         if results and len(results) % CHECKPOINT_EVERY == 0:
@@ -553,8 +554,10 @@ def main():
 
     print(f"\n{'='*50}")
     print(f"Generation complete")
-    print(f"  Successful : {len(results)}")
-    print(f"  Failed     : {failed}")
+    print(f"  Accepted   : {stats['accepted']}")
+    print(f"  Parse fail : {stats['parse_fail']}")
+    print(f"  OOM fail   : {stats['oom_fail']}")
+    print(f"  Other fail : {stats['unknown_fail']}")
     print(f"  Saved to   : {output_path}")
     print(f"\nDomain distribution:")
     print(df.groupby(["ticket_type", "domain"]).size().to_string())

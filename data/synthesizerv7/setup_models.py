@@ -1,6 +1,6 @@
 """
 Downloads and stores Synthesizer v7 models into local folders:
-  - models/generator/phi-3.5-mini-instruct
+  - models/generator/phi-4-mini-instruct
   - models/classifier/deberta-v3-base-mnli-fever-anli
 
 Usage:
@@ -15,7 +15,7 @@ from huggingface_hub import snapshot_download
 
 
 BASE_DIR = Path(__file__).resolve().parent
-GENERATOR_DIR = BASE_DIR / "models" / "generator" / "phi-3.5-mini-instruct"
+GENERATOR_DIR = BASE_DIR / "models" / "generator" / "phi-4-mini-instruct"
 CLASSIFIER_DIR = BASE_DIR / "models" / "classifier" / "deberta-v3-base-mnli-fever-anli"
 
 
@@ -42,13 +42,18 @@ def download(repo_id: str, target_dir: Path, force: bool = False) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Download local models for Synthesizer v7")
     parser.add_argument(
+        "--generator-model",
+        default="microsoft/Phi-4-mini-instruct",
+        help="Generator model repo id to download",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Force re-download even if local model files already exist",
     )
     args = parser.parse_args()
 
-    download("microsoft/Phi-3.5-mini-instruct", GENERATOR_DIR, force=args.force)
+    download(args.generator_model, GENERATOR_DIR, force=args.force)
     download("MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli", CLASSIFIER_DIR, force=args.force)
     print("All models downloaded.")
 
