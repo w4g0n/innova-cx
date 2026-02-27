@@ -91,9 +91,30 @@ export default function ManagerViewComplaints() {
 
   const clearSelection = () => setSelectedEmployee("");
 
-  const confirmAssignment = () => {
-    if (!activeTicketId) return;
+const confirmAssignment = async () => {
+  if (!activeTicketId) return;
 
+  console.log("PATCH →", apiUrl(`/manager/complaints/${activeTicketId}/assign`));
+  console.log("body →", JSON.stringify({ employee_name: selectedEmployee || null }));
+
+  try {
+    const res = await fetch(apiUrl(`/manager/complaints/${activeTicketId}/assign`), {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ employee_name: selectedEmployee || null }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("Assignment failed:", err);
+      alert(`Failed to update assignment: ${err.detail || res.statusText}`);
+      return;
+    }
+
+    // Optimistically update local state after confirmed DB write
     setRows((prev) =>
       prev.map((r) => {
         if (r.id !== activeTicketId) return r;
@@ -112,9 +133,13 @@ export default function ManagerViewComplaints() {
         };
       })
     );
+  } catch (err) {
+    console.error("Network error during assignment:", err);
+    alert("Network error. Please try again.");
+  }
 
-    closeAssignModal();
-  };
+  closeAssignModal();
+};
 
   const handleReroute = (ticketId, dept) => {
     setRows((prev) =>
@@ -260,7 +285,7 @@ export default function ManagerViewComplaints() {
                         to={`/manager/complaints/${r.id}`}
                         state={{ ticket: r }}
                       >
-                        {r.id}
+                        {r.ticket_code}
                       </Link>
                     </td>
                     <td className="mv-subjectCell mv-cellGrow">{r.subject}</td>

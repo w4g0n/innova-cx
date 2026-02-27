@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ManagerComplaintDetails.css";
+import { apiUrl } from "../../config/apiBase";
+
 
 export default function ManagerComplaintDetails() {
   const { id } = useParams();
@@ -15,106 +17,31 @@ export default function ManagerComplaintDetails() {
   const [modalType, setModalType] = useState(null);
   const closeModal = () => setModalType(null);
 
-  const managerFallbackTickets = useMemo(
-    () => [
-      {
-        id: "CX-1122",
-        subject: "Air conditioning not working",
-        priority: "critical",
-        priorityText: "Critical",
-        status: "Unassigned",
-        assignee: "—",
-        issueDate: "19/11/2025",
-        respondTime: "30 Minutes",
-        resolveTime: "6 Hours",
-      },
-      {
-        id: "CX-3862",
-        subject: "Water leakage in pantry",
-        priority: "critical",
-        priorityText: "Critical",
-        status: "Overdue",
-        assignee: "Maria Lopez",
-        issueDate: "18/11/2025",
-        respondTime: "30 Minutes",
-        resolveTime: "6 Hours",
-      },
-      {
-        id: "CX-4587",
-        subject: "Wi-Fi connection unstable",
-        priority: "high",
-        priorityText: "High",
-        status: "Escalated",
-        assignee: "Supervisor Team",
-        issueDate: "19/11/2025",
-        respondTime: "1 Hour",
-        resolveTime: "18 Hours",
-      },
-      {
-        id: "CX-4630",
-        subject: "Lift stopping between floors",
-        priority: "high",
-        priorityText: "High",
-        status: "Assigned",
-        assignee: "Ahmed Hassan",
-        issueDate: "18/11/2025",
-        respondTime: "1 Hour",
-        resolveTime: "18 Hours",
-      },
-      {
-        id: "CX-4701",
-        subject: "Cleaning service missed schedule",
-        priority: "medium",
-        priorityText: "Medium",
-        status: "Unassigned",
-        assignee: "—",
-        issueDate: "16/11/2025",
-        respondTime: "3 Hours",
-        resolveTime: "2 Days",
-      },
-      {
-        id: "CX-4725",
-        subject: "Parking access card not working",
-        priority: "medium",
-        priorityText: "Medium",
-        status: "Overdue",
-        assignee: "Omar Ali",
-        issueDate: "13/11/2025",
-        respondTime: "3 Hours",
-        resolveTime: "2 Days",
-      },
-      {
-        id: "CX-4780",
-        subject: "Noise from maintenance works",
-        priority: "low",
-        priorityText: "Low",
-        status: "Escalated",
-        assignee: "Sara Ahmed",
-        issueDate: "09/11/2025",
-        respondTime: "6 Hours",
-        resolveTime: "3 Days",
-      },
-    ],
-    []
-  );
-
   useEffect(() => {
     if (ticket) return;
 
     setLoading(true);
     setError(null);
 
-    try {
-      const found = managerFallbackTickets.find((t) => t.id === id);
-      if (!found) throw new Error("Ticket not found");
-      setTicket(found);
-    } catch (e) {
-      setError(e.message || "Could not load ticket details.");
-      setTicket(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [id, ticket, managerFallbackTickets]);
+    const token = localStorage.getItem("access_token");
+
+    fetch(apiUrl(`/manager/complaints/${id}`), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Ticket not found");
+        return res.json();
+      })
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setTicket(data);
+      })
+      .catch((e) => {
+        setError(e.message || "Could not load ticket details.");
+        setTicket(null);
+      })
+      .finally(() => setLoading(false));
+  }, [id, ticket]);
 
   const Modal = ({ type }) => {
     if (!type || !ticket) return null;
@@ -284,7 +211,7 @@ export default function ManagerComplaintDetails() {
               ← Back
             </button>
 
-            <h1 className="mvd-title">Ticket ID: {ticket.id}</h1>
+            <h1 className="mvd-title">Ticket ID: {ticket.ticket_code || ticket.id}</h1>
 
             <div className="mvd-pills">
               <span className={`mvd-pill mvd-pill--${(ticket.priorityText || "Medium").toLowerCase()}`}>

@@ -7,8 +7,6 @@ import KpiCard from "../../components/common/KpiCard";
 import { apiUrl } from "../../config/apiBase";
 import "./ManagerViewEmployees.css";
 
-const API_BASE = apiUrl("");
-
 export default function ManagerViewEmployees() {
   const navigate = useNavigate();
 
@@ -28,7 +26,7 @@ export default function ManagerViewEmployees() {
 
     const fetchEmployees = async () => {
       try {
-        const res = await fetch(`${API_BASE}/manager/employees`, {
+        const res = await fetch(apiUrl("/manager/employees"), {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,

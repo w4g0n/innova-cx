@@ -485,6 +485,109 @@ CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(sta
 CREATE INDEX IF NOT EXISTS idx_approval_requests_ticket ON approval_requests(ticket_id);
 
 -- -------------------------
+-- Auto-notify manager on new approval requests
+-- -------------------------
+CREATE OR REPLACE FUNCTION notify_manager_on_approval_request()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_manager_id     UUID;
+  v_ticket_code    TEXT;
+  v_ticket_priority ticket_priority;
+  v_submitter_name TEXT;
+  v_title          TEXT;
+  v_message        TEXT;
+BEGIN
+  -- Get the ticket info
+  SELECT ticket_code, priority
+  INTO v_ticket_code, v_ticket_priority
+  FROM tickets WHERE id = NEW.ticket_id;
+
+  -- Get the submitter's name
+  SELECT full_name INTO v_submitter_name
+  FROM user_profiles WHERE user_id = NEW.submitted_by_user_id;
+
+  -- Find any active manager(s) — notifies all managers
+  FOR v_manager_id IN
+    SELECT id FROM users WHERE role = 'manager' AND is_active = TRUE
+  LOOP
+    v_title := CASE NEW.request_type
+      WHEN 'Rescoring' THEN 'Rescoring Request — ' || COALESCE(v_ticket_code, 'Unknown')
+      WHEN 'Rerouting' THEN 'Rerouting Request — ' || COALESCE(v_ticket_code, 'Unknown')
+      ELSE 'Approval Request — ' || COALESCE(v_ticket_code, 'Unknown')
+    END;
+
+    v_message := COALESCE(v_submitter_name, 'An employee') || ' submitted a '
+      || lower(NEW.request_type::TEXT) || ' request. '
+      || 'Current: ' || NEW.current_value || ' → Requested: ' || NEW.requested_value || '.';
+
+    INSERT INTO notifications (user_id, type, title, message, priority, ticket_id)
+    VALUES (
+      v_manager_id,
+      'status_change',
+      v_title,
+      v_message,
+      v_ticket_priority,
+      NEW.ticket_id
+    );
+  END LOOP;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_notify_manager_approval_request ON approval_requests;
+CREATE TRIGGER trg_notify_manager_approval_request
+AFTER INSERT ON approval_requests
+FOR EACH ROW
+EXECUTE FUNCTION notify_manager_on_approval_request();
+
+-- -------------------------
+-- Auto-notify manager on their own approval decision (confirmation)
+-- -------------------------
+CREATE OR REPLACE FUNCTION notify_manager_on_approval_decision()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_ticket_code    TEXT;
+  v_ticket_priority ticket_priority;
+  v_title          TEXT;
+  v_message        TEXT;
+BEGIN
+  -- Only fire when status actually changes to Approved or Rejected
+  IF OLD.status = NEW.status THEN RETURN NEW; END IF;
+  IF NEW.status NOT IN ('Approved', 'Rejected') THEN RETURN NEW; END IF;
+  IF NEW.decided_by_user_id IS NULL THEN RETURN NEW; END IF;
+
+  SELECT ticket_code, priority
+  INTO v_ticket_code, v_ticket_priority
+  FROM tickets WHERE id = NEW.ticket_id;
+
+  v_title := NEW.status || ': ' || NEW.request_type::TEXT || ' — ' || COALESCE(v_ticket_code, 'Unknown');
+
+  v_message := 'You ' || lower(NEW.status::TEXT) || ' the '
+    || lower(NEW.request_type::TEXT) || ' request for ticket '
+    || COALESCE(v_ticket_code, 'Unknown') || '. '
+    || 'Change: ' || NEW.current_value || ' → ' || NEW.requested_value || '.';
+
+  INSERT INTO notifications (user_id, type, title, message, priority, ticket_id)
+  VALUES (
+    NEW.decided_by_user_id,
+    'status_change',
+    v_title,
+    v_message,
+    v_ticket_priority,
+    NEW.ticket_id
+  );
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_notify_manager_approval_decision ON approval_requests;
+CREATE TRIGGER trg_notify_manager_approval_decision
+AFTER UPDATE ON approval_requests
+FOR EACH ROW
+EXECUTE FUNCTION notify_manager_on_approval_decision();
+-- -------------------------
 -- Chat tables
 -- -------------------------
 CREATE TABLE IF NOT EXISTS chat_conversations (
