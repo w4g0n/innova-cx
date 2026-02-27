@@ -1,8 +1,152 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ManagerComplaintDetails.css";
 import { apiUrl } from "../../config/apiBase";
+
+
+function Modal({ type, ticket, closeModal }) {
+  if (!type || !ticket) return null;
+
+  const titles = {
+    reroute: "Reroute Ticket",
+    rescore: "Rescore Ticket",
+    escalate: "Escalate Ticket",
+    resolve: "Resolve Ticket",
+  };
+
+  const submitText =
+    type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
+
+  const renderBody = () => {
+    switch (type) {
+      case "reroute":
+        return (
+          <>
+            <label className="mvd-modalLabel">New Department</label>
+            <div className="mvd-modalDropdown">
+              <select>
+                <option>Select Department</option>
+                <option>IT</option>
+                <option>Facilities</option>
+                <option>Security</option>
+                <option>HR</option>
+                <option>Admin</option>
+              </select>
+            </div>
+
+            <label className="mvd-modalLabel">Reason for rerouting</label>
+            <textarea
+              className="mvd-modalTextarea"
+              placeholder="Explain why this ticket should be rerouted..."
+            />
+          </>
+        );
+
+      case "rescore":
+        return (
+          <>
+            <label className="mvd-modalLabel">New Priority</label>
+            <div className="mvd-modalDropdown">
+              <select defaultValue={ticket.priorityText || "Medium"}>
+                <option>Low</option>
+                <option>Medium</option>
+                <option>High</option>
+                <option>Critical</option>
+              </select>
+            </div>
+
+            <label className="mvd-modalLabel">Reason for rescoring</label>
+            <textarea
+              className="mvd-modalTextarea"
+              placeholder="Explain why the priority should be adjusted..."
+            />
+          </>
+        );
+
+      case "escalate":
+        return (
+          <>
+            <label className="mvd-modalLabel">Escalation Level</label>
+            <div className="mvd-modalDropdown">
+              <select>
+                <option>Select Level</option>
+                <option>Supervisor</option>
+                <option>Department Head</option>
+                <option>Management</option>
+              </select>
+            </div>
+
+            <label className="mvd-modalLabel">Reason for escalation</label>
+            <textarea
+              className="mvd-modalTextarea"
+              placeholder="Explain why this ticket must be escalated..."
+            />
+
+            <label className="mvd-modalLabel">Additional Notes (optional)</label>
+            <textarea className="mvd-modalTextarea mvd-modalTextareaSmall" placeholder="Any extra context..." />
+          </>
+        );
+
+      case "resolve":
+        return (
+          <>
+            <label className="mvd-modalLabel">Resolution</label>
+            <textarea
+              className="mvd-modalTextarea"
+              placeholder="Describe the final resolution provided..."
+            />
+
+            <label className="mvd-modalLabel">Steps Taken</label>
+            <textarea
+              className="mvd-modalTextarea"
+              placeholder="List the steps taken to resolve this issue..."
+            />
+
+            <label className="mvd-modalLabel">Attachments (optional)</label>
+            <div className="mvd-uploadBox">
+              <input type="file" multiple />
+            </div>
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="mvd-overlay" onClick={closeModal} role="presentation">
+      <div
+        className={`mvd-modalCard ${type === "escalate" ? "mvd-modalRed" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="mvd-modalHeader">
+          <h2 className="mvd-modalTitle">{titles[type]}</h2>
+          <button className="mvd-close" type="button" onClick={closeModal}>
+            ✕
+          </button>
+        </div>
+
+        <div className="mvd-modalBody">{renderBody()}</div>
+
+        <div className="mvd-modalFooter">
+          <button className="mvd-btn mvd-btnCancel" type="button" onClick={closeModal}>
+            Cancel
+          </button>
+          <button
+            className={`mvd-btn ${type === "escalate" ? "mvd-btnEscalate" : "mvd-btnSubmit"}`}
+            type="button"
+          >
+            {submitText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 
 export default function ManagerComplaintDetails() {
@@ -19,12 +163,7 @@ export default function ManagerComplaintDetails() {
 
   useEffect(() => {
     if (ticket) return;
-
-    setLoading(true);
-    setError(null);
-
     const token = localStorage.getItem("access_token");
-
     fetch(apiUrl(`/manager/complaints/${id}`), {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -34,157 +173,14 @@ export default function ManagerComplaintDetails() {
       })
       .then((data) => {
         if (data.error) throw new Error(data.error);
+        setLoading(false);
         setTicket(data);
       })
       .catch((e) => {
         setError(e.message || "Could not load ticket details.");
-        setTicket(null);
-      })
-      .finally(() => setLoading(false));
+        setLoading(false);
+      });
   }, [id, ticket]);
-
-  const Modal = ({ type }) => {
-    if (!type || !ticket) return null;
-
-    const titles = {
-      reroute: "Reroute Ticket",
-      rescore: "Rescore Ticket",
-      escalate: "Escalate Ticket",
-      resolve: "Resolve Ticket",
-    };
-
-    const submitText =
-      type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
-
-    const renderBody = () => {
-      switch (type) {
-        case "reroute":
-          return (
-            <>
-              <label className="mvd-modalLabel">New Department</label>
-              <div className="mvd-modalDropdown">
-                <select>
-                  <option>Select Department</option>
-                  <option>IT</option>
-                  <option>Facilities</option>
-                  <option>Security</option>
-                  <option>HR</option>
-                  <option>Admin</option>
-                </select>
-              </div>
-
-              <label className="mvd-modalLabel">Reason for rerouting</label>
-              <textarea
-                className="mvd-modalTextarea"
-                placeholder="Explain why this ticket should be rerouted..."
-              />
-            </>
-          );
-
-        case "rescore":
-          return (
-            <>
-              <label className="mvd-modalLabel">New Priority</label>
-              <div className="mvd-modalDropdown">
-                <select defaultValue={ticket.priorityText || "Medium"}>
-                  <option>Low</option>
-                  <option>Medium</option>
-                  <option>High</option>
-                  <option>Critical</option>
-                </select>
-              </div>
-
-              <label className="mvd-modalLabel">Reason for rescoring</label>
-              <textarea
-                className="mvd-modalTextarea"
-                placeholder="Explain why the priority should be adjusted..."
-              />
-            </>
-          );
-
-        case "escalate":
-          return (
-            <>
-              <label className="mvd-modalLabel">Escalation Level</label>
-              <div className="mvd-modalDropdown">
-                <select>
-                  <option>Select Level</option>
-                  <option>Supervisor</option>
-                  <option>Department Head</option>
-                  <option>Management</option>
-                </select>
-              </div>
-
-              <label className="mvd-modalLabel">Reason for escalation</label>
-              <textarea
-                className="mvd-modalTextarea"
-                placeholder="Explain why this ticket must be escalated..."
-              />
-
-              <label className="mvd-modalLabel">Additional Notes (optional)</label>
-              <textarea className="mvd-modalTextarea mvd-modalTextareaSmall" placeholder="Any extra context..." />
-            </>
-          );
-
-        case "resolve":
-          return (
-            <>
-              <label className="mvd-modalLabel">Resolution</label>
-              <textarea
-                className="mvd-modalTextarea"
-                placeholder="Describe the final resolution provided..."
-              />
-
-              <label className="mvd-modalLabel">Steps Taken</label>
-              <textarea
-                className="mvd-modalTextarea"
-                placeholder="List the steps taken to resolve this issue..."
-              />
-
-              <label className="mvd-modalLabel">Attachments (optional)</label>
-              <div className="mvd-uploadBox">
-                <input type="file" multiple />
-              </div>
-            </>
-          );
-
-        default:
-          return null;
-      }
-    };
-
-    return (
-      <div className="mvd-overlay" onClick={closeModal} role="presentation">
-        <div
-          className={`mvd-modalCard ${type === "escalate" ? "mvd-modalRed" : ""}`}
-          onClick={(e) => e.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="mvd-modalHeader">
-            <h2 className="mvd-modalTitle">{titles[type]}</h2>
-            <button className="mvd-close" type="button" onClick={closeModal}>
-              ✕
-            </button>
-          </div>
-
-          <div className="mvd-modalBody">{renderBody()}</div>
-
-          <div className="mvd-modalFooter">
-            <button className="mvd-btn mvd-btnCancel" type="button" onClick={closeModal}>
-              Cancel
-            </button>
-            <button
-              className={`mvd-btn ${type === "escalate" ? "mvd-btnEscalate" : "mvd-btnSubmit"}`}
-              type="button"
-            >
-              {submitText}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   if (loading)
     return (
@@ -259,9 +255,7 @@ export default function ManagerComplaintDetails() {
           <div className="mvd-card">
             <h2 className="mvd-sectionTitle">Complaint Details</h2>
             <div className="mvd-subject">{ticket.subject}</div>
-            <p className="mvd-desc">
-              This is a placeholder description. When you connect to your backend/DB, replace this with the real complaint text.
-            </p>
+            <p className="mvd-desc">{ticket.details}</p>
           </div>
 
           <div className="mvd-card">
@@ -286,7 +280,7 @@ export default function ManagerComplaintDetails() {
         </section>
       </main>
 
-      <Modal type={modalType} />
+      <Modal type={modalType} ticket={ticket} closeModal={closeModal} />
     </Layout>
   );
-}
+}d

@@ -404,12 +404,6 @@ def require_customer(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[s
         raise HTTPException(status_code=403, detail="Forbidden")
     return user
 
-
-def require_manager(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    if user.get("role") != "manager":
-        raise HTTPException(status_code=403, detail="Forbidden")
-    return user
-
 # =========================================================
 # Recurring complaint prediction
 # =========================================================
