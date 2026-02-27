@@ -2,29 +2,32 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
-  width: 90px;  
-  height: 28px;   
+  width: 84px;
+  height: 26px;
   border-radius: 999px;
-
-  font-size: 13px;
-  font-weight: 750;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border: 1px solid transparent;
 }
 
 .priorityPill--critical {
-  background: rgba(231, 76, 60, 0.16);
+  background: rgba(231, 76, 60, 0.12);
   color: #a7372b;
+  border-color: rgba(231, 76, 60, 0.2);
 }
 .priorityPill--high {
-  background: rgba(241, 196, 15, 0.18);
-  color: #8a6d00;
+  background: rgba(241, 196, 15, 0.14);
+  color: #7a5f00;
+  border-color: rgba(241, 196, 15, 0.25);
 }
 .priorityPill--medium {
-  background: rgba(52, 152, 219, 0.16);
+  background: rgba(52, 152, 219, 0.12);
   color: #1f5f86;
+  border-color: rgba(52, 152, 219, 0.22);
 }
 .priorityPill--low {
-  background: rgba(46, 204, 113, 0.16);
+  background: rgba(46, 204, 113, 0.12);
   color: #1f7a45;
+  border-color: rgba(46, 204, 113, 0.22);
 }

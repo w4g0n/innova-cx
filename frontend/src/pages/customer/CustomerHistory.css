@@ -78,15 +78,23 @@
   display: flex;
   justify-content: space-between;
   gap: 14px;
-  background: #ffffff;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: 18px;
   padding: 16px 18px;
-  border: 1px solid rgba(20, 20, 20, 0.06);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 
 .historyCard--click {
   cursor: pointer;
+}
+
+.historyCard--click:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
 }
 
 .historyCard--click:focus {
@@ -199,10 +207,13 @@
 }
 
 .historyEmpty {
-  background: #ffffff;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: 18px;
   padding: 18px;
-  border: 1px solid rgba(20, 20, 20, 0.06);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
 
 .historyEmptyTitle {

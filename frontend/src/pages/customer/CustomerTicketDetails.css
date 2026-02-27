@@ -32,11 +32,13 @@
 .ticketCard,
 .updatesCard,
 .ticketEmpty {
-  background: #ffffff;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: 18px;
   padding: 16px 18px;
-  border: 1px solid rgba(20, 20, 20, 0.06);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
 
 .ticketTop {
