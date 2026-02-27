@@ -7,9 +7,11 @@ import useNovaChatbot from "./chatbot.js";
 import { apiUrl } from "../../config/apiBase";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { getToken, getUser } from "../../utils/auth";
+import useScrollReveal from "../../utils/useScrollReveal";
 
 export default function CustomerLanding() {
   const navigate = useNavigate();
+  const revealRef = useScrollReveal();
 
   const [embeddedFormType, setEmbeddedFormType] = useState("Complaint");
 
@@ -26,6 +28,7 @@ export default function CustomerLanding() {
       setEmbeddedFormType(type || "Complaint");
       if (!isOpen) setIsOpen(true);
       setNovaView("form");
+      setIsExpanded(true);
     },
   });
 
@@ -272,8 +275,14 @@ export default function CustomerLanding() {
 
   return (
     <div className="customer-landing-page">
-      <div className="main-content">
-        <nav className="navbar">
+      <div className="landing-bg-blobs" aria-hidden="true">
+        <span className="landing-blob landing-blob--one" />
+        <span className="landing-blob landing-blob--two" />
+        <span className="landing-blob landing-blob--three" />
+      </div>
+
+      <div className="main-content" ref={revealRef}>
+        <nav className="navbar reveal">
           <div className="logo">
             <img src={novaLogo} alt="Dubai CommerCity" />
           </div>
@@ -283,7 +292,7 @@ export default function CustomerLanding() {
             <li><a href="#">Digital Ecosystem</a></li>
             <li><a href="#">Newsroom</a></li>
             <li><a href="#">Contact</a></li>
-            <li><a href="#">About</a></li>
+            <li><a href="#" onClick={(e) => { e.preventDefault(); navigate("/customer/about"); }}>About</a></li>
           </ul>
 
           <div className="nav-actions">
@@ -364,7 +373,7 @@ export default function CustomerLanding() {
           </div>
         </nav>
 
-        <section className="hero">
+        <section className="hero reveal">
           <div className="hero-content">
             <div className="hero-title-wrapper">
               <h1 className="hero-title"><span className="hero-static">We are</span></h1>
@@ -372,14 +381,14 @@ export default function CustomerLanding() {
                 <div className="hero-dynamic-inner">
                   <span>InnovaAI</span>
                   <span>Transforming Customer Experience</span>
-                  <span>An AI-Powered Ticket Prioritization System</span>
+                  <span>AI-Powered Ticket Prioritization</span>
                 </div>
               </div>
               <div className="hero-line" />
             </div>
 
             <div className="hero-body">
-              <button className="btn-hero" onClick={() => navigate("/customer/about")}>About Us</button>
+              <button className="btn-hero btn-hero--primary" onClick={() => navigate("/customer/about")}>About Us</button>
               <p className="hero-desc">
                We are transforming customer support with smart ticket prioritization. Using sentiment and audio analysis, our system identifies urgent issues and high-value customers, helping teams respond faster and more effectively.
               </p>
@@ -387,16 +396,16 @@ export default function CustomerLanding() {
           </div>
         </section>
 
-        <section className="clusters">
+        <section className="clusters reveal">
           {clusters.map((c, i) => (
-            <div key={i} className="cluster-card">
+            <div key={i} className="cluster-card reveal">
               <h3>{c.title}</h3>
               <p>{c.desc}</p>
             </div>
           ))}
         </section>
 
-        <footer className="footer">
+        <footer className="footer reveal">
           <p>© 2026 Dubai CommerCity</p>
           <div className="footer-links">
             <span>Privacy Policy</span>

@@ -4,13 +4,13 @@
   background: #fdf9ff;
   border-radius: 999px;
   padding: 16px 20px;
-  border: 1px solid #e5d4ff;
-  transition: box-shadow 0.2s;
+  border: 1.5px solid #e5d4ff;
+  transition: border-color 0.2s;
   width: 100%;
 }
 
 .pillSearch:focus-within {
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.4);
+  border-color: rgba(124, 58, 237, 0.55);
 }
 
 .pillSearch__icon {

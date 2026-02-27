@@ -1,19 +1,36 @@
+/*  App shell  */
 .appShell {
   display: flex;
   min-height: 100vh;
 }
 
+/* Main content */
 .appContent {
   flex: 1;
   background: var(--screen-bg);
-  padding: 28px 34px;
-  margin-left: 280px;
+  padding: 24px 28px;
+  margin-left: var(--sidebar-current-width, var(--sidebar-width));
   box-sizing: border-box;
-  width: calc(100% - 280px);
+  width: calc(100% - var(--sidebar-current-width, var(--sidebar-width)));
+  /* Smooth shift when sidebar collapses */
+  transition:
+    margin-left var(--dur-base) var(--ease-out),
+    width var(--dur-base) var(--ease-out);
+  min-width: 0;
 }
 
+/* No-sidebar variant (for customer view) */
 .appShell--noSidebar .appContent,
 .appContent--noSidebar {
   margin-left: 0;
   width: 100%;
+}
+
+/*  Mobile  */
+@media (max-width: 768px) {
+  .appContent {
+    margin-left: 0 !important;
+    width: 100% !important;
+    padding: 16px;
+  }
 }

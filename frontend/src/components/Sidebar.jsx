@@ -1,37 +1,153 @@
 import { NavLink, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import "./Sidebar.css";
 import logo from "../assets/nova-logo.png";
+
+/*  SVG icon set */
+const Icon = {
+  bell: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M12 22a2.5 2.5 0 0 0 2.45-2H9.55A2.5 2.5 0 0 0 12 22ZM19 17H5c1.6-1.2 2-2.6 2-5.2V10a5 5 0 0 1 10 0v1.8c0 2.6.4 4 2 5.2Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  dashboard: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  ),
+  tickets: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <rect x="9" y="3" width="6" height="4" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M9 12h6M9 16h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  ),
+  reports: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 2v6h6M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  ),
+  complaints: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  employees: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M19 8v6M16 11h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  ),
+  approvals: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  ),
+  trends: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="16 7 22 7 22 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  model: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M12 2L2 7l10 5 10-5-10-5Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  chatbot: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M9 11V7a3 3 0 0 1 6 0v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="9" cy="16" r="1" fill="currentColor" />
+      <circle cx="15" cy="16" r="1" fill="currentColor" />
+    </svg>
+  ),
+  form: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  settings: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  ),
+  logout: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="16 17 21 12 16 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  ),
+  chevronLeft: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+      <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  chevronRight: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+      <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+};
+
+/*  Menu definitions */
+const menus = {
+  customer: [
+    { label: "Notifications", to: "/customer/notifications", icon: "bell" },
+    { label: "My Tickets",    to: "/customer/history",        icon: "tickets" },
+    { label: "Fill a Form",   to: "/customer/fill-form",      icon: "form" },
+  ],
+  employee: [
+    { label: "Notifications", to: "/employee/notifications", icon: "bell" },
+    { label: "Dashboard",     to: "/employee",  end: true,   icon: "dashboard" },
+    { label: "My Tickets",    to: "/employee/complaints",    icon: "tickets" },
+    { label: "Reports",       to: "/employee/reports",       icon: "reports" },
+  ],
+  manager: [
+    { label: "Notifications",       to: "/manager/notifications", icon: "bell" },
+    { label: "Dashboard",           to: "/manager", end: true,    icon: "dashboard" },
+    { label: "View All Complaints", to: "/manager/complaints",    icon: "complaints" },
+    { label: "View All Employees",  to: "/manager/employees",     icon: "employees" },
+    { label: "Approvals",           to: "/manager/approvals",     icon: "approvals" },
+    { label: "Complaint Trends",    to: "/manager/trends",        icon: "trends" },
+  ],
+  operator: [
+    { label: "Notifications",    to: "/operator/notifications",    icon: "bell" },
+    { label: "Dashboard",        to: "/operator", end: true,       icon: "dashboard" },
+    { label: "Model Analysis",   to: "/operator/model-analysis",   icon: "model" },
+    { label: "Chatbot Analysis", to: "/operator/chatbot-analysis", icon: "chatbot" },
+  ],
+};
 
 export default function Sidebar({ role }) {
   const navigate = useNavigate();
 
-  const menus = {
-    customer: [
-      { label: "Notifications", to: "/customer/notifications", icon: "bell" },
-      { label: "My Tickets", to: "/customer/history" },
-      { label: "Fill a Form", to: "/customer/fill-form" },
-    ],
-    employee: [
-      { label: "Notifications", to: "/employee/notifications", icon: "bell" },
-      { label: "Dashboard", to: "/employee", end: true },
-      { label: "My Tickets", to: "/employee/complaints" },
-      { label: "Reports", to: "/employee/reports" },
-    ],
-    manager: [
-      { label: "Notifications", to: "/manager/notifications", icon: "bell" },
-      { label: "Dashboard", to: "/manager", end: true },
-      { label: "View All Complaints", to: "/manager/complaints" },
-      { label: "View All Employees", to: "/manager/employees" },
-      { label: "Approvals", to: "/manager/approvals" },
-      { label: "Complaint Trends", to: "/manager/trends" },
-    ],
-    operator: [
-      { label: "Notifications", to: "/operator/notifications", icon: "bell" },
-      { label: "Dashboard", to: "/operator", end: true },
-      { label: "Model Analysis", to: "/operator/model-analysis" },
-      { label: "Chatbot Analysis", to: "/operator/chatbot-analysis" },
-    ],
-  };
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("sidebar-collapsed") === "true"
+  );
+
+  /* Sync CSS variable + localStorage whenever collapsed changes */
+  useEffect(() => {
+    const w = collapsed ? "var(--sidebar-collapsed)" : "var(--sidebar-width)";
+    document.documentElement.style.setProperty("--sidebar-current-width", w);
+    localStorage.setItem("sidebar-collapsed", String(collapsed));
+  }, [collapsed]);
+
+  /* Also apply on first mount (handles page refresh) */
+  useEffect(() => {
+    const w = collapsed ? "var(--sidebar-collapsed)" : "var(--sidebar-width)";
+    document.documentElement.style.setProperty("--sidebar-current-width", w);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const menu = menus[role] || [];
 
@@ -41,78 +157,70 @@ export default function Sidebar({ role }) {
   };
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`}>
+      {/* Brand */}
       <div className="sidebar__brand">
         <img src={logo} alt="InnovaCX Logo" className="sidebar__logo" />
         <span className="sidebar__title">InnovaCX</span>
       </div>
 
-      <nav className="sidebar__nav">
+      {/* Navigation */}
+      <nav className="sidebar__nav" aria-label="Main navigation">
         {menu.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.end}
+            title={item.label}
+            aria-label={item.label}
             className={({ isActive }) =>
-              isActive
-                ? "sidebar__link sidebar__link--active"
-                : "sidebar__link"
+              isActive ? "sidebar__link sidebar__link--active" : "sidebar__link"
             }
           >
             <div className="sidebar__pill">
-              {item.icon === "bell" && (
-                <span className="sidebar__icon">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M12 22a2.5 2.5 0 0 0 2.45-2H9.55A2.5 2.5 0 0 0 12 22ZM19 17H5c1.6-1.2 2-2.6 2-5.2V10a5 5 0 0 1 10 0v1.8c0 2.6.4 4 2 5.2Z"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </span>
-              )}
-              <span>{item.label}</span>
+              <span className="sidebar__icon" aria-hidden="true">
+                {Icon[item.icon]}
+              </span>
+              <span className="sidebar__label">{item.label}</span>
             </div>
           </NavLink>
         ))}
       </nav>
 
+      {/* Bottom controls */}
       <div className="sidebar__bottom">
-        <button className="sidebar__bottomBtn" type="button">
-          <span className="sidebar__icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 15.5a3.5 3.5 0 1 0 0-7"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              />
-              <path
-                d="M20 12a8.2 8.2 0 0 0-.1-1.2l1.8-1.3-1.8-3.1-2.1.8a8.1 8.1 0 0 0-2.1-1.2L13.5 3h-3L10 5.8A8.1 8.1 0 0 0 7.9 7l-2.1-.8L4 9.3l1.8 1.3A8.2 8.2 0 0 0 5.7 12c0 .4 0 .8.1 1.2L4 14.5l1.8 3.1 2.1-.8a8.1 8.1 0 0 0 2.1 1.2L10.5 21h3l.5-2.8a8.1 8.1 0 0 0 2.1-1.2l2.1.8 1.8-3.1-1.8-1.3c.1-.4.1-.8.1-1.2Z"
-                stroke="currentColor"
-                strokeWidth="1.4"
-              />
-            </svg>
-          </span>
-          <span>Settings</span>
+        <button
+          className="sidebar__bottomBtn"
+          type="button"
+          title="Settings"
+          aria-label="Settings"
+        >
+          <span className="sidebar__icon" aria-hidden="true">{Icon.settings}</span>
+          <span className="sidebar__label">Settings</span>
         </button>
 
-        <button className="sidebar__bottomBtn" onClick={handleLogout}>
-          <span className="sidebar__icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M10 17l5-5-5-5"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path d="M15 12H3" stroke="currentColor" strokeWidth="1.8" />
-              <path d="M21 4v16" stroke="currentColor" strokeWidth="1.8" />
-            </svg>
+        <button
+          className="sidebar__bottomBtn"
+          type="button"
+          onClick={handleLogout}
+          title="Logout"
+          aria-label="Logout"
+        >
+          <span className="sidebar__icon" aria-hidden="true">{Icon.logout}</span>
+          <span className="sidebar__label">Logout</span>
+        </button>
+
+        {/* Collapse / expand toggle */}
+        <button
+          className="sidebar__toggleBtn"
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <span aria-hidden="true">
+            {collapsed ? Icon.chevronRight : Icon.chevronLeft}
           </span>
-          <span>Logout</span>
         </button>
       </div>
     </aside>

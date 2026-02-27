@@ -1,35 +1,54 @@
+/*  Page Header  */
 .pageHeader {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 18px;
-  margin-bottom: 18px;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .pageHeader__title {
   margin: 0;
-  font-size: 38px;
-  font-weight: 750;
+  font-family: var(--font-heading);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 800;
   color: var(--text-dark);
-  letter-spacing: 0.2px;
+  letter-spacing: -0.2px;
+  line-height: 1.15;
+}
+
+/* Gradient underline accent */
+.pageHeader__title::after {
+  content: "";
+  display: block;
+  margin-top: 6px;
+  height: 3px;
+  width: 48px;
+  background: var(--gradient-card-top);
+  border-radius: var(--radius-pill);
 }
 
 .pageHeader__subtitle {
-  margin-top: 10px;
-  font-size: 18px;
-  font-weight: 500;
-  color: rgba(17, 17, 17, 0.7);
-  line-height: 1.5;
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 400;
+  color: rgba(17, 17, 17, 0.6);
+  line-height: 1.55;
 }
 
 .pageHeader__actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 @media (max-width: 768px) {
   .pageHeader {
     flex-direction: column;
+  }
+  .pageHeader__actions {
+    width: 100%;
   }
 }

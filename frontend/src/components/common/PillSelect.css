@@ -1,36 +1,47 @@
+/* ── Pill Select ─────────────────────────────── */
 .pillSelect {
   position: relative;
   display: inline-flex;
 }
 
 .pillSelect__select {
-  padding: 16px 44px 16px 20px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: #fff;
+  padding: 10px 40px 10px 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(89, 36, 180, 0.18);
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   outline: none;
-
-  font-size: 17px;
-  font-weight: 650;
-  min-width: 200px;
-
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 160px;
+  color: var(--text-dark);
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
   cursor: pointer;
+  transition:
+    border-color var(--dur-fast),
+    box-shadow var(--dur-fast);
 }
 
-.pillSelect::after {
-  content: "▼";
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
-  color: rgba(17, 17, 17, 0.7);
-  pointer-events: none;
+.pillSelect__select:hover {
+  border-color: rgba(89, 36, 180, 0.35);
 }
 
 .pillSelect__select:focus {
-  box-shadow: 0 0 0 3px rgba(89, 36, 180, 0.18);
+  border-color: rgba(89, 36, 180, 0.5);
+  box-shadow: var(--shadow-glow);
+}
+
+.pillSelect::after {
+  content: "▾";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--color-purple-main);
+  pointer-events: none;
 }
