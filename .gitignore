@@ -61,6 +61,8 @@ data/synthesizerv7/models/classifier/deberta-v3-base-mnli-fever-anli/
 *.h5
 *.pkl
 *.joblib
+!data/synthesizerv7/models/
+!data/synthesizerv7/models/**
 
 # IDE
 .vscode/

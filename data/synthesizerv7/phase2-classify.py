@@ -41,9 +41,9 @@ MODEL_NAME = str(CLASSIFIER_MODEL_DIR) if CLASSIFIER_MODEL_DIR.exists() else REM
 LABEL_COLUMNS = ("issue_severity", "issue_urgency", "safety_concern", "business_impact")
 CHECKPOINT_EVERY = 100
 DEFAULT_MANIFEST_PATH = "output/phase2_model_manifest.json"
-MIN_TRANSFORMERS = (4, 46, 0)
-MIN_ACCELERATE = (0, 30, 0)
-MIN_TOKENIZERS = (0, 20, 0)
+MIN_TRANSFORMERS = (4, 55, 0)
+MIN_ACCELERATE = (0, 34, 0)
+MIN_TOKENIZERS = (0, 21, 0)
 
 # Candidate labels for each classification task.
 LABEL_CONFIGS = {
@@ -180,8 +180,8 @@ def validate_runtime_dependencies() -> None:
             required = ".".join(str(v) for v in minimum)
             raise RuntimeError(
                 f"{pkg}=={got_raw} is too old. Required >= {required}. "
-                "Run: pip install -U \"transformers>=4.46.0\" "
-                "\"accelerate>=0.30.0\" \"tokenizers>=0.20.0\""
+                "Run: pip install -U \"transformers>=4.55.0\" "
+                "\"accelerate>=0.34.0\" \"tokenizers>=0.21.0\""
             )
 
     _check_min_version("transformers", MIN_TRANSFORMERS)

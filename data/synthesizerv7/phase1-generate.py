@@ -116,9 +116,9 @@ SYSTEM_REFERENCE_COUNT = 4
 SYSTEM_REFERENCE_CHARS = 160
 MIN_SUBJECT_LEN = 3
 MIN_TEXT_LEN = 20
-MIN_TRANSFORMERS = (4, 46, 0)
-MIN_ACCELERATE = (0, 30, 0)
-MIN_TOKENIZERS = (0, 20, 0)
+MIN_TRANSFORMERS = (4, 55, 0)
+MIN_ACCELERATE = (0, 34, 0)
+MIN_TOKENIZERS = (0, 21, 0)
 
 
 # ─────────────────────────────────────────────
@@ -213,8 +213,8 @@ def load_model(model_name: str, quantization: str = "auto"):
             got_str = getattr(mod, "__version__", "unknown")
             raise RuntimeError(
                 f"{pkg}=={got_str} is too old. Required: >= {minimum_str}. "
-                "Run: pip install -U \"transformers>=4.46.0\" "
-                "\"accelerate>=0.30.0\" \"tokenizers>=0.20.0\""
+                "Run: pip install -U \"transformers>=4.55.0\" "
+                "\"accelerate>=0.34.0\" \"tokenizers>=0.21.0\""
             )
 
     _check_min_version("transformers", MIN_TRANSFORMERS)
@@ -227,7 +227,7 @@ def load_model(model_name: str, quantization: str = "auto"):
             "Your transformers package is incompatible with Phi-4 mini in this environment "
             "(missing SlidingWindowCache). Reinstall with this exact interpreter:\n"
             "python -m pip install --upgrade --force-reinstall "
-            "\"transformers>=4.46.0\" \"accelerate>=0.30.0\" \"tokenizers>=0.20.0\""
+            "\"transformers>=4.55.0\" \"accelerate>=0.34.0\" \"tokenizers>=0.21.0\""
         ) from exc
 
     print(f"\nLoading {model_name}...")

@@ -34,9 +34,9 @@ REMOTE_MODEL_NAME = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
 MODEL_NAME = str(CLASSIFIER_MODEL_DIR) if CLASSIFIER_MODEL_DIR.exists() else REMOTE_MODEL_NAME
 DEFAULT_OUTPUT_PATH = "output/predictions.csv"
 LABEL_COLUMNS = ["issue_severity", "issue_urgency", "safety_concern", "business_impact"]
-MIN_TRANSFORMERS = (4, 46, 0)
-MIN_ACCELERATE = (0, 30, 0)
-MIN_TOKENIZERS = (0, 20, 0)
+MIN_TRANSFORMERS = (4, 55, 0)
+MIN_ACCELERATE = (0, 34, 0)
+MIN_TOKENIZERS = (0, 21, 0)
 
 LABEL_CONFIGS = {
     "issue_severity": {
@@ -167,8 +167,8 @@ def validate_runtime_dependencies() -> None:
             required = ".".join(str(v) for v in minimum)
             raise RuntimeError(
                 f"{pkg}=={got_raw} is too old. Required >= {required}. "
-                "Run: pip install -U \"transformers>=4.46.0\" "
-                "\"accelerate>=0.30.0\" \"tokenizers>=0.20.0\""
+                "Run: pip install -U \"transformers>=4.55.0\" "
+                "\"accelerate>=0.34.0\" \"tokenizers>=0.21.0\""
             )
 
     _check_min_version("transformers", MIN_TRANSFORMERS)
