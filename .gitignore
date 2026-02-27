@@ -56,6 +56,7 @@ models/checkpoints/
 models/generator/phi-4/
 models/classifier/deberta-v3-base-mnli-fever-anli/
 data/synthesizerv7/models/generator/phi-4/
+data/synthesizerv7/models/generator/phi-3.5-mini-instruct/
 data/synthesizerv7/models/classifier/deberta-v3-base-mnli-fever-anli/
 *.h5
 *.pkl

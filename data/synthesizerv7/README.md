@@ -3,7 +3,7 @@
 Four-phase synthetic data pipeline:
 
 1. `phase1-generate.py`  
-Generates synthetic support tickets (`unlabeled.csv`) with Phi-4.
+Generates synthetic support tickets (`unlabeled.csv`) with Phi-3.5 Mini.
 Default target size: 10,000 rows (7,500 complaints + 2,500 inquiries).
 2. `phase2-classify.py`  
 Adds complaint labels with DeBERTa zero-shot NLI (`labeled.csv`).
@@ -38,7 +38,7 @@ python data/synthesizerv7/setup_models.py
 
 This downloads:
 
-- `microsoft/phi-4` to `data/synthesizerv7/models/generator/phi-4/`
+- `microsoft/Phi-3.5-mini-instruct` to `data/synthesizerv7/models/generator/phi-3.5-mini-instruct/`
 - `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` to `data/synthesizerv7/models/classifier/deberta-v3-base-mnli-fever-anli/`
 
 Download behavior:
@@ -68,6 +68,25 @@ python data/synthesizerv7/phase1-generate.py \
   --output data/synthesizerv7/output/unlabeled.csv \
   --quantization 8bit
 ```
+
+If GPU memory is tight, lower generation length:
+
+```bash
+python data/synthesizerv7/phase1-generate.py \
+  --dataset data/synthesizerv7/input.csv \
+  --output data/synthesizerv7/output/unlabeled.csv \
+  --quantization 8bit \
+  --max-new-tokens 64
+```
+
+All model phases (1/2/3) now include automatic runtime fallback:
+- Try GPU (and 8-bit if enabled)
+- If CUDA OOM happens during processing, they switch to CPU fallback and continue
+
+Phase 1 defaults are tuned for throughput/stability:
+- Greedy decoding by default (`--do-sample` is off)
+- Lower token budget (`--max-new-tokens 64`)
+- Fewer retries (`--retries 2`)
 
 Dry run:
 
@@ -153,7 +172,7 @@ python data/synthesizerv7/phase4-deduplicate.py \
 
 Each script first checks for local model directories:
 
-- Generator: `data/synthesizerv7/models/generator/phi-4/`
+- Generator: `data/synthesizerv7/models/generator/phi-3.5-mini-instruct/`
 - Classifier: `data/synthesizerv7/models/classifier/deberta-v3-base-mnli-fever-anli/`
 
 If present, local paths are used.  

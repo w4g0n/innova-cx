@@ -63,7 +63,11 @@ def remove_near_duplicates(
         strip_accents="unicode",
         lowercase=True,
     )
-    tfidf = vectorizer.fit_transform(transcripts)
+    try:
+        tfidf = vectorizer.fit_transform(transcripts)
+    except MemoryError:
+        print("[WARN] Phase 4 near-dedup skipped due to memory limits")
+        return df.copy(), 0, 0
 
     cluster_labels = [-1] * len(df)
     clusters: list[list[int]] = []
@@ -77,7 +81,11 @@ def remove_near_duplicates(
         cluster_members = [i]
 
         if i + 1 < len(df):
-            similarities = cosine_similarity(tfidf[i : i + 1], tfidf[i + 1 :])[0]
+            try:
+                similarities = cosine_similarity(tfidf[i : i + 1], tfidf[i + 1 :])[0]
+            except MemoryError:
+                print("[WARN] Phase 4 near-dedup interrupted due to memory limits")
+                return df.copy(), 0, 0
             for offset, sim in enumerate(similarities):
                 j = i + 1 + offset
                 if cluster_labels[j] == -1 and sim >= threshold:

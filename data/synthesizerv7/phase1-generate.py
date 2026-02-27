@@ -1,5 +1,5 @@
 """
-Phase 1 — Synthetic Ticket Generation using Phi-4
+Phase 1 — Synthetic Ticket Generation using Phi-3.5 Mini
 ==================================================
 Generates 10,000 support tickets (7,500 complaints + 2,500 inquiries)
 across multiple domains with leasing/tenant support as the primary domain.
@@ -95,8 +95,8 @@ LEASING_ISSUES = [
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
-GENERATOR_MODEL_DIR = BASE_DIR / "models" / "generator" / "phi-4"
-REMOTE_MODEL_NAME = "microsoft/phi-4"
+GENERATOR_MODEL_DIR = BASE_DIR / "models" / "generator" / "phi-3.5-mini-instruct"
+REMOTE_MODEL_NAME = "microsoft/Phi-3.5-mini-instruct"
 MODEL_NAME = str(GENERATOR_MODEL_DIR) if GENERATOR_MODEL_DIR.exists() else REMOTE_MODEL_NAME
 PRIMARY_DOMAIN = "office leasing and tenant support"
 LENGTH_HINTS = (
@@ -111,6 +111,8 @@ PHASE2_LABEL_COLUMNS = (
     "business_impact",
 )
 CHECKPOINT_EVERY = 100
+SYSTEM_REFERENCE_COUNT = 4
+SYSTEM_REFERENCE_CHARS = 160
 
 
 # ─────────────────────────────────────────────
@@ -122,8 +124,14 @@ def build_system_prompt(reference_transcripts: list[str]) -> str:
     System prompt passed once. Includes reference transcripts for domain
     context — model is explicitly told NOT to copy their style or content.
     """
-    sample = random.sample(reference_transcripts, min(15, len(reference_transcripts)))
-    ref_block = "\n---\n".join(f"[Reference {i+1}]: {t[:400]}" for i, t in enumerate(sample))
+    # Keep context compact to reduce latency per generation call.
+    sample = random.sample(
+        reference_transcripts,
+        min(SYSTEM_REFERENCE_COUNT, len(reference_transcripts)),
+    )
+    ref_block = "\n---\n".join(
+        f"[Reference {i+1}]: {t[:SYSTEM_REFERENCE_CHARS]}" for i, t in enumerate(sample)
+    )
 
     return f"""You are a data generation assistant creating realistic customer support tickets for a training dataset.
 
@@ -141,7 +149,10 @@ Generate synthetic customer support tickets that are:
 - Representative of the assigned domain and ticket type
 
 OUTPUT FORMAT:
-Always respond with a single valid JSON object and nothing else:
+Always respond with a single valid JSON object and nothing else.
+Do not include markdown, code fences, comments, or extra text.
+Start your response with '{{' and end with '}}'.
+Use this exact schema:
 {{
   "subject": "<3 to 8 word summary of the specific issue>",
   "text": "<the full ticket text>"
@@ -184,7 +195,7 @@ def load_model(model_name: str, quantization: str = "auto"):
 
     use_8bit = quantization == "8bit" or (quantization == "auto" and torch.cuda.is_available())
     load_kwargs = {
-        "dtype": torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+        "torch_dtype": torch.bfloat16 if torch.cuda.is_available() else torch.float32,
         "device_map": "auto",
         "trust_remote_code": True,
     }
@@ -199,7 +210,64 @@ def load_model(model_name: str, quantization: str = "auto"):
             print(f"[WARN] Could not enable 8-bit quantization: {exc}")
             print("[WARN] Falling back to standard precision load")
 
-    model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
+    def _load_standard_gpu_then_cpu():
+        standard_gpu_kwargs = {
+            "trust_remote_code": True,
+            "torch_dtype": torch.float16 if torch.cuda.is_available() else torch.float32,
+            "device_map": "auto",
+        }
+        try:
+            print("[WARN] Trying non-quantized GPU load before CPU fallback")
+            return AutoModelForCausalLM.from_pretrained(model_name, **standard_gpu_kwargs)
+        except Exception as gpu_exc:
+            print(f"[WARN] Non-quantized GPU load failed: {gpu_exc}")
+            cpu_kwargs = {"trust_remote_code": True}
+            print("[WARN] Falling back to CPU load")
+            return AutoModelForCausalLM.from_pretrained(model_name, **cpu_kwargs)
+
+    try:
+        model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
+    except ValueError as exc:
+        # Typical on 16GB GPUs when some quantized modules are auto-dispatched
+        # to CPU/disk without explicit fp32 CPU offload enabled.
+        if "load_in_8bit_fp32_cpu_offload" in str(exc):
+            print("[WARN] VRAM insufficient for pure 8-bit placement; retrying with CPU offload")
+            try:
+                from transformers import BitsAndBytesConfig
+
+                offload_kwargs = dict(load_kwargs)
+                offload_kwargs["quantization_config"] = BitsAndBytesConfig(
+                    load_in_8bit=True,
+                    llm_int8_enable_fp32_cpu_offload=True,
+                )
+                model = AutoModelForCausalLM.from_pretrained(model_name, **offload_kwargs)
+            except Exception as offload_exc:
+                print(f"[WARN] 8-bit offload retry failed: {offload_exc}")
+                print("[WARN] Falling back to compatibility loader")
+                model = _load_standard_gpu_then_cpu()
+        elif "not supported for `4-bit` or `8-bit` bitsandbytes models" in str(exc):
+            # Some transformers/accelerate combinations attempt model.to(...) when
+            # device_map is provided. Retry without device_map to avoid dispatch_model.
+            print("[WARN] 8-bit + device_map dispatch is incompatible here; retrying without device_map")
+            retry_kwargs = dict(load_kwargs)
+            retry_kwargs.pop("device_map", None)
+            try:
+                model = AutoModelForCausalLM.from_pretrained(model_name, **retry_kwargs)
+            except Exception as retry_exc:
+                print(f"[WARN] 8-bit retry without device_map failed: {retry_exc}")
+                print("[WARN] Falling back to compatibility loader")
+                model = _load_standard_gpu_then_cpu()
+        else:
+            raise
+    except TypeError as exc:
+        # Compatibility fallback for older/newer transformers/model wrappers.
+        print(f"[WARN] Model load args not accepted ({exc}); retrying with compatibility fallback")
+        try:
+            fallback_kwargs = dict(load_kwargs)
+            fallback_kwargs.pop("torch_dtype", None)
+            model = AutoModelForCausalLM.from_pretrained(model_name, **fallback_kwargs)
+        except TypeError:
+            model = _load_standard_gpu_then_cpu()
     model.eval()
     print(f"Model loaded on: {next(model.parameters()).device}")
     return tokenizer, model
@@ -221,22 +289,44 @@ def parse_generated_json(raw: str) -> dict[str, Any]:
         raise ValueError("Generated text too short")
     return parsed
 
+
+def repair_non_json_output(raw: str) -> dict[str, Any]:
+    """
+    Best-effort repair path when model returns non-JSON text.
+    Keeps pipeline moving instead of wasting many retries.
+    """
+    text = " ".join(str(raw).strip().split())
+    if not text:
+        raise ValueError("Empty model output")
+    words = text.split()
+    subject = " ".join(words[:8]).strip()
+    if len(subject) < 3:
+        subject = "Customer support issue"
+    if len(text) < 20:
+        raise ValueError("Generated text too short after repair")
+    return {"subject": subject, "text": text}
+
 def generate_ticket(
     tokenizer,
     model,
     system_prompt: str,
     user_prompt: str,
-    max_new_tokens: int = 512,
-    retries: int = 3,
+    max_new_tokens: int = 64,
+    retries: int = 2,
+    temperature: float = 0.3,
+    top_p: float = 0.8,
+    do_sample: bool = False,
 ) -> dict | None:
     """
-    Calls Phi-4 with the given prompts and parses the JSON response.
+    Calls Phi-3.5 Mini with the given prompts and parses the JSON response.
     Retries up to `retries` times on parse failure.
     """
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user",   "content": user_prompt},
     ]
+
+    current_max_new_tokens = max_new_tokens
 
     for attempt in range(retries):
         try:
@@ -250,25 +340,29 @@ def generate_ticket(
                 # Newer transformers may return either a tensor or a BatchEncoding.
                 if isinstance(chat_inputs, torch.Tensor):
                     model_inputs = chat_inputs.to(model.device)
+                    attention_mask = torch.ones_like(model_inputs)
                     prompt_len = model_inputs.shape[-1]
                     output_ids = model.generate(
                         model_inputs,
-                        max_new_tokens=max_new_tokens,
-                        do_sample=True,
-                        temperature=0.9,       # High temperature = more diversity
-                        top_p=0.95,
+                        attention_mask=attention_mask,
+                        max_new_tokens=current_max_new_tokens,
+                        do_sample=do_sample,
+                        temperature=temperature,
+                        top_p=top_p,
                         repetition_penalty=1.1,
                         pad_token_id=tokenizer.eos_token_id,
                     )
                 else:
                     model_inputs = chat_inputs.to(model.device)
+                    if "attention_mask" not in model_inputs:
+                        model_inputs["attention_mask"] = torch.ones_like(model_inputs["input_ids"])
                     prompt_len = model_inputs["input_ids"].shape[-1]
                     output_ids = model.generate(
                         **model_inputs,
-                        max_new_tokens=max_new_tokens,
-                        do_sample=True,
-                        temperature=0.9,       # High temperature = more diversity
-                        top_p=0.95,
+                        max_new_tokens=current_max_new_tokens,
+                        do_sample=do_sample,
+                        temperature=temperature,
+                        top_p=top_p,
                         repetition_penalty=1.1,
                         pad_token_id=tokenizer.eos_token_id,
                     )
@@ -276,13 +370,28 @@ def generate_ticket(
             # Decode only the newly generated tokens
             new_tokens = output_ids[0][prompt_len:]
             raw = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
-            return parse_generated_json(raw)
+            try:
+                return parse_generated_json(raw)
+            except ValueError:
+                return repair_non_json_output(raw)
 
         except (json.JSONDecodeError, ValueError) as e:
             if attempt < retries - 1:
                 time.sleep(0.5)
                 continue
             print(f"  [WARN] Failed after {retries} attempts: {e}")
+            return None
+        except torch.OutOfMemoryError:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            if attempt < retries - 1 and current_max_new_tokens > 64:
+                current_max_new_tokens = max(64, current_max_new_tokens // 2)
+                print(
+                    f"  [WARN] CUDA OOM while generating; retrying with max_new_tokens={current_max_new_tokens}"
+                )
+                time.sleep(0.25)
+                continue
+            print("  [WARN] Generation failed due to CUDA OOM")
             return None
 
 
@@ -351,7 +460,7 @@ def build_result_row(ticket_type: str, domain: str, generated: dict[str, Any]) -
 # ─────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Phase 1: Synthetic ticket generation with Phi-4")
+    parser = argparse.ArgumentParser(description="Phase 1: Synthetic ticket generation with Phi-3.5 Mini")
     parser.add_argument("--dataset",    required=True,  help="Path to dataset.csv (must have 'transcript' column)")
     parser.add_argument("--output",     default="output/unlabeled.csv", help="Path to save generated CSV")
     parser.add_argument("--model",      default=MODEL_NAME, help="HuggingFace model name")
@@ -362,6 +471,11 @@ def main():
         help="Model quantization mode (default: auto; uses 8bit on CUDA)",
     )
     parser.add_argument("--dry-run",    action="store_true", help="Generate only 10 tickets for testing")
+    parser.add_argument("--max-new-tokens", type=int, default=64, help="Max generated tokens per ticket")
+    parser.add_argument("--retries", type=int, default=2, help="Retries per ticket on invalid JSON/OOM")
+    parser.add_argument("--temperature", type=float, default=0.3, help="Sampling temperature")
+    parser.add_argument("--top-p", type=float, default=0.8, help="Nucleus sampling top-p")
+    parser.add_argument("--do-sample", action="store_true", help="Enable sampling (default is greedy decoding)")
     parser.add_argument("--complaints", type=int, default=TARGET_COMPLAINTS)
     parser.add_argument("--inquiries",  type=int, default=TARGET_INQUIRIES)
     args = parser.parse_args()
@@ -411,7 +525,17 @@ def main():
 
         user_prompt = build_user_prompt(ticket_type, domain, style, issue_hint)
 
-        result = generate_ticket(tokenizer, model, system_prompt, user_prompt)
+        result = generate_ticket(
+            tokenizer,
+            model,
+            system_prompt,
+            user_prompt,
+            max_new_tokens=args.max_new_tokens,
+            retries=args.retries,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            do_sample=args.do_sample,
+        )
 
         if result:
             results.append(build_result_row(ticket_type, domain, result))
