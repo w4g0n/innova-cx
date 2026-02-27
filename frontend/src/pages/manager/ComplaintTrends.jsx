@@ -123,7 +123,10 @@ export default function ComplaintTrends() {
         repeatCaption: "",
       },
       bars: apiData.bars,
-      categories: apiData.categories,
+      categories: apiData.categories.map((c) => ({
+        ...c,
+        pct: Math.round(Number(c.pct)),
+      })),
       table: normalizedTable,
     };
   }, [apiData]);
@@ -199,9 +202,10 @@ export default function ComplaintTrends() {
                 ariaLabel="Filter by priority"
                 options={[
                   { value: "All Priorities", label: "All Priorities" },
-                  { value: "Critical only", label: "Critical only" },
-                  { value: "High & Critical", label: "High & Critical" },
-                  { value: "Low & Medium", label: "Low & Medium" },
+                  { value: "Critical", label: "Critical" },
+                  { value: "High", label: "High" },
+                  { value: "Medium", label: "Medium" },
+                  { value: "Low", label: "Low" },
                 ]}
               />
             </div>

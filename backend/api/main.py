@@ -394,15 +394,13 @@ def require_employee(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[s
         raise HTTPException(status_code=403, detail="Forbidden")
     return user
 
-
-def require_customer(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    if user.get("role") != "customer":
+def require_manager(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
     return user
 
-
-def require_manager(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    if user.get("role") != "manager":
+def require_customer(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    if user.get("role") != "customer":
         raise HTTPException(status_code=403, detail="Forbidden")
     return user
 
@@ -2216,6 +2214,7 @@ def get_complaints():
     tickets = fetch_all("""
         SELECT
             t.id AS ticket_id,
+            t.ticket_code,
             t.subject AS subject,
             t.status,
             t.priority,
@@ -2259,12 +2258,69 @@ def get_complaints():
             "respondTime": respond_time,
             "resolveTime": resolve_time,
             "action": action,
+            "ticket_code": t.get("ticket_code") or "", 
         })
 
     return result
 
+class AssignTicketBody(BaseModel):
+    employee_name: Optional[str] = None
 
+@app.patch("/manager/complaints/{ticket_id}/assign")
+def assign_ticket(
+    ticket_id: str,
+    body: AssignTicketBody,
+    authorization: Optional[str] = Header(default=None),
+):
+    user = get_current_user(authorization)
+    if user.get("role") != "manager":
+        raise HTTPException(status_code=403, detail="Forbidden")
 
+    if body.employee_name:
+        emp = fetch_one(
+            """
+            SELECT u.id AS user_id
+            FROM user_profiles up
+            JOIN users u ON u.id = up.user_id
+            WHERE up.full_name = %s AND u.role = 'employee'
+            LIMIT 1
+            """,
+            (body.employee_name,),
+        )
+        if not emp:
+            raise HTTPException(status_code=404, detail="Employee not found")
+
+        execute(
+            """
+            UPDATE tickets
+            SET
+                assigned_to_user_id = %s,
+                assigned_at         = NOW(),
+                updated_at          = NOW(),
+                status              = CASE
+                                        WHEN status = 'Unassigned' THEN 'Assigned'::ticket_status
+                                        ELSE status
+                                      END
+            WHERE id = %s
+            """,
+            (emp["user_id"], ticket_id),
+        )
+        return {"ticket_id": ticket_id, "assigned_to": body.employee_name, "action": "assigned"}
+
+    else:
+        execute(
+            """
+            UPDATE tickets
+            SET
+                assigned_to_user_id = NULL,
+                assigned_at         = NULL,
+                updated_at          = NOW(),
+                status              = 'Unassigned'
+            WHERE id = %s
+            """,
+            (ticket_id,),
+        )
+        return {"ticket_id": ticket_id, "assigned_to": None, "action": "unassigned"}
 #============================================
 
 @app.get("/manager")
@@ -2444,6 +2500,7 @@ def get_manager_complaint_details(ticket_id: str):
     ticket = fetch_one("""
         SELECT
             t.id AS ticket_id,
+            t.ticket_code,
             t.subject,
             t.status,
             t.details,
@@ -2479,6 +2536,7 @@ def get_manager_complaint_details(ticket_id: str):
 
     return {
         "id": ticket["ticket_id"],
+        "ticket_code": ticket.get("ticket_code") or "",  # add this line
         "subject": ticket.get("subject") or "",
         "priority": priority_raw,
         "priorityText": priority_text,
@@ -2499,15 +2557,14 @@ def get_manager_trends(
     priority: str = Query("All Priorities")
 ):
     # ---------- TIME RANGE ----------
-    if timeRange == "This Month":
-        month_start = fetch_one("SELECT date_trunc('month', now()) AS start")["start"]
-    elif timeRange == "Last 3 Months":
-        month_start = fetch_one(
-            "SELECT date_trunc('month', now()) - interval '3 months' AS start"
-        )["start"]
+    if timeRange == "Last 3 Months":
+        month_start = fetch_one("SELECT now() - interval '3 months' AS start")["start"]
+    elif timeRange == "Last 6 Months":
+        month_start = fetch_one("SELECT now() - interval '6 months' AS start")["start"]
+    elif timeRange == "Last 12 Months":
+        month_start = fetch_one("SELECT now() - interval '12 months' AS start")["start"]
     else:
         month_start = fetch_one("SELECT date_trunc('month', now()) AS start")["start"]
-
     # ---------- FILTERS ----------
     filters = ["t.created_at >= %s"]
     params = [month_start]
@@ -2517,24 +2574,17 @@ def get_manager_trends(
         filters.append("d.name = %s")
         params.append(department)
 
-    # Priority filter mapping
+   # Priority filter
     priority_map = {
-        "All Priorities": None,
         "Low": "Low",
         "Medium": "Medium",
         "High": "High",
         "Critical": "Critical",
-        "High & Critical": ["High", "Critical"],
-        "Critical only": "Critical"
     }
     priority_value = priority_map.get(priority)
     if priority_value:
-        if isinstance(priority_value, list):
-            filters.append("t.priority = ANY(%s)")
-            params.append(priority_value)
-        else:
-            filters.append("t.priority = %s")
-            params.append(priority_value)
+        filters.append("t.priority = %s::ticket_priority")
+        params.append(priority_value)
 
     where_clause = " AND ".join(filters)
 
@@ -2543,7 +2593,7 @@ def get_manager_trends(
         f"""
         SELECT COUNT(*) AS count
         FROM tickets t
-        JOIN departments d ON d.id = t.department_id
+        LEFT JOIN departments d ON d.id = t.department_id
         WHERE {where_clause}
         """,
         params,
@@ -2565,7 +2615,7 @@ def get_manager_trends(
               AND t.first_response_at IS NOT NULL
           ) AS total
         FROM tickets t
-        JOIN departments d ON d.id = t.department_id
+        LEFT JOIN departments d ON d.id = t.department_id
         WHERE {where_clause}
         """,
         params,
@@ -2578,7 +2628,7 @@ def get_manager_trends(
         SELECT
           AVG(EXTRACT(EPOCH FROM (t.first_response_at - COALESCE(t.priority_assigned_at, t.created_at))) / 60) AS mins
         FROM tickets t
-        JOIN departments d ON d.id = t.department_id
+        LEFT JOIN departments d ON d.id = t.department_id
         WHERE t.first_response_at IS NOT NULL
           AND {where_clause}
         """,
@@ -2591,7 +2641,7 @@ def get_manager_trends(
         SELECT
           AVG(EXTRACT(EPOCH FROM (t.resolved_at - COALESCE(t.priority_assigned_at, t.created_at))) / 86400) AS days
         FROM tickets t
-        JOIN departments d ON d.id = t.department_id
+        LEFT JOIN departments d ON d.id = t.department_id
         WHERE t.resolved_at IS NOT NULL
           AND {where_clause}
         """,
@@ -2619,7 +2669,7 @@ def get_manager_trends(
         SELECT COUNT(*) AS count FROM (
           SELECT t.created_by_user_id, t.department_id
           FROM tickets t
-          JOIN departments d ON d.id = t.department_id
+          LEFT JOIN departments d ON d.id = t.department_id
           WHERE {where_clause}
           GROUP BY t.created_by_user_id, t.department_id
           HAVING COUNT(*) > 1
@@ -2636,7 +2686,7 @@ def get_manager_trends(
           to_char(t.created_at, 'Mon') AS label,
           COUNT(*) AS value
         FROM tickets t
-        JOIN departments d ON d.id = t.department_id
+        LEFT JOIN departments d ON d.id = t.department_id
         WHERE {where_clause}
         GROUP BY label, date_trunc('month', t.created_at)
         ORDER BY date_trunc('month', t.created_at)
@@ -2649,11 +2699,13 @@ def get_manager_trends(
         f"""
         SELECT
           d.name AS name,
-          COUNT(*) * 100.0 / SUM(COUNT(*)) OVER () AS pct
+          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER ()) AS pct
         FROM tickets t
-        JOIN departments d ON d.id = t.department_id
+        LEFT JOIN departments d ON d.id = t.department_id
         WHERE {where_clause}
+          AND d.name IS NOT NULL
         GROUP BY d.name
+        ORDER BY pct DESC
         """,
         params,
     )
@@ -2680,7 +2732,7 @@ def get_manager_trends(
             AVG(EXTRACT(EPOCH FROM (t.resolved_at - COALESCE(t.priority_assigned_at, t.created_at))) / 86400), 1
           ) AS avg_resolve
         FROM tickets t
-        JOIN departments d ON d.id = t.department_id
+        LEFT JOIN departments d ON d.id = t.department_id
         WHERE {where_clause}
         GROUP BY date_trunc('month', t.created_at), month
         ORDER BY date_trunc('month', t.created_at)
@@ -2701,7 +2753,104 @@ def get_manager_trends(
         "categories": categories,
         "table": table
     }
+#--------------------------------------------
+@app.get("/manager/notifications")
+def manager_notifications(
+    limit: int = Query(default=200, ge=1, le=500),
+    only_unread: bool = Query(default=False),
+    authorization: Optional[str] = Header(default=None),
+):
+    user = get_current_user(authorization)
+    if user.get("role") != "manager":
+        raise HTTPException(status_code=403, detail="Forbidden")
 
+    user_id = user["id"]
+
+    rows = fetch_all(
+        """
+        SELECT
+          n.id::text           AS "id",
+          n.type::text         AS "type",
+          n.title              AS "title",
+          n.message            AS "message",
+          n.priority::text     AS "priority",
+          t.id::text           AS "ticketId",
+          t.ticket_code        AS "ticketCode",
+          n.report_id          AS "reportId",
+          n.read               AS "read",
+          n.created_at         AS "timestamp"
+        FROM notifications n
+        LEFT JOIN tickets t ON t.id = n.ticket_id
+        WHERE n.user_id = %s
+          AND (%s = FALSE OR n.read = FALSE)
+        ORDER BY n.created_at DESC
+        LIMIT %s;
+        """,
+        (user_id, only_unread, limit),
+    )
+
+    unread_row = fetch_one(
+        "SELECT COUNT(*)::int AS unread FROM notifications WHERE user_id = %s AND read = FALSE;",
+        (user_id,),
+    ) or {"unread": 0}
+
+    notifications = []
+    for r in rows:
+        ts = r.get("timestamp")
+        notifications.append({
+            "id": r.get("id"),
+            "type": r.get("type"),
+            "title": r.get("title"),
+            "message": r.get("message"),
+            "priority": r.get("priority"),
+            "ticketId": r.get("ticketId"),
+            "ticketCode": r.get("ticketCode"),
+            "reportId": r.get("reportId"),
+            "read": bool(r.get("read")),
+            "timestamp": ts.isoformat() if ts else None,
+        })
+
+    return {"unreadCount": int(unread_row.get("unread") or 0), "notifications": notifications}
+
+
+@app.post("/manager/notifications/{notification_id}/read")
+def manager_notification_mark_read(
+    notification_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    user = get_current_user(authorization)
+    if user.get("role") != "manager":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    import uuid
+    try:
+        uuid.UUID(notification_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid notification id")
+
+    updated = execute(
+        "UPDATE notifications SET read = TRUE WHERE id = %s::uuid AND user_id = %s;",
+        (notification_id, user["id"]),
+    )
+    if updated <= 0:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"ok": True}
+
+
+@app.post("/manager/notifications/read-all")
+def manager_notifications_mark_all_read(
+    authorization: Optional[str] = Header(default=None),
+):
+    user = get_current_user(authorization)
+    if user.get("role") != "manager":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    execute(
+        "UPDATE notifications SET read = TRUE WHERE user_id = %s AND read = FALSE;",
+        (user["id"],),
+    )
+    return {"ok": True}
+    
 # =========================================================
 # Internal Orchestrator Endpoint (no JWT — Docker-network only)
 # =========================================================
