@@ -50,6 +50,7 @@
 }
 
 .welcomeTitle {
+  font-family: var(--font-heading);
   font-size: 44px;
   font-weight: 800;
   margin: 0 0 14px 0;
@@ -94,6 +95,7 @@
 
 .loginTitle {
   margin: 0;
+  font-family: var(--font-heading);
   font-size: 34px;
   font-weight: 800;
   color: #2a1149;

@@ -1,3 +1,6 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+/* Component CSS */
 @import "./components/common/PillSelect.css";
 @import "./components/common/KpiCard.css";
 @import "./components/common/PageHeader.css";
@@ -6,21 +9,112 @@
 @import "./components/common/PriorityPill.css";
 @import "./components/common/ExportPdfButton.css";
 
+/*Design Tokens*/
 :root {
-  --sidebar-bg: #401c51;
-  --screen-bg: #e5e6ed;
-  --btn-light: #c8b9cc;
+  --sidebar-bg:  #401c51;
+  --screen-bg:   #eeeaf5;
+  --btn-light:   #c8b9cc;
   --btn-primary: #5924b4;
-  --text-dark: #111;
-  --text-light: #ffffff;
+  --text-dark:   #111111;
+  --text-light:  #ffffff;
+
+  /* Extended palette */
+  --color-purple-deep: #401c51;
+  --color-purple-mid:  #5a2970;
+  --color-purple-main: #5924b4;
+  --color-purple-lite: #9b71a3;
+  --color-accent:      #c084fc;
+  --color-gold:        #f0b429;
+
+  /* Typography */
+  --font-heading: 'Sora', system-ui, -apple-system, sans-serif;
+  --font-body:    'DM Sans', system-ui, -apple-system, sans-serif;
+
+  /* Spacing */
+  --sp-1:  4px;   --sp-2:  8px;   --sp-3:  12px;
+  --sp-4:  16px;  --sp-5:  20px;  --sp-6:  24px;
+  --sp-8:  32px;  --sp-10: 40px;  --sp-12: 48px;
+
+  /* Border radius */
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-lg:   18px;
+  --radius-xl:   24px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-sm:   0 2px 8px  rgba(64, 28, 81, 0.07);
+  --shadow-md:   0 6px 24px rgba(64, 28, 81, 0.11);
+  --shadow-lg:   0 14px 44px rgba(64, 28, 81, 0.17);
+  --shadow-glow: 0 0 0 3px  rgba(89, 36, 180, 0.18);
+
+  /* Glass system */
+  --glass-bg:     rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-shadow: 0 8px 32px rgba(64, 28, 81, 0.10);
+
+  /* Gradients */
+  --gradient-brand:    linear-gradient(135deg, #5924b4, #401c51);
+  --gradient-accent:   linear-gradient(135deg, #c084fc, #f0b429);
+  --gradient-soft:     linear-gradient(135deg, rgba(89,36,180,0.07), rgba(64,28,81,0.03));
+  --gradient-card-top: linear-gradient(90deg, #5924b4, #c084fc);
+
+  /* Motion */
+  --ease-spring: cubic-bezier(.22, .68, 0, 1.2);
+  --ease-out:    cubic-bezier(0, 0, 0.3, 1);
+  --dur-fast: 0.15s;
+  --dur-base: 0.25s;
+  --dur-slow: 0.45s;
+
+  /* Sidebar dimensions */
+  --sidebar-width:          260px;
+  --sidebar-collapsed:       68px;
+  --sidebar-current-width:  260px;
 }
 
-* {
-  box-sizing: border-box;
+/*Global Keyframes*/
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-html,
-body {
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.93); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% center; }
+  to   { background-position:  200% center; }
+}
+
+/*Scroll-reveal utility*/
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity   var(--dur-slow) var(--ease-spring),
+    transform var(--dur-slow) var(--ease-spring);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/*  Reduced-motion override*/
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .reveal { opacity: 1; transform: none; }
+}
+
+/*  Reset  */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
@@ -35,31 +129,21 @@ body {
 body {
   background-color: var(--screen-bg);
   color: var(--text-dark);
-  display: block;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 16px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  margin: 0;
-  font-weight: 600;
-}
+h1, h2, h3, h4, h5, h6 { margin: 0; font-weight: 600; }
+p  { margin: 0; }
+button { font-family: inherit; cursor: pointer; }
+a  { text-decoration: none; color: inherit; }
 
-p {
-  margin: 0;
-}
-
-button {
-  font-family: inherit;
-  cursor: pointer;
-}
-
-a {
-  text-decoration: none;
-  color: inherit;
+/*  Focus ring */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-glow);
+  border-radius: var(--radius-sm);
 }

@@ -3,17 +3,20 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background: #e5e6ed;
-  font-family: "Inter", sans-serif;
+  background: linear-gradient(135deg, #8d63ff 0%, #2a1149 100%);
+  background-attachment: fixed;
 }
 
 .auth-card {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   width: 100%;
   max-width: 480px;
   padding: 52px 46px;
   border-radius: 26px;
-  box-shadow: 0px 16px 36px rgba(60, 0, 102, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0px 24px 48px rgba(60, 0, 102, 0.28);
   text-align: center;
 }
 
