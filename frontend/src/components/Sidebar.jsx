@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import "./Sidebar.css";
 import logo from "../assets/nova-logo.png";
 
-/*  SVG icon set */
+/* SVG icon set */
 const Icon = {
   bell: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -88,19 +88,26 @@ const Icon = {
       <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   ),
-  chevronLeft: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-      <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  pin: (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+      <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
-  chevronRight: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-      <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  unpin: (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+      <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  ),
+  users: (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.8" />
+    <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <path d="M17 11h4M19 9v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
   ),
 };
 
-/*  Menu definitions */
+/* Menu definitions */
 const menus = {
   customer: [
     { label: "Notifications", to: "/customer/notifications", icon: "bell" },
@@ -126,28 +133,32 @@ const menus = {
     { label: "Dashboard",        to: "/operator", end: true,       icon: "dashboard" },
     { label: "Model Analysis",   to: "/operator/model-analysis",   icon: "model" },
     { label: "Chatbot Analysis", to: "/operator/chatbot-analysis", icon: "chatbot" },
+    { label: "Manage Users",            to: "/operator/users",            icon: "users" },
   ],
 };
 
 export default function Sidebar({ role }) {
   const navigate = useNavigate();
 
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem("sidebar-collapsed") === "true"
+  /* Pinned = stays open without hover */
+  const [pinned, setPinned] = useState(
+    () => localStorage.getItem("sidebar-pinned") === "true"
   );
+  const [hovered, setHovered] = useState(false);
 
-  /* Sync CSS variable + localStorage whenever collapsed changes */
-  useEffect(() => {
-    const w = collapsed ? "var(--sidebar-collapsed)" : "var(--sidebar-width)";
-    document.documentElement.style.setProperty("--sidebar-current-width", w);
-    localStorage.setItem("sidebar-collapsed", String(collapsed));
-  }, [collapsed]);
+  const isExpanded = pinned || hovered;
 
-  /* Also apply on first mount (handles page refresh) */
   useEffect(() => {
-    const w = collapsed ? "var(--sidebar-collapsed)" : "var(--sidebar-width)";
-    document.documentElement.style.setProperty("--sidebar-current-width", w);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    localStorage.setItem("sidebar-pinned", String(pinned));
+  }, [pinned]);
+
+  /* Push page content as sidebar resizes */
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--sidebar-current-width",
+      isExpanded ? "210px" : "var(--sidebar-collapsed)"
+    );
+  }, [isExpanded]);
 
   const menu = menus[role] || [];
 
@@ -157,7 +168,11 @@ export default function Sidebar({ role }) {
   };
 
   return (
-    <aside className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`}>
+    <aside
+      className={`sidebar${isExpanded ? " sidebar--expanded" : ""}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       {/* Brand */}
       <div className="sidebar__brand">
         <img src={logo} alt="InnovaCX Logo" className="sidebar__logo" />
@@ -210,16 +225,16 @@ export default function Sidebar({ role }) {
           <span className="sidebar__label">Logout</span>
         </button>
 
-        {/* Collapse / expand toggle */}
+        {/* Small pin toggle — keeps sidebar open without hover */}
         <button
-          className="sidebar__toggleBtn"
+          className={`sidebar__pinBtn${pinned ? " sidebar__pinBtn--active" : ""}`}
           type="button"
-          onClick={() => setCollapsed((c) => !c)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={() => setPinned((p) => !p)}
+          aria-label={pinned ? "Unpin sidebar" : "Pin sidebar open"}
+          title={pinned ? "Unpin sidebar" : "Pin sidebar open"}
         >
           <span aria-hidden="true">
-            {collapsed ? Icon.chevronRight : Icon.chevronLeft}
+            {pinned ? Icon.unpin : Icon.pin}
           </span>
         </button>
       </div>

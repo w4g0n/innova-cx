@@ -1,4 +1,4 @@
-/*  Page Header  */
+/* Page Header */
 .pageHeader {
   display: flex;
   justify-content: space-between;
@@ -45,10 +45,6 @@
 }
 
 @media (max-width: 768px) {
-  .pageHeader {
-    flex-direction: column;
-  }
-  .pageHeader__actions {
-    width: 100%;
-  }
+  .pageHeader { flex-direction: column; }
+  .pageHeader__actions { width: 100%; }
 }

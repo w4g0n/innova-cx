@@ -1,0 +1,131 @@
+.uamPage {
+  padding: 24px;
+  max-width: 1100px;
+}
+
+.uamHeader h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.uamHeader p {
+  margin: 8px 0 0 0;
+  opacity: 0.8;
+}
+
+.uamCard {
+  margin-top: 16px;
+  border-radius: 16px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.uamSectionTitle {
+  font-weight: 600;
+  margin: 6px 0 14px 0;
+  opacity: 0.9;
+}
+
+.uamGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.uamField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.uamField label {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.uamField input,
+.uamField select {
+  border-radius: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  outline: none;
+}
+
+.uamField input:focus,
+.uamField select:focus {
+  border-color: rgba(168, 107, 255, 0.65);
+  box-shadow: 0 0 0 3px rgba(168, 107, 255, 0.18);
+}
+
+.uamError {
+  color: #ff6b6b;
+  font-size: 12px;
+}
+
+.uamDivider {
+  height: 1px;
+  margin: 18px 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.uamActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.uamBtn {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.uamBtn.primary {
+  background: rgba(168, 107, 255, 0.95);
+  color: #0b0612;
+}
+
+.uamBtn.secondary {
+  background: rgba(255, 255, 255, 0.10);
+  color: inherit;
+}
+
+.uamBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.uamToast {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.uamToast.success {
+  background: rgba(46, 204, 113, 0.15);
+  border: 1px solid rgba(46, 204, 113, 0.25);
+}
+
+.uamToast.error {
+  background: rgba(255, 107, 107, 0.15);
+  border: 1px solid rgba(255, 107, 107, 0.25);
+}
+
+.uamFootnote {
+  margin-top: 12px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+@media (max-width: 820px) {
+  .uamGrid {
+    grid-template-columns: 1fr;
+  }
+}
