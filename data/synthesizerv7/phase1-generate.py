@@ -277,34 +277,38 @@ def load_model(model_name: str, quantization: str = "auto"):
 # GENERATION
 # ─────────────────────────────────────────────
 
+def _unescape_json_string(value: str) -> str:
+    # Decode escaped characters safely via JSON parser.
+    return json.loads(f"\"{value}\"")
+
+
 def parse_generated_json(raw: str) -> dict[str, Any]:
-    json_match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if not json_match:
-        raise ValueError("No JSON object found in response")
+    # Remove common markdown wrappers.
+    cleaned = str(raw).strip().replace("```json", "").replace("```", "").strip()
 
-    parsed = json.loads(json_match.group(0))
-    if "subject" not in parsed or "text" not in parsed:
-        raise ValueError("Missing 'subject' or 'text' in JSON")
-    if len(parsed["text"].strip()) < 20:
-        raise ValueError("Generated text too short")
-    return parsed
+    # Try direct JSON object extraction first.
+    json_match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    if json_match:
+        try:
+            parsed = json.loads(json_match.group(0))
+            if "subject" in parsed and "text" in parsed:
+                subject = str(parsed["subject"]).strip()
+                text = str(parsed["text"]).strip()
+                if len(subject) >= 3 and len(text) >= 20:
+                    return {"subject": subject, "text": text}
+        except json.JSONDecodeError:
+            pass
 
+    # Fallback: recover fields from JSON-like output even if object is malformed.
+    subject_match = re.search(r'"subject"\s*:\s*"((?:[^"\\]|\\.)*)"', cleaned, re.DOTALL)
+    text_match = re.search(r'"text"\s*:\s*"((?:[^"\\]|\\.)*)"', cleaned, re.DOTALL)
+    if subject_match and text_match:
+        subject = _unescape_json_string(subject_match.group(1)).strip()
+        text = _unescape_json_string(text_match.group(1)).strip()
+        if len(subject) >= 3 and len(text) >= 20:
+            return {"subject": subject, "text": text}
 
-def repair_non_json_output(raw: str) -> dict[str, Any]:
-    """
-    Best-effort repair path when model returns non-JSON text.
-    Keeps pipeline moving instead of wasting many retries.
-    """
-    text = " ".join(str(raw).strip().split())
-    if not text:
-        raise ValueError("Empty model output")
-    words = text.split()
-    subject = " ".join(words[:8]).strip()
-    if len(subject) < 3:
-        subject = "Customer support issue"
-    if len(text) < 20:
-        raise ValueError("Generated text too short after repair")
-    return {"subject": subject, "text": text}
+    raise ValueError("No valid subject/text JSON payload found in response")
 
 def generate_ticket(
     tokenizer,
@@ -370,10 +374,7 @@ def generate_ticket(
             # Decode only the newly generated tokens
             new_tokens = output_ids[0][prompt_len:]
             raw = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
-            try:
-                return parse_generated_json(raw)
-            except ValueError:
-                return repair_non_json_output(raw)
+            return parse_generated_json(raw)
 
         except (json.JSONDecodeError, ValueError) as e:
             if attempt < retries - 1:
