@@ -6,6 +6,7 @@ import KpiCard from "../../components/common/KpiCard";
 import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
 import "./EmployeeDashboard.css";
+import useScrollReveal from "../../utils/useScrollReveal";
 
 function monthKeyToReportId(monthKey) {
   if (!monthKey || typeof monthKey !== "string") return "";
@@ -54,6 +55,7 @@ function getStoredToken() {
 }
 
 export default function EmployeeDashboard() {
+  const revealRef = useScrollReveal();
   const [employee, setEmployee] = useState(null);
   const [kpis, setKpis] = useState({});
   const [tickets, setTickets] = useState([]);
@@ -138,7 +140,7 @@ export default function EmployeeDashboard() {
 
   return (
     <Layout role="employee">
-      <div className="empDash">
+      <div className="empDash" ref={revealRef}>
         <PageHeader
           title={`Good Morning, ${employee?.name || "Employee"}`}
           subtitle="Here’s your activity and assigned workload."

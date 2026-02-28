@@ -8,8 +8,10 @@ import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import { apiUrl } from "../../config/apiBase";
 import "./Approvals.css";
+import useScrollReveal from "../../utils/useScrollReveal";
 
 export default function Approvals() {
+  const revealRef = useScrollReveal();
   const navigate = useNavigate();
 
   // ------------------- State -------------------
@@ -120,7 +122,7 @@ export default function Approvals() {
   // ------------------- JSX -------------------
   return (
     <Layout role="manager">
-      <div className="mgrApprovals">
+      <div className="mgrApprovals" ref={revealRef}>
         <PageHeader
           title="Approvals"
           subtitle="Approve or reject requests for rescoring and rerouting complaints."

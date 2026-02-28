@@ -466,13 +466,13 @@ export default function ComplaintDetails() {
     }
   }
 
-  if (loading) return <Layout role="employee"><main className="main">Loading ticket details...</main></Layout>;
-  if (error) return <Layout role="employee"><main className="main">{error}</main></Layout>;
+  if (loading) return <Layout role="employee"><div className="empTicketDetail">Loading ticket details...</div></Layout>;
+  if (error) return <Layout role="employee"><div className="empTicketDetail">{error}</div></Layout>;
   if (!ticket) return null;
 
   return (
     <Layout role="employee">
-      <main className="main">
+      <div className="empTicketDetail">
         <div className="details-header">
           <div className="header-left">
             <button className="back-btn" onClick={() => navigate(-1)}>← Back</button>
@@ -481,7 +481,7 @@ export default function ComplaintDetails() {
               <span className={`header-pill ${(ticket.priority || "").toLowerCase()}-pill`}>
                 {ticket.priority}
               </span>
-              <span className="header-pill status-pill">{ticket.status}</span>
+              <span className="header-pill empStatusPill">{ticket.status}</span>
             </div>
           </div>
 
@@ -541,7 +541,7 @@ export default function ComplaintDetails() {
             </div>
           )}
         </section>
-      </main>
+      </div>
 
       <TicketModal
         type={modalType}

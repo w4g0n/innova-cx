@@ -2,6 +2,7 @@
   width: 100%;
   max-width: none;
   font-size: 14px;
+  animation: fadeUp 0.4s var(--ease-out) both;
 }
 
 .kpiRow {
@@ -56,20 +57,20 @@
 .trendsTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: 16px;
+  font-size: 13px;
   background: #fff;
 }
 
 .trendsTable th,
 .trendsTable td {
-  padding: 14px 12px;
+  padding: 10px 10px;
   text-align: left;
   white-space: nowrap;
   vertical-align: middle;
 }
 
 .trendsTable thead th {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 750;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -100,10 +101,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 999px;
-  font-size: 14px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 700;
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
@@ -129,14 +130,15 @@
 }
 
 .actionBtn {
-  padding: 10px 14px;
+  padding: 7px 12px;
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.12);
   background: #ffffff;
-  font-size: 14px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
   color: var(--text-dark);
+  white-space: nowrap;
 }
 
 .actionBtn--primary {
@@ -158,7 +160,7 @@
 
 @media (max-width: 1200px) {
   .kpiRow {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

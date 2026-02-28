@@ -6,8 +6,10 @@ import "./ManagerDashboard.css";
 import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import { apiUrl } from "../../config/apiBase";
+import useScrollReveal from "../../utils/useScrollReveal";
 
 export default function ManagerDashboard() {
+  const revealRef = useScrollReveal();
   const token = localStorage.getItem("access_token");
 
   // State to hold backend KPIs
@@ -42,7 +44,7 @@ export default function ManagerDashboard() {
 
   return (
     <Layout role="manager">
-      <div className="mgrDashboard">
+      <div className="mgrDashboard" ref={revealRef}>
         <PageHeader
           title="Dr. Farhad - Facilities Management"
           subtitle="Quick overview of your department’s activity."

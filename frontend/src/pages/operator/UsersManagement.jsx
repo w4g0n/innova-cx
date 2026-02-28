@@ -4,8 +4,8 @@ import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
+import FilterPillButton from "../../components/common/FilterPillButton";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
-import "../../components/common/FilterPillButton.css";
 import "./UsersManagement.css";
 
 const ROLE_OPTIONS = ["Customer", "Employee", "Manager", "Operator"];
@@ -354,9 +354,7 @@ export default function UsersManagement() {
               { value: "operator", label: "Operator" },
             ]}
           />
-          <button className="filterPillBtn" onClick={resetFilters}>
-            ↺ Reset
-          </button>
+          <FilterPillButton onClick={resetFilters} label="Reset" />
         </div>
 
         {/* Table */}

@@ -1,57 +1,24 @@
-.top-bar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 22px;
-  flex-wrap: wrap;
+/* ================================================
+   ChatbotAnalysis — chatbot performance view
+   ================================================ */
+
+.chatbotA {
+  width: 100%;
+  max-width: none;
+  font-size: 14px;
+  animation: fadeUp 0.4s var(--ease-out) both;
 }
 
-.page-title {
-  font-size: 38px;
-  margin: 0;
-  color: var(--text-dark);
-  letter-spacing: 0.2px;
-  font-weight: 650;
-}
-
-.page-subtitle {
-  margin-top: 8px;
-  font-size: 16px;
-  color: rgba(17, 17, 17, 0.72);
-}
-
-.top-actions {
+/* ---- Header actions slot ---- */
+.chatbotA__topActions {
   display: flex;
   gap: 14px;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.chatbotSelect {
-  min-width: 180px;
-}
-
-.purple-btn {
-  background: var(--btn-primary);
-  color: #ffffff;
-  border: none;
-  border-radius: 999px;
-  padding: 12px 18px;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 16px;
-  font-weight: 750;
-  cursor: pointer;
-  box-shadow: 0 3px 10px rgba(108, 33, 217, 0.25);
-  transition: 0.2s ease;
-}
-
-.purple-btn:hover {
-  filter: brightness(1.05);
-}
-
-.kpi-row {
+/* ---- KPI row ---- */
+.chatbotA .kpi-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
@@ -59,14 +26,7 @@
   margin-bottom: 18px;
 }
 
-.charts-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 12px;
-}
-
-.kpi-card {
+.chatbotA .kpi-card {
   background: #ffffff;
   border-radius: 18px;
   padding: 22px 24px;
@@ -78,19 +38,19 @@
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.kpi-card:hover {
+.chatbotA .kpi-card:hover {
   transform: translateY(-3px);
   box-shadow: 0px 12px 30px rgba(60, 0, 102, 0.2);
 }
 
-.kpi-top {
+.chatbotA .kpi-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
 }
 
-.kpi-label {
+.chatbotA .kpi-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -98,8 +58,8 @@
   font-weight: 750;
 }
 
-.kpi-pill {
-  font-size: 13px;
+.chatbotA .kpi-pill {
+  font-size: 11px;
   padding: 4px 12px;
   border-radius: 999px;
   background: rgba(89, 36, 180, 0.12);
@@ -108,72 +68,77 @@
   white-space: nowrap;
 }
 
-.kpi-value {
+.chatbotA .kpi-value {
   margin-top: 8px;
   font-size: 32px;
   font-weight: 900;
   color: var(--btn-primary);
+  font-family: var(--font-heading);
 }
 
-.kpi-change {
+.chatbotA .kpi-change {
   margin-top: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   padding: 5px 10px;
   border-radius: 999px;
   width: fit-content;
 }
 
-.kpi-change.positive {
+.chatbotA .kpi-change.positive {
   background: rgba(46, 204, 113, 0.18);
   color: #1f7a45;
 }
 
-.kpi-change.negative {
+.chatbotA .kpi-change.negative {
   background: rgba(231, 76, 60, 0.18);
   color: #a7372b;
 }
 
-.kpi-change.neutral {
+.chatbotA .kpi-change.neutral {
   background: rgba(0, 0, 0, 0.08);
   color: rgba(17, 17, 17, 0.7);
 }
 
-.card {
+/* ---- Charts rows ---- */
+.chatbotA .charts-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+/* ---- Cards ---- */
+.chatbotA .card {
   background: #ffffff;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 18px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
   margin-bottom: 15px;
 }
 
-.card-title {
+.chatbotA .card-title {
   margin: 0;
-  font-size: 20px;
-  font-weight: 750;
-  color: #111827;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-dark);
+  font-family: var(--font-heading);
 }
 
-.card-subtitle {
-  margin: 8px 0 14px;
-  font-size: 15px;
+.chatbotA .card-subtitle {
+  margin: 6px 0 14px;
+  font-size: 12px;
   color: rgba(17, 17, 17, 0.65);
 }
 
-.charts-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.chart-inner {
+/* ---- Chart container ---- */
+.chatbotA .chart-inner {
   margin-top: 16px;
   padding: 20px;
   border-radius: 12px;
   background: #e5e6ed;
   border: 1px solid rgba(0, 0, 0, 0.1);
-
   display: flex;
   justify-content: center;
   align-items: center;
@@ -181,35 +146,21 @@
   height: auto;
 }
 
-.chart-inner * {
-  user-select: none;   }
+.chatbotA .chart-inner * {
+  user-select: none;
+}
 
-.chart-inner:focus,
-.chart-inner *:focus {
+.chatbotA .chart-inner:focus,
+.chatbotA .chart-inner *:focus {
   outline: none;
 }
 
-.chart-inner img {
-  width: 100%;
-  height: auto;
-  display: block;
-  border-radius: 8px;
-  object-fit: contain;
-}
-
-.recharts-label {
-  font-size: 12px;
-}
-
-.recharts-legend-item text {
-  font-size: 13px;
-}
-
-.alerts-card {
+/* ---- Alerts card ---- */
+.chatbotA .alerts-card {
   width: 100%;
 }
 
-.alerts-list {
+.chatbotA .alerts-list {
   list-style: none;
   padding: 0;
   margin: 6px 0 0;
@@ -218,32 +169,35 @@
   gap: 10px;
 }
 
-.alert-item {
-  font-size: 14px;
-  padding: 12px 12px;
+.chatbotA .alert-item {
+  font-size: 13px;
+  padding: 12px;
   border-radius: 12px;
   border: 1px solid rgba(0, 0, 0, 0.06);
   background: rgba(0, 0, 0, 0.03);
 }
 
-.alert-warning {
+.chatbotA .alert-warning {
   background: #fef3c7;
   color: #92400e;
   border-color: rgba(146, 64, 14, 0.18);
 }
 
-.alert-success {
+.chatbotA .alert-success {
   background: #ecfdf3;
   color: #047857;
   border-color: rgba(4, 120, 87, 0.18);
 }
 
-.alert-info {
+.chatbotA .alert-info {
   background: #eff6ff;
   color: #1d4ed8;
   border-color: rgba(29, 78, 216, 0.18);
 }
 
+/* ================================================
+   Modal (global — fixed position overlay)
+   ================================================ */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -278,8 +232,10 @@
 
 .modal-header h2 {
   margin: 0;
-  font-size: 20px;
-  color: #111827;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-dark);
+  font-family: var(--font-heading);
 }
 
 .close-btn {
@@ -289,8 +245,12 @@
   border-radius: 999px;
   padding: 8px 12px;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.close-btn:hover {
+  background: rgba(89, 36, 180, 0.18);
 }
 
 .modal-filters {
@@ -331,7 +291,7 @@
 
 .complaints-table th,
 .complaints-table td {
-  padding: 10px 10px;
+  padding: 10px;
 }
 
 .complaints-table thead th {
@@ -373,25 +333,22 @@
   color: #1d4ed8;
 }
 
+/* ================================================
+   Responsive
+   ================================================ */
 @media (max-width: 1200px) {
-  .kpi-row {
+  .chatbotA .kpi-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 980px) {
-  .charts-row {
+  .chatbotA .charts-row {
     grid-template-columns: 1fr;
   }
 
-  .top-bar {
+  .chatbotA__topActions {
     flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
-@media (max-width: 700px) {
-  .main {
-    padding: 22px 18px;
+    align-items: stretch;
   }
 }

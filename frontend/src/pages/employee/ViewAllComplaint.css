@@ -1,20 +1,21 @@
 .main-EV-VAC {
   flex: 1;
+  width: 100%;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
+  animation: fadeUp 0.4s var(--ease-out) both;
 }
 
 .kpi-row-EV-VAC {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
-  margin-bottom: 24px;
 }
 
 .search-section-EV-VAC {
-  margin-bottom: 12px;
+  /* gap on parent handles spacing */
 }
 
 .filters-row-EV-VAC {
@@ -22,13 +23,12 @@
   align-items: center;
   justify-content: flex-start;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 18px;
+  gap: 10px;
 }
 
 .filter-group-EV-VAC {
   display: flex;
-  gap: 18px;
+  gap: 10px;
   flex-wrap: wrap;
   align-items: center;
 }

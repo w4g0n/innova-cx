@@ -1,8 +1,10 @@
 import Layout from "../../components/Layout";
 import "./ChatbotAnalysis.css";
-import { useState, useEffect } from "react"; // eslint-disable-line no-unused-vars -- TODO: review - useEffect unused
+import { useState } from "react";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
+import FilterPillButton from "../../components/common/FilterPillButton";
+import useScrollReveal from "../../utils/useScrollReveal";
 
 import {
   LineChart,
@@ -20,12 +22,11 @@ import {
 } from "recharts";
 
 export default function ChatbotAnalysis() {
+  const revealRef = useScrollReveal();
   const [modalOpen, setModalOpen] = useState(false);
   const [filter, setFilter] = useState("all");
 
   const pieColors = ["#401c51", "#9b71a3", "#cfc3d7"];
-  const barColors = ["#401c51", "#9b71a3"]; // eslint-disable-line no-unused-vars -- TODO: review - barColors unused
-
   const responseTimeData = [
     { day: "Mon", value: 2.4 },
     { day: "Tue", value: 2.6 },
@@ -96,16 +97,12 @@ export default function ChatbotAnalysis() {
 
   return (
     <Layout role="operator">
-      <main className="main">
-        
-        <header className="top-bar">
-          <PageHeader
-            title="Chatbot Performance Analytics"
-            subtitle="Real-time insights into speed, accuracy, and resolution quality."
-          />
-
-          <div className="top-actions">
-            <div className="chatbotSelect">
+      <div className="chatbotA" ref={revealRef}>
+        <PageHeader
+          title="Chatbot Performance Analytics"
+          subtitle="Real-time insights into speed, accuracy, and resolution quality."
+          actions={
+            <div className="chatbotA__topActions">
               <PillSelect
                 value={"Week"}
                 onChange={() => {}}
@@ -117,17 +114,10 @@ export default function ChatbotAnalysis() {
                   { label: "Year", value: "Year" },
                 ]}
               />
+              <FilterPillButton label="View Complaints" onClick={() => setModalOpen(true)} />
             </div>
-
-            <button
-              className="purple-btn"
-              onClick={() => setModalOpen(true)}
-              type="button"
-            >
-              View handled Complaints
-            </button>
-          </div>
-        </header>
+          }
+        />
 
         
         <section className="kpi-row">
@@ -324,7 +314,7 @@ export default function ChatbotAnalysis() {
             </div>
           </div>
         )}
-      </main>
+      </div>
     </Layout>
   );
 }

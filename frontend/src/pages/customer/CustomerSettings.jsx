@@ -14,7 +14,6 @@ export default function CustomerSettings() {
   const navigate = useNavigate();
 
   const [language, setLanguage] = useState("English");
-  const [notifPref, setNotifPref] = useState("Enabled");
 
   const [emailNotifs, setEmailNotifs] = useState(true);
   const [inAppNotifs, setInAppNotifs] = useState(true);
@@ -66,11 +65,6 @@ export default function CustomerSettings() {
           setEmailNotifs(!!data.preferences.emailNotifications);
           setInAppNotifs(!!data.preferences.inAppNotifications);
           setStatusAlerts(!!data.preferences.statusAlerts);
-          setNotifPref(
-            data.preferences.emailNotifications || data.preferences.inAppNotifications
-              ? "Enabled"
-              : "Disabled"
-          );
         }
       } catch (err) {
         console.error("Error fetching customer settings", err);
@@ -279,23 +273,6 @@ export default function CustomerSettings() {
             </div>
 
             <div className="customerSettingsForm">
-              <div className="customerSettingsField">
-                <div className="customerSettingsFieldLabel">
-                  Notifications (quick)
-                </div>
-                <div className="customerSettingsPillWrap">
-                  <PillSelect
-                    value={notifPref}
-                    onChange={setNotifPref}
-                    ariaLabel="Notification preference"
-                    options={[
-                      { value: "Enabled", label: "Enabled" },
-                      { value: "Disabled", label: "Disabled" },
-                    ]}
-                  />
-                </div>
-              </div>
-
               <div className="customerSettingsField">
                 <div className="customerSettingsFieldLabel">Language</div>
                 <div className="customerSettingsPillWrap">
