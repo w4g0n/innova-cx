@@ -254,6 +254,8 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
 
       const isInquiry = !orchestratorResult?.ticket_id;
       const ticketId = orchestratorResult?.ticket_id ?? null;
+      // Capture before resetForm() resets mode to "Text"
+      const wasAudio = mode === "Audio";
 
       // Build a readable fallback text (shown in card + used by SpeechSynthesis
       // if backend TTS is unavailable).
@@ -263,9 +265,9 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
 
       resetForm();
 
-      // Show success screen — AudioReplyPlayer fetches and plays TTS
-      // independently so the card appears immediately.
-      setSubmitted({ ticketId, isInquiry, replyText });
+      // Show success screen. AudioReplyPlayer only mounts when the complaint
+      // was submitted via audio — matching the call-centre voice-in/voice-out flow.
+      setSubmitted({ ticketId, isInquiry, replyText, wasAudio });
     } catch (err) {
       console.error("Ticket creation failed:", err);
       alert(`Error creating ticket: ${err.message}`);
@@ -411,11 +413,13 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
 
           <p className="custSuccessText">{submitted.replyText}</p>
 
-          <AudioReplyPlayer
-            ticketId={submitted.ticketId}
-            isInquiry={submitted.isInquiry}
-            replyText={submitted.replyText}
-          />
+          {submitted.wasAudio && (
+            <AudioReplyPlayer
+              ticketId={submitted.ticketId}
+              isInquiry={submitted.isInquiry}
+              replyText={submitted.replyText}
+            />
+          )}
 
           <button
             type="button"
