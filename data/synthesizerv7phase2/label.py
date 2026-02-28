@@ -37,7 +37,7 @@ except Exception:
 try:
     import transformers.utils as _transformers_utils
     if not hasattr(_transformers_utils, "LossKwargs"):
-        from typing_extensions import TypedDict
+        from typing import TypedDict
 
         class _LossKwargs(TypedDict, total=False):
             pass
