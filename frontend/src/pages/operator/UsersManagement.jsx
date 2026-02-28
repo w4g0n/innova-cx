@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import Layout from "../../components/Layout";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
 import "./UsersManagement.css";
 
-const ROLE_OPTIONS = ["customer", "employee", "manager", "operator"];
+const ROLE_OPTIONS = ["Customer", "Employee", "Manager", "Operator"];
 
 const MOCK_USERS = [
   {
@@ -69,7 +70,6 @@ function isValidEmail(email) {
 }
 
 function genUserId(existingUsers) {
-  // make a simple unique id
   const base = 1000 + existingUsers.length + Math.floor(Math.random() * 400);
   return `U-${base}`;
 }
@@ -84,7 +84,6 @@ export default function UsersManagement() {
   // MANAGE modal state
   const [openManageModal, setOpenManageModal] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
-
   const [edit, setEdit] = useState({
     fullName: "",
     email: "",
@@ -112,6 +111,20 @@ export default function UsersManagement() {
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState({ type: "", message: "" });
 
+  // CONFIRM DIALOG state
+  const [confirm, setConfirm] = useState({
+    open: false,
+    icon: null,
+    title: "",
+    message: "",
+    variant: "danger",
+    onConfirm: null,
+  });
+  const closeConfirm = () => setConfirm((c) => ({ ...c, open: false }));
+
+  // -------------------------
+  // DERIVED DATA
+  // -------------------------
   const filtered = useMemo(() => {
     return users.filter((u) => {
       if (!matchesQuery(u, query)) return false;
@@ -169,14 +182,11 @@ export default function UsersManagement() {
     if (!edit.phone.trim()) e.phone = "Phone is required.";
     if (!edit.location.trim()) e.location = "Location is required.";
     if (!ROLE_OPTIONS.includes(edit.role)) e.role = "Invalid role.";
-
-    // password change optional (only validate if typed)
     if (edit.password || edit.confirmPassword) {
       if (!edit.password) e.password = "Password is required.";
       if (edit.password && edit.password.length < 8) e.password = "Min 8 characters.";
       if (edit.confirmPassword !== edit.password) e.confirmPassword = "Passwords do not match.";
     }
-
     return e;
   };
 
@@ -187,13 +197,9 @@ export default function UsersManagement() {
       setToast({ type: "error", message: "Fix the highlighted fields." });
       return;
     }
-
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id !== selectedId) return u;
-
-        const passwordChanged = !!edit.password;
-
         return {
           ...u,
           fullName: edit.fullName,
@@ -202,13 +208,12 @@ export default function UsersManagement() {
           location: edit.location,
           role: edit.role,
           status: edit.status,
-          lastPasswordChange: passwordChanged
+          lastPasswordChange: edit.password
             ? new Date().toISOString().slice(0, 10)
             : u.lastPasswordChange,
         };
       })
     );
-
     console.log("UPDATE USER (frontend mock):", {
       id: selectedId,
       fullName: edit.fullName,
@@ -219,13 +224,12 @@ export default function UsersManagement() {
       status: edit.status,
       passwordChanged: !!edit.password,
     });
-
-    setToast({ type: "success", message: "User updated (mock). Check console." });
+    setToast({ type: "success", message: "User updated successfully." });
     closeManage();
   };
 
   // -------------------------
-  // CREATE USER LOGIC (MODAL)
+  // CREATE USER LOGIC
   // -------------------------
   const openCreate = () => {
     setToast({ type: "", message: "" });
@@ -244,9 +248,7 @@ export default function UsersManagement() {
     setOpenManageModal(false);
   };
 
-  const closeCreate = () => {
-    setOpenCreateModal(false);
-  };
+  const closeCreate = () => setOpenCreateModal(false);
 
   const onCreateChange = (e) => {
     const { name, value } = e.target;
@@ -261,12 +263,9 @@ export default function UsersManagement() {
     if (!create.phone.trim()) e.phone = "Phone is required.";
     if (!create.location.trim()) e.location = "Location is required.";
     if (!ROLE_OPTIONS.includes(create.role)) e.role = "Invalid role.";
-
-    // password REQUIRED for create
     if (!create.password) e.password = "Password is required.";
     if (create.password && create.password.length < 8) e.password = "Min 8 characters.";
     if (create.confirmPassword !== create.password) e.confirmPassword = "Passwords do not match.";
-
     return e;
   };
 
@@ -277,7 +276,6 @@ export default function UsersManagement() {
       setToast({ type: "error", message: "Fix the highlighted fields." });
       return;
     }
-
     const newUser = {
       id: genUserId(users),
       fullName: create.fullName,
@@ -289,62 +287,86 @@ export default function UsersManagement() {
       createdAt: new Date().toISOString().slice(0, 10),
       lastLogin: "—",
     };
-
     setUsers((prev) => [newUser, ...prev]);
-
-    // FRONTEND ONLY: don't store raw password anywhere
-    console.log("CREATE USER (frontend mock):", {
-      ...newUser,
-      passwordProvided: true,
-    });
-
-    setToast({ type: "success", message: "User created (mock). Check console." });
+    console.log("CREATE USER (frontend mock):", { ...newUser, passwordProvided: true });
+    setToast({ type: "success", message: "User created successfully." });
     closeCreate();
   };
 
   // -------------------------
-  // OTHER ACTIONS
+  // DELETE / TOGGLE ACTIVE
   // -------------------------
   const toggleActive = (id) => {
-    setUsers((prev) =>
-      prev.map((u) =>
-        u.id === id ? { ...u, status: u.status === "active" ? "inactive" : "active" } : u
-      )
-    );
+    const user = users.find((u) => u.id === id);
+    const isActive = user?.status === "active";
+    setConfirm({
+      open: true,
+      icon: isActive ? "⚠️" : "✅",
+      title: isActive ? "Deactivate User" : "Activate User",
+      message: isActive
+        ? `Deactivate "${user?.fullName}"? They will lose system access.`
+        : `Activate "${user?.fullName}"? They will regain system access.`,
+      variant: isActive ? "warning" : "success",
+      onConfirm: () => {
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === id ? { ...u, status: isActive ? "inactive" : "active" } : u
+          )
+        );
+        setToast({
+          type: "success",
+          message: `User ${isActive ? "deactivated" : "activated"}.`,
+        });
+        closeConfirm();
+      },
+    });
   };
 
   const deleteUser = (id) => {
-    const ok = window.confirm("Delete this user? This is frontend-only for now.");
-    if (!ok) return;
-
-    setUsers((prev) => prev.filter((u) => u.id !== id));
-    console.log("DELETE USER (frontend mock):", { id });
-    setToast({ type: "success", message: "User deleted (mock)." });
+    const user = users.find((u) => u.id === id);
+    setConfirm({
+      open: true,
+      icon: "🗑️",
+      title: "Delete User",
+      message: `Permanently delete "${user?.fullName}"? This cannot be undone.`,
+      variant: "danger",
+      onConfirm: () => {
+        setUsers((prev) => prev.filter((u) => u.id !== id));
+        console.log("DELETE USER (frontend mock):", { id });
+        setToast({ type: "success", message: "User deleted." });
+        closeConfirm();
+      },
+    });
   };
 
+  // -------------------------
+  // RENDER
+  // -------------------------
   return (
     <Layout role="operator">
       <div className="umPage">
+
+        {/* Header */}
         <div className="umTop">
           <div>
-            <h1 className="umTitle">Users Viewer and Management</h1>
+            <h1 className="umTitle">User Management</h1>
             <p className="umSub">
-              View, search, filter, and manage all users (customers, employees, managers, operators).
+              View, search, filter, and manage all users — customers, employees, managers, and operators.
             </p>
           </div>
-
-          {/* ✅ now opens popup instead of navigating */}
           <button className="umBtnPrimary" onClick={openCreate}>
-            Create New User
+            + Create New User
           </button>
         </div>
 
+        {/* Toast */}
         {toast.message ? (
           <div className={`umToast ${toast.type === "success" ? "success" : "error"}`}>
             {toast.message}
           </div>
         ) : null}
 
+        {/* KPI Cards — 5 KPIs, all one row */}
         <div className="umKpis">
           <div className="umKpi">
             <div className="umKpiLabel">TOTAL USERS</div>
@@ -368,16 +390,28 @@ export default function UsersManagement() {
           </div>
         </div>
 
+        {/* Search */}
         <div className="umSearchBar">
-          <span className="umSearchIcon">🔎</span>
+          <span className="umSearchIcon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2" />
+              <path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </span>
           <input
             className="umSearchInput"
-            placeholder="Search users by ID, name, email, role, location..."
+            placeholder="Search by name, email, ID, role, or location…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          {query && (
+            <button className="umSearchClear" onClick={() => setQuery("")} type="button">
+              ✕
+            </button>
+          )}
         </div>
 
+        {/* Filters */}
         <div className="umFilters">
           <select
             className="umSelect"
@@ -413,6 +447,7 @@ export default function UsersManagement() {
           </button>
         </div>
 
+        {/* Table */}
         <div className="umTableCard">
           <table className="umTable">
             <thead>
@@ -427,35 +462,34 @@ export default function UsersManagement() {
                 <th className="umRight">Actions</th>
               </tr>
             </thead>
-
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="umEmpty">
-                    No users found.
+                    No users match your current filters.
                   </td>
                 </tr>
               ) : (
                 filtered.map((u) => (
                   <tr key={u.id}>
                     <td className="umLinkish">{u.id}</td>
-                    <td>{u.fullName}</td>
-                    <td>{u.email}</td>
+                    <td className="umNameCell">{u.fullName}</td>
+                    <td className="umMuted">{u.email}</td>
                     <td>
                       <span className={`umPill role-${u.role}`}>{u.role}</span>
                     </td>
                     <td>
                       <span className={`umPill status-${u.status}`}>{u.status}</span>
                     </td>
-                    <td>{u.location}</td>
-                    <td>{u.phone}</td>
+                    <td className="umMuted">{u.location}</td>
+                    <td className="umMuted">{u.phone}</td>
                     <td className="umRight">
                       <div className="umActions">
                         <button className="umBtnSmall" onClick={() => openManage(u)}>
                           Manage
                         </button>
                         <button
-                          className="umBtnSmall secondary"
+                          className={`umBtnSmall ${u.status === "active" ? "warning" : "secondary"}`}
                           onClick={() => toggleActive(u.id)}
                         >
                           {u.status === "active" ? "Deactivate" : "Activate"}
@@ -475,56 +509,73 @@ export default function UsersManagement() {
           </table>
         </div>
 
-        {/* --------------------- */}
-        {/* CREATE MODAL */}
-        {/* --------------------- */}
+        {/* ==================== */}
+        {/* CREATE MODAL         */}
+        {/* ==================== */}
         {openCreateModal ? (
           <div className="umModalOverlay" onMouseDown={closeCreate}>
             <div className="umModal" onMouseDown={(e) => e.stopPropagation()}>
               <div className="umModalTop">
                 <div>
                   <div className="umModalTitle">Create New User</div>
-                  <div className="umModalSub">
-                    Frontend-only for now. Your friend can connect backend later.
-                  </div>
+                  <div className="umModalSub">Fill in the details below to add a new user to the system.</div>
                 </div>
-                <button className="umX" onClick={closeCreate}>
-                  ✕
-                </button>
+                <button className="umX" type="button" onClick={closeCreate}>✕</button>
               </div>
 
               <div className="umModalGrid">
+                {/* Row 1 */}
                 <div className="umField">
                   <label>Full Name *</label>
-                  <input name="fullName" value={create.fullName} onChange={onCreateChange} />
+                  <input
+                    name="fullName"
+                    value={create.fullName}
+                    onChange={onCreateChange}
+                    placeholder="e.g. Hana Ayad"
+                  />
                   {errors.fullName ? <span className="umErr">{errors.fullName}</span> : null}
                 </div>
 
                 <div className="umField">
                   <label>Email *</label>
-                  <input name="email" value={create.email} onChange={onCreateChange} />
+                  <input
+                    name="email"
+                    value={create.email}
+                    onChange={onCreateChange}
+                    placeholder="e.g. hana@company.com"
+                  />
                   {errors.email ? <span className="umErr">{errors.email}</span> : null}
                 </div>
 
+                {/* Row 2 */}
                 <div className="umField">
                   <label>Phone *</label>
-                  <input name="phone" value={create.phone} onChange={onCreateChange} />
+                  <input
+                    name="phone"
+                    value={create.phone}
+                    onChange={onCreateChange}
+                    placeholder="e.g. +971 50 123 4567"
+                  />
                   {errors.phone ? <span className="umErr">{errors.phone}</span> : null}
                 </div>
 
                 <div className="umField">
                   <label>Location *</label>
-                  <input name="location" value={create.location} onChange={onCreateChange} />
+                  <input
+                    name="location"
+                    value={create.location}
+                    onChange={onCreateChange}
+                    placeholder="e.g. Dubai, UAE"
+                  />
                   {errors.location ? <span className="umErr">{errors.location}</span> : null}
                 </div>
 
+                {/* Row 3 */}
                 <div className="umField">
                   <label>Role *</label>
                   <select name="role" value={create.role} onChange={onCreateChange}>
                     {ROLE_OPTIONS.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
+                      <option key={r} value={r}>{r}</option>
                     ))}
                   </select>
                   {errors.role ? <span className="umErr">{errors.role}</span> : null}
@@ -533,13 +584,14 @@ export default function UsersManagement() {
                 <div className="umField">
                   <label>Status</label>
                   <select name="status" value={create.status} onChange={onCreateChange}>
-                    <option value="active">active</option>
-                    <option value="inactive">inactive</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
                   </select>
                 </div>
 
                 <div className="umDivider" />
 
+                {/* Row 4 */}
                 <div className="umField">
                   <label>Password *</label>
                   <input
@@ -559,28 +611,23 @@ export default function UsersManagement() {
                     name="confirmPassword"
                     value={create.confirmPassword}
                     onChange={onCreateChange}
+                    placeholder="Re-enter password"
                   />
-                  {errors.confirmPassword ? (
-                    <span className="umErr">{errors.confirmPassword}</span>
-                  ) : null}
+                  {errors.confirmPassword ? <span className="umErr">{errors.confirmPassword}</span> : null}
                 </div>
               </div>
 
               <div className="umModalActions">
-                <button className="umBtnGhost" onClick={closeCreate}>
-                  Cancel
-                </button>
-                <button className="umBtnPrimary" onClick={createUser}>
-                  Create User
-                </button>
+                <button className="umBtnGhost" type="button" onClick={closeCreate}>Cancel</button>
+                <button className="umBtnPrimary" type="button" onClick={createUser}>Create User</button>
               </div>
             </div>
           </div>
         ) : null}
 
-        {/* --------------------- */}
-        {/* MANAGE MODAL */}
-        {/* --------------------- */}
+        {/* ==================== */}
+        {/* MANAGE MODAL         */}
+        {/* ==================== */}
         {openManageModal ? (
           <div className="umModalOverlay" onMouseDown={closeManage}>
             <div className="umModal" onMouseDown={(e) => e.stopPropagation()}>
@@ -588,12 +635,10 @@ export default function UsersManagement() {
                 <div>
                   <div className="umModalTitle">Manage User</div>
                   <div className="umModalSub">
-                    Edit user details, role, status, and optionally change password.
+                    Edit details, role, and status. Leave password fields blank to keep unchanged.
                   </div>
                 </div>
-                <button className="umX" onClick={closeManage}>
-                  ✕
-                </button>
+                <button className="umX" type="button" onClick={closeManage}>✕</button>
               </div>
 
               <div className="umModalGrid">
@@ -625,9 +670,7 @@ export default function UsersManagement() {
                   <label>Role *</label>
                   <select name="role" value={edit.role} onChange={onEditChange}>
                     {ROLE_OPTIONS.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
+                      <option key={r} value={r}>{r}</option>
                     ))}
                   </select>
                   {errors.role ? <span className="umErr">{errors.role}</span> : null}
@@ -636,8 +679,8 @@ export default function UsersManagement() {
                 <div className="umField">
                   <label>Status</label>
                   <select name="status" value={edit.status} onChange={onEditChange}>
-                    <option value="active">active</option>
-                    <option value="inactive">inactive</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
                   </select>
                 </div>
 
@@ -650,36 +693,46 @@ export default function UsersManagement() {
                     name="password"
                     value={edit.password}
                     onChange={onEditChange}
-                    placeholder="Leave empty to keep unchanged"
+                    placeholder="Leave empty to keep current"
                   />
                   {errors.password ? <span className="umErr">{errors.password}</span> : null}
                 </div>
 
                 <div className="umField">
-                  <label>Confirm New Password (optional)</label>
+                  <label>Confirm New Password</label>
                   <input
                     type="password"
                     name="confirmPassword"
                     value={edit.confirmPassword}
                     onChange={onEditChange}
+                    placeholder="Re-enter new password"
                   />
-                  {errors.confirmPassword ? (
-                    <span className="umErr">{errors.confirmPassword}</span>
-                  ) : null}
+                  {errors.confirmPassword ? <span className="umErr">{errors.confirmPassword}</span> : null}
                 </div>
               </div>
 
               <div className="umModalActions">
-                <button className="umBtnGhost" onClick={closeManage}>
-                  Cancel
-                </button>
-                <button className="umBtnPrimary" onClick={saveChanges}>
-                  Save Changes
-                </button>
+                <button className="umBtnGhost" type="button" onClick={closeManage}>Cancel</button>
+                <button className="umBtnPrimary" type="button" onClick={saveChanges}>Save Changes</button>
               </div>
             </div>
           </div>
         ) : null}
+
+        {/* ==================== */}
+        {/* CONFIRM DIALOG       */}
+        {/* ==================== */}
+        <ConfirmDialog
+          open={confirm.open}
+          icon={confirm.icon}
+          title={confirm.title}
+          message={confirm.message}
+          variant={confirm.variant}
+          confirmLabel={confirm.variant === "danger" ? "Yes, Delete" : "Confirm"}
+          onConfirm={confirm.onConfirm}
+          onCancel={closeConfirm}
+        />
+
       </div>
     </Layout>
   );

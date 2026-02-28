@@ -1,9 +1,15 @@
+/* =====================================================
+   empNotifs — shared by Employee, Manager, Operator
+   ===================================================== */
+
 .empNotifs {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+  animation: fadeUp 0.4s var(--ease-out) both;
 }
 
+/* Controls row */
 .empNotifs__controls {
   display: flex;
   flex-direction: column;
@@ -17,97 +23,141 @@
   flex-wrap: wrap;
 }
 
+/* List */
 .empNotifs__list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
+/* Empty / error state */
 .empNotifs__empty {
-  padding: 18px;
-  border-radius: 16px;
-  background: white;
-  border: 1px solid #f3f4f6;
-  color: #6b7280;
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  color: rgba(17, 17, 17, 0.50);
+  font-size: 14px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
 }
 
+/* Notification item */
 .empNotifs__item {
-  background: white;
-  border: 1px solid #f3f4f6;
-  border-radius: 18px;
-  padding: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
   display: flex;
   justify-content: space-between;
   gap: 14px;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    border-color var(--dur-base);
 }
 
 .empNotifs__item.clickable {
   cursor: pointer;
 }
-
-.empNotifs__item.unread {
-  border-color: #e9d5ff;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+.empNotifs__item.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(89, 36, 180, 0.16);
 }
 
+/* Unread: left accent bar + subtle purple shadow */
+.empNotifs__item.unread {
+  border-color: rgba(89, 36, 180, 0.18);
+  border-left: 3px solid var(--btn-primary);
+  box-shadow: 0 3px 14px rgba(89, 36, 180, 0.08);
+}
+
+/* Left section: icon + content */
 .empNotifs__left {
   display: flex;
-  gap: 12px;
+  gap: 13px;
+  flex: 1;
+  min-width: 0;
 }
 
 .empNotifs__icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
-  background: #f5f3ff;
+  background: rgba(89, 36, 180, 0.07);
+  border: 1px solid rgba(89, 36, 180, 0.12);
   font-size: 18px;
+  flex-shrink: 0;
+}
+
+.empNotifs__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .empNotifs__topRow {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 10px;
 }
 
 .empNotifs__title {
   font-size: 14px;
   font-weight: 800;
+  color: var(--text-dark);
+  font-family: var(--font-heading);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .empNotifs__message {
   font-size: 13px;
-  color: #374151;
+  color: rgba(17, 17, 17, 0.62);
   margin-top: 4px;
+  line-height: 1.5;
 }
 
 .empNotifs__meta {
-  font-size: 12px;
-  color: #6b7280;
+  font-size: 11px;
+  color: rgba(17, 17, 17, 0.42);
   margin-top: 6px;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
+/* Right section: unread dot + chevron */
 .empNotifs__right {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .empNotifs__dot {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: #7c3aed;
+  background: var(--btn-primary);
+  box-shadow: 0 0 0 3px rgba(89, 36, 180, 0.15);
 }
 
 .empNotifs__chev {
-  font-size: 22px;
-  color: #7c3aed;
+  font-size: 20px;
+  color: var(--btn-primary);
+  opacity: 0.65;
+  line-height: 1;
 }
 
+/* Action button (Mark all read / Show Unread) */
 .empNotifs__actionBtn {
   font-weight: 700;
 }
