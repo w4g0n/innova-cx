@@ -20,6 +20,7 @@ import {
 } from "recharts";
 
 import "./ModelAnalysis.css";
+import useScrollReveal from "../../utils/useScrollReveal";
 
 import operatorModelAnalysis from "../../mock-data/operatorModelAnalysis.json";
 
@@ -31,6 +32,7 @@ const ORANGE = "#f59e0b";
 const RED = "#ef4444";
 
 export default function ModelAnalysis() {
+  const revealRef = useScrollReveal();
   const navigate = useNavigate();
 
   const [timeFilter, setTimeFilter] = useState("last30days");
@@ -115,48 +117,38 @@ export default function ModelAnalysis() {
 
   return (
     <Layout role="operator">
-      <div className="modelAnalysis">
-        <header className="top-bar">
-          <PageHeader
-            title="Model Performance Dashboard"
-            subtitle="Routing and priority scoring accuracy for model-driven complaint handling."
-          />
-
-          <div className="top-actions">
-            <div className="modelSelect">
+      <div className="modelAnalysis" ref={revealRef}>
+        <PageHeader
+          title="Model Performance Dashboard"
+          subtitle="Routing and priority scoring accuracy for model-driven complaint handling."
+          actions={
+            <div className="modelA__topActions">
               <PillSelect
                 value={timeFilter}
                 onChange={setTimeFilter}
                 ariaLabel="Filter by time range"
                 options={[
-                  { label: "Last 7 days", value: "last7days" },
-                  { label: "Last 30 days", value: "last30days" },
-                  { label: "This quarter", value: "quarter" },
+                  { label: "Last 7 days",   value: "last7days" },
+                  { label: "Last 30 days",  value: "last30days" },
+                  { label: "This quarter",  value: "quarter" },
                 ]}
               />
-            </div>
-
-            <div className="modelSelect">
               <PillSelect
                 value={deptFilter}
                 onChange={setDeptFilter}
                 ariaLabel="Filter by department"
                 options={[
-                  { label: "All departments", value: "all" },
-                  { label: "Billing", value: "Billing" },
-                  { label: "Technical Support", value: "Technical Support" },
-                  { label: "Facilities", value: "Facilities" },
-                  { label: "Leasing", value: "Leasing" },
+                  { label: "All departments",    value: "all" },
+                  { label: "Billing",            value: "Billing" },
+                  { label: "Technical Support",  value: "Technical Support" },
+                  { label: "Facilities",         value: "Facilities" },
+                  { label: "Leasing",            value: "Leasing" },
                 ]}
               />
-            </div>
-
-            
-            <div className="modelReset">
               <FilterPillButton onClick={resetFilters} label="Reset" />
             </div>
-          </div>
-        </header>
+          }
+        />
 
         <section className="kpi-row">
           {[

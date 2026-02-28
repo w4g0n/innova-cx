@@ -9,6 +9,7 @@ import FilterPillButton from "../../components/common/FilterPillButton";
 import { apiUrl } from "../../config/apiBase";
 import PriorityPill from "../../components/common/PriorityPill";
 import "./ViewAllComplaint.css";
+import useScrollReveal from "../../utils/useScrollReveal";
 
 const API_BASE = apiUrl("/api");
 
@@ -71,6 +72,7 @@ function getStoredToken() {
 }
 
 export default function EmployeeViewAllComplaints() {
+  const revealRef = useScrollReveal();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -275,7 +277,7 @@ export default function EmployeeViewAllComplaints() {
 
   return (
     <Layout role="employee">
-      <main className="main-EV-VAC">
+      <main className="main-EV-VAC" ref={revealRef}>
         <PageHeader
           title="Tickets Viewer and Management"
           subtitle="View, search, sort, and manage all complaints and requests assigned to you."

@@ -24,10 +24,10 @@
   --border:         #e5deff;
   --border-strong:  #c4b5fd;
 
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  --sl-radius-sm: 8px;
+  --sl-radius-md: 14px;
+  --sl-radius-lg: 20px;
+  --sl-radius-xl: 28px;
 
   --shadow-card: 0 2px 16px rgba(100, 71, 217, 0.08);
   --shadow-hover: 0 8px 32px rgba(100, 71, 217, 0.18);
@@ -167,7 +167,7 @@
 .sc-card {
   background: var(--surface);
   border: 1.5px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--sl-radius-lg);
   box-shadow: var(--shadow-card);
   overflow: hidden;
   transition: var(--transition);
@@ -226,7 +226,7 @@
 .sf-input {
   padding: 11px 14px;
   border: 1.5px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--sl-radius-sm);
   font-size: 14px;
   color: var(--text-primary);
   background: var(--surface);
@@ -325,7 +325,7 @@
 
 .ssb-btn {
   padding: 11px 28px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--sl-radius-sm);
   border: none;
   cursor: pointer;
   font-size: 14px;
@@ -373,7 +373,7 @@
 
 .dz-root {
   border: 1.5px solid #fecaca;
-  border-radius: var(--radius-lg);
+  border-radius: var(--sl-radius-lg);
   padding: 20px 24px;
   background: #fff5f5;
 }
@@ -415,7 +415,7 @@
 
 .dz-btn {
   padding: 8px 18px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--sl-radius-sm);
   border: 1.5px solid #fca5a5;
   background: #fff;
   color: var(--danger);

@@ -8,8 +8,10 @@ import operatorDashboardData from "../../mock-data/operatorDashboard.json";
 import "./OperatorDashboard.css";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import OperatorDashboardPDF from "./OperatorDashboardPDF.jsx";
+import useScrollReveal from "../../utils/useScrollReveal";
 
 export default function OperatorDashboard() {
+  const revealRef = useScrollReveal();
   const navigate = useNavigate();
   const [range, setRange] = useState("last_1_hour");
 
@@ -77,7 +79,7 @@ export default function OperatorDashboard() {
 
   return (
     <Layout role="operator">
-      <div className="opDash">
+      <div className="opDash" ref={revealRef}>
 
         <PageHeader
           title="Operator System Dashboard"

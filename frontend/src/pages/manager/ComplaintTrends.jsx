@@ -8,8 +8,10 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import { apiUrl } from "../../config/apiBase";
+import useScrollReveal from "../../utils/useScrollReveal";
 
 export default function ComplaintTrends() {
+  const revealRef = useScrollReveal();
   const navigate = useNavigate();
 
   // ------------------- State -------------------
@@ -162,7 +164,7 @@ export default function ComplaintTrends() {
   // ------------------- JSX -------------------
   return (
     <Layout role="manager">
-      <div className="mgrTrends">
+      <div className="mgrTrends" ref={revealRef}>
         <PageHeader
           title="Complaint Trends"
           subtitle="Track complaint volumes, resolution performance, and top categories over time."

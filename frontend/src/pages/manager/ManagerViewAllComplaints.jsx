@@ -10,8 +10,10 @@ import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
+import useScrollReveal from "../../utils/useScrollReveal";
 
 export default function ManagerViewComplaints() {
+  const revealRef = useScrollReveal();
   const token = localStorage.getItem("access_token");
 
   // Tickets & Employees
@@ -189,7 +191,7 @@ const confirmAssignment = async () => {
   // ------------------- JSX -------------------
   return (
     <Layout role="manager">
-      <main className="mv-main" onClick={closeMenu}>
+      <main className="mv-main" ref={revealRef} onClick={closeMenu}>
         <section className="mv-header">
           <PageHeader
             title="View All Complaints"

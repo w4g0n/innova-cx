@@ -44,6 +44,7 @@ export default function CustomerLanding() {
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -134,6 +135,10 @@ export default function CustomerLanding() {
 
   const handleLogout = () => {
     closeAllPopovers();
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("token");
     localStorage.removeItem("temp_token");
@@ -322,12 +327,9 @@ export default function CustomerLanding() {
                 aria-label="Notifications"
                 onClick={toggleNotifications}
               >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path
-                    d="M12 22a2.25 2.25 0 0 0 2.2-1.8h-4.4A2.25 2.25 0 0 0 12 22Zm7-6V11a7 7 0 1 0-14 0v5l-2 2v1h18v-1l-2-2Z"
-                    fill="currentColor"
-                    opacity="0.95"
-                  />
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
 
                 {unreadCount > 0 && (
@@ -652,6 +654,18 @@ export default function CustomerLanding() {
                 )}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {showLogoutConfirm && (
+        <div className="novaCloseModal">
+          <div className="novaCloseModalContent">
+            <p>Are you sure you want to log out?</p>
+            <div className="novaCloseModalBtns">
+              <button onClick={confirmLogout}>Log out</button>
+              <button onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
+            </div>
           </div>
         </div>
       )}
