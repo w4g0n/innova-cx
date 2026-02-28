@@ -26,6 +26,22 @@ import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+# Compatibility shims for Phi-4 remote code across nearby transformers versions.
+try:
+    import transformers.cache_utils as _cache_utils
+    if not hasattr(_cache_utils, "SlidingWindowCache") and hasattr(_cache_utils, "DynamicCache"):
+        _cache_utils.SlidingWindowCache = _cache_utils.DynamicCache
+except Exception:
+    pass
+
+try:
+    import transformers.utils as _transformers_utils
+    if not hasattr(_transformers_utils, "LossKwargs"):
+        from typing import Dict, Any
+        _transformers_utils.LossKwargs = Dict[str, Any]
+except Exception:
+    pass
+
 try:
     from transformers import BitsAndBytesConfig
 except Exception:
@@ -204,10 +220,12 @@ def label_ticket(tokenizer, model, system_prompt: str, text: str, retries: int =
                 add_generation_prompt=True,
                 return_tensors="pt",
             ).to(model.device)
+            attention_mask = torch.ones_like(input_ids)
 
             with torch.no_grad():
                 output_ids = model.generate(
                     input_ids,
+                    attention_mask=attention_mask,
                     max_new_tokens=80,
                     do_sample=False,        # Deterministic — labeling not generation
                     temperature=1.0,

@@ -8,6 +8,7 @@
 #   bash run_pipeline.sh --full-run --epochs 3   # explicit uncapped full dataset run
 
 set -eo pipefail  # Exit immediately on any error and propagate failures in pipes
+export PYTHONNOUSERSITE=1
 
 # ─────────────────────────────────────────────
 # DEFAULTS
