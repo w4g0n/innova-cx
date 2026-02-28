@@ -1,0 +1,12 @@
+# Synthetic Dataset Generation Pipeline
+# Phase 1 (Text Generation) + Phase 2 (NLI Classification)
+
+# Core ML
+torch>=2.1.0
+transformers>=4.40.0
+accelerate>=0.26.0
+# Data
+pandas>=2.0.0
+tqdm>=4.66.0
+scikit-learn>=1.3.0
+bitsandbytes>=0.41.0
