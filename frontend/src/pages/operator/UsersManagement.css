@@ -3,8 +3,8 @@
    ================================================ */
 
 .umPage {
-  padding: 24px;
-  max-width: 1200px;
+  width: 100%;
+  max-width: none;
   animation: fadeUp 0.4s var(--ease-out) both;
 }
 
@@ -90,8 +90,14 @@
 .umKpis {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 20px;
+  gap: 16px;
+  margin-top: 28px;
+  margin-bottom: 28px;
+}
+
+/* ---- Search row ---- */
+.umSearchRow {
+  margin-bottom: 14px;
 }
 
 .umKpi {
@@ -175,7 +181,8 @@
 .umFilters {
   display: flex;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 10px;
+  margin-bottom: 24px;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -196,12 +203,19 @@
 
 /* ---- Table card ---- */
 .umTableCard {
-  margin-top: 14px;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(0, 0, 0, 0.07);
   background: #ffffff;
   box-shadow: 0 6px 24px rgba(64, 28, 81, 0.08);
-  overflow: hidden;
+  /* overflow: visible so 3-dot dropdowns aren't clipped */
+  overflow: visible;
+}
+
+/* Inner scroll wrapper — clips table to border-radius */
+.umTableScroll {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  overflow-y: visible;
 }
 
 .umTable {
@@ -291,6 +305,82 @@
   color: #a7372b;
 }
 .umBtnSmall.danger:hover { background: rgba(231, 76, 60, 0.14); }
+
+/* ---- 3-dot action menu ---- */
+.umMenuWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.umMenuBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-dark);
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--dur-fast), border-color var(--dur-fast);
+  flex-shrink: 0;
+}
+.umMenuBtn:hover {
+  background: rgba(89, 36, 180, 0.08);
+  border-color: rgba(89, 36, 180, 0.22);
+}
+
+.umMenuDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 160px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 28px rgba(15, 10, 24, 0.14);
+  z-index: 200;
+  overflow: hidden;
+  animation: scaleIn 0.15s var(--ease-spring) both;
+  transform-origin: top right;
+}
+
+/* Flip upward when near the bottom of the viewport */
+.umMenuDropdown--up {
+  top: auto;
+  bottom: calc(100% + 6px);
+  transform-origin: bottom right;
+}
+
+.umMenuItem {
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--text-dark);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--dur-fast);
+}
+.umMenuItem:hover { background: rgba(0, 0, 0, 0.05); }
+.umMenuItem + .umMenuItem { border-top: 1px solid rgba(0, 0, 0, 0.05); }
+
+.umMenuItem.warning { color: #7a5c00; }
+.umMenuItem.warning:hover { background: rgba(240, 180, 41, 0.10); }
+
+.umMenuItem.danger { color: #a7372b; }
+.umMenuItem.danger:hover { background: rgba(231, 76, 60, 0.08); }
 
 /* ---- Role & Status pills ---- */
 .umPill {

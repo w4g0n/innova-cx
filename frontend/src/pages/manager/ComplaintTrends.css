@@ -1,7 +1,7 @@
 .mgrTrends {
   width: 100%;
   max-width: none;
-  font-size: 18px;
+  font-size: 14px;
 }
 
 .filtersRow {
@@ -27,8 +27,8 @@
 
 .kpiRow {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 22px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
   margin-bottom: 22px;
 }
 
@@ -48,17 +48,18 @@
 }
 
 .cardTitle {
-  font-size: 22px;
-  font-weight: 750;
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 800;
   color: var(--text-dark);
-  margin: 0 0 10px;
+  margin: 0 0 6px;
 }
 
 .cardSubtitle {
-  font-size: 17px;
+  font-size: 13px;
   font-weight: 500;
-  color: rgba(17, 17, 17, 0.7);
-  margin: 0 0 18px;
+  color: rgba(17, 17, 17, 0.60);
+  margin: 0 0 16px;
   line-height: 1.5;
 }
 
@@ -105,9 +106,9 @@
   display: flex;
   justify-content: space-between;
   margin-top: 12px;
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 600;
-  color: rgba(17, 17, 17, 0.65);
+  color: rgba(17, 17, 17, 0.60);
 }
 
 .categoryList {
@@ -125,7 +126,7 @@
 }
 
 .categoryName {
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-dark);
 }
@@ -144,9 +145,9 @@
 }
 
 .categoryValue {
-  font-size: 15px;
-  font-weight: 650;
-  color: rgba(17, 17, 17, 0.65);
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(17, 17, 17, 0.60);
   text-align: right;
 }
 

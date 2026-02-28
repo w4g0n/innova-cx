@@ -1,415 +1,357 @@
+/* ================================================
+   OperatorDashboard — system monitoring view
+   ================================================ */
+
 .opDash {
   width: 100%;
   max-width: none;
-  font-size: 16px;
+  font-size: 14px;
+  animation: fadeUp 0.4s var(--ease-out) both;
 }
 
-.top-bar {
+/* ---- Header actions slot ---- */
+.opDash__topActions {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 22px;
-  margin-bottom: 22px;
-}
-
-.page-title {
-  font-size: 38px;
-  margin: 0;
-  color: var(--text-dark);
-  letter-spacing: 0.2px;
-  font-weight: 650;
-}
-
-.page-subtitle {
-  margin-top: 8px;
-  font-size: 16px;
-  color: rgba(17, 17, 17, 0.72);
-}
-
-.top-actions {
-  display: flex;
-  gap: 14px;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.opDashSelect {
-  min-width: 210px;
+.opDash__selectWrap {
+  min-width: 200px;
 }
 
-.cards-row {
+/* ---- Cards row (2-column grid) ---- */
+.opDash__cardsRow {
   display: grid;
   grid-template-columns: 1.6fr 1fr;
   gap: 16px;
+  margin-top: 20px;
+}
+
+/* ---- Individual card ---- */
+.opDash__card {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: 20px 22px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  box-shadow: 0 6px 18px rgba(64, 28, 81, 0.07);
+}
+
+.opDash__card--full {
   margin-top: 16px;
 }
 
-@media (max-width: 980px) {
-  .cards-row {
-    grid-template-columns: 1fr;
-  }
-}
-
-.card {
-  background: white;
-  border-radius: 16px;
-  padding: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
-}
-
-.full-width-card {
-  margin-top: 16px;
-}
-
-.card-title {
-  font-size: 20px;
+.opDash__cardTitle {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 800;
   margin: 0;
-  font-weight: 750;
+  color: var(--text-dark);
 }
 
-.card-subtitle {
-  margin-top: 8px;
-  margin-bottom: 14px;
-  color: rgba(17, 17, 17, 0.65);
-  font-size: 15px;
+.opDash__cardSubtitle {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: rgba(17, 17, 17, 0.55);
 }
 
-.status-grid {
+/* ---- Core Services status grid ---- */
+.opDash__statusGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 12px;
   margin-top: 14px;
 }
 
-@media (max-width: 700px) {
-  .status-grid {
-    grid-template-columns: 1fr;
-  }
+.opDash__statusItem {
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: rgba(64, 28, 81, 0.04);
+  border: 1px solid rgba(64, 28, 81, 0.10);
 }
 
-.status-item {
-  border-radius: 14px;
-  padding: 14px;
-  background: rgba(64, 28, 81, 0.06);
-  border: 1px solid rgba(64, 28, 81, 0.12);
+.opDash__statusLabel {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: var(--text-dark);
 }
 
-.status-label {
-  font-weight: 750;
-  margin-bottom: 8px;
-  font-size: 16px;
+.opDash__statusNote {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: rgba(17, 17, 17, 0.60);
 }
 
-.status-note {
-  margin-top: 8px;
-  font-size: 14px;
-  color: rgba(17, 17, 17, 0.7);
-}
-
-.status-pill {
+/* ---- Status pills ---- */
+.opDash__statusPill {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 650;
-  margin-bottom: 8px;
+  padding: 3px 11px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 700;
   border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-.status-ok {
-  background: rgba(46, 204, 113, 0.16);
-  color: #1f7a45;
-}
+.opDash__status--ok       { background: rgba(46, 204, 113, 0.16); color: #1f7a45; }
+.opDash__status--warning  { background: rgba(241, 196,  15, 0.18); color: #8a6d00; }
+.opDash__status--critical { background: rgba(231,  76,  60, 0.16); color: #a7372b; }
 
-.status-warning {
-  background: rgba(241, 196, 15, 0.18);
-  color: #8a6d00;
-}
-
-.status-critical {
-  background: rgba(231, 76, 60, 0.16);
-  color: #a7372b;
-}
-
-.narrow-card .mini-kpi-column {
+/* ---- Mini KPI — Error/Fallback card ---- */
+.opDash__miniKpiCol {
   margin-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.mini-kpi {
+.opDash__miniKpi {
   background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: var(--radius-md);
   padding: 14px;
 }
 
-.mini-kpi-label {
+.opDash__miniKpiLabel {
   display: block;
-  font-size: 14px;
-  color: rgba(17, 17, 17, 0.7);
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(17, 17, 17, 0.60);
 }
 
-.mini-kpi-value {
+.opDash__miniKpiValue {
   display: block;
-  margin-top: 8px;
-  font-size: 24px;
-  font-weight: 800;
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--text-dark);
+  font-family: var(--font-heading);
 }
 
-.mini-kpi-trend {
+.opDash__miniKpiTrend {
   display: inline-block;
-  margin-top: 8px;
-  font-size: 13px;
+  margin-top: 6px;
+  font-size: 12px;
   font-weight: 700;
-  padding: 5px 10px;
-  border-radius: 999px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
 }
 
-.mini-kpi-normal {
-  background: rgba(46, 204, 113, 0.16);
-  color: #1f7a45;
-}
+.opDash__miniKpiTrend--normal   { background: rgba(46, 204, 113, 0.16); color: #1f7a45; }
+.opDash__miniKpiTrend--critical { background: rgba(231,  76,  60, 0.16); color: #a7372b; }
 
-.mini-kpi-warning {
-  background: rgba(241, 196, 15, 0.18);
-  color: #8a6d00;
-}
-
-.mini-kpi-critical {
-  background: rgba(231, 76, 60, 0.16);
-  color: #a7372b;
-}
-
-.integration-list,
-.version-list,
-.safety-list,
-.event-feed {
+/* ---- Generic list (integrations + versions) ---- */
+.opDash__list {
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: 14px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.integration-item,
-.version-item {
+.opDash__listItem {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 14px;
-  padding: 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(0, 0, 0, 0.07);
   background: rgba(0, 0, 0, 0.02);
 }
 
-.integration-item + .integration-item,
-.version-item + .version-item {
-  margin-top: 12px;
+.opDash__itemName {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-dark);
 }
 
-.integration-name,
-.version-name {
-  font-weight: 750;
-  font-size: 16px;
+.opDash__itemMeta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(17, 17, 17, 0.55);
 }
 
-.integration-note,
-.version-meta {
-  margin-top: 6px;
-  font-size: 14px;
-  color: rgba(17, 17, 17, 0.7);
-}
-
-.queue-grid {
+/* ---- Queue health grid ---- */
+.opDash__queueGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 12px;
   margin-top: 14px;
 }
 
-@media (max-width: 700px) {
-  .queue-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.queue-item {
+.opDash__queueItem {
   padding: 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(0, 0, 0, 0.07);
   background: rgba(0, 0, 0, 0.02);
 }
 
-.queue-label {
+.opDash__queueLabel {
   font-weight: 700;
-  font-size: 15px;
-  color: rgba(17, 17, 17, 0.75);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(17, 17, 17, 0.55);
 }
 
-.queue-value {
-  margin-top: 10px;
-  font-size: 24px;
-  font-weight: 800;
-}
-
-.queue-note {
+.opDash__queueValue {
   margin-top: 8px;
-  font-size: 14px;
-  color: rgba(17, 17, 17, 0.7);
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--text-dark);
+  font-family: var(--font-heading);
 }
 
-.queue-note-warning {
+.opDash__queueNote {
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(17, 17, 17, 0.60);
+}
+
+.opDash__queueNote--warning {
   color: #8a6d00;
   font-weight: 700;
 }
 
-.event-feed {
-  margin-top: 0;
+/* ---- Incident & Event Feed ---- */
+.opDash__eventFeed {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.event-item {
+.opDash__eventItem {
   display: flex;
   gap: 12px;
-  padding: 14px;
-  border-radius: 14px;
-  background: rgba(0, 0, 0, 0.03);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.02);
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.event-dot {
-  width: 9px;
-  height: 9px;
+.opDash__eventDot {
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
-  margin-top: 7px;
+  margin-top: 5px;
+  flex-shrink: 0;
 }
 
-.event-critical .event-dot {
-  background: #dc2626;
-}
+.opDash__event--critical .opDash__eventDot { background: #dc2626; }
+.opDash__event--warning  .opDash__eventDot { background: #f59e0b; }
+.opDash__event--info     .opDash__eventDot { background: var(--btn-primary); }
 
-.event-warning .event-dot {
-  background: #f59e0b;
-}
+.opDash__eventContent { flex: 1; }
 
-.event-info .event-dot {
-  background: var(--btn-primary);
-}
-
-.event-content {
-  flex: 1;
-}
-
-.event-header {
+.opDash__eventHeader {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
 }
 
-.event-title {
-  font-size: 16px;
-  font-weight: 650;
+.opDash__eventTitle {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-dark);
 }
 
-.event-time {
-  margin-left: auto;
-  text-align: right;
-  min-width: 78px;
-  font-size: 14px;
-  color: rgba(17, 17, 17, 0.55);
+.opDash__eventTime {
+  font-size: 12px;
+  color: rgba(17, 17, 17, 0.50);
+  white-space: nowrap;
 }
 
-.event-description {
-  margin: 6px 0 0;
-  font-size: 14px;
-  color: rgba(17, 17, 17, 0.7);
+.opDash__eventDesc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: rgba(17, 17, 17, 0.60);
 }
 
-.link-btn {
+/* ---- Link button (AI versions "View details") ---- */
+.opDash__linkBtn {
   border: 1px solid rgba(89, 36, 180, 0.18);
-  background: rgba(89, 36, 180, 0.08);
+  background: rgba(89, 36, 180, 0.07);
   color: var(--btn-primary);
-  font-weight: 650;
+  font-weight: 700;
   cursor: pointer;
-  padding: 8px 12px;
-  border-radius: 999px;
-  font-size: 14px;
+  padding: 7px 13px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background var(--dur-fast);
 }
 
-.link-btn:hover {
-  background: rgba(89, 36, 180, 0.14);
+.opDash__linkBtn:hover {
+  background: rgba(89, 36, 180, 0.13);
 }
 
-.version-list {
-  margin-top: 0;
+/* ---- Safety & Maintenance ---- */
+.opDash__safetyList {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.version-item {
-  padding: 14px;
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.version-name {
-  font-size: 16px;
-  font-weight: 650;
-  color: var(--text-dark);
-}
-
-.version-meta {
-  font-size: 14px;
-  color: rgba(17, 17, 17, 0.55);
-}
-
-.safety-list {
-  margin-top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.safety-item {
+.opDash__safetyItem {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 14px;
-  padding: 12px 12px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.03);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.02);
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.safety-label {
-  font-size: 15px;
+.opDash__safetyLabel {
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-dark);
 }
 
-.config-pill {
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: rgba(89, 36, 180, 0.12);
-  color: rgba(64, 28, 81, 1);
-  font-size: 14px;
-  font-weight: 650;
+.opDash__configPill {
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  background: rgba(89, 36, 180, 0.09);
+  border: 1px solid rgba(89, 36, 180, 0.18);
+  color: var(--btn-primary);
+  font-size: 12px;
+  font-weight: 700;
 }
 
+/* ================================================
+   Responsive
+   ================================================ */
 @media (max-width: 1000px) {
-  .cards-row {
+  .opDash__cardsRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .opDash__statusGrid,
+  .opDash__queueGrid {
     grid-template-columns: 1fr;
   }
 
-  .top-bar {
+  .opDash__topActions {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+  }
+
+  .opDash__selectWrap {
+    min-width: 100%;
   }
 }
