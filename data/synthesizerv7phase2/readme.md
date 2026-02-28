@@ -48,6 +48,7 @@ pipeline/
 ├── phase1_generate.py      # Generate unlabeled tickets
 ├── label.py                # Label complaints with Phi-4-mini
 ├── train.py                # Fine-tune multi-head DeBERTa
+├── predict_guarded.py      # No-retrain inference guardrails
 ├── phase2_classify.py      # Zero-shot NLI classification (standalone)
 ├── phase3_evaluate.py      # Evaluate classifier against test set
 ├── run_pipeline.sh         # Orchestrates label.py + train.py
@@ -72,6 +73,14 @@ bash run_pipeline.sh --dry-run
 
 # Full run
 bash run_pipeline.sh
+
+# Full run + continue training from existing checkpoint + weighted safety loss + guarded predictions
+bash run_pipeline.sh \
+  --full-run \
+  --epochs 2 \
+  --resume-from models/deberta_multitask/model.pt \
+  --weighted-safety-loss \
+  --run-guarded-predict
 ```
 
 ### Run stages individually
@@ -89,6 +98,26 @@ python3 label.py --input input.csv --output labeled.csv
 **Train classifier:**
 ```bash
 python3 train.py --input labeled.csv --output-dir models/
+```
+
+**Continue training from existing checkpoint (not from scratch):**
+```bash
+python3 train.py \
+  --input labeled.csv \
+  --output-dir models/ \
+  --resume-from models/deberta_multitask/model.pt \
+  --epochs 2 \
+  --weighted-safety-loss
+```
+
+**Predict with no-retrain guardrails (threshold + rules + review flag):**
+```bash
+python3 predict_guarded.py \
+  --input input.csv \
+  --output output/predictions_guarded.csv \
+  --model-dir models/deberta_multitask \
+  --safety-threshold 0.30 \
+  --uncertainty-margin 0.15
 ```
 
 **Evaluate against test set:**
@@ -147,6 +176,9 @@ logs/
 | `--epochs` | `3` | Training epochs |
 | `--batch-size` | `16` | Batch size |
 | `--lr` | `2e-5` | Learning rate |
+| `--resume-from` | empty | Path to existing `model.pt` to continue training |
+| `--weighted-safety-loss` | off | Up-weight `safety_concern=True` class |
+| `--safety-positive-weight` | auto | Manual positive-class weight when weighted loss is on |
 
 ### run_pipeline.sh
 
@@ -155,6 +187,15 @@ logs/
 | `--dry-run` | Labels 10 rows only, skips training |
 | `--epochs N` | Override training epochs |
 | `--input PATH` | Override input CSV path |
+| `--full-run` | Remove complaint cap for labeling |
+| `--resume-from PATH` | Continue training from existing `model.pt` |
+| `--weighted-safety-loss` | Up-weight `safety_concern=True` class in training |
+| `--safety-positive-weight X` | Manual positive-class weight for safety loss |
+| `--run-guarded-predict` | Run `predict_guarded.py` after training |
+| `--predict-input PATH` | Input CSV for guarded predictions (defaults to `--input`) |
+| `--predict-output PATH` | Output CSV for guarded predictions |
+| `--safety-threshold X` | Threshold for forcing `safety_concern=True` in guarded prediction |
+| `--uncertainty-margin X` | Confidence margin threshold for `needs_review` flag |
 
 ---
 

@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from sklearn.metrics import accuracy_score, f1_score, classification_report
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
@@ -105,7 +106,7 @@ class MultiTaskDeBERTa(nn.Module):
             for col, n_classes in num_labels_per_task.items()
         })
 
-    def forward(self, input_ids, attention_mask, labels=None):
+    def forward(self, input_ids, attention_mask, labels=None, loss_weights=None):
         outputs     = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
         pooled      = outputs.last_hidden_state[:, 0, :]  # [CLS] token
 
@@ -113,11 +114,17 @@ class MultiTaskDeBERTa(nn.Module):
 
         loss = None
         if labels is not None:
-            loss_fn = nn.CrossEntropyLoss(label_smoothing=0.1)
-            loss = sum(
-                loss_fn(logits_dict[col], labels[col])
-                for col in self.heads
-            )
+            losses = []
+            for col in self.heads:
+                losses.append(
+                    F.cross_entropy(
+                        logits_dict[col],
+                        labels[col],
+                        weight=None if loss_weights is None else loss_weights.get(col),
+                        label_smoothing=0.1,
+                    )
+                )
+            loss = sum(losses)
 
         return loss, logits_dict
 
@@ -147,7 +154,7 @@ def prepare_labels(df: pd.DataFrame, encoders: dict) -> dict:
 # TRAIN EPOCH
 # ─────────────────────────────────────────────
 
-def train_epoch(model, dataloader, optimizer, scheduler, device):
+def train_epoch(model, dataloader, optimizer, scheduler, device, loss_weights=None):
     model.train()
     total_loss = 0
     for batch in tqdm(dataloader, desc="  Training", leave=False):
@@ -156,7 +163,12 @@ def train_epoch(model, dataloader, optimizer, scheduler, device):
         batch_labels   = {col: batch[col].to(device) for col in LABEL_COLS}
 
         optimizer.zero_grad()
-        loss, _ = model(input_ids, attention_mask, labels=batch_labels)
+        loss, _ = model(
+            input_ids,
+            attention_mask,
+            labels=batch_labels,
+            loss_weights=loss_weights,
+        )
         loss.backward()
 
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -222,6 +234,11 @@ def main():
     parser.add_argument("--batch-size", type=int,   default=16)
     parser.add_argument("--lr",         type=float, default=2e-5)
     parser.add_argument("--max-length", type=int,   default=256)
+    parser.add_argument("--resume-from", default="", help="Path to an existing model.pt to continue training")
+    parser.add_argument("--weighted-safety-loss", action="store_true",
+                        help="Apply class weighting for safety_concern to improve recall for True class")
+    parser.add_argument("--safety-positive-weight", type=float, default=0.0,
+                        help="Override positive-class weight for safety_concern (used with --weighted-safety-loss)")
     args = parser.parse_args()
 
     device     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -301,10 +318,33 @@ def main():
     # ── Model ──
     print("Loading model...")
     model = MultiTaskDeBERTa(args.base_model, num_labels_per_task).to(device)
+    resume_path = Path(args.resume_from) if args.resume_from else None
+    if resume_path:
+        if not resume_path.exists():
+            raise FileNotFoundError(f"--resume-from path not found: {resume_path}")
+        state_dict = torch.load(resume_path, map_location=device)
+        model.load_state_dict(state_dict)
+        print(f"Resumed from: {resume_path}")
 
     total_params     = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Parameters : {total_params:,} total  |  {trainable_params:,} trainable")
+
+    loss_weights = None
+    if args.weighted_safety_loss:
+        pos_weight = args.safety_positive_weight
+        if pos_weight <= 0:
+            safety_counts = train_df["safety_concern"].apply(normalise_safety).value_counts()
+            n_false = int(safety_counts.get(False, 0))
+            n_true = int(safety_counts.get(True, 0))
+            if n_true > 0 and n_false > 0:
+                pos_weight = n_false / n_true
+            else:
+                pos_weight = 1.0
+        loss_weights = {
+            "safety_concern": torch.tensor([1.0, float(pos_weight)], dtype=torch.float, device=device)
+        }
+        print(f"Using weighted safety_concern loss: [False=1.0, True={pos_weight:.4f}]")
 
     # ── Optimizer + scheduler ──
     optimizer   = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
@@ -322,7 +362,7 @@ def main():
 
     for epoch in range(1, args.epochs + 1):
         print(f"Epoch {epoch}/{args.epochs}")
-        train_loss = train_epoch(model, train_loader, optimizer, scheduler, device)
+        train_loss = train_epoch(model, train_loader, optimizer, scheduler, device, loss_weights=loss_weights)
         results    = evaluate(model, val_loader, device, encoders)
         avg_f1     = float(np.mean([r["f1_macro"] for r in results.values()]))
 
@@ -356,6 +396,11 @@ def main():
         "training_rows": len(train_df),
         "val_rows":      len(val_df),
         "epochs":        args.epochs,
+        "resumed_from":  str(resume_path) if resume_path else None,
+        "weighted_safety_loss": args.weighted_safety_loss,
+        "safety_positive_weight": None if not args.weighted_safety_loss else (
+            None if loss_weights is None else float(loss_weights["safety_concern"][1].item())
+        ),
         "best_avg_f1":   round(best_avg_f1, 4),
         "results":       best_results,
     }
