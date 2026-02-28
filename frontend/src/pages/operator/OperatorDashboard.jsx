@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
+import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
 import ExportPdfButton from "../../components/common/ExportPdfButton";
 import operatorDashboardData from "../../mock-data/operatorDashboard.json";
@@ -12,16 +13,16 @@ export default function OperatorDashboard() {
   const navigate = useNavigate();
   const [range, setRange] = useState("last_1_hour");
 
-  const [data, setData] = useState(null);
+  const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError]     = useState(null);
 
   useEffect(() => {
     try {
       setLoading(true);
       setError(null);
       setData(operatorDashboardData);
-    } catch (err) { // eslint-disable-line no-unused-vars -- TODO: review - err unused
+    } catch (err) { // eslint-disable-line no-unused-vars
       setError("Failed to load dashboard data");
     } finally {
       setLoading(false);
@@ -39,77 +40,74 @@ export default function OperatorDashboard() {
   if (error) {
     return (
       <Layout role="operator">
-        <div className="opDash error">⚠️ {error}</div>
+        <div className="opDash">⚠️ {error}</div>
       </Layout>
     );
   }
 
+  const headerActions = (
+    <div className="opDash__topActions">
+      <div className="opDash__selectWrap">
+        <PillSelect
+          value={range}
+          onChange={setRange}
+          ariaLabel="Filter by time range"
+          options={[
+            { label: "Last 30 minutes", value: "last_30_min" },
+            { label: "Last 1 hour",     value: "last_1_hour" },
+            { label: "Today",           value: "today" },
+            { label: "Last 7 days",     value: "last_7_days" },
+          ]}
+        />
+      </div>
+
+      <PDFDownloadLink
+        className="exportPdfLink"
+        document={<OperatorDashboardPDF data={data} range={range} />}
+        fileName={`operator-dashboard-${new Date().toISOString().slice(0, 10)}.pdf`}
+      >
+        {({ loading: pdfLoading }) => (
+          <span className={`exportPdfBtn ${pdfLoading ? "isLoading" : ""}`}>
+            <ExportPdfButton loading={pdfLoading} />
+          </span>
+        )}
+      </PDFDownloadLink>
+    </div>
+  );
+
   return (
     <Layout role="operator">
       <div className="opDash">
-        
-        <header className="top-bar">
-          <div>
-            <h1 className="page-title">Operator System Dashboard</h1>
-            <p className="page-subtitle">
-              High-level health of the complaint-handling platform and AI services.
-            </p>
-          </div>
 
-          <div className="top-actions">
-            <div className="opDashSelect">
-              <PillSelect
-                value={range}
-                onChange={setRange}
-                ariaLabel="Filter by time range"
-                options={[
-                  { label: "Last 30 minutes", value: "last_30_min" },
-                  { label: "Last 1 hour", value: "last_1_hour" },
-                  { label: "Today", value: "today" },
-                  { label: "Last 7 days", value: "last_7_days" },
-                ]}
-              />
-            </div>
+        <PageHeader
+          title="Operator System Dashboard"
+          subtitle="High-level health of the complaint-handling platform and AI services."
+          actions={headerActions}
+        />
 
-            <PDFDownloadLink
-              className="exportPdfLink"
-              document={<OperatorDashboardPDF data={data} range={range} />}
-              fileName={`operator-dashboard-${new Date()
-                .toISOString()
-                .slice(0, 10)}.pdf`}
-            >
-              {({ loading }) => (
-                <span className={`exportPdfBtn ${loading ? "isLoading" : ""}`}>
-                  <ExportPdfButton loading={loading} />
-                </span>
-              )}
-            </PDFDownloadLink>
-          </div>
-        </header>
+        {/* Row 1 — Core Services + Error Overview */}
+        <section className="opDash__cardsRow">
+          <article className="opDash__card">
+            <h2 className="opDash__cardTitle">Core Services Status</h2>
+            <p className="opDash__cardSubtitle">Real-time health of critical components.</p>
 
-        
-        <section className="cards-row">
-          <article className="card">
-            <h2 className="card-title">Core Services Status</h2>
-            <p className="card-subtitle">Real-time health of critical components.</p>
-
-            <div className="status-grid">
+            <div className="opDash__statusGrid">
               {data.coreServices.map((svc) => (
-                <div key={svc.name} className="status-item">
-                  <div className="status-label">{svc.name}</div>
-                  <span className={`status-pill status-${svc.severity}`}>
+                <div key={svc.name} className="opDash__statusItem">
+                  <div className="opDash__statusLabel">{svc.name}</div>
+                  <span className={`opDash__statusPill opDash__status--${svc.severity}`}>
                     {svc.status}
                   </span>
-                  <p className="status-note">{svc.note}</p>
+                  <p className="opDash__statusNote">{svc.note}</p>
                 </div>
               ))}
             </div>
           </article>
 
-          <article className="card narrow-card">
-            <h2 className="card-title">Error & Fallback Overview</h2>
+          <article className="opDash__card opDash__card--narrow">
+            <h2 className="opDash__cardTitle">Error & Fallback Overview</h2>
 
-            <div className="mini-kpi-column">
+            <div className="opDash__miniKpiCol">
               <MiniKpi
                 label="System errors"
                 {...data.errorFallbackOverview.systemErrors}
@@ -127,18 +125,19 @@ export default function OperatorDashboard() {
           </article>
         </section>
 
-        <section className="cards-row">
-          <article className="card">
-            <h2 className="card-title">Integrations Status</h2>
+        {/* Row 2 — Integrations + Queue Health */}
+        <section className="opDash__cardsRow">
+          <article className="opDash__card">
+            <h2 className="opDash__cardTitle">Integrations Status</h2>
 
-            <ul className="integration-list">
+            <ul className="opDash__list">
               {data.integrations.map((i) => (
-                <li key={i.name} className="integration-item">
+                <li key={i.name} className="opDash__listItem">
                   <div>
-                    <div className="integration-name">{i.name}</div>
-                    <div className="integration-note">{i.note}</div>
+                    <div className="opDash__itemName">{i.name}</div>
+                    <div className="opDash__itemMeta">{i.note}</div>
                   </div>
-                  <span className={`status-pill status-${i.severity}`}>
+                  <span className={`opDash__statusPill opDash__status--${i.severity}`}>
                     {i.status}
                   </span>
                 </li>
@@ -146,19 +145,15 @@ export default function OperatorDashboard() {
             </ul>
           </article>
 
-          <article className="card">
-            <h2 className="card-title">Pipeline & Queue Health</h2>
+          <article className="opDash__card">
+            <h2 className="opDash__cardTitle">Pipeline & Queue Health</h2>
 
-            <div className="queue-grid">
+            <div className="opDash__queueGrid">
               {data.queues.map((q) => (
-                <div key={q.name} className="queue-item">
-                  <div className="queue-label">{q.name}</div>
-                  <div className="queue-value">{q.value}</div>
-                  <div
-                    className={`queue-note ${
-                      q.severity === "warning" ? "queue-note-warning" : ""
-                    }`}
-                  >
+                <div key={q.name} className="opDash__queueItem">
+                  <div className="opDash__queueLabel">{q.name}</div>
+                  <div className="opDash__queueValue">{q.value}</div>
+                  <div className={`opDash__queueNote${q.severity === "warning" ? " opDash__queueNote--warning" : ""}`}>
                     {q.note}
                   </div>
                 </div>
@@ -167,40 +162,42 @@ export default function OperatorDashboard() {
           </article>
         </section>
 
-        <section className="card full-width-card">
-          <h2 className="card-title">Incident & Event Feed</h2>
+        {/* Full-width — Event Feed */}
+        <section className="opDash__card opDash__card--full">
+          <h2 className="opDash__cardTitle">Incident & Event Feed</h2>
 
-          <ul className="event-feed">
+          <ul className="opDash__eventFeed">
             {data.eventFeed.map((e, idx) => (
-              <li key={idx} className={`event-item event-${e.severity}`}>
-                <span className="event-dot" />
-                <div className="event-content">
-                  <div className="event-header">
-                    <span className="event-title">{e.title}</span>
-                    <span className="event-time">{e.time}</span>
+              <li key={idx} className={`opDash__eventItem opDash__event--${e.severity}`}>
+                <span className="opDash__eventDot" />
+                <div className="opDash__eventContent">
+                  <div className="opDash__eventHeader">
+                    <span className="opDash__eventTitle">{e.title}</span>
+                    <span className="opDash__eventTime">{e.time}</span>
                   </div>
-                  <p className="event-description">{e.description}</p>
+                  <p className="opDash__eventDesc">{e.description}</p>
                 </div>
               </li>
             ))}
           </ul>
         </section>
 
-        <section className="cards-row">
-          <article className="card">
-            <h2 className="card-title">AI & Chatbot Versions</h2>
+        {/* Row 3 — AI Versions + Safety */}
+        <section className="opDash__cardsRow">
+          <article className="opDash__card">
+            <h2 className="opDash__cardTitle">AI & Chatbot Versions</h2>
 
-            <ul className="version-list">
+            <ul className="opDash__list">
               {data.versions.map((v) => (
-                <li key={v.component} className="version-item">
+                <li key={v.component} className="opDash__listItem">
                   <div>
-                    <div className="version-name">{v.component}</div>
-                    <div className="version-meta">
+                    <div className="opDash__itemName">{v.component}</div>
+                    <div className="opDash__itemMeta">
                       {v.version} · Deployed {v.deployedAt}
                     </div>
                   </div>
                   <button
-                    className="link-btn"
+                    className="opDash__linkBtn"
                     onClick={() => navigate("/operator/model-analysis")}
                   >
                     View details
@@ -210,19 +207,20 @@ export default function OperatorDashboard() {
             </ul>
           </article>
 
-          <article className="card">
-            <h2 className="card-title">Safety & Maintenance</h2>
+          <article className="opDash__card">
+            <h2 className="opDash__cardTitle">Safety & Maintenance</h2>
 
-            <ul className="safety-list">
+            <ul className="opDash__safetyList">
               {Object.entries(data.safetyMaintenance).map(([k, v]) => (
-                <li key={k} className="safety-item">
-                  <span className="safety-label">{k}</span>
-                  <span className="config-pill">{v}</span>
+                <li key={k} className="opDash__safetyItem">
+                  <span className="opDash__safetyLabel">{k}</span>
+                  <span className="opDash__configPill">{v}</span>
                 </li>
               ))}
             </ul>
           </article>
         </section>
+
       </div>
     </Layout>
   );
@@ -230,14 +228,10 @@ export default function OperatorDashboard() {
 
 function MiniKpi({ label, count, trendLabel, critical }) {
   return (
-    <div className="mini-kpi">
-      <span className="mini-kpi-label">{label}</span>
-      <span className="mini-kpi-value">{count}</span>
-      <span
-        className={`mini-kpi-trend ${
-          critical ? "mini-kpi-critical" : "mini-kpi-normal"
-        }`}
-      >
+    <div className="opDash__miniKpi">
+      <span className="opDash__miniKpiLabel">{label}</span>
+      <span className="opDash__miniKpiValue">{count}</span>
+      <span className={`opDash__miniKpiTrend${critical ? " opDash__miniKpiTrend--critical" : " opDash__miniKpiTrend--normal"}`}>
         {trendLabel}
       </span>
     </div>

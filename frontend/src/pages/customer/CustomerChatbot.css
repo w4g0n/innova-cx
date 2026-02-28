@@ -1,0 +1,217 @@
+/* ================================================
+   CustomerChatbot — Nova AI chatbot interface
+   ================================================ */
+
+.custChatPage {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: fadeUp 0.4s var(--ease-out) both;
+}
+
+.custChatTop {
+  flex-shrink: 0;
+}
+
+/* ---- Outer shell — fills remaining vertical space ---- */
+.custChatShellV2 {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Chat panel card ---- */
+.custChatPanelV2 {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  box-shadow: 0 6px 24px rgba(64, 28, 81, 0.08);
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 260px);
+  min-height: 420px;
+  overflow: hidden;
+}
+
+/* ---- Quick-start bar ---- */
+.custQuickTop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  background: rgba(89, 36, 180, 0.02);
+}
+
+.custQuickTopHint {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(17, 17, 17, 0.50);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.custQuickTopBtns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.custQuickTopBtns button {
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(89, 36, 180, 0.22);
+  background: rgba(89, 36, 180, 0.07);
+  color: var(--btn-primary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--dur-fast), border-color var(--dur-fast);
+}
+
+.custQuickTopBtns button:hover {
+  background: rgba(89, 36, 180, 0.14);
+  border-color: rgba(89, 36, 180, 0.36);
+}
+
+/* ---- Scrollable message list ---- */
+.custChatList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  scroll-behavior: smooth;
+}
+
+.custChatList::-webkit-scrollbar {
+  width: 4px;
+}
+.custChatList::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custChatList::-webkit-scrollbar-thumb {
+  background: rgba(89, 36, 180, 0.15);
+  border-radius: 99px;
+}
+
+/* ---- Message rows ---- */
+.custMsg {
+  display: flex;
+  animation: fadeUp 0.2s var(--ease-out) both;
+}
+
+.custMsg--bot  { justify-content: flex-start; }
+.custMsg--user { justify-content: flex-end; }
+
+/* ---- Message bubbles ---- */
+.custMsg__bubble {
+  max-width: 72%;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.55;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* Bot bubble — soft purple tint, left-anchored corner */
+.custMsg--bot .custMsg__bubble {
+  background: rgba(89, 36, 180, 0.07);
+  border: 1px solid rgba(89, 36, 180, 0.13);
+  border-radius: 18px 18px 18px 4px;
+  color: var(--text-dark);
+}
+
+/* User bubble — brand gradient, right-anchored corner */
+.custMsg--user .custMsg__bubble {
+  background: var(--gradient-brand);
+  color: #ffffff;
+  border-radius: 18px 18px 4px 18px;
+  box-shadow: 0 3px 12px rgba(89, 36, 180, 0.22);
+}
+
+/* ---- Message composer ---- */
+.custComposer {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  padding: 14px 18px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.01);
+}
+
+.custInput {
+  flex: 1;
+  border: 1px solid rgba(0, 0, 0, 0.13);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-dark);
+  background: #ffffff;
+  resize: none;
+  min-height: 44px;
+  max-height: 120px;
+  outline: none;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+  line-height: 1.5;
+}
+
+.custInput:focus {
+  border-color: rgba(89, 36, 180, 0.50);
+  box-shadow: var(--shadow-glow);
+}
+
+.custInput::placeholder {
+  color: rgba(17, 17, 17, 0.38);
+}
+
+/* ---- Send button — local definition for self-containment ---- */
+.primaryPillBtn {
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 11px 22px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: var(--gradient-brand);
+  color: #ffffff;
+  box-shadow: 0 3px 12px rgba(89, 36, 180, 0.25);
+  transition: filter var(--dur-fast), transform var(--dur-fast);
+}
+
+.primaryPillBtn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.primaryPillBtn:active {
+  transform: translateY(0);
+}
+
+/* ================================================
+   Responsive
+   ================================================ */
+@media (max-width: 768px) {
+  .custChatPanelV2 {
+    height: calc(100vh - 200px);
+  }
+
+  .custMsg__bubble {
+    max-width: 88%;
+  }
+
+  .custQuickTop {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}

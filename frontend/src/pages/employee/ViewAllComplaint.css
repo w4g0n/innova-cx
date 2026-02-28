@@ -8,8 +8,8 @@
 
 .kpi-row-EV-VAC {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
   margin-bottom: 24px;
 }
 
