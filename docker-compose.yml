@@ -88,7 +88,10 @@ services:
     environment:
       PYTHONPATH: /app
       SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
+      postgres:
+        condition: service_healthy
       backend:
         condition: service_started
     ports:

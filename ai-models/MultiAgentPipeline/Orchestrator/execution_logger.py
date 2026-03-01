@@ -1,0 +1,213 @@
+"""
+Execution Logger — wraps pipeline steps with JSON logging to PostgreSQL.
+
+Usage in pipeline.py:
+    from execution_logger import logged_step
+    pipeline = (
+        logged_step("ClassificationAgent", classify, 1)
+        | logged_step("SentimentAgent", analyze_sentiment, 2)
+        | ...
+    )
+
+Each wrapped step:
+  1. Snapshots the input state (deep copy)
+  2. Runs the agent function and measures wall-clock time
+  3. Snapshots the output state
+  4. Computes a diff (keys added or changed)
+  5. Writes to model_execution_log and agent_output_log
+  6. On error: logs with error_flag=True, then re-raises
+
+Logging failures never crash the pipeline.
+"""
+
+import copy
+import json
+import time
+import uuid
+import logging
+from typing import Any, Callable, Awaitable
+
+from langchain_core.runnables import RunnableLambda
+
+from db import db_connect
+
+logger = logging.getLogger(__name__)
+
+
+def _compute_diff(before: dict, after: dict) -> dict:
+    """Compute keys added or changed between two state dicts."""
+    diff = {}
+    for key in after:
+        if key not in before:
+            diff[key] = {"action": "added", "value": _safe_value(after[key])}
+        elif before[key] != after[key]:
+            diff[key] = {
+                "action": "changed",
+                "old": _safe_value(before[key]),
+                "new": _safe_value(after[key]),
+            }
+    return diff
+
+
+def _safe_value(obj: Any) -> Any:
+    """Convert a single value to something JSON-safe."""
+    if isinstance(obj, (str, int, float, bool, type(None))):
+        return obj
+    if isinstance(obj, (list, tuple)):
+        return [_safe_value(item) for item in obj]
+    if isinstance(obj, dict):
+        return {str(k): _safe_value(v) for k, v in obj.items()}
+    return str(obj)
+
+
+def _safe_json(obj: Any) -> Any:
+    """Make an entire dict JSON-serializable (handles numpy, UUID, datetime, etc.)."""
+    try:
+        return json.loads(json.dumps(obj, default=str))
+    except (TypeError, ValueError):
+        return {"_serialization_error": str(obj)[:500]}
+
+
+def _extract_confidence(state: dict) -> float | None:
+    """Extract the most relevant confidence score from the output state."""
+    for key in ("class_confidence", "model_confidence", "classification_confidence", "confidence_score"):
+        val = state.get(key)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _write_logs(
+    execution_id: str,
+    ticket_id: str | None,
+    agent_name: str,
+    step_order: int,
+    input_state: dict,
+    output_state: dict,
+    state_diff: dict,
+    inference_time_ms: int,
+    confidence_score: float | None,
+    error_flag: bool,
+    error_message: str | None,
+) -> None:
+    """Write to both model_execution_log and agent_output_log. Never raises."""
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO model_execution_log
+                        (execution_id, ticket_id, agent_name, inference_time_ms,
+                         confidence_score, error_flag, error_message)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        execution_id,
+                        ticket_id,
+                        agent_name,
+                        inference_time_ms,
+                        confidence_score,
+                        error_flag,
+                        error_message,
+                    ),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO agent_output_log
+                        (execution_id, ticket_id, agent_name, step_order,
+                         input_state, output_state, state_diff,
+                         inference_time_ms, error_flag, error_message)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        execution_id,
+                        ticket_id,
+                        agent_name,
+                        step_order,
+                        json.dumps(_safe_json(input_state)),
+                        json.dumps(_safe_json(output_state)),
+                        json.dumps(_safe_json(state_diff)),
+                        inference_time_ms,
+                        error_flag,
+                        error_message,
+                    ),
+                )
+    except Exception as exc:
+        logger.error("execution_log | write failed agent=%s err=%s", agent_name, exc)
+
+
+def logged_step(
+    agent_name: str,
+    step_fn: Callable[[dict], Awaitable[dict]],
+    step_order: int,
+) -> RunnableLambda:
+    """
+    Wrap an async agent step function with execution logging.
+    Returns a RunnableLambda suitable for use in a LangChain pipeline.
+    """
+
+    async def wrapper(state: dict) -> dict:
+        execution_id = state.get("_execution_id", str(uuid.uuid4()))
+        ticket_id = state.get("ticket_id")
+
+        # Strip internal keys from the snapshot we log (keep state clean)
+        input_snapshot = {k: v for k, v in copy.deepcopy(state).items() if not k.startswith("_")}
+
+        start = time.monotonic()
+
+        try:
+            result = await step_fn(state)
+        except Exception as exc:
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            error_msg = f"{type(exc).__name__}: {exc}"
+            _write_logs(
+                execution_id=execution_id,
+                ticket_id=ticket_id,
+                agent_name=agent_name,
+                step_order=step_order,
+                input_state=input_snapshot,
+                output_state=input_snapshot,
+                state_diff={},
+                inference_time_ms=elapsed_ms,
+                confidence_score=None,
+                error_flag=True,
+                error_message=error_msg,
+            )
+            raise
+
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        output_snapshot = {k: v for k, v in copy.deepcopy(result).items() if not k.startswith("_")}
+        state_diff = _compute_diff(input_snapshot, output_snapshot)
+        confidence = _extract_confidence(result)
+
+        _write_logs(
+            execution_id=execution_id,
+            ticket_id=ticket_id,
+            agent_name=agent_name,
+            step_order=step_order,
+            input_state=input_snapshot,
+            output_state=output_snapshot,
+            state_diff=state_diff,
+            inference_time_ms=elapsed_ms,
+            confidence_score=confidence,
+            error_flag=False,
+            error_message=None,
+        )
+
+        logger.info(
+            "execution_log | agent=%s step=%d time_ms=%d confidence=%s error=%s",
+            agent_name,
+            step_order,
+            elapsed_ms,
+            f"{confidence:.4f}" if confidence is not None else "n/a",
+            False,
+        )
+
+        return result
+
+    wrapper.__name__ = f"logged_{step_fn.__name__}"
+    wrapper.__qualname__ = f"logged_{step_fn.__qualname__}"
+    return RunnableLambda(wrapper)
