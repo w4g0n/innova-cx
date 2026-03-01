@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { apiUrl } from "../../config/apiBase";
 import "../employee/TicketDetails.css";
@@ -14,8 +14,15 @@ function getAuthToken() {
   );
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
-function ManagerTicketModal({ type, ticket, closeModal, onSuccess }) {
+function ManagerTicketModal({
+  type,
+  ticket,
+  closeModal,
+  onRerouteSuccess,
+  onRescoreSuccess,
+  onResolveSuccess,
+  onSuccess,
+}) {
   if (!type || !ticket) return null;
 
   return (
@@ -24,29 +31,64 @@ function ManagerTicketModal({ type, ticket, closeModal, onSuccess }) {
       type={type}
       ticket={ticket}
       closeModal={closeModal}
+      onRerouteSuccess={onRerouteSuccess}
+      onRescoreSuccess={onRescoreSuccess}
+      onResolveSuccess={onResolveSuccess}
       onSuccess={onSuccess}
     />
   );
 }
 
-function ManagerTicketModalInner({ type, ticket, closeModal, onSuccess }) {
-  // Controlled fields
-  const [department, setDepartment] = useState("");
+function ManagerTicketModalInner({
+  type,
+  ticket,
+  closeModal,
+  onRerouteSuccess,
+  onRescoreSuccess,
+  onResolveSuccess,
+  onSuccess,
+}) {
+  const [busy, setBusy] = useState(false);
+
+  // Reroute
+  const [departments, setDepartments] = useState([]);
+  const [selectedDept, setSelectedDept] = useState("");
   const [rerouteReason, setRerouteReason] = useState("");
   const [rerouteError, setRerouteError] = useState("");
 
-  const [priority, setPriority] = useState(ticket.priorityText || ticket.priority || "Medium");
+  // Rescore
+  const [selectedPriority, setSelectedPriority] = useState(
+    ticket.priorityText || ticket.priority || "Medium"
+  );
   const [rescoreReason, setRescoreReason] = useState("");
   const [rescoreError, setRescoreError] = useState("");
 
+  // Escalate
   const [escalateLevel, setEscalateLevel] = useState("");
   const [escalateReason, setEscalateReason] = useState("");
 
+  // Resolve
   const [resolution, setResolution] = useState("");
   const [stepsTaken, setStepsTaken] = useState("");
   const [resolveError, setResolveError] = useState("");
 
-  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (type !== "reroute") return;
+    const token = getAuthToken();
+
+    fetch(apiUrl("/manager/departments"), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setDepartments(list);
+        if (ticket.department && list.includes(ticket.department)) {
+          setSelectedDept(ticket.department);
+        }
+      })
+      .catch(() => setDepartments([]));
+  }, [type, ticket.department]);
 
   const titles = {
     reroute: "Reroute Ticket",
@@ -58,95 +100,134 @@ function ManagerTicketModalInner({ type, ticket, closeModal, onSuccess }) {
   const submitText =
     type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
 
-  const handleSubmit = async () => {
-    const token = getAuthToken();
-
-    // ── Reroute ──
-    if (type === "reroute") {
-      if (!department || !rerouteReason.trim()) {
-        setRerouteError("Please select a department and provide a reason.");
-        return;
-      }
-      setBusy(true);
-      try {
-        const res = await fetch(
-          apiUrl(`/manager/complaints/${ticket.id || ticket.ticket_code}/reroute`),
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ new_department: department, reason: rerouteReason.trim() }),
-          }
-        );
-        if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
-        closeModal();
-        onSuccess("Reroute request submitted successfully.");
-      } catch (e) {
-        setRerouteError(e?.message || "Failed to submit reroute request.");
-      } finally {
-        setBusy(false);
-      }
+  const handleRerouteSubmit = async () => {
+    if (!selectedDept) {
+      setRerouteError("Please select a department.");
+      return;
+    }
+    if (!rerouteReason.trim()) {
+      setRerouteError("Please provide a reason for rerouting.");
       return;
     }
 
-    // ── Rescore ──
-    if (type === "rescore") {
-      if (!priority || !rescoreReason.trim()) {
-        setRescoreError("Please select a priority and provide a reason.");
-        return;
-      }
-      setBusy(true);
-      try {
-        const res = await fetch(
-          apiUrl(`/manager/complaints/${ticket.id || ticket.ticket_code}/rescore`),
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ new_priority: priority, reason: rescoreReason.trim() }),
-          }
-        );
-        if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
-        closeModal();
-        onSuccess("Rescore request submitted successfully.");
-      } catch (e) {
-        setRescoreError(e?.message || "Failed to submit rescore request.");
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-
-    // ── Escalate (UI only) ──
-    if (type === "escalate") {
-      closeModal();
-      onSuccess("Escalation submitted.");
-      return;
-    }
-
-    // ── Resolve ──
-    if (!resolution.trim()) {
-      setResolveError("Please describe the resolution.");
-      return;
-    }
     setBusy(true);
+    setRerouteError("");
+
     try {
-      const res = await fetch(
-        apiUrl(`/manager/complaints/${ticket.id || ticket.ticket_code}/resolve`),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            final_resolution: resolution.trim(),
-            steps_taken: stepsTaken.trim() || undefined,
-          }),
-        }
-      );
-      if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
+      const token = getAuthToken();
+      const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/department`), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ department: selectedDept, reason: rerouteReason.trim() }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Error ${res.status}`);
+      }
+
+      onRerouteSuccess?.(selectedDept);
+      onSuccess?.("Reroute request submitted successfully.");
       closeModal();
-      onSuccess("Ticket resolved successfully.");
     } catch (e) {
-      setResolveError(e?.message || "Failed to resolve ticket.");
+      setRerouteError(e.message || "Failed to reroute ticket.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleRescoreSubmit = async () => {
+    if (!rescoreReason.trim()) {
+      setRescoreError("Please provide a reason for rescoring.");
+      return;
+    }
+
+    setBusy(true);
+    setRescoreError("");
+
+    try {
+      const token = getAuthToken();
+      const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/priority`), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          new_priority: selectedPriority,
+          reason: rescoreReason.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Error ${res.status}`);
+      }
+
+      onRescoreSuccess?.(selectedPriority);
+      onSuccess?.("Rescore request submitted successfully.");
+      closeModal();
+    } catch (e) {
+      setRescoreError(e.message || "Failed to rescore ticket.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleResolveSubmit = async () => {
+    if (!resolution.trim()) {
+      setResolveError("Please provide a resolution description.");
+      return;
+    }
+
+    setBusy(true);
+    setResolveError("");
+
+    try {
+      const token = getAuthToken();
+      const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/resolve`), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          final_resolution: resolution.trim(),
+          steps_taken: stepsTaken.trim() || null,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Error ${res.status}`);
+      }
+
+      onResolveSuccess?.();
+      onSuccess?.("Ticket resolved successfully.");
+      closeModal();
+    } catch (e) {
+      setResolveError(e.message || "Failed to resolve ticket.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (type === "reroute") return handleRerouteSubmit();
+    if (type === "rescore") return handleRescoreSubmit();
+    if (type === "resolve") return handleResolveSubmit();
+
+    // Escalate placeholder (if backend endpoint not implemented yet)
+    if (type === "escalate") {
+      onSuccess?.(
+        `Escalation submitted${escalateLevel ? ` to ${escalateLevel}` : ""}${
+          escalateReason ? "." : " (no reason provided)."
+        }`
+      );
+      closeModal();
     }
   };
 
@@ -155,30 +236,38 @@ function ManagerTicketModalInner({ type, ticket, closeModal, onSuccess }) {
       case "reroute":
         return (
           <>
-            <label>New Department</label>
+            <label className="mvd-modalLabel">New Department</label>
             <div className="select-wrapper modal-dropdown">
               <select
-                value={department}
-                onChange={(e) => { setDepartment(e.target.value); setRerouteError(""); }}
+                value={selectedDept}
+                onChange={(e) => {
+                  setSelectedDept(e.target.value);
+                  setRerouteError("");
+                }}
               >
-                <option value="" disabled>Select Department</option>
-                <option>Maintenance</option>
-                <option>IT Support</option>
-                <option>Cleaning</option>
-                <option>Security</option>
-                <option>Facilities</option>
-                <option>HR</option>
-                <option>Admin</option>
-                <option>IT</option>
+                <option value="" disabled>
+                  Select Department
+                </option>
+                {departments.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                    {d === ticket.department ? " (current)" : ""}
+                  </option>
+                ))}
               </select>
             </div>
-            <label>Reason for rerouting</label>
+
+            <label className="mvd-modalLabel">Reason for rerouting</label>
             <textarea
               className="modal-textarea"
               value={rerouteReason}
-              onChange={(e) => { setRerouteReason(e.target.value); setRerouteError(""); }}
+              onChange={(e) => {
+                setRerouteReason(e.target.value);
+                setRerouteError("");
+              }}
               placeholder="Explain why this ticket should be rerouted..."
             />
+
             {rerouteError && <div className="modal-inline-error">{rerouteError}</div>}
           </>
         );
@@ -186,11 +275,14 @@ function ManagerTicketModalInner({ type, ticket, closeModal, onSuccess }) {
       case "rescore":
         return (
           <>
-            <label>New Priority</label>
+            <label className="mvd-modalLabel">New Priority</label>
             <div className="select-wrapper modal-dropdown">
               <select
-                value={priority}
-                onChange={(e) => { setPriority(e.target.value); setRescoreError(""); }}
+                value={selectedPriority}
+                onChange={(e) => {
+                  setSelectedPriority(e.target.value);
+                  setRescoreError("");
+                }}
               >
                 <option>Low</option>
                 <option>Medium</option>
@@ -198,13 +290,18 @@ function ManagerTicketModalInner({ type, ticket, closeModal, onSuccess }) {
                 <option>Critical</option>
               </select>
             </div>
-            <label>Reason for rescoring</label>
+
+            <label className="mvd-modalLabel">Reason for rescoring</label>
             <textarea
               className="modal-textarea"
               value={rescoreReason}
-              onChange={(e) => { setRescoreReason(e.target.value); setRescoreError(""); }}
+              onChange={(e) => {
+                setRescoreReason(e.target.value);
+                setRescoreError("");
+              }}
               placeholder="Explain why the priority should be adjusted..."
             />
+
             {rescoreError && <div className="modal-inline-error">{rescoreError}</div>}
           </>
         );
@@ -218,12 +315,15 @@ function ManagerTicketModalInner({ type, ticket, closeModal, onSuccess }) {
                 value={escalateLevel}
                 onChange={(e) => setEscalateLevel(e.target.value)}
               >
-                <option value="" disabled>Select Level</option>
+                <option value="" disabled>
+                  Select Level
+                </option>
                 <option>Supervisor</option>
                 <option>Department Head</option>
                 <option>Management</option>
               </select>
             </div>
+
             <label>Reason for Escalation</label>
             <textarea
               className="modal-textarea"
@@ -231,33 +331,34 @@ function ManagerTicketModalInner({ type, ticket, closeModal, onSuccess }) {
               onChange={(e) => setEscalateReason(e.target.value)}
               placeholder="Explain why this ticket must be escalated..."
             />
-            <label>Additional Notes (optional)</label>
-            <textarea className="modal-textarea" placeholder="Any extra context..." />
           </>
         );
 
       case "resolve":
         return (
           <>
-            <label>Resolution</label>
+            <label className="mvd-modalLabel">
+              Resolution <span style={{ color: "red" }}>*</span>
+            </label>
             <textarea
               className="modal-textarea"
               value={resolution}
-              onChange={(e) => { setResolution(e.target.value); setResolveError(""); }}
+              onChange={(e) => {
+                setResolution(e.target.value);
+                setResolveError("");
+              }}
               placeholder="Describe the final resolution provided..."
             />
-            <label>Steps Taken</label>
+
+            <label className="mvd-modalLabel">Steps Taken (optional)</label>
             <textarea
               className="modal-textarea"
               value={stepsTaken}
               onChange={(e) => setStepsTaken(e.target.value)}
               placeholder="List the steps taken to resolve this issue..."
             />
+
             {resolveError && <div className="modal-inline-error">{resolveError}</div>}
-            <label>Attachments (optional)</label>
-            <div className="modal-upload-box">
-              <input type="file" multiple />
-            </div>
           </>
         );
 
@@ -276,7 +377,9 @@ function ManagerTicketModalInner({ type, ticket, closeModal, onSuccess }) {
       >
         <div className="modal-header">
           <h2>{titles[type]}</h2>
-          <span className="modal-close" onClick={closeModal} role="button" tabIndex={0}>✕</span>
+          <span className="modal-close" onClick={closeModal} role="button" tabIndex={0}>
+            ✕
+          </span>
         </div>
 
         <div className="modal-body">{renderBody()}</div>
@@ -291,7 +394,7 @@ function ManagerTicketModalInner({ type, ticket, closeModal, onSuccess }) {
             onClick={handleSubmit}
             disabled={busy}
           >
-            {busy ? "Saving…" : submitText}
+            {busy ? "Saving..." : submitText}
           </button>
         </div>
       </div>
@@ -299,14 +402,12 @@ function ManagerTicketModalInner({ type, ticket, closeModal, onSuccess }) {
   );
 }
 
-// ─── Main Page ───────────────────────────────────────────────────────────────
 export default function ManagerComplaintDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
 
-  const [ticket, setTicket] = useState(location.state?.ticket || null);
-  const [loading, setLoading] = useState(!location.state?.ticket);
+  const [ticket, setTicket] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalType, setModalType] = useState(null);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
@@ -318,9 +419,25 @@ export default function ManagerComplaintDetails() {
     setTimeout(() => setToast((t) => ({ ...t, show: false })), 4000);
   };
 
+  const handleRerouteSuccess = (newDepartment) => {
+    setTicket((prev) => ({ ...prev, department: newDepartment }));
+  };
+
+  const handleRescoreSuccess = (newPriority) => {
+    const priorityText = newPriority;
+    const priorityRaw = String(newPriority).toLowerCase();
+    setTicket((prev) => ({ ...prev, priority: priorityRaw, priorityText }));
+  };
+
+  const handleResolveSuccess = () => {
+    setTicket((prev) => ({ ...prev, status: "Resolved" }));
+  };
+
   useEffect(() => {
-    if (ticket) return;
     const token = getAuthToken();
+    setLoading(true);
+    setError(null);
+
     fetch(apiUrl(`/manager/complaints/${id}`), {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -337,21 +454,23 @@ export default function ManagerComplaintDetails() {
         setError(e.message || "Could not load ticket details.");
         setLoading(false);
       });
-  }, [id, ticket]);
+  }, [id]);
 
-  if (loading)
+  if (loading) {
     return (
       <Layout role="manager">
         <div className="empTicketDetail">Loading ticket details…</div>
       </Layout>
     );
+  }
 
-  if (error)
+  if (error) {
     return (
       <Layout role="manager">
         <div className="empTicketDetail">{error}</div>
       </Layout>
     );
+  }
 
   if (!ticket) return null;
 
@@ -360,18 +479,14 @@ export default function ManagerComplaintDetails() {
   return (
     <Layout role="manager">
       <div className="empTicketDetail">
-
-        {/* ── Header ── */}
         <div className="details-header">
           <div className="header-left">
             <button className="back-btn" type="button" onClick={() => navigate(-1)}>
               ← Back
             </button>
-            <h1 className="ticket-title">
-              Ticket ID: {ticket.ticket_code || ticket.id}
-            </h1>
+            <h1 className="ticket-title">Ticket ID: {ticket.ticket_code || ticket.id}</h1>
             <div className="status-row">
-              <span className={`header-pill ${priorityText.toLowerCase()}-pill`}>
+              <span className={`header-pill ${String(priorityText).toLowerCase()}-pill`}>
                 {priorityText}
               </span>
               <span className="header-pill empStatusPill">{ticket.status}</span>
@@ -391,7 +506,6 @@ export default function ManagerComplaintDetails() {
           </div>
         </div>
 
-        {/* ── Summary ── */}
         <section className="card-section">
           <h2 className="section-title">Summary</h2>
           <div className="summary-grid">
@@ -412,17 +526,16 @@ export default function ManagerComplaintDetails() {
               {ticket.assignee || "—"}
             </div>
             <div>
-              <span className="label">Submitted By</span>
-              {ticket.submittedBy || "—"}
-            </div>
-            <div>
               <span className="label">Department</span>
               {ticket.department || "—"}
+            </div>
+            <div>
+              <span className="label">Submitted By</span>
+              {ticket.submittedBy || "—"}
             </div>
           </div>
         </section>
 
-        {/* ── Details + Activity ── */}
         <section className="details-grid">
           <div className="card-section">
             <h2 className="section-title">Complaint Details</h2>
@@ -446,6 +559,7 @@ export default function ManagerComplaintDetails() {
                   </div>
                 </div>
               </div>
+
               <div className="timeline-item">
                 <div className="dot" />
                 <div>
@@ -457,6 +571,7 @@ export default function ManagerComplaintDetails() {
                   </div>
                 </div>
               </div>
+
               {ticket.respondTime && (
                 <div className="timeline-item">
                   <div className="dot" />
@@ -475,7 +590,6 @@ export default function ManagerComplaintDetails() {
         </section>
       </div>
 
-      {/* ── Toast ── */}
       {toast.show && (
         <div className={`ticket-toast ticket-toast--${toast.type}`}>
           <span className="ticket-toast__msg">{toast.message}</span>
@@ -492,6 +606,9 @@ export default function ManagerComplaintDetails() {
         type={modalType}
         ticket={ticket}
         closeModal={closeModal}
+        onRerouteSuccess={handleRerouteSuccess}
+        onRescoreSuccess={handleRescoreSuccess}
+        onResolveSuccess={handleResolveSuccess}
         onSuccess={showToast}
       />
     </Layout>

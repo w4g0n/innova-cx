@@ -470,6 +470,28 @@ def _generate_resolution_suggestion(ticket: Dict[str, Any]) -> str:
             continue
     raise HTTPException(status_code=503, detail=f"Resolution suggestion service unavailable: {last_error}")
 
+def _insert_notification(
+    cur,
+    user_id: str,
+    notif_type: str,
+    title: str,
+    message: str,
+    ticket_id: str,
+    priority: Optional[str] = None,
+) -> None:
+    """
+    Insert a single notification row inside an existing cursor/transaction.
+    notif_type must match the notification_type enum:
+      ticket_assignment | sla_warning | customer_reply |
+      status_change | report_ready | system
+    """
+    cur.execute(
+        """
+        INSERT INTO notifications (user_id, type, title, message, priority, ticket_id)
+        VALUES (%s, %s::notification_type, %s, %s, %s::ticket_priority, %s);
+        """,
+        (user_id, notif_type, title, message, priority, ticket_id),
+    )
 
 def _trigger_resolution_retraining() -> None:
     for base in [CHATBOT_URL, CHATBOT_URL_LOCAL]:
@@ -1489,6 +1511,13 @@ class EmployeeRerouteRequest(BaseModel):
     new_department: str
     reason: str
 
+class ManagerRescoreRequest(BaseModel):
+    new_priority: str
+    reason: str
+
+class ManagerResolveRequest(BaseModel):
+    final_resolution: str
+    steps_taken: Optional[str] = None
 
 @api.post("/employee/tickets/{ticket_code}/rescore")
 def employee_rescore_ticket(
@@ -2332,9 +2361,11 @@ def get_complaints():
             t.first_response_at,
             t.resolved_at,
             t.assigned_to_user_id,
-            up.full_name AS assignee_name
+            up.full_name AS assignee_name,
+            d.name AS department_name
         FROM tickets t
         LEFT JOIN user_profiles up ON t.assigned_to_user_id = up.user_id
+        LEFT JOIN departments d ON d.id = t.department_id
         ORDER BY t.created_at DESC;
     """)
 
@@ -2365,7 +2396,8 @@ def get_complaints():
             "respondTime": respond_time,
             "resolveTime": resolve_time,
             "action": action,
-            "ticket_code": t.get("ticket_code") or "", 
+            "ticket_code": t.get("ticket_code") or "",
+            "department": t.get("department_name") or "",
         })
 
     return result
@@ -2428,6 +2460,364 @@ def assign_ticket(
             (ticket_id,),
         )
         return {"ticket_id": ticket_id, "assigned_to": None, "action": "unassigned"}
+class RouteTicketBody(BaseModel):
+    department: str
+
+@app.patch("/manager/complaints/{ticket_id}/resolve")
+def manager_resolve_ticket(
+    ticket_id: str,
+    body: ManagerResolveRequest,
+    authorization: Optional[str] = Header(default=None),
+):
+    user = get_current_user(authorization)
+    if user.get("role") != "manager":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    final_resolution = (body.final_resolution or "").strip()
+    if not final_resolution:
+        raise HTTPException(status_code=422, detail="Resolution text is required")
+
+    ticket = fetch_one(
+        "SELECT id, ticket_code, status FROM tickets WHERE id = %s LIMIT 1;",
+        (ticket_id,),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    if ticket["status"] == "Resolved":
+        raise HTTPException(status_code=409, detail="Ticket is already resolved")
+
+    from_status = ticket["status"]
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+            # 1. Update ticket — status, final_resolution, resolved_at, resolved_by
+            cur.execute(
+                """
+                UPDATE tickets
+                SET
+                    status              = 'Resolved',
+                    final_resolution    = %s,
+                    resolved_at         = COALESCE(resolved_at, now()),
+                    resolved_by_user_id = %s,
+                    first_response_at   = COALESCE(first_response_at, now()),
+                    updated_at          = now()
+                WHERE id = %s
+                RETURNING id, ticket_code, status, resolved_at;
+                """,
+                (final_resolution, user["id"], ticket_id),
+            )
+            row = cur.fetchone()
+
+            # 2. Log in ticket_updates
+            cur.execute(
+                """
+                INSERT INTO ticket_updates (
+                    ticket_id, author_user_id, update_type,
+                    message, from_status, to_status
+                )
+                VALUES (%s, %s, 'status_change', %s, %s, 'Resolved');
+                """,
+                (
+                    ticket_id,
+                    user["id"],
+                    f"Ticket resolved by manager. Resolution: {final_resolution}",
+                    from_status,
+                ),
+            )
+
+            # 3. Store steps taken if provided
+            if (body.steps_taken or "").strip():
+                cur.execute(
+                    """
+                    INSERT INTO ticket_work_steps (
+                        ticket_id, step_no, technician_user_id, notes
+                    )
+                    VALUES (
+                        %s,
+                        COALESCE(
+                            (SELECT MAX(step_no) FROM ticket_work_steps WHERE ticket_id = %s),
+                            0
+                        ) + 1,
+                        %s,
+                        %s
+                    );
+                    """,
+                    (ticket_id, ticket_id, user["id"], body.steps_taken.strip()),
+                )
+            
+            # 4. Fetch assigned employee + customer user IDs and ticket priority
+            cur.execute(
+                """
+                SELECT
+                    t.assigned_to_user_id,
+                    t.created_by_user_id,
+                    t.priority,
+                    t.ticket_code
+                FROM tickets t
+                WHERE t.id = %s
+                LIMIT 1;
+                """,
+                (ticket_id,),
+            )
+            t_info = cur.fetchone()
+            ticket_code   = (t_info or {}).get("ticket_code") or ticket_id
+            t_priority    = (t_info or {}).get("priority")
+            assigned_uid  = (t_info or {}).get("assigned_to_user_id")
+            customer_uid  = (t_info or {}).get("created_by_user_id")
+
+            # Notify manager (confirmation)
+            _insert_notification(
+                cur,
+                user_id=str(user["id"]),
+                notif_type="status_change",
+                title=f"Resolved: {ticket_code}",
+                message=f"You resolved ticket {ticket_code}. Resolution: {final_resolution[:120]}",
+                ticket_id=ticket_id,
+                priority=t_priority,
+            )
+
+            # Notify assigned employee
+            if assigned_uid and str(assigned_uid) != str(user["id"]):
+                _insert_notification(
+                    cur,
+                    user_id=str(assigned_uid),
+                    notif_type="status_change",
+                    title=f"Ticket Resolved: {ticket_code}",
+                    message=f"Your ticket {ticket_code} was resolved by the manager. Resolution: {final_resolution[:120]}",
+                    ticket_id=ticket_id,
+                    priority=t_priority,
+                )
+
+            # Notify customer
+            if customer_uid and str(customer_uid) != str(user["id"]):
+                _insert_notification(
+                    cur,
+                    user_id=str(customer_uid),
+                    notif_type="status_change",
+                    title=f"Your Ticket Has Been Resolved: {ticket_code}",
+                    message=f"Ticket {ticket_code} has been resolved. Resolution: {final_resolution[:120]}",
+                    ticket_id=ticket_id,
+                    priority=t_priority,
+                )
+
+    logger.info(
+        "manager_resolve | ticket=%s from=%s resolved_at=%s by=%s",
+        row["ticket_code"], from_status, row["resolved_at"], user["id"],
+    )
+    return {
+        "ok": True,
+        "ticketCode": row["ticket_code"],
+        "status": row["status"],
+        "resolvedAt": row["resolved_at"].isoformat() if row.get("resolved_at") else None,
+    }
+
+@app.patch("/manager/complaints/{ticket_id}/priority")
+def manager_rescore_ticket(
+    ticket_id: str,
+    body: ManagerRescoreRequest,
+    authorization: Optional[str] = Header(default=None),
+):
+    user = get_current_user(authorization)
+    if user.get("role") != "manager":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    allowed_priorities = {"Low", "Medium", "High", "Critical"}
+    new_priority = (body.new_priority or "").strip()
+    reason = (body.reason or "").strip()
+
+    if new_priority not in allowed_priorities:
+        raise HTTPException(status_code=422, detail=f"Invalid priority. Must be one of: {', '.join(sorted(allowed_priorities))}")
+    if not reason:
+        raise HTTPException(status_code=422, detail="Reason is required")
+
+    # Fetch ticket to get current priority and code
+    ticket = fetch_one(
+        "SELECT id, ticket_code, priority FROM tickets WHERE id = %s LIMIT 1;",
+        (ticket_id,),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    current_priority = ticket["priority"]
+    ticket_code = ticket["ticket_code"]
+    request_code = f"REQ-{int(time.time() * 1000) % 10000000}"
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # 1. Update the ticket priority immediately
+            cur.execute(
+                "UPDATE tickets SET priority = %s, updated_at = now() WHERE id = %s;",
+                (new_priority, ticket_id),
+            )
+
+            # 2. Insert an approval_request already marked as Approved
+            #    decided_by_user_id = manager, decided_at = now()
+            cur.execute(
+                """
+                INSERT INTO approval_requests (
+                  request_code, ticket_id, request_type,
+                  current_value, requested_value,
+                  request_reason, submitted_by_user_id,
+                  submitted_at, status,
+                  decided_by_user_id, decided_at, decision_notes
+                )
+                VALUES (%s, %s, 'Rescoring', %s, %s, %s, %s, now(), 'Approved', %s, now(), %s)
+                RETURNING request_code;
+                """,
+                (
+                    request_code,
+                    ticket_id,
+                    f"Priority: {current_priority}",
+                    f"Priority: {new_priority}",
+                    reason,
+                    user["id"],   # submitted_by = manager themselves
+                    user["id"],   # decided_by   = manager themselves
+                    reason,       # decision_notes stores the reason too
+                ),
+            )
+            result = cur.fetchone()
+
+            # 3. Log it as a ticket_update for the activity trail
+            cur.execute(
+                """
+                INSERT INTO ticket_updates (
+                  ticket_id, author_user_id, update_type, message
+                )
+                VALUES (%s, %s, 'priority_change', %s);
+                """,
+                (
+                    ticket_id,
+                    user["id"],
+                    f"Manager changed priority from {current_priority} to {new_priority}. Reason: {reason}",
+                ),
+            )
+
+            # 4. Fetch assigned employee + priority for notifications
+            cur.execute(
+                "SELECT assigned_to_user_id, priority FROM tickets WHERE id = %s LIMIT 1;",
+                (ticket_id,),
+            )
+            t_info = cur.fetchone()
+            assigned_uid = (t_info or {}).get("assigned_to_user_id")
+            t_priority   = (t_info or {}).get("priority")
+
+            # Notify manager (confirmation)
+            _insert_notification(
+                cur,
+                user_id=str(user["id"]),
+                notif_type="status_change",
+                title=f"Priority Updated: {ticket_code}",
+                message=f"You changed priority of {ticket_code} from {current_priority} to {new_priority}. Reason: {reason}",
+                ticket_id=ticket_id,
+                priority=t_priority,
+            )
+
+            # Notify assigned employee
+            if assigned_uid and str(assigned_uid) != str(user["id"]):
+                _insert_notification(
+                    cur,
+                    user_id=str(assigned_uid),
+                    notif_type="status_change",
+                    title=f"Priority Changed: {ticket_code}",
+                    message=f"The priority of your ticket {ticket_code} was changed from {current_priority} to {new_priority} by the manager.",
+                    ticket_id=ticket_id,
+                    priority=t_priority,
+                )
+
+    logger.info(
+        "manager_rescore | ticket=%s from=%s to=%s request=%s by=%s",
+        ticket_code, current_priority, new_priority, result["request_code"], user["id"],
+    )
+    return {
+        "ok": True,
+        "requestCode": result["request_code"],
+        "newPriority": new_priority,
+        "status": "Approved",
+    }
+
+@app.patch("/manager/complaints/{ticket_id}/department")
+def route_ticket_department(
+    ticket_id: str,
+    body: RouteTicketBody,
+    authorization: Optional[str] = Header(default=None),
+):
+    user = get_current_user(authorization)
+    if user.get("role") != "manager":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    dept_name = (body.department or "").strip()
+    if not dept_name:
+        raise HTTPException(status_code=422, detail="Department is required")
+
+    dept = fetch_one(
+        "SELECT id FROM departments WHERE LOWER(name) = LOWER(%s) LIMIT 1;",
+        (dept_name,),
+    )
+    if not dept:
+        raise HTTPException(status_code=404, detail=f"Department '{dept_name}' not found")
+
+    execute(
+        """
+        UPDATE tickets
+        SET department_id = %s,
+            updated_at    = NOW()
+        WHERE id = %s
+        """,
+        (dept["id"], ticket_id),
+    )
+
+    # Notifications for reroute
+    t_info = fetch_one(
+        """
+        SELECT t.ticket_code, t.assigned_to_user_id, t.priority,
+               d_old.name AS old_dept
+        FROM tickets t
+        LEFT JOIN departments d_old ON d_old.id = t.department_id
+        WHERE t.id = %s LIMIT 1;
+        """,
+        (ticket_id,),
+    ) or {}
+    ticket_code  = t_info.get("ticket_code") or ticket_id
+    assigned_uid = t_info.get("assigned_to_user_id")
+    t_priority   = t_info.get("priority")
+
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            # Notify manager (confirmation)
+            _insert_notification(
+                cur,
+                user_id=str(user["id"]),
+                notif_type="status_change",
+                title=f"Ticket Rerouted: {ticket_code}",
+                message=f"You rerouted ticket {ticket_code} to department: {dept_name}.",
+                ticket_id=ticket_id,
+                priority=t_priority,
+            )
+
+            # Notify assigned employee
+            if assigned_uid and str(assigned_uid) != str(user["id"]):
+                _insert_notification(
+                    cur,
+                    user_id=str(assigned_uid),
+                    notif_type="status_change",
+                    title=f"Ticket Rerouted: {ticket_code}",
+                    message=f"Your ticket {ticket_code} has been rerouted to the {dept_name} department.",
+                    ticket_id=ticket_id,
+                    priority=t_priority,
+                )
+
+    return {"ticket_id": ticket_id, "department": dept_name, "action": "rerouted"}
+
+
+@app.get("/manager/departments")
+def get_departments(authorization: Optional[str] = Header(default=None)):
+    user = get_current_user(authorization)
+    if user.get("role") != "manager":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    depts = fetch_all("SELECT name FROM departments ORDER BY name;")
+    return [d["name"] for d in depts]
 #============================================
 
 @app.get("/manager")
@@ -2521,12 +2911,15 @@ class ApprovalDecisionRequest(BaseModel):
     decision_notes: Optional[str] = None
 
 
-@api.patch("/manager/approvals/{request_id}")
+@app.patch("/manager/approvals/{request_id}")
 def decide_approval(
     request_id: str,
     body: ApprovalDecisionRequest,
-    user: Dict[str, Any] = Depends(require_manager),
+    authorization: Optional[str] = Header(default=None),
 ):
+    user = get_current_user(authorization)
+    if user.get("role") != "manager":
+        raise HTTPException(status_code=403, detail="Forbidden")
     decision = (body.decision or "").strip()
     if decision not in ("Approved", "Rejected"):
         raise HTTPException(status_code=422, detail="decision must be 'Approved' or 'Rejected'")
@@ -2592,6 +2985,64 @@ def decide_approval(
                             "UPDATE tickets SET department_id = %s WHERE id = %s;",
                             (dept_row["id"], ticket_id),
                         )
+                # ── Notifications for approval decision ──────────────────
+            # Fetch ticket info + submitter
+            cur.execute(
+                """
+                SELECT
+                    t.ticket_code,
+                    t.priority,
+                    ar.submitted_by_user_id,
+                    ar.request_type,
+                    ar.current_value,
+                    ar.requested_value
+                FROM approval_requests ar
+                JOIN tickets t ON t.id = ar.ticket_id
+                WHERE ar.id::text = %s
+                LIMIT 1;
+                """,
+                (request_id,),
+            )
+            ar_info = cur.fetchone() or {}
+            notif_ticket_code  = ar_info.get("ticket_code") or ""
+            notif_priority     = ar_info.get("priority")
+            submitter_uid      = ar_info.get("submitted_by_user_id")
+            notif_req_type     = (ar_info.get("request_type") or "").lower()
+            notif_current      = ar_info.get("current_value") or ""
+            notif_requested    = ar_info.get("requested_value") or ""
+            notif_ticket_id    = ar["ticket_id"]
+
+            decision_word = "approved" if decision == "Approved" else "rejected"
+
+            # Notify the employee who submitted
+            if submitter_uid and str(submitter_uid) != str(user["id"]):
+                _insert_notification(
+                    cur,
+                    user_id=str(submitter_uid),
+                    notif_type="status_change",
+                    title=f"Request {decision}: {notif_ticket_code}",
+                    message=(
+                        f"Your {notif_req_type} request for ticket {notif_ticket_code} "
+                        f"was {decision_word} by the manager. "
+                        f"Change: {notif_current} → {notif_requested}."
+                    ),
+                    ticket_id=str(notif_ticket_id),
+                    priority=notif_priority,
+                )
+
+            # Notify the manager (confirmation to themselves)
+            _insert_notification(
+                cur,
+                user_id=str(user["id"]),
+                notif_type="status_change",
+                title=f"You {decision} a Request: {notif_ticket_code}",
+                message=(
+                    f"You {decision_word} the {notif_req_type} request for ticket "
+                    f"{notif_ticket_code}. Change: {notif_current} → {notif_requested}."
+                ),
+                ticket_id=str(notif_ticket_id),
+                priority=notif_priority,
+            )
 
     logger.info(
         "approval_decision | request=%s decision=%s by=%s",
@@ -2617,10 +3068,12 @@ def get_manager_complaint_details(ticket_id: str):
             t.assigned_at,
             t.first_response_at,
             t.resolved_at,
-            up.full_name AS assignee_name
+            up.full_name AS assignee_name,
+            d.name AS department_name
         FROM tickets t
         LEFT JOIN user_profiles up
             ON t.assigned_to_user_id = up.user_id
+        LEFT JOIN departments d ON d.id = t.department_id
         WHERE t.id = %s
         LIMIT 1;
     """, (ticket_id,))
@@ -2643,16 +3096,17 @@ def get_manager_complaint_details(ticket_id: str):
 
     return {
         "id": ticket["ticket_id"],
-        "ticket_code": ticket.get("ticket_code") or "",  # add this line
+        "ticket_code": ticket.get("ticket_code") or "",
         "subject": ticket.get("subject") or "",
         "priority": priority_raw,
         "priorityText": priority_text,
         "status": ticket["status"],
         "assignee": assignee,
-        "details": ticket.get("details") or "",  # <-- fixed
+        "details": ticket.get("details") or "",
         "issueDate": issue_date,
         "respondTime": respond_time,
-        "resolveTime": resolve_time
+        "resolveTime": resolve_time,
+        "department": ticket.get("department_name") or "",
     }
 
 #============================================

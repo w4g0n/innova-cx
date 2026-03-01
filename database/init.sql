@@ -70,12 +70,36 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- -------------------------
+-- Helper functions (must be defined before triggers that reference them)
+-- -------------------------
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- -------------------------
 -- Reference tables
 -- -------------------------
 CREATE TABLE IF NOT EXISTS departments (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT NOT NULL UNIQUE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- -------------------------
+-- Users + Profiles (Identity)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS users (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email         CITEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role          user_role NOT NULL,
+  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at TIMESTAMPTZ
 );
 
 -- -------------------------
@@ -96,19 +120,6 @@ CREATE TRIGGER trg_user_preferences_updated_at
 BEFORE UPDATE ON user_preferences
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
-
--- -------------------------
--- Users + Profiles (Identity)
--- -------------------------
-CREATE TABLE IF NOT EXISTS users (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email         CITEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  role          user_role NOT NULL,
-  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_login_at TIMESTAMPTZ
-);
 
 -- -------------------------
 -- MFA columns (safe for re-runs)
@@ -204,14 +215,6 @@ CREATE INDEX IF NOT EXISTS idx_tickets_asset_type  ON tickets(asset_type);
 CREATE INDEX IF NOT EXISTS idx_tickets_created_at  ON tickets(created_at);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee    ON tickets(assigned_to_user_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_creator     ON tickets(created_by_user_id);
-
-CREATE OR REPLACE FUNCTION set_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_tickets_updated_at ON tickets;
 CREATE TRIGGER trg_tickets_updated_at

@@ -126,6 +126,7 @@
   cursor: pointer;
   white-space: nowrap;
   margin: 0;
+  width: 90px; 
 }
 
 .mv-actionBtn:hover {
