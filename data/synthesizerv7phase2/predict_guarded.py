@@ -223,8 +223,8 @@ def main():
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
 
-    reviewed = int(pd.Series(df["needs_review"]).fillna(False).astype(bool).sum())
-    safety_true = int(pd.Series(df["pred_safety_concern"]).fillna(False).astype(bool).sum())
+    reviewed = int(df["needs_review"].eq(True).sum())
+    safety_true = int(df["pred_safety_concern"].eq(True).sum())
     print(f"Saved predictions: {output_path}")
     print(f"Rows marked for review: {reviewed}")
     print(f"Predicted safety_concern=True: {safety_true}")

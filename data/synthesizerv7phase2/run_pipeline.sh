@@ -6,8 +6,10 @@
 #   bash run_pipeline.sh --dry-run       # test with 10 rows
 #   bash run_pipeline.sh --epochs 5      # override training epochs
 #   bash run_pipeline.sh --full-run --epochs 3   # explicit uncapped full dataset run
+#   bash run_pipeline.sh --skip-label --epochs 2 --resume-from models/deberta_multitask/model.pt
 #   bash run_pipeline.sh --full-run --resume-from models/deberta_multitask/model.pt --weighted-safety-loss
 #   bash run_pipeline.sh --full-run --run-guarded-predict
+#   bash run_pipeline.sh --skip-label --generate-safety-rows 1000 --augment-with-safety --external-test output/safety_test_v2.csv
 
 set -eo pipefail  # Exit immediately on any error and propagate failures in pipes
 export PYTHONNOUSERSITE=1
@@ -23,6 +25,7 @@ EPOCHS=1
 DRY_RUN=""
 MAX_COMPLAINTS=200
 FULL_RUN=""
+SKIP_LABEL=""
 RESUME_FROM=""
 WEIGHTED_SAFETY_LOSS=""
 SAFETY_POSITIVE_WEIGHT=""
@@ -31,6 +34,14 @@ PREDICT_INPUT=""
 PREDICT_OUTPUT="output/predictions_guarded.csv"
 SAFETY_THRESHOLD="0.30"
 UNCERTAINTY_MARGIN="0.15"
+GENERATE_SAFETY_ROWS="0"
+SAFETY_SYNTH_OUTPUT="output/safety_synth_1000.csv"
+AUGMENT_WITH_SAFETY=""
+AUGMENTED_OUTPUT="labeled_augmented.csv"
+EXTERNAL_TEST=""
+EXTERNAL_EVAL_REPORT="output/eval_external_report.json"
+EXTERNAL_EVAL_PREDS="output/eval_external_predictions.csv"
+TRAIN_INPUT=""
 
 # ─────────────────────────────────────────────
 # PARSE ARGS
@@ -43,6 +54,7 @@ while [[ "$#" -gt 0 ]]; do
         --input)   INPUT="$2";  shift ;;
         --max-complaints) MAX_COMPLAINTS="$2"; shift ;;
         --full-run) FULL_RUN="1" ;;
+        --skip-label) SKIP_LABEL="1" ;;
         --resume-from) RESUME_FROM="$2"; shift ;;
         --weighted-safety-loss) WEIGHTED_SAFETY_LOSS="1" ;;
         --safety-positive-weight) SAFETY_POSITIVE_WEIGHT="$2"; shift ;;
@@ -51,6 +63,13 @@ while [[ "$#" -gt 0 ]]; do
         --predict-output) PREDICT_OUTPUT="$2"; shift ;;
         --safety-threshold) SAFETY_THRESHOLD="$2"; shift ;;
         --uncertainty-margin) UNCERTAINTY_MARGIN="$2"; shift ;;
+        --generate-safety-rows) GENERATE_SAFETY_ROWS="$2"; shift ;;
+        --safety-synth-output) SAFETY_SYNTH_OUTPUT="$2"; shift ;;
+        --augment-with-safety) AUGMENT_WITH_SAFETY="1" ;;
+        --augmented-output) AUGMENTED_OUTPUT="$2"; shift ;;
+        --external-test) EXTERNAL_TEST="$2"; shift ;;
+        --external-eval-report) EXTERNAL_EVAL_REPORT="$2"; shift ;;
+        --external-eval-preds) EXTERNAL_EVAL_PREDS="$2"; shift ;;
         *) echo "Unknown arg: $1"; exit 1 ;;
     esac
     shift
@@ -94,6 +113,18 @@ fi
 if [ -n "$RUN_GUARDED_PREDICT" ]; then
     log "Guarded pred : enabled"
 fi
+if [ -n "$SKIP_LABEL" ]; then
+    log "Skip label   : enabled"
+fi
+if [ "${GENERATE_SAFETY_ROWS}" != "0" ]; then
+    log "Safety synth : ${GENERATE_SAFETY_ROWS} rows -> ${SAFETY_SYNTH_OUTPUT}"
+fi
+if [ -n "$AUGMENT_WITH_SAFETY" ]; then
+    log "Augment data : enabled -> ${AUGMENTED_OUTPUT}"
+fi
+if [ -n "$EXTERNAL_TEST" ]; then
+    log "External test: ${EXTERNAL_TEST}"
+fi
 
 check_file "$INPUT"
 
@@ -121,17 +152,23 @@ mkdir -p "logs/"
 # STEP 1 — LABEL
 # ─────────────────────────────────────────────
 
-log "────────────────────────────────────"
-log "STEP 1: Labeling with Phi-4-mini"
-log "────────────────────────────────────"
+if [ -z "$SKIP_LABEL" ]; then
+    log "────────────────────────────────────"
+    log "STEP 1: Labeling with Phi-4-mini"
+    log "────────────────────────────────────"
 
-LABEL_CMD=("$PYTHON_BIN" "label.py" "--input" "$INPUT" "--output" "$LABELED")
-[ -n "$DRY_RUN" ] && LABEL_CMD+=("$DRY_RUN")
-if [ -z "$FULL_RUN" ]; then
-    LABEL_CMD+=("--max-complaints" "$MAX_COMPLAINTS")
+    LABEL_CMD=("$PYTHON_BIN" "label.py" "--input" "$INPUT" "--output" "$LABELED")
+    [ -n "$DRY_RUN" ] && LABEL_CMD+=("$DRY_RUN")
+    if [ -z "$FULL_RUN" ]; then
+        LABEL_CMD+=("--max-complaints" "$MAX_COMPLAINTS")
+    fi
+
+    "${LABEL_CMD[@]}" 2>&1 | tee logs/label.log
+else
+    log "────────────────────────────────────"
+    log "STEP 1: Labeling skipped (--skip-label)"
+    log "────────────────────────────────────"
 fi
-
-"${LABEL_CMD[@]}" 2>&1 | tee logs/label.log
 
 if [ ! -f "$LABELED" ]; then
     log "ERROR: label.py did not produce $LABELED — aborting"
@@ -154,16 +191,51 @@ if [ -n "$DRY_RUN" ]; then
 fi
 
 # ─────────────────────────────────────────────
-# STEP 2 — TRAIN
+# STEP 2 — GENERATE SAFETY SYNTHETIC DATA (OPTIONAL)
+# ─────────────────────────────────────────────
+
+if [ "${GENERATE_SAFETY_ROWS}" != "0" ]; then
+    log "────────────────────────────────────"
+    log "STEP 2: Generate safety synthetic data (Phi-4)"
+    log "────────────────────────────────────"
+
+    "$PYTHON_BIN" generate_safety_phi4.py \
+        --rows "$GENERATE_SAFETY_ROWS" \
+        --output "$SAFETY_SYNTH_OUTPUT" \
+        2>&1 | tee logs/generate_safety.log
+fi
+
+# ─────────────────────────────────────────────
+# STEP 3 — MERGE AUGMENTED TRAINING DATA (OPTIONAL)
+# ─────────────────────────────────────────────
+
+TRAIN_INPUT="$LABELED"
+if [ -n "$AUGMENT_WITH_SAFETY" ] || [ "${GENERATE_SAFETY_ROWS}" != "0" ]; then
+    log "────────────────────────────────────"
+    log "STEP 3: Merge augmented training data"
+    log "────────────────────────────────────"
+
+    check_file "$SAFETY_SYNTH_OUTPUT"
+    "$PYTHON_BIN" merge_training_data.py \
+        --base "$LABELED" \
+        --add "$SAFETY_SYNTH_OUTPUT" \
+        --output "$AUGMENTED_OUTPUT" \
+        2>&1 | tee logs/merge_training.log
+
+    TRAIN_INPUT="$AUGMENTED_OUTPUT"
+fi
+
+# ─────────────────────────────────────────────
+# STEP 4 — TRAIN
 # ─────────────────────────────────────────────
 
 log "────────────────────────────────────"
-log "STEP 2: Fine-tuning DeBERTa"
+log "STEP 4: Fine-tuning DeBERTa"
 log "────────────────────────────────────"
 
 TRAIN_CMD=(
     "$PYTHON_BIN" train.py
-    --input "$LABELED"
+    --input "$TRAIN_INPUT"
     --output-dir "$MODELS_DIR"
     --epochs "$EPOCHS"
 )
@@ -174,12 +246,12 @@ TRAIN_CMD=(
 "${TRAIN_CMD[@]}" 2>&1 | tee logs/train.log
 
 # ─────────────────────────────────────────────
-# STEP 3 — GUARDED PREDICTION (OPTIONAL)
+# STEP 5 — GUARDED PREDICTION (OPTIONAL)
 # ─────────────────────────────────────────────
 
 if [ -n "$RUN_GUARDED_PREDICT" ]; then
     log "────────────────────────────────────"
-    log "STEP 3: Guarded prediction (no retrain)"
+    log "STEP 5: Guarded prediction (no retrain)"
     log "────────────────────────────────────"
 
     if [ -z "$PREDICT_INPUT" ]; then
@@ -197,16 +269,41 @@ if [ -n "$RUN_GUARDED_PREDICT" ]; then
 fi
 
 # ─────────────────────────────────────────────
+# STEP 6 — EXTERNAL EVALUATION (OPTIONAL)
+# ─────────────────────────────────────────────
+
+if [ -n "$EXTERNAL_TEST" ]; then
+    log "────────────────────────────────────"
+    log "STEP 6: External test-set evaluation"
+    log "────────────────────────────────────"
+
+    check_file "$EXTERNAL_TEST"
+    "$PYTHON_BIN" evaluate_checkpoint.py \
+        --test "$EXTERNAL_TEST" \
+        --model-dir "${MODELS_DIR%/}/deberta_multitask" \
+        --output-report "$EXTERNAL_EVAL_REPORT" \
+        --output-preds "$EXTERNAL_EVAL_PREDS" \
+        2>&1 | tee logs/eval_external.log
+fi
+
+# ─────────────────────────────────────────────
 # DONE
 # ─────────────────────────────────────────────
 
 log "────────────────────────────────────"
 log "Pipeline complete"
 log "  Labeled CSV       : $LABELED"
+if [ "$TRAIN_INPUT" != "$LABELED" ]; then
+    log "  Train input       : $TRAIN_INPUT"
+fi
 log "  Models            : $MODELS_DIR"
 log "  Evaluation report : ${MODELS_DIR}evaluation_report.json"
 if [ -n "$RUN_GUARDED_PREDICT" ]; then
     log "  Guarded preds     : $PREDICT_OUTPUT"
+fi
+if [ -n "$EXTERNAL_TEST" ]; then
+    log "  External report   : $EXTERNAL_EVAL_REPORT"
+    log "  External preds    : $EXTERNAL_EVAL_PREDS"
 fi
 log "  Logs              : logs/"
 log "────────────────────────────────────"

@@ -49,6 +49,10 @@ pipeline/
 ├── label.py                # Label complaints with Phi-4-mini
 ├── train.py                # Fine-tune multi-head DeBERTa
 ├── predict_guarded.py      # No-retrain inference guardrails
+├── build_safety_test_set.py # Build new safety-focused evaluation candidates
+├── generate_safety_phi4.py # Generate balanced safety synthetic tickets (Phi-4)
+├── merge_training_data.py  # Merge base + synthetic training data
+├── evaluate_checkpoint.py  # Evaluate checkpoint on external test set
 ├── phase2_classify.py      # Zero-shot NLI classification (standalone)
 ├── phase3_evaluate.py      # Evaluate classifier against test set
 ├── run_pipeline.sh         # Orchestrates label.py + train.py
@@ -77,6 +81,14 @@ bash run_pipeline.sh
 # Full run + continue training from existing checkpoint + weighted safety loss + guarded predictions
 bash run_pipeline.sh \
   --full-run \
+  --epochs 2 \
+  --resume-from models/deberta_multitask/model.pt \
+  --weighted-safety-loss \
+  --run-guarded-predict
+
+# Fast stack-training loop (skip relabeling)
+bash run_pipeline.sh \
+  --skip-label \
   --epochs 2 \
   --resume-from models/deberta_multitask/model.pt \
   --weighted-safety-loss \
@@ -118,6 +130,51 @@ python3 predict_guarded.py \
   --model-dir models/deberta_multitask \
   --safety-threshold 0.30 \
   --uncertainty-margin 0.15
+```
+
+**Build a new safety-focused test set for manual annotation:**
+```bash
+python3 build_safety_test_set.py \
+  --predictions output/predictions_guarded.csv \
+  --output output/safety_test_candidates.csv \
+  --n 300 \
+  --n-review 140 \
+  --n-safety-true 120 \
+  --n-random 40
+```
+
+**Generate 1000 balanced safety rows with Phi-4 (500 True / 500 False):**
+```bash
+python3 generate_safety_phi4.py \
+  --rows 1000 \
+  --output output/safety_synth_1000.csv
+```
+
+**Merge synthetic safety rows into training data:**
+```bash
+python3 merge_training_data.py \
+  --base labeled.csv \
+  --add output/safety_synth_1000.csv \
+  --output labeled_augmented.csv
+```
+
+**Continue training from current checkpoint on augmented data:**
+```bash
+python3 train.py \
+  --input labeled_augmented.csv \
+  --output-dir models/ \
+  --resume-from models/deberta_multitask/model.pt \
+  --epochs 2 \
+  --weighted-safety-loss
+```
+
+**Evaluate on external test set (never trained on):**
+```bash
+python3 evaluate_checkpoint.py \
+  --test output/safety_test_v2.csv \
+  --model-dir models/deberta_multitask \
+  --output-report output/eval_external_report.json \
+  --output-preds output/eval_external_predictions.csv
 ```
 
 **Evaluate against test set:**
@@ -188,6 +245,7 @@ logs/
 | `--epochs N` | Override training epochs |
 | `--input PATH` | Override input CSV path |
 | `--full-run` | Remove complaint cap for labeling |
+| `--skip-label` | Skip labeling step and reuse existing `labeled.csv` |
 | `--resume-from PATH` | Continue training from existing `model.pt` |
 | `--weighted-safety-loss` | Up-weight `safety_concern=True` class in training |
 | `--safety-positive-weight X` | Manual positive-class weight for safety loss |
