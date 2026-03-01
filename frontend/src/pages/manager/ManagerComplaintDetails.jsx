@@ -1,12 +1,94 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
-import "./ManagerComplaintDetails.css";
 import { apiUrl } from "../../config/apiBase";
+import "../employee/TicketDetails.css";
 
+function getAuthToken() {
+  return (
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") ||
+    ""
+  );
+}
 
-function Modal({ type, ticket, closeModal, onRerouteSuccess, onRescoreSuccess, onResolveSuccess }) {  
+function ManagerTicketModal({
+  type,
+  ticket,
+  closeModal,
+  onRerouteSuccess,
+  onRescoreSuccess,
+  onResolveSuccess,
+  onSuccess,
+}) {
   if (!type || !ticket) return null;
+
+  return (
+    <ManagerTicketModalInner
+      key={type}
+      type={type}
+      ticket={ticket}
+      closeModal={closeModal}
+      onRerouteSuccess={onRerouteSuccess}
+      onRescoreSuccess={onRescoreSuccess}
+      onResolveSuccess={onResolveSuccess}
+      onSuccess={onSuccess}
+    />
+  );
+}
+
+function ManagerTicketModalInner({
+  type,
+  ticket,
+  closeModal,
+  onRerouteSuccess,
+  onRescoreSuccess,
+  onResolveSuccess,
+  onSuccess,
+}) {
+  const [busy, setBusy] = useState(false);
+
+  // Reroute
+  const [departments, setDepartments] = useState([]);
+  const [selectedDept, setSelectedDept] = useState("");
+  const [rerouteReason, setRerouteReason] = useState("");
+  const [rerouteError, setRerouteError] = useState("");
+
+  // Rescore
+  const [selectedPriority, setSelectedPriority] = useState(
+    ticket.priorityText || ticket.priority || "Medium"
+  );
+  const [rescoreReason, setRescoreReason] = useState("");
+  const [rescoreError, setRescoreError] = useState("");
+
+  // Escalate
+  const [escalateLevel, setEscalateLevel] = useState("");
+  const [escalateReason, setEscalateReason] = useState("");
+
+  // Resolve
+  const [resolution, setResolution] = useState("");
+  const [stepsTaken, setStepsTaken] = useState("");
+  const [resolveError, setResolveError] = useState("");
+
+  useEffect(() => {
+    if (type !== "reroute") return;
+    const token = getAuthToken();
+
+    fetch(apiUrl("/manager/departments"), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setDepartments(list);
+        if (ticket.department && list.includes(ticket.department)) {
+          setSelectedDept(ticket.department);
+        }
+      })
+      .catch(() => setDepartments([]));
+  }, [type, ticket.department]);
 
   const titles = {
     reroute: "Reroute Ticket",
@@ -18,71 +100,42 @@ function Modal({ type, ticket, closeModal, onRerouteSuccess, onRescoreSuccess, o
   const submitText =
     type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
 
-  // ── Reroute state ──────────────────────────────────────────
-  const [departments, setDepartments] = useState([]);
-  const [selectedDept, setSelectedDept] = useState("");
-  const [rerouteLoading, setRerouteLoading] = useState(false);
-  const [rerouteError, setRerouteError] = useState("");
-
-  // ── Rescore state ──────────────────────────────────────────
-  const [selectedPriority, setSelectedPriority] = useState(ticket.priorityText || "Medium");
-  const [rescoreReason, setRescoreReason] = useState("");
-  const [rescoreLoading, setRescoreLoading] = useState(false);
-  const [rescoreError, setRescoreError] = useState("");
-
-  // ── Resolve state ──────────────────────────────────────────
-  const [resolveText, setResolveText] = useState("");
-  const [resolveSteps, setResolveSteps] = useState("");
-  const [resolveLoading, setResolveLoading] = useState(false);
-  const [resolveError, setResolveError] = useState("");
-
-  useEffect(() => {
-    if (type !== "reroute") return;
-    const token = localStorage.getItem("access_token");
-    fetch(apiUrl("/manager/departments"), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        // API returns a plain array of strings
-        const list = Array.isArray(data) ? data : [];
-        setDepartments(list);
-        // Pre-select current department if it exists in the list
-        if (ticket.department && list.includes(ticket.department)) {
-          setSelectedDept(ticket.department);
-        }
-      })
-      .catch(() => setDepartments([]));
-  }, [type, ticket.department]);
-
   const handleRerouteSubmit = async () => {
     if (!selectedDept) {
       setRerouteError("Please select a department.");
       return;
     }
-    setRerouteLoading(true);
+    if (!rerouteReason.trim()) {
+      setRerouteError("Please provide a reason for rerouting.");
+      return;
+    }
+
+    setBusy(true);
     setRerouteError("");
+
     try {
-      const token = localStorage.getItem("access_token");
+      const token = getAuthToken();
       const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/department`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ department: selectedDept }),
+        body: JSON.stringify({ department: selectedDept, reason: rerouteReason.trim() }),
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `Error ${res.status}`);
       }
-      // Notify parent to update displayed ticket
-      onRerouteSuccess(selectedDept);
+
+      onRerouteSuccess?.(selectedDept);
+      onSuccess?.("Reroute request submitted successfully.");
       closeModal();
     } catch (e) {
       setRerouteError(e.message || "Failed to reroute ticket.");
     } finally {
-      setRerouteLoading(false);
+      setBusy(false);
     }
   };
 
@@ -91,40 +144,50 @@ function Modal({ type, ticket, closeModal, onRerouteSuccess, onRescoreSuccess, o
       setRescoreError("Please provide a reason for rescoring.");
       return;
     }
-    setRescoreLoading(true);
+
+    setBusy(true);
     setRescoreError("");
+
     try {
-      const token = localStorage.getItem("access_token");
+      const token = getAuthToken();
       const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/priority`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ new_priority: selectedPriority, reason: rescoreReason }),
+        body: JSON.stringify({
+          new_priority: selectedPriority,
+          reason: rescoreReason.trim(),
+        }),
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `Error ${res.status}`);
       }
-      onRescoreSuccess(selectedPriority);
+
+      onRescoreSuccess?.(selectedPriority);
+      onSuccess?.("Rescore request submitted successfully.");
       closeModal();
     } catch (e) {
       setRescoreError(e.message || "Failed to rescore ticket.");
     } finally {
-      setRescoreLoading(false);
+      setBusy(false);
     }
   };
 
   const handleResolveSubmit = async () => {
-    if (!resolveText.trim()) {
+    if (!resolution.trim()) {
       setResolveError("Please provide a resolution description.");
       return;
     }
-    setResolveLoading(true);
+
+    setBusy(true);
     setResolveError("");
+
     try {
-      const token = localStorage.getItem("access_token");
+      const token = getAuthToken();
       const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/resolve`), {
         method: "PATCH",
         headers: {
@@ -132,23 +195,41 @@ function Modal({ type, ticket, closeModal, onRerouteSuccess, onRescoreSuccess, o
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          final_resolution: resolveText,
-          steps_taken: resolveSteps || null,
+          final_resolution: resolution.trim(),
+          steps_taken: stepsTaken.trim() || null,
         }),
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `Error ${res.status}`);
       }
-      onResolveSuccess();
+
+      onResolveSuccess?.();
+      onSuccess?.("Ticket resolved successfully.");
       closeModal();
     } catch (e) {
       setResolveError(e.message || "Failed to resolve ticket.");
     } finally {
-      setResolveLoading(false);
+      setBusy(false);
     }
   };
-  // ──────────────────────────────────────────────────────────
+
+  const handleSubmit = () => {
+    if (type === "reroute") return handleRerouteSubmit();
+    if (type === "rescore") return handleRescoreSubmit();
+    if (type === "resolve") return handleResolveSubmit();
+
+    // Escalate placeholder (if backend endpoint not implemented yet)
+    if (type === "escalate") {
+      onSuccess?.(
+        `Escalation submitted${escalateLevel ? ` to ${escalateLevel}` : ""}${
+          escalateReason ? "." : " (no reason provided)."
+        }`
+      );
+      closeModal();
+    }
+  };
 
   const renderBody = () => {
     switch (type) {
@@ -156,12 +237,17 @@ function Modal({ type, ticket, closeModal, onRerouteSuccess, onRescoreSuccess, o
         return (
           <>
             <label className="mvd-modalLabel">New Department</label>
-            <div className="mvd-modalDropdown">
+            <div className="select-wrapper modal-dropdown">
               <select
                 value={selectedDept}
-                onChange={(e) => setSelectedDept(e.target.value)}
+                onChange={(e) => {
+                  setSelectedDept(e.target.value);
+                  setRerouteError("");
+                }}
               >
-                <option value="">Select Department</option>
+                <option value="" disabled>
+                  Select Department
+                </option>
                 {departments.map((d) => (
                   <option key={d} value={d}>
                     {d}
@@ -170,11 +256,19 @@ function Modal({ type, ticket, closeModal, onRerouteSuccess, onRescoreSuccess, o
                 ))}
               </select>
             </div>
-            {rerouteError && (
-              <p style={{ color: "red", fontSize: "0.8rem", marginTop: "0.25rem" }}>
-                {rerouteError}
-              </p>
-            )}
+
+            <label className="mvd-modalLabel">Reason for rerouting</label>
+            <textarea
+              className="modal-textarea"
+              value={rerouteReason}
+              onChange={(e) => {
+                setRerouteReason(e.target.value);
+                setRerouteError("");
+              }}
+              placeholder="Explain why this ticket should be rerouted..."
+            />
+
+            {rerouteError && <div className="modal-inline-error">{rerouteError}</div>}
           </>
         );
 
@@ -182,10 +276,13 @@ function Modal({ type, ticket, closeModal, onRerouteSuccess, onRescoreSuccess, o
         return (
           <>
             <label className="mvd-modalLabel">New Priority</label>
-            <div className="mvd-modalDropdown">
+            <div className="select-wrapper modal-dropdown">
               <select
                 value={selectedPriority}
-                onChange={(e) => setSelectedPriority(e.target.value)}
+                onChange={(e) => {
+                  setSelectedPriority(e.target.value);
+                  setRescoreError("");
+                }}
               >
                 <option>Low</option>
                 <option>Medium</option>
@@ -196,67 +293,72 @@ function Modal({ type, ticket, closeModal, onRerouteSuccess, onRescoreSuccess, o
 
             <label className="mvd-modalLabel">Reason for rescoring</label>
             <textarea
-              className="mvd-modalTextarea"
-              placeholder="Explain why the priority should be adjusted..."
+              className="modal-textarea"
               value={rescoreReason}
-              onChange={(e) => setRescoreReason(e.target.value)}
+              onChange={(e) => {
+                setRescoreReason(e.target.value);
+                setRescoreError("");
+              }}
+              placeholder="Explain why the priority should be adjusted..."
             />
-            {rescoreError && (
-              <p style={{ color: "red", fontSize: "0.8rem", marginTop: "0.25rem" }}>
-                {rescoreError}
-              </p>
-            )}
+
+            {rescoreError && <div className="modal-inline-error">{rescoreError}</div>}
           </>
         );
 
       case "escalate":
         return (
           <>
-            <label className="mvd-modalLabel">Escalation Level</label>
-            <div className="mvd-modalDropdown">
-              <select>
-                <option>Select Level</option>
+            <label>Escalation Level</label>
+            <div className="select-wrapper modal-dropdown">
+              <select
+                value={escalateLevel}
+                onChange={(e) => setEscalateLevel(e.target.value)}
+              >
+                <option value="" disabled>
+                  Select Level
+                </option>
                 <option>Supervisor</option>
                 <option>Department Head</option>
                 <option>Management</option>
               </select>
             </div>
 
-            <label className="mvd-modalLabel">Reason for escalation</label>
+            <label>Reason for Escalation</label>
             <textarea
-              className="mvd-modalTextarea"
+              className="modal-textarea"
+              value={escalateReason}
+              onChange={(e) => setEscalateReason(e.target.value)}
               placeholder="Explain why this ticket must be escalated..."
             />
-
-            <label className="mvd-modalLabel">Additional Notes (optional)</label>
-            <textarea className="mvd-modalTextarea mvd-modalTextareaSmall" placeholder="Any extra context..." />
           </>
         );
 
       case "resolve":
         return (
           <>
-            <label className="mvd-modalLabel">Resolution <span style={{ color: "red" }}>*</span></label>
+            <label className="mvd-modalLabel">
+              Resolution <span style={{ color: "red" }}>*</span>
+            </label>
             <textarea
-              className="mvd-modalTextarea"
+              className="modal-textarea"
+              value={resolution}
+              onChange={(e) => {
+                setResolution(e.target.value);
+                setResolveError("");
+              }}
               placeholder="Describe the final resolution provided..."
-              value={resolveText}
-              onChange={(e) => setResolveText(e.target.value)}
             />
 
             <label className="mvd-modalLabel">Steps Taken (optional)</label>
             <textarea
-              className="mvd-modalTextarea"
+              className="modal-textarea"
+              value={stepsTaken}
+              onChange={(e) => setStepsTaken(e.target.value)}
               placeholder="List the steps taken to resolve this issue..."
-              value={resolveSteps}
-              onChange={(e) => setResolveSteps(e.target.value)}
             />
 
-            {resolveError && (
-              <p style={{ color: "red", fontSize: "0.8rem", marginTop: "0.25rem" }}>
-                {resolveError}
-              </p>
-            )}
+            {resolveError && <div className="modal-inline-error">{resolveError}</div>}
           </>
         );
 
@@ -265,48 +367,34 @@ function Modal({ type, ticket, closeModal, onRerouteSuccess, onRescoreSuccess, o
     }
   };
 
-  const handleSubmit = () => {
-    if (type === "reroute") handleRerouteSubmit();
-    if (type === "rescore") handleRescoreSubmit();
-    if (type === "resolve") handleResolveSubmit();
-  };
-
   return (
-    <div className="mvd-overlay" onClick={closeModal} role="presentation">
+    <div className="modal-overlay" onClick={closeModal}>
       <div
-        className={`mvd-modalCard ${type === "escalate" ? "mvd-modalRed" : ""}`}
+        className={`modal-card ${type === "escalate" ? "modal-red" : ""}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
-        <div className="mvd-modalHeader">
-          <h2 className="mvd-modalTitle">{titles[type]}</h2>
-          <button className="mvd-close" type="button" onClick={closeModal}>
+        <div className="modal-header">
+          <h2>{titles[type]}</h2>
+          <span className="modal-close" onClick={closeModal} role="button" tabIndex={0}>
             ✕
-          </button>
+          </span>
         </div>
 
-        <div className="mvd-modalBody">{renderBody()}</div>
+        <div className="modal-body">{renderBody()}</div>
 
-        <div className="mvd-modalFooter">
-          <button className="mvd-btn mvd-btnCancel" type="button" onClick={closeModal}>
+        <div className="modal-footer">
+          <button className="modal-btn cancel" type="button" onClick={closeModal} disabled={busy}>
             Cancel
           </button>
           <button
-            className={`mvd-btn ${type === "escalate" ? "mvd-btnEscalate" : "mvd-btnSubmit"}`}
+            className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
             type="button"
-            onClick={["reroute", "rescore", "resolve"].includes(type) ? handleSubmit : undefined}
-            disabled={
-              (type === "reroute" && rerouteLoading) ||
-              (type === "rescore" && rescoreLoading) ||
-              (type === "resolve" && resolveLoading)
-            }
+            onClick={handleSubmit}
+            disabled={busy}
           >
-            {(type === "reroute" && rerouteLoading) ||
-             (type === "rescore" && rescoreLoading) ||
-             (type === "resolve" && resolveLoading)
-              ? "Saving..."
-              : submitText}
+            {busy ? "Saving..." : submitText}
           </button>
         </div>
       </div>
@@ -314,28 +402,30 @@ function Modal({ type, ticket, closeModal, onRerouteSuccess, onRescoreSuccess, o
   );
 }
 
-
 export default function ManagerComplaintDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
   const [modalType, setModalType] = useState(null);
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+
   const closeModal = () => setModalType(null);
 
-  // Called by Modal after a successful reroute PATCH
+  const showToast = (message, type = "success") => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast((t) => ({ ...t, show: false })), 4000);
+  };
+
   const handleRerouteSuccess = (newDepartment) => {
     setTicket((prev) => ({ ...prev, department: newDepartment }));
   };
 
   const handleRescoreSuccess = (newPriority) => {
-    const priorityMap = { low: "Low", medium: "Medium", high: "High", critical: "Critical" };
     const priorityText = newPriority;
-    const priorityRaw = newPriority.toLowerCase();
+    const priorityRaw = String(newPriority).toLowerCase();
     setTicket((prev) => ({ ...prev, priority: priorityRaw, priorityText }));
   };
 
@@ -344,8 +434,10 @@ export default function ManagerComplaintDetails() {
   };
 
   useEffect(() => {
-    if (ticket) return;
-    const token = localStorage.getItem("access_token");
+    const token = getAuthToken();
+    setLoading(true);
+    setError(null);
+
     fetch(apiUrl(`/manager/complaints/${id}`), {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -355,135 +447,170 @@ export default function ManagerComplaintDetails() {
       })
       .then((data) => {
         if (data.error) throw new Error(data.error);
-        setLoading(false);
         setTicket(data);
+        setLoading(false);
       })
       .catch((e) => {
         setError(e.message || "Could not load ticket details.");
         setLoading(false);
       });
-  }, [id, ticket]);
+  }, [id]);
 
-  if (loading)
+  if (loading) {
     return (
       <Layout role="manager">
-        <main className="mvd-main">Loading ticket details...</main>
+        <div className="empTicketDetail">Loading ticket details…</div>
       </Layout>
     );
+  }
 
-  if (error)
+  if (error) {
     return (
       <Layout role="manager">
-        <main className="mvd-main">{error}</main>
+        <div className="empTicketDetail">{error}</div>
       </Layout>
     );
+  }
 
   if (!ticket) return null;
 
+  const priorityText = ticket.priorityText || ticket.priority || "Medium";
+
   return (
     <Layout role="manager">
-      <main className="mvd-main">
-        <div className="mvd-header">
-          <div className="mvd-headerLeft">
-            <button className="mvd-back" type="button" onClick={() => navigate(-1)}>
+      <div className="empTicketDetail">
+        <div className="details-header">
+          <div className="header-left">
+            <button className="back-btn" type="button" onClick={() => navigate(-1)}>
               ← Back
             </button>
-
-            <h1 className="mvd-title">Ticket ID: {ticket.ticket_code || ticket.id}</h1>
-
-            <div className="mvd-pills">
-              <span className={`mvd-pill mvd-pill--${(ticket.priorityText || "Medium").toLowerCase()}`}>
-                {ticket.priorityText}
+            <h1 className="ticket-title">Ticket ID: {ticket.ticket_code || ticket.id}</h1>
+            <div className="status-row">
+              <span className={`header-pill ${String(priorityText).toLowerCase()}-pill`}>
+                {priorityText}
               </span>
-              <span className="mvd-pill mvd-pill--status">{ticket.status}</span>
+              <span className="header-pill empStatusPill">{ticket.status}</span>
             </div>
           </div>
 
-          <div className="mvd-actions">
-            <button className="mvd-outline" type="button" onClick={() => setModalType("rescore")}>
+          <div className="header-actions">
+            <button className="btn-outline" type="button" onClick={() => setModalType("rescore")}>
               Rescore
             </button>
-            <button className="mvd-outline" type="button" onClick={() => setModalType("reroute")}>
+            <button className="btn-outline" type="button" onClick={() => setModalType("reroute")}>
               Reroute
             </button>
-            <button className="mvd-primary" type="button" onClick={() => setModalType("resolve")}>
+            <button className="btn-primary" type="button" onClick={() => setModalType("resolve")}>
               Resolve
             </button>
           </div>
         </div>
 
-        <section className="mvd-card">
-          <h2 className="mvd-sectionTitle">Summary</h2>
-          <div className="mvd-grid">
+        <section className="card-section">
+          <h2 className="section-title">Summary</h2>
+          <div className="summary-grid">
             <div>
-              <span className="mvd-label">Issue Date:</span> {ticket.issueDate}
+              <span className="label">Issue Date</span>
+              {ticket.issueDate || "—"}
             </div>
             <div>
-              <span className="mvd-label">Respond Time:</span> {ticket.respondTime}
+              <span className="label">Response Time</span>
+              {ticket.respondTime || "—"}
             </div>
             <div>
-              <span className="mvd-label">Resolve Time:</span> {ticket.resolveTime}
+              <span className="label">Resolve Time</span>
+              {ticket.resolveTime || "—"}
             </div>
             <div>
-              <span className="mvd-label">Assignee:</span> {ticket.assignee}
+              <span className="label">Assignee</span>
+              {ticket.assignee || "—"}
             </div>
             <div>
-              <span className="mvd-label">Department:</span>{" "}
-              {ticket.department || <span style={{ color: "#aaa" }}>Unassigned</span>}
+              <span className="label">Department</span>
+              {ticket.department || "—"}
             </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <span className="mvd-label">Subject:</span> {ticket.subject}
+            <div>
+              <span className="label">Submitted By</span>
+              {ticket.submittedBy || "—"}
             </div>
           </div>
         </section>
 
-        <section className="mvd-twoCol">
-          <div className="mvd-card">
-            <h2 className="mvd-sectionTitle">Complaint Details</h2>
-            <div className="mvd-subject">{ticket.subject}</div>
-            <p className="mvd-desc">{ticket.details}</p>
+        <section className="details-grid">
+          <div className="card-section">
+            <h2 className="section-title">Complaint Details</h2>
+            <div className="subject">{ticket.subject || "No subject"}</div>
+            <p className="description">
+              {ticket.details || ticket.description || "No details provided."}
+            </p>
           </div>
 
-          <div className="mvd-card">
-            <h2 className="mvd-sectionTitle">Activity</h2>
-            <div className="mvd-activity">
-              <div className="mvd-activityItem">
-                <div className="mvd-dot" />
+          <div className="card-section">
+            <h2 className="section-title">Activity</h2>
+            <div className="timeline">
+              <div className="timeline-item">
+                <div className="dot" />
                 <div>
-                  <div className="mvd-activityTitle">Ticket created</div>
-                  <div className="mvd-activityText">{ticket.issueDate}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>
+                    Ticket created
+                  </div>
+                  <div style={{ color: "rgba(17,17,17,0.55)", fontSize: 12 }}>
+                    {ticket.issueDate || "—"}
+                  </div>
                 </div>
               </div>
-              {ticket.department && (
-                <div className="mvd-activityItem">
-                  <div className="mvd-dot" />
+
+              <div className="timeline-item">
+                <div className="dot" />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>
+                    Current status
+                  </div>
+                  <div style={{ color: "rgba(17,17,17,0.55)", fontSize: 12 }}>
+                    {ticket.status || "—"}
+                  </div>
+                </div>
+              </div>
+
+              {ticket.respondTime && (
+                <div className="timeline-item">
+                  <div className="dot" />
                   <div>
-                    <div className="mvd-activityTitle">Department</div>
-                    <div className="mvd-activityText">{ticket.department}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>
+                      First response
+                    </div>
+                    <div style={{ color: "rgba(17,17,17,0.55)", fontSize: 12 }}>
+                      {ticket.respondTime}
+                    </div>
                   </div>
                 </div>
               )}
-              <div className="mvd-activityItem">
-                <div className="mvd-dot" />
-                <div>
-                  <div className="mvd-activityTitle">Current status</div>
-                  <div className="mvd-activityText">{ticket.status}</div>
-                </div>
-              </div>
             </div>
           </div>
         </section>
-      </main>
+      </div>
 
-      <Modal
+      {toast.show && (
+        <div className={`ticket-toast ticket-toast--${toast.type}`}>
+          <span className="ticket-toast__msg">{toast.message}</span>
+          <button
+            className="ticket-toast__close"
+            onClick={() => setToast((t) => ({ ...t, show: false }))}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      <ManagerTicketModal
         type={modalType}
         ticket={ticket}
         closeModal={closeModal}
         onRerouteSuccess={handleRerouteSuccess}
         onRescoreSuccess={handleRescoreSuccess}
         onResolveSuccess={handleResolveSuccess}
+        onSuccess={showToast}
       />
-      
     </Layout>
   );
 }

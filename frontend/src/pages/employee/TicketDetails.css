@@ -482,6 +482,89 @@
 }
 
 /* ================================================
+   Inline modal error
+   ================================================ */
+.modal-inline-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #fff1f2;
+  border: 1px solid rgba(180, 35, 24, 0.22);
+  border-radius: var(--radius-md);
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 600;
+  animation: modalFade 0.2s var(--ease-out) both;
+}
+
+.modal-inline-error::before {
+  content: "⚠";
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+/* ================================================
+   Toast notification
+   ================================================ */
+.ticket-toast {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 18px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  font-size: 13px;
+  font-weight: 650;
+  min-width: 260px;
+  max-width: 400px;
+  animation: toastSlide 0.3s var(--ease-spring) both;
+}
+
+.ticket-toast--success {
+  background: #f0fdf4;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #166534;
+}
+
+.ticket-toast--error {
+  background: #fff1f2;
+  border: 1px solid rgba(180, 35, 24, 0.25);
+  color: #b42318;
+}
+
+.ticket-toast__msg {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.ticket-toast__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  color: inherit;
+  opacity: 0.6;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ticket-toast__close:hover {
+  opacity: 1;
+}
+
+@keyframes toastSlide {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ================================================
    Responsive
    ================================================ */
 @media (max-width: 900px) {

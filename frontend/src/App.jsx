@@ -3,6 +3,7 @@ import { Suspense, lazy, useEffect } from "react";
 
 import ProtectedRoute from "./auth/ProtectedRoute";
 
+const PublicLanding = lazy(() => import("./pages/PublicLanding"));
 const Login = lazy(() => import("./pages/Login"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 
@@ -87,9 +88,12 @@ export default function App() {
         }
       >
         <Routes>
-          <Route path="/" element={<Login />} />
+          {/* Public routes — no auth required */}
+          <Route path="/" element={<PublicLanding />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/verify" element={<CustomerAuthPage />} />
+          <Route path="/about" element={<AboutUs />} />
 
           
           <Route
