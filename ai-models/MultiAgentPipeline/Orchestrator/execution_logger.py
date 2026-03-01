@@ -22,6 +22,7 @@ Logging failures never crash the pipeline.
 
 import copy
 import json
+import math
 import time
 import uuid
 import logging
@@ -40,32 +41,52 @@ def _compute_diff(before: dict, after: dict) -> dict:
     for key in after:
         if key not in before:
             diff[key] = {"action": "added", "value": _safe_value(after[key])}
-        elif before[key] != after[key]:
-            diff[key] = {
-                "action": "changed",
-                "old": _safe_value(before[key]),
-                "new": _safe_value(after[key]),
-            }
+        else:
+            try:
+                equal = before[key] == after[key]
+                # Handle numpy arrays where == returns an array instead of bool
+                if hasattr(equal, "__iter__") and not isinstance(equal, str):
+                    equal = all(equal)
+            except (ValueError, TypeError):
+                equal = False
+            if not equal:
+                diff[key] = {
+                    "action": "changed",
+                    "old": _safe_value(before[key]),
+                    "new": _safe_value(after[key]),
+                }
     return diff
 
 
 def _safe_value(obj: Any) -> Any:
     """Convert a single value to something JSON-safe."""
-    if isinstance(obj, (str, int, float, bool, type(None))):
+    if obj is None or isinstance(obj, (str, bool, int)):
+        return obj
+    if isinstance(obj, float):
+        # Replace NaN/Infinity with None (null in JSON) to avoid JSONB rejection
+        if math.isnan(obj) or math.isinf(obj):
+            return None
         return obj
     if isinstance(obj, (list, tuple)):
         return [_safe_value(item) for item in obj]
     if isinstance(obj, dict):
         return {str(k): _safe_value(v) for k, v in obj.items()}
+    # numpy scalars, UUIDs, datetimes, etc.
     return str(obj)
 
 
 def _safe_json(obj: Any) -> Any:
-    """Make an entire dict JSON-serializable (handles numpy, UUID, datetime, etc.)."""
+    """Make an entire dict JSON-serializable (handles numpy, UUID, datetime, NaN, etc.)."""
     try:
-        return json.loads(json.dumps(obj, default=str))
+        # allow_nan=False forces NaN/Infinity to raise ValueError so we catch them
+        return json.loads(json.dumps(obj, default=str, allow_nan=False))
     except (TypeError, ValueError):
-        return {"_serialization_error": str(obj)[:500]}
+        # Fallback: convert with _safe_value which stringifies non-serializable types
+        try:
+            cleaned = _safe_value(obj)
+            return json.loads(json.dumps(cleaned, allow_nan=False))
+        except (TypeError, ValueError):
+            return {"_serialization_error": str(obj)[:500]}
 
 
 def _extract_confidence(state: dict) -> float | None:
