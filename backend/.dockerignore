@@ -1,0 +1,19 @@
+# VCS and editor state
+.git
+.gitignore
+.DS_Store
+
+# Python caches and local envs
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Runtime/local artifacts
+uploads/
+logs/
+.env
+.env.*

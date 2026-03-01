@@ -65,7 +65,7 @@ export default function OperatorNotifications() {
   useEffect(() => {
     if (!token) { navigate("/login"); return; }
     fetchNotifications();
-  }, []);
+  }, [fetchNotifications, navigate, token]);
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
