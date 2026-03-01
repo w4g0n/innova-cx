@@ -169,7 +169,7 @@ const confirmAssignment = async () => {
             : r
         )
       );
-    } catch (err) {
+    } catch {
       alert("Network error during reroute.");
     }
     closeMenu();
