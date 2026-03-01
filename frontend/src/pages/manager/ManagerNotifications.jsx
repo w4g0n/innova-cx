@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -6,7 +6,20 @@ import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
-import "./ManagerNotifications.css";
+import "../employee/EmployeeNotifications.css";
+
+function getAuthToken() {
+  try {
+    const raw = localStorage.getItem("user");
+    if (raw) { const u = JSON.parse(raw); if (u?.access_token) return u.access_token; }
+  } catch { /* ignore */ }
+  return (
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") || ""
+  );
+}
 
 function formatTime(isoString) {
   if (!isoString) return "";
@@ -30,8 +43,11 @@ function iconForType(type) {
   }
 }
 
+const API_BASE = apiUrl("/api");
+
 export default function ManagerNotifications() {
   const navigate = useNavigate();
+
   const [notifications, setNotifications] = useState([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
@@ -39,30 +55,40 @@ export default function ManagerNotifications() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const token = localStorage.getItem("access_token");
+  useEffect(() => { fetchNotifications(); }, []);
 
-  const fetchNotifications = useCallback(async () => {
+  async function fetchNotifications() {
+    const token = getAuthToken();
+    if (!token) return;
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(apiUrl("/manager/notifications"), {
+      const res = await fetch(`${API_BASE}/manager/notifications`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.status === 401) { navigate("/login"); return; }
-      if (!res.ok) throw new Error("Failed to load notifications");
+      if (!res.ok) throw new Error((await res.text()) || "Failed to load notifications");
       const data = await res.json();
-      setNotifications(data.notifications || []);
+      const normalised = (data.notifications || []).map((n) => {
+        const typeMap = {
+          approval:   "ticket_assignment",
+          escalation: "status_change",
+          sla_breach: "sla_warning",
+        };
+        const codeMatch = (n.title || "").match(/([A-Z]{2,}-\d+)/);
+        return {
+          ...n,
+          type:     typeMap[n.type] || n.type,
+          message:  n.message || n.body || "",
+          ticketId: n.ticketId || (codeMatch ? codeMatch[1] : null),
+        };
+      });
+      setNotifications(normalised);
     } catch (e) {
       setError(e?.message || "Failed to load notifications.");
     } finally {
       setLoading(false);
     }
-  }, [token, navigate]);
-
-  useEffect(() => {
-    if (!token) { navigate("/login"); return; }
-    fetchNotifications();
-  }, []);
+  }
 
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
@@ -85,27 +111,26 @@ export default function ManagerNotifications() {
   }, [notifications, query, filter, onlyUnread]);
 
   const markAllRead = async () => {
+    const token = getAuthToken();
+    if (!token) return;
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     try {
-      await fetch(apiUrl("/manager/notifications/read-all"), {
+      await fetch(`${API_BASE}/manager/notifications/read-all`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-    } catch (e) {
-      console.error("Failed to mark all notifications as read:", e);
-    }
+    } catch { /* silently ignore */ }
   };
 
   const onNotificationClick = async (n) => {
+    const token = getAuthToken();
     setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
     try {
-      await fetch(apiUrl(`/manager/notifications/${n.id}/read`), {
+      await fetch(`${API_BASE}/manager/notifications/${n.id}/read`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-    } catch (e) {
-      console.error("Failed to mark notification as read:", e);
-    }
+    } catch { /* silently ignore */ }
     if (n.ticketId) navigate(`/manager/complaints/${n.ticketId}`);
   };
 
@@ -179,7 +204,7 @@ export default function ManagerNotifications() {
                     <div className="empNotifs__message">{n.message}</div>
                     <div className="empNotifs__meta">
                       <span>{formatTime(n.timestamp)}</span>
-                      {n.ticketCode && <span>• {n.ticketCode}</span>}
+                      {n.ticketId && <span>• {n.ticketId}</span>}
                     </div>
                   </div>
                 </div>

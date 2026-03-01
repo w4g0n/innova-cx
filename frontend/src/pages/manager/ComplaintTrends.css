@@ -1,3 +1,7 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Original styles — preserved exactly as provided
+───────────────────────────────────────────────────────────────────────────── */
+
 .mgrTrends {
   width: 100%;
   max-width: none;
@@ -249,4 +253,444 @@
   .categoryValue {
     text-align: left;
   }
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   New analytics components — tabs, charts, gauges, employee panel
+───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+.ct-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 20px 0 0;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.08);
+  padding-bottom: 0;
+}
+
+.ct-tab {
+  padding: 10px 24px;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(17, 17, 17, 0.5);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  border-radius: 8px 8px 0 0;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.ct-tab:hover {
+  color: var(--btn-primary);
+}
+
+.ct-tab--active {
+  color: var(--btn-primary);
+  border-bottom-color: var(--btn-primary);
+  background: rgba(89, 36, 180, 0.04);
+  font-weight: 750;
+}
+
+/* ── Section wrapper ─────────────────────────────────────────────────────── */
+.ct-section {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-top: 22px;
+}
+
+/* ── Card description line ────────────────────────────────────────────────── */
+.ct-cardDesc {
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(17, 17, 17, 0.55);
+  margin: 0 0 18px;
+  line-height: 1.5;
+}
+
+/* ── Two-column grid ──────────────────────────────────────────────────────── */
+.ct-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+}
+
+/* ── Dual-line SVG chart ──────────────────────────────────────────────────── */
+.ct-dualLine {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ct-dualLine__svg {
+  width: 100%;
+  height: 120px;
+}
+
+.ct-dualLine__legend {
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.ct-dualLine__xLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(17, 17, 17, 0.4);
+}
+
+/* ── Stacked area chart ───────────────────────────────────────────────────── */
+.ct-stackedArea {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ct-stackedArea__svg {
+  width: 100%;
+  height: 140px;
+}
+
+/* ── Daily volume mini-bars ───────────────────────────────────────────────── */
+.ct-volBars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 100px;
+  overflow: hidden;
+}
+
+.ct-volBar {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  min-width: 2px;
+}
+
+.ct-volBar__fill {
+  width: 100%;
+  background: linear-gradient(180deg, var(--btn-primary), var(--sidebar-bg));
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.ct-volBar:hover .ct-volBar__fill {
+  opacity: 1;
+}
+
+/* ── Horizontal mini-bars (dept breach / escalation rates) ───────────────── */
+.ct-miniBar {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.ct-miniBar__labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.ct-miniBar__label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.ct-miniBar__sub {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(17, 17, 17, 0.5);
+}
+
+.ct-miniBar__track {
+  height: 9px;
+  background: rgba(89, 36, 180, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ct-miniBar__fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.4s ease;
+}
+
+/* ── Recurring issue heatmap ──────────────────────────────────────────────── */
+.ct-heatmap {
+  overflow-x: auto;
+}
+
+.ct-heatmap__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.ct-heatmap__table th {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-align: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  color: rgba(17, 17, 17, 0.5);
+}
+
+.ct-heatmap__table th:first-child {
+  text-align: left;
+}
+
+.ct-heatmap__dept {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-dark);
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+
+.ct-heatmap__cell {
+  text-align: center;
+  padding: 10px 14px;
+  font-size: 15px;
+  font-weight: 700;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  cursor: default;
+  color: rgba(17, 17, 17, 0.85);
+  transition: transform 0.1s;
+}
+
+.ct-heatmap__cell:hover {
+  transform: scale(1.1);
+}
+
+/* ── SLA Gauges ───────────────────────────────────────────────────────────── */
+.ct-gaugeRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 28px;
+}
+
+.ct-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ct-gauge__label {
+  font-size: 13px;
+  font-weight: 750;
+  color: rgba(17, 17, 17, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ct-gauge__track {
+  height: 12px;
+  background: rgba(89, 36, 180, 0.1);
+  border-radius: 8px;
+  position: relative;
+  overflow: visible;
+}
+
+.ct-gauge__fill {
+  height: 100%;
+  border-radius: 8px;
+  transition: width 0.5s ease;
+}
+
+.ct-gauge__target {
+  position: absolute;
+  top: -4px;
+  width: 3px;
+  height: 20px;
+  background: rgba(17, 17, 17, 0.35);
+  border-radius: 2px;
+}
+
+.ct-gauge__row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ct-gauge__value {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-dark);
+  line-height: 1;
+}
+
+.ct-gauge__target-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(17, 17, 17, 0.4);
+}
+
+.ct-gauge__delta {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.ct-gauge__delta.pos { color: #047857; }
+.ct-gauge__delta.neg { color: #b91c1c; }
+
+/* ── Semantic status colours ──────────────────────────────────────────────── */
+.ct-good { color: #047857; font-weight: 750; }
+.ct-warn { color: #b45309; font-weight: 750; }
+.ct-bad  { color: #b91c1c; font-weight: 750; }
+.ct-dimVal { font-size: 13px; color: rgba(17, 17, 17, 0.4); }
+
+/* ── Priority badge tags ──────────────────────────────────────────────────── */
+.ct-priTag {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.ct-pri--critical { background: #fee2e2; color: #b91c1c; }
+.ct-pri--high     { background: #ffedd5; color: #c2410c; }
+.ct-pri--medium   { background: #fef3c7; color: #92400e; }
+.ct-pri--low      { background: #dcfce7; color: #166534; }
+
+/* ── Employee table ───────────────────────────────────────────────────────── */
+.ct-empTable td {
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.ct-empRow--alert td {
+  border-left: 3px solid #f97316;
+}
+
+.ct-empRow__name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  min-width: 160px;
+}
+
+.ct-empRow__badge {
+  font-size: 12px;
+  font-weight: 750;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 20px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+.ct-empRow__chevron {
+  color: rgba(17, 17, 17, 0.3);
+  font-size: 12px;
+  text-align: center;
+  padding: 0 8px;
+}
+
+/* ── Employee expandable detail panel ────────────────────────────────────── */
+.ct-empDetail > td {
+  background: rgba(89, 36, 180, 0.03);
+  padding: 0 16px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.ct-empDetail__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  padding: 14px 0;
+}
+
+.ct-empDetail__card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.ct-empDetail__card--alerts {
+  border-color: #fbbf24;
+  background: #fffbeb;
+}
+
+.ct-empDetail__cardTitle {
+  font-size: 12px;
+  font-weight: 750;
+  color: rgba(17, 17, 17, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+}
+
+.ct-empDetail__val {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-dark);
+  line-height: 1.1;
+}
+
+.ct-empDetail__sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(17, 17, 17, 0.5);
+  margin-top: 5px;
+  line-height: 1.5;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.ct-empDetail__alert {
+  font-size: 14px;
+  font-weight: 750;
+  color: #92400e;
+  padding: 3px 0;
+}
+
+/* ── Alert reference table accent ────────────────────────────────────────── */
+.ct-alertRef .trendsTable td:nth-child(2) {
+  font-weight: 750;
+  color: var(--btn-primary);
+}
+
+/* ── Loading / error / empty states ──────────────────────────────────────── */
+.ct-loading,
+.ct-error,
+.ct-empty {
+  padding: 48px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 500;
+  color: rgba(17, 17, 17, 0.45);
+}
+
+.ct-error { color: #b91c1c; }
+
+/* ── Responsive additions for new components ──────────────────────────────── */
+@media (max-width: 1200px) {
+  .ct-grid2 { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .ct-tabs   { flex-wrap: wrap; }
+  .ct-tab    { font-size: 14px; padding: 8px 14px; }
+  .ct-gaugeRow { grid-template-columns: 1fr; }
+  .pillSelectHolder { flex-wrap: wrap; }
 }

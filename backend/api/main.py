@@ -26,14 +26,30 @@ import pyotp  # for RFC 6238 TOTP
 import qrcode
 import io
 
+# ── Analytics service (reads from materialized views) ────────────────────────
+try:
+    import sys, os as _os
+    sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..'))
+    from services import analytics_service as _analytics
+    _ANALYTICS_READY = True
+except Exception as _analytics_import_err:
+    _analytics = None
+    _ANALYTICS_READY = False
+    import logging as _log
+    _log.getLogger(__name__).warning(
+        "analytics_service not loaded — manager trends will use raw SQL fallback. err=%s",
+        _analytics_import_err
+    )
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
 CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "120"))
+ANALYTICS_REFRESH_INTERVAL_SECONDS = int(os.getenv("ANALYTICS_REFRESH_INTERVAL_HOURS", "12")) * 3600
 _sla_heartbeat_task: Optional[asyncio.Task] = None
+_analytics_refresh_task: Optional[asyncio.Task] = None
 _has_sla_policy_fn = False
-
 
 # =========================================================
 # App
@@ -170,6 +186,28 @@ async def _sla_heartbeat_loop() -> None:
     while True:
         await asyncio.to_thread(_apply_sla_policies_once, True, "timer")
         await asyncio.sleep(SLA_HEARTBEAT_SECONDS)
+
+
+async def _analytics_refresh_loop() -> None:
+    """Background task: refreshes all 4 materialized views on a repeating
+    interval. Sleeps FIRST so the startup warm-up refresh isn't immediately
+    duplicated. Interval is controlled by env var ANALYTICS_REFRESH_INTERVAL_HOURS
+    (default 12 hours). Set to 0 to disable the loop entirely."""
+    if ANALYTICS_REFRESH_INTERVAL_SECONDS <= 0:
+        logger.info("analytics_refresh | loop disabled (ANALYTICS_REFRESH_INTERVAL_SECONDS=0)")
+        return
+    while True:
+        await asyncio.sleep(ANALYTICS_REFRESH_INTERVAL_SECONDS)
+        try:
+            await asyncio.to_thread(_analytics.refresh_mvs)
+            logger.info(
+                "analytics_refresh | MVs refreshed (interval_s=%s)",
+                ANALYTICS_REFRESH_INTERVAL_SECONDS,
+            )
+        except Exception as _e:
+            logger.warning(
+                "analytics_refresh | refresh failed — will retry next cycle. err=%s", _e
+            )
 
 
 def fetch_one(sql: str, params: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
@@ -340,9 +378,24 @@ async def _start_sla_heartbeat() -> None:
     # ✅ permanent dev seed (works even with existing DB volume)
     _ensure_dev_seed_users()
 
-    _has_sla_policy_fn = _detect_sla_policy_function()
+    # ── Wire analytics service to DB helpers and warm-up refresh ─────────────
+    if _ANALYTICS_READY:
+        try:
+            _analytics.init(fetch_one, fetch_all, db_connect)
+            _analytics.refresh_mvs()
+            logger.info("analytics_service | MVs refreshed and ready")
+        except Exception as _e:
+            logger.warning("analytics_service | startup refresh failed — will still serve from MVs. err=%s", _e)
+
+    # Retry detecting the SLA function — DB may still be running init.sql on first boot
+    for _attempt in range(10):
+        _has_sla_policy_fn = _detect_sla_policy_function()
+        if _has_sla_policy_fn:
+            break
+        logger.info("sla_heartbeat | waiting for apply_ticket_sla_policies() (attempt %d/10)...", _attempt + 1)
+        await asyncio.sleep(3)
     if not _has_sla_policy_fn:
-        logger.warning("sla_heartbeat | disabled (apply_ticket_sla_policies() not found)")
+        logger.warning("sla_heartbeat | disabled (apply_ticket_sla_policies() not found after retries)")
         return
     if SLA_HEARTBEAT_SECONDS <= 0:
         logger.info("sla_heartbeat | disabled (SLA_HEARTBEAT_SECONDS=%s)", SLA_HEARTBEAT_SECONDS)
@@ -351,10 +404,21 @@ async def _start_sla_heartbeat() -> None:
         _sla_heartbeat_task = asyncio.create_task(_sla_heartbeat_loop())
         logger.info("sla_heartbeat | started interval_s=%s", SLA_HEARTBEAT_SECONDS)
 
+    # ── Start background MV refresh loop ─────────────────────────────────────
+    global _analytics_refresh_task
+    if _ANALYTICS_READY and ANALYTICS_REFRESH_INTERVAL_SECONDS > 0 and (
+        _analytics_refresh_task is None or _analytics_refresh_task.done()
+    ):
+        _analytics_refresh_task = asyncio.create_task(_analytics_refresh_loop())
+        logger.info(
+            "analytics_refresh | background loop started (interval_s=%s)",
+            ANALYTICS_REFRESH_INTERVAL_SECONDS,
+        )
+
 
 @app.on_event("shutdown")
 async def _stop_sla_heartbeat() -> None:
-    global _sla_heartbeat_task
+    global _sla_heartbeat_task, _analytics_refresh_task
     if _sla_heartbeat_task and not _sla_heartbeat_task.done():
         _sla_heartbeat_task.cancel()
         try:
@@ -362,6 +426,14 @@ async def _stop_sla_heartbeat() -> None:
         except asyncio.CancelledError:
             pass
     _sla_heartbeat_task = None
+
+    if _analytics_refresh_task and not _analytics_refresh_task.done():
+        _analytics_refresh_task.cancel()
+        try:
+            await _analytics_refresh_task
+        except asyncio.CancelledError:
+            pass
+    _analytics_refresh_task = None
 
 
 # =========================================================
@@ -1670,9 +1742,322 @@ def _safe_report_code(code: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid report code")
     return code
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AUTO-REPORT GENERATION ENGINE
+# Computes a monthly performance report from live ticket data and persists it
+# to employee_reports + sub-tables.  Safe to call repeatedly (upsert style).
+# ──────────────────────────────────────────────────────────────────────────────
+
+_MONTH_ABBR = {1:"jan",2:"feb",3:"mar",4:"apr",5:"may",6:"jun",
+               7:"jul",8:"aug",9:"sep",10:"oct",11:"nov",12:"dec"}
+
+_MONTH_LABEL = {1:"January",2:"February",3:"March",4:"April",5:"May",6:"June",
+                7:"July",8:"August",9:"September",10:"October",11:"November",12:"December"}
+
+
+def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[str]:
+    """
+    Computes and saves a monthly performance report for `user_id` covering
+    the given calendar month.  Returns the report_code on success, None if
+    the employee had zero ticket activity that month.
+
+    Idempotent — if the report already exists it is refreshed in-place.
+    """
+    from datetime import date as _date
+    import calendar as _calendar
+
+    month_start = datetime(year, month, 1, tzinfo=timezone.utc)
+    last_day    = _calendar.monthrange(year, month)[1]
+    month_end   = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+
+    report_code = f"{_MONTH_ABBR[month]}-{year}"
+    month_label = f"{_MONTH_LABEL[month]} {year}"
+
+    # ── Pull all tickets from mv_ticket_base (pre-joined, pre-computed) ─────
+    # mv_ticket_base already has: status, priority, respond_breached,
+    # resolve_breached, first_response_at, response_time_mins, is_resolved,
+    # is_escalated, any_breached, created_week — no joins needed.
+    rows = fetch_all(
+        """
+        SELECT
+            ticket_id       AS id,
+            status,
+            priority,
+            respond_breached,
+            resolve_breached,
+            any_breached,
+            is_resolved,
+            is_escalated,
+            first_response_at,
+            response_time_mins,
+            created_at,
+            created_week    AS week_start
+        FROM mv_ticket_base
+        WHERE employee_id = %s
+          AND created_at >= %s
+          AND created_at <= %s
+        ORDER BY created_at
+        """,
+        (user_id, month_start, month_end),
+    )
+
+    if not rows:
+        return None  # no activity → no report
+
+    # ── Aggregate KPIs ────────────────────────────────────────────────────
+    # mv_ticket_base pre-computes any_breached, is_resolved, is_escalated,
+    # and response_time_mins — use them directly, no re-derivation needed.
+    total      = len(rows)
+    resolved   = sum(1 for r in rows if r["is_resolved"])
+    escalated  = sum(1 for r in rows if r["is_escalated"])
+    overdue    = sum(1 for r in rows if r["status"] == "Overdue")
+    breached   = sum(1 for r in rows if r["any_breached"])
+    pending    = total - resolved
+
+    sla_pct    = round((total - breached) / total * 100) if total else 0
+
+    # response_time_mins is already computed in the MV (NULL if not responded)
+    # Guard: skip negative values — they mean priority_assigned_at was set after
+    # first_response_at (bad seed data or clock skew). We floor at 0.
+    respond_times = [
+        max(0.0, float(r["response_time_mins"]))
+        for r in rows
+        if r.get("response_time_mins") is not None
+        and float(r["response_time_mins"]) >= 0   # discard clearly bad values
+    ]
+    avg_respond_mins = round(sum(respond_times) / len(respond_times)) if respond_times else 0
+
+    # Priority distribution
+    priority_counts = {}
+    for r in rows:
+        p = r.get("priority") or "Unknown"
+        priority_counts[p] = priority_counts.get(p, 0) + 1
+    avg_priority = max(priority_counts, key=priority_counts.get) if priority_counts else "Medium"
+
+    # ── Rating calculation ────────────────────────────────────────────────
+    # Resolution rate score (0-5)
+    res_rate_score = round((resolved / total) * 5, 1) if total else 0.0
+
+    # SLA compliance score (0-5)
+    sla_score = round((sla_pct / 100) * 5, 1)
+
+    # Response speed score (0-5) — based on avg respond time vs 60min target
+    if avg_respond_mins <= 0:
+        resp_speed_score = 5.0
+    elif avg_respond_mins <= 30:
+        resp_speed_score = 5.0
+    elif avg_respond_mins <= 60:
+        resp_speed_score = 4.5
+    elif avg_respond_mins <= 120:
+        resp_speed_score = 4.0
+    elif avg_respond_mins <= 240:
+        resp_speed_score = 3.5
+    elif avg_respond_mins <= 480:
+        resp_speed_score = 3.0
+    else:
+        resp_speed_score = 2.5
+
+    # Customer satisfaction proxy — based on SLA + resolution
+    csat_score = round((sla_score + res_rate_score) / 2, 1)
+
+    overall_rating = round(
+        (res_rate_score * 0.35 + sla_score * 0.30 + resp_speed_score * 0.20 + csat_score * 0.15),
+        1
+    )
+    overall_rating = min(max(overall_rating, 0.0), 5.0)
+
+    rating_str = f"{overall_rating} / 5"
+    sla_str    = f"{sla_pct}%"
+    avg_resp_str = f"{avg_respond_mins} Mins" if avg_respond_mins else "N/A"
+
+    # ── Subtitle ──────────────────────────────────────────────────────────
+    if overall_rating >= 4.5:
+        subtitle = "Strong performance with high SLA compliance."
+    elif overall_rating >= 4.0:
+        subtitle = "Consistent resolution rate across all priorities."
+    elif overall_rating >= 3.5:
+        subtitle = "Good month — met most SLA targets."
+    elif overall_rating >= 3.0:
+        subtitle = "Solid performance with room for improvement."
+    else:
+        subtitle = "Challenging month — high workload or SLA breaches detected."
+
+    # ── Weekly breakdown ──────────────────────────────────────────────────
+    from collections import defaultdict as _defaultdict
+    week_map = _defaultdict(lambda: {"assigned": 0, "resolved": 0, "breached": 0, "respond_times": []})
+
+    for r in rows:
+        ws = r["week_start"]
+        week_map[ws]["assigned"] += 1
+        if r["is_resolved"]:
+            week_map[ws]["resolved"] += 1
+        if r["any_breached"]:
+            week_map[ws]["breached"] += 1
+        # response_time_mins is pre-computed in mv_ticket_base
+        if r.get("response_time_mins") is not None:
+            week_map[ws]["respond_times"].append(float(r["response_time_mins"]))
+
+    sorted_weeks = sorted(week_map.keys())
+    weekly_rows = []
+    prev_resolved = None
+    for i, ws in enumerate(sorted_weeks):
+        w = week_map[ws]
+        asgn    = w["assigned"]
+        res     = w["resolved"]
+        breach  = w["breached"]
+        sla_w   = f"{round((asgn - breach) / asgn * 100)}%" if asgn else "N/A"
+        rt      = w["respond_times"]
+        avg_w   = f"{round(sum(rt)/len(rt))} Mins" if rt else "N/A"
+
+        # Delta vs previous week
+        if prev_resolved is None:
+            delta_type = "positive"
+            delta_text = "+0%"
+        else:
+            if prev_resolved == 0:
+                delta_pct = 100 if res > 0 else 0
+            else:
+                delta_pct = round((res - prev_resolved) / prev_resolved * 100)
+            delta_type = "positive" if delta_pct >= 0 else "negative"
+            sign = "+" if delta_pct >= 0 else ""
+            delta_text = f"{sign}{delta_pct}%"
+
+        weekly_rows.append({
+            "week":       f"Week {i+1}",
+            "assigned":   asgn,
+            "resolved":   res,
+            "sla":        sla_w,
+            "avg":        avg_w,
+            "delta_type": delta_type,
+            "delta_text": delta_text,
+        })
+        prev_resolved = res
+
+    # ── Notes ─────────────────────────────────────────────────────────────
+    notes = []
+    if resolved == total:
+        notes.append("All assigned tickets resolved within the month.")
+    elif resolved >= total * 0.9:
+        notes.append(f"Excellent closure rate — {resolved} of {total} tickets resolved.")
+    else:
+        notes.append(f"Resolved {resolved} of {total} tickets. Focus on pending cases.")
+    if breached == 0:
+        notes.append("Zero SLA breaches recorded — outstanding compliance.")
+    elif breached == 1:
+        notes.append("One SLA breach this month — review response process.")
+    else:
+        notes.append(f"{breached} SLA breaches detected — consider workload review.")
+    if avg_respond_mins and avg_respond_mins > 120:
+        notes.append(f"Average response time of {avg_respond_mins} mins is above target.")
+    elif avg_respond_mins and avg_respond_mins <= 30:
+        notes.append("Response time is well within targets — keep it up.")
+
+    # ── Persist to DB ──────────────────────────────────────────────────────
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Upsert the report header
+                cur.execute("""
+                    INSERT INTO employee_reports
+                        (report_code, employee_user_id, month_label, subtitle,
+                         kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (report_code) DO UPDATE
+                        SET month_label    = EXCLUDED.month_label,
+                            subtitle       = EXCLUDED.subtitle,
+                            kpi_rating     = EXCLUDED.kpi_rating,
+                            kpi_resolved   = EXCLUDED.kpi_resolved,
+                            kpi_sla        = EXCLUDED.kpi_sla,
+                            kpi_avg_response = EXCLUDED.kpi_avg_response
+                    RETURNING id;
+                """, (report_code, user_id, month_label, subtitle,
+                      rating_str, resolved, sla_str, avg_resp_str))
+                report_id = cur.fetchone()["id"]
+
+                # Replace sub-table rows (delete + re-insert for idempotency)
+                cur.execute("DELETE FROM employee_report_summary_items WHERE report_id = %s", (report_id,))
+                summary_data = [
+                    ("Total Assigned",  str(total)),
+                    ("Resolved",        str(resolved)),
+                    ("Escalated",       str(escalated)),
+                    ("Pending",         str(pending)),
+                    ("Avg Priority",    avg_priority),
+                    ("SLA Breaches",    str(breached)),
+                ]
+                cur.executemany(
+                    "INSERT INTO employee_report_summary_items (report_id, label, value_text) VALUES (%s, %s, %s)",
+                    [(report_id, lbl, val) for lbl, val in summary_data]
+                )
+
+                cur.execute("DELETE FROM employee_report_rating_components WHERE report_id = %s", (report_id,))
+                rating_data = [
+                    ("Resolution Rate",       res_rate_score,   round(res_rate_score / 5 * 100)),
+                    ("SLA Compliance",        sla_score,         sla_pct),
+                    ("Response Speed",        resp_speed_score,  round(resp_speed_score / 5 * 100)),
+                    ("Customer Satisfaction", csat_score,        round(csat_score / 5 * 100)),
+                ]
+                cur.executemany(
+                    "INSERT INTO employee_report_rating_components (report_id, name, score, pct) VALUES (%s, %s, %s, %s)",
+                    [(report_id, name, score, pct) for name, score, pct in rating_data]
+                )
+
+                cur.execute("DELETE FROM employee_report_weekly WHERE report_id = %s", (report_id,))
+                cur.executemany(
+                    """INSERT INTO employee_report_weekly
+                        (report_id, week_label, assigned, resolved, sla, avg_response, delta_type, delta_text)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                    [(report_id, w["week"], w["assigned"], w["resolved"],
+                      w["sla"], w["avg"], w["delta_type"], w["delta_text"])
+                     for w in weekly_rows]
+                )
+
+                cur.execute("DELETE FROM employee_report_notes WHERE report_id = %s", (report_id,))
+                cur.executemany(
+                    "INSERT INTO employee_report_notes (report_id, note) VALUES (%s, %s)",
+                    [(report_id, n) for n in notes]
+                )
+
+            conn.commit()
+        return report_code
+    except Exception as exc:
+        logger.error("report_gen | failed user=%s month=%s-%s err=%s", user_id, year, month, exc)
+        return None
+
+
+def _ensure_recent_reports(user_id: str, months: int = 3) -> None:
+    """
+    Ensures the last `months` calendar months have a generated report.
+    Called on the reports list endpoint so every employee always sees data.
+    """
+    from datetime import date as _date
+    import calendar as _calendar
+
+    today = datetime.now(tz=timezone.utc)
+    for i in range(months):
+        m = today.month - i
+        y = today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        code = f"{_MONTH_ABBR[m]}-{y}"
+        existing = fetch_one(
+            "SELECT 1 FROM employee_reports WHERE report_code = %s AND employee_user_id = %s",
+            (code, user_id),
+        )
+        if not existing:
+            _generate_employee_report(user_id, y, m)
+
 @api.get("/employee/reports")
 def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
     user_id = user["id"]
+
+    # Auto-generate reports for the last 3 months if they don't exist yet
+    # This means every employee always has at least their current-month report
+    try:
+        _ensure_recent_reports(user_id, months=3)
+    except Exception as exc:
+        logger.warning("report_gen | auto-ensure failed user=%s err=%s", user_id, exc)
 
     rows = fetch_all(
         """
@@ -1683,7 +2068,18 @@ def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
           created_at  AS "createdAt"
         FROM employee_reports
         WHERE employee_user_id = %s
-        ORDER BY created_at DESC
+        ORDER BY
+          -- Sort by the actual month the report covers, not when it was generated.
+          -- report_code format is "mon-yyyy" (e.g. "feb-2026", "nov-2025").
+          -- Extract year then map the 3-letter month abbreviation to a number.
+          split_part(report_code, '-', 2)::int DESC,
+          CASE split_part(report_code, '-', 1)
+            WHEN 'jan' THEN 1  WHEN 'feb' THEN 2  WHEN 'mar' THEN 3
+            WHEN 'apr' THEN 4  WHEN 'may' THEN 5  WHEN 'jun' THEN 6
+            WHEN 'jul' THEN 7  WHEN 'aug' THEN 8  WHEN 'sep' THEN 9
+            WHEN 'oct' THEN 10 WHEN 'nov' THEN 11 WHEN 'dec' THEN 12
+            ELSE 0
+          END DESC
         LIMIT 24;
         """,
         (user_id,),
@@ -1706,9 +2102,43 @@ def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
     return {"reports": reports}
 
 
+# ── IMPORTANT: this route MUST come before /{report_code} so FastAPI
+# doesn't swallow "generate" as a report_code path param. ────────────────────
+@api.get("/employee/reports/generate")
+def employee_generate_report(
+    year: int = Query(default=None),
+    month: int = Query(default=None),
+    user: Dict[str, Any] = Depends(require_employee),
+):
+    """
+    Generates (or refreshes) the performance report for the given month.
+    Defaults to the current calendar month.
+    Returns the report_code so the frontend can immediately load it.
+
+    Using GET (not POST) keeps this preflight-free and consistent with the
+    other read-style report endpoints.
+    """
+    now = datetime.now(tz=timezone.utc)
+    y = year  if year  and 2020 <= year  <= now.year + 1 else now.year
+    m = month if month and 1   <= month  <= 12            else now.month
+
+    code = _generate_employee_report(user["id"], y, m)
+    if not code:
+        raise HTTPException(status_code=404, detail="No ticket activity found for that month.")
+    return {"reportCode": code, "month": f"{_MONTH_LABEL[m]} {y}"}
+
+
 @api.get("/employee/reports/{report_code}")
 def employee_report_detail(report_code: str, user: Dict[str, Any] = Depends(require_employee)):
     user_id = user["id"]
+    # Safety net: if routing somehow sends 'generate' here, run the generator
+    # instead of returning 400 Invalid report code.
+    if report_code.lower() == "generate":
+        now = datetime.now(tz=timezone.utc)
+        code = _generate_employee_report(user_id, now.year, now.month)
+        if not code:
+            raise HTTPException(status_code=404, detail="No ticket activity found for this month.")
+        return {"reportCode": code, "month": f"{_MONTH_LABEL[now.month]} {now.year}"}
     report_code = _safe_report_code(report_code)
 
     report = fetch_one(
@@ -1812,6 +2242,7 @@ def employee_report_detail(report_code: str, user: Dict[str, Any] = Depends(requ
         "employeeName": profile.get("full_name") or user.get("email"),
         "employeeId": profile.get("employee_code") or "",
     }
+
 
 # -----------------------------
 # Customer Dashboard
@@ -2307,8 +2738,8 @@ def update_customer_settings(
 # Manager View
 # -----------------------------
 
-@app.get("/manager/employees")
-def get_employees():
+@api.get("/manager/employees")
+def get_employees(user: Dict[str, Any] = Depends(require_manager)):
     employees = fetch_all("""
         SELECT
             up.full_name AS name,
@@ -2345,8 +2776,8 @@ def get_employees():
 
  #-------------------------------------------------------------
 
-@app.get("/manager/complaints")
-def get_complaints():
+@api.get("/manager/complaints")
+def get_complaints(user: Dict[str, Any] = Depends(require_manager)):
     tickets = fetch_all("""
         SELECT
             t.id AS ticket_id,
@@ -2820,41 +3251,29 @@ def get_departments(authorization: Optional[str] = Header(default=None)):
     return [d["name"] for d in depts]
 #============================================
 
-@app.get("/manager")
-def get_manager_kpis():
-    # Total complaints
-    open_complaints = fetch_one(
-        "SELECT COUNT(*) AS count FROM tickets WHERE status='Open';"
-    )["count"]
-    in_progress = fetch_one(
-        "SELECT COUNT(*) AS count FROM tickets WHERE status='In Progress';"
-    )["count"]
-    resolved_today = fetch_one(
-        "SELECT COUNT(*) AS count FROM tickets WHERE resolved_at::date = CURRENT_DATE;"
-    )["count"]
-
-    # Active employees (consider role='employee' in users table)
-    active_employees = fetch_one(
-        "SELECT COUNT(*) AS count FROM users WHERE role='employee';"
-    )["count"]
-
-    # Pending approvals (from approval_requests table)
-    pending_approvals = fetch_one(
-        "SELECT COUNT(*) AS count FROM approval_requests WHERE status='Pending';"
-    )["count"]
-
+@api.get("/manager")
+def get_manager_kpis(user: Dict[str, Any] = Depends(require_manager)):
+    row = fetch_one("""
+        SELECT
+            COUNT(*) FILTER (WHERE status = 'Open')                            AS open_complaints,
+            COUNT(*) FILTER (WHERE status = 'In Progress')                     AS in_progress,
+            COUNT(*) FILTER (WHERE resolved_at::date = CURRENT_DATE)           AS resolved_today,
+            (SELECT COUNT(*) FROM users WHERE role = 'employee')               AS active_employees,
+            (SELECT COUNT(*) FROM approval_requests WHERE status = 'Pending')  AS pending_approvals
+        FROM tickets;
+    """)
     return {
-        "open_complaints": open_complaints,
-        "in_progress": in_progress,
-        "resolved_today": resolved_today,
-        "active_employees": active_employees,
-        "pending_approvals": pending_approvals
+        "openComplaints":   int(row["open_complaints"]   or 0),
+        "inProgress":       int(row["in_progress"]       or 0),
+        "resolvedToday":    int(row["resolved_today"]    or 0),
+        "activeEmployees":  int(row["active_employees"]  or 0),
+        "pendingApprovals": int(row["pending_approvals"] or 0),
     }
 
 # ==========================
 
-@app.get("/manager/approvals")
-def get_approvals():
+@api.get("/manager/approvals")
+def get_approvals(user: Dict[str, Any] = Depends(require_manager)):
     approvals = fetch_all("""
 SELECT
     ar.id AS request_id,
@@ -3052,9 +3471,95 @@ def decide_approval(
 
 
 # =========================================================
+# Manager: Notifications
+# =========================================================
 
-@app.get("/manager/complaints/{ticket_id}")
-def get_manager_complaint_details(ticket_id: str):
+@api.get("/manager/notifications")
+def get_manager_notifications(user: Dict[str, Any] = Depends(require_manager)):
+    notifications = []
+
+    # Pending approvals
+    pending = fetch_all("""
+        SELECT ar.id, ar.request_type, t.ticket_code, ar.submitted_at,
+               up.full_name AS submitted_by
+        FROM approval_requests ar
+        LEFT JOIN tickets t ON ar.ticket_id = t.id
+        LEFT JOIN user_profiles up ON ar.submitted_by_user_id = up.user_id
+        WHERE ar.status = 'Pending'
+        ORDER BY ar.submitted_at DESC LIMIT 10
+    """)
+    for a in pending:
+        notifications.append({
+            "id": f"approval-{a['id']}",
+            "type": "approval",
+            "title": f"Approval Requested — {a.get('request_type', '')}",
+            "body": f"{a.get('submitted_by', 'Someone')} requested a {(a.get('request_type') or '').lower()} on {a.get('ticket_code', 'a ticket')}",
+            "timestamp": a["submitted_at"].isoformat() if a.get("submitted_at") else "",
+            "read": False,
+        })
+
+    # Recently escalated tickets (last 48h)
+    escalated = fetch_all("""
+        SELECT t.id, t.ticket_code, t.subject, t.updated_at
+        FROM tickets t
+        WHERE t.status = 'Escalated'
+          AND t.updated_at >= now() - interval '48 hours'
+        ORDER BY t.updated_at DESC LIMIT 10
+    """)
+    for t in escalated:
+        notifications.append({
+            "id": f"escalated-{t['id']}",
+            "type": "escalation",
+            "title": f"Ticket Escalated — {t.get('ticket_code', '')}",
+            "body": t.get("subject", "No subject"),
+            "timestamp": t["updated_at"].isoformat() if t.get("updated_at") else "",
+            "read": False,
+        })
+
+    # SLA breaches in last 24h
+    breaches = fetch_all("""
+        SELECT t.id, t.ticket_code, t.subject, t.priority, t.updated_at
+        FROM tickets t
+        WHERE (t.respond_breached = true OR t.resolve_breached = true)
+          AND t.updated_at >= now() - interval '24 hours'
+        ORDER BY t.updated_at DESC LIMIT 10
+    """)
+    for t in breaches:
+        notifications.append({
+            "id": f"breach-{t['id']}",
+            "type": "sla_breach",
+            "title": f"SLA Breached — {t.get('ticket_code', '')}",
+            "body": f"{t.get('priority', '')} priority: {t.get('subject', 'No subject')}",
+            "timestamp": t["updated_at"].isoformat() if t.get("updated_at") else "",
+            "read": False,
+        })
+
+    notifications.sort(key=lambda n: n["timestamp"], reverse=True)
+    return {"notifications": notifications, "unread": len(notifications)}
+
+
+# =========================================================
+
+@api.post("/manager/notifications/read-all")
+def manager_notifications_mark_all_read(user: Dict[str, Any] = Depends(require_manager)):
+    """Mark all manager notifications as read.
+    Manager notifications are dynamically generated (not stored in DB),
+    so this is a no-op that returns success — the frontend updates state locally.
+    """
+    return {"ok": True, "message": "All notifications marked as read"}
+
+
+@api.post("/manager/notifications/{notification_id}/read")
+def manager_notification_mark_read(
+    notification_id: str,
+    user: Dict[str, Any] = Depends(require_manager),
+):
+    """Mark a single manager notification as read (no-op — state managed client-side)."""
+    return {"ok": True, "id": notification_id}
+
+
+@api.get("/manager/complaints/{ticket_id}")
+def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends(require_manager)):
     ticket = fetch_one("""
         SELECT
             t.id AS ticket_id,
@@ -3111,208 +3616,193 @@ def get_manager_complaint_details(ticket_id: str):
 
 #============================================
 
-@app.get("/manager/trends")
+@api.get("/manager/trends")
 def get_manager_trends(
     timeRange: str = Query("This Month"),
     department: str = Query("All Departments"),
-    priority: str = Query("All Priorities")
+    priority: str = Query("All Priorities"),
+    user: Dict[str, Any] = Depends(require_manager),
 ):
-    # ---------- TIME RANGE ----------
-    if timeRange == "Last 3 Months":
-        month_start = fetch_one("SELECT now() - interval '3 months' AS start")["start"]
-    elif timeRange == "Last 6 Months":
-        month_start = fetch_one("SELECT now() - interval '6 months' AS start")["start"]
-    elif timeRange == "Last 12 Months":
-        month_start = fetch_one("SELECT now() - interval '12 months' AS start")["start"]
-    else:
-        month_start = fetch_one("SELECT date_trunc('month', now()) AS start")["start"]
-    # ---------- FILTERS ----------
-    filters = ["t.created_at >= %s"]
-    params = [month_start]
+    # ── Resolve time window ───────────────────────────────────────────────────
+    range_sql = {
+        "7d":             "now() - interval '7 days'",
+        "Last 7 Days":    "now() - interval '7 days'",
+        "30d":            "now() - interval '30 days'",
+        "Last 30 Days":   "now() - interval '30 days'",
+        "This Month":     "date_trunc('month', now())",
+        "Last 3 Months":  "date_trunc('month', now()) - interval '3 months'",
+        "Last 6 Months":  "date_trunc('month', now()) - interval '6 months'",
+        "Last 12 Months": "date_trunc('month', now()) - interval '12 months'",
+        "90d":            "now() - interval '90 days'",
+    }
+    start_expr   = range_sql.get(timeRange, "date_trunc('month', now())")
+    period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
+    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    window_secs  = (period_end - period_start).total_seconds()
+    prev_start   = fetch_one(
+        "SELECT (%s::timestamptz - make_interval(secs => %s)) AS start",
+        (period_start, window_secs),
+    )["start"]
 
-    # Department filter
+    # ── Route through analytics_service (materialized views) ─────────────────
+    if _ANALYTICS_READY:
+        try:
+            return _analytics.get_trends_data(
+                period_start=period_start,
+                period_end=period_end,
+                prev_start=prev_start,
+                department=department,
+                priority=priority,
+            )
+        except Exception as _svc_err:
+            logger.error(
+                "analytics_service.get_trends_data failed — falling back to raw SQL. err=%s",
+                _svc_err
+            )
+            # falls through to raw SQL below
+
+    # ── RAW SQL FALLBACK (used only if analytics_service is unavailable) ──────
+    # This is the original implementation kept as a safety net.
+    # If you are seeing this path in production logs, the MVs may not be installed.
+    # Run: docker exec -i innovacx-db psql -U $POSTGRES_USER -d $POSTGRES_DB < database/scripts/analytics_mvs.sql
+
+    filters = ["t.created_at >= %s", "t.created_at < %s"]
+    params  = [period_start, period_end]
+    dept_join = "LEFT JOIN departments d ON d.id = t.department_id"
     if department != "All Departments":
         filters.append("d.name = %s")
         params.append(department)
-
-   # Priority filter
-    priority_map = {
-        "Low": "Low",
-        "Medium": "Medium",
-        "High": "High",
-        "Critical": "Critical",
+    priority_map_raw = {
+        "All Priorities":  None,
+        "Low":             ("Low",),
+        "Medium":          ("Medium",),
+        "High":            ("High",),
+        "Critical":        ("Critical",),
+        "High & Critical": ("High", "Critical"),
+        "Critical only":   ("Critical",),
+        "Low & Medium":    ("Low", "Medium"),
     }
-    priority_value = priority_map.get(priority)
-    if priority_value:
-        filters.append("t.priority = %s::ticket_priority")
-        params.append(priority_value)
+    pv = priority_map_raw.get(priority)
+    if pv:
+        filters.append("t.priority = ANY(%s::ticket_priority[])")
+        params.append(list(pv))
+    where      = " AND ".join(filters)
+    prev_params = [prev_start, period_start] + params[2:]
+    prev_where  = where
 
-    where_clause = " AND ".join(filters)
-
-    # ---------- TOTAL COMPLAINTS ----------
-    total_complaints = fetch_one(
-        f"""
-        SELECT COUNT(*) AS count
-        FROM tickets t
-        LEFT JOIN departments d ON d.id = t.department_id
-        WHERE {where_clause}
-        """,
-        params,
-    )["count"]
-
-    # ---------- SLA ----------
-    sla_row = fetch_one(
-        f"""
-        SELECT
-          COUNT(*) FILTER (
-            WHERE t.resolved_at IS NOT NULL
-              AND t.resolve_due_at IS NOT NULL
-              AND t.resolved_at <= t.resolve_due_at
-              AND t.first_response_at IS NOT NULL
-          ) AS on_time,
-          COUNT(*) FILTER (
-            WHERE t.resolved_at IS NOT NULL
-              AND t.resolve_due_at IS NOT NULL
-              AND t.first_response_at IS NOT NULL
-          ) AS total
-        FROM tickets t
-        LEFT JOIN departments d ON d.id = t.department_id
-        WHERE {where_clause}
-        """,
+    complaint_inquiry_daily = fetch_all(
+        f"SELECT date_trunc('day', t.created_at)::date AS day, t.ticket_type, COUNT(*) AS count FROM tickets t {dept_join} WHERE {where} GROUP BY 1,2 ORDER BY 1",
         params,
     )
-    sla_pct = round((sla_row["on_time"] / sla_row["total"]) * 100) if sla_row["total"] else 0
+    cid_map: Dict[str, dict] = {}
+    for r in complaint_inquiry_daily:
+        key = r["day"].isoformat()
+        if key not in cid_map:
+            cid_map[key] = {"day": key, "complaints": 0, "inquiries": 0}
+        if r["ticket_type"] == "Complaint":
+            cid_map[key]["complaints"] = r["count"]
+        else:
+            cid_map[key]["inquiries"] = r["count"]
+    complaint_vs_inquiry = sorted(cid_map.values(), key=lambda x: x["day"])
 
-    # ---------- AVERAGE RESPONSE TIME ----------
-    avg_response = fetch_one(
-        f"""
-        SELECT
-          AVG(EXTRACT(EPOCH FROM (t.first_response_at - COALESCE(t.priority_assigned_at, t.created_at))) / 60) AS mins
-        FROM tickets t
-        LEFT JOIN departments d ON d.id = t.department_id
-        WHERE t.first_response_at IS NOT NULL
-          AND {where_clause}
-        """,
-        params,
-    )["mins"] or 0
+    recurring_heatmap = fetch_all(
+        f"""SELECT COALESCE(d.name,'Unassigned') AS department, t.priority, COUNT(*) AS count
+            FROM tickets t {dept_join} WHERE {where}
+            AND t.created_by_user_id IN (
+                SELECT t2.created_by_user_id FROM tickets t2
+                WHERE t2.created_by_user_id IS NOT NULL
+                GROUP BY t2.created_by_user_id, t2.department_id HAVING COUNT(*) > 1)
+            GROUP BY 1,2 ORDER BY 1,2""", params)
 
-    # ---------- AVERAGE RESOLVE TIME ----------
-    avg_resolve = fetch_one(
-        f"""
-        SELECT
-          AVG(EXTRACT(EPOCH FROM (t.resolved_at - COALESCE(t.priority_assigned_at, t.created_at))) / 86400) AS days
-        FROM tickets t
-        LEFT JOIN departments d ON d.id = t.department_id
-        WHERE t.resolved_at IS NOT NULL
-          AND {where_clause}
-        """,
-        params,
-    )["days"] or 0
+    daily_volume_raw = fetch_all(
+        f"""SELECT day, count, ROUND(AVG(count) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW),1) AS rolling_avg
+            FROM (SELECT date_trunc('day',t.created_at)::date AS day, COUNT(*) AS count
+                  FROM tickets t {dept_join} WHERE {where} GROUP BY 1) sub ORDER BY day""", params)
+    daily_volume_out = [{"day": r["day"].isoformat(), "count": r["count"],
+                          "rollingAvg": float(r["rolling_avg"] or 0)} for r in daily_volume_raw]
 
-    # ---------- TOP CATEGORY ----------
-    top_category_row = fetch_one(
-        f"""
-        SELECT d.name, COUNT(*) AS count
-        FROM tickets t
-        JOIN departments d ON d.id = t.department_id
-        WHERE {where_clause}
-        GROUP BY d.name
-        ORDER BY count DESC
-        LIMIT 1
-        """,
-        params,
-    )
-    top_category = top_category_row["name"] if top_category_row else "—"
+    sla_overall = fetch_one(
+        f"""SELECT COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE t.resolve_breached OR t.respond_breached) AS breached,
+            COUNT(*) FILTER (WHERE t.status='Escalated') AS escalated,
+            ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0)
+                  FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond_mins,
+            ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0)
+                  FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve_mins
+            FROM tickets t {dept_join} WHERE {where}""", params) or {}
 
-    # ---------- REPEAT COMPLAINTS ----------
-    repeat_row = fetch_one(
-        f"""
-        SELECT COUNT(*) AS count FROM (
-          SELECT t.created_by_user_id, t.department_id
-          FROM tickets t
-          LEFT JOIN departments d ON d.id = t.department_id
-          WHERE {where_clause}
-          GROUP BY t.created_by_user_id, t.department_id
-          HAVING COUNT(*) > 1
-        ) r
-        """,
-        params,
-    )
-    repeat_pct = round((repeat_row["count"] / total_complaints) * 100) if total_complaints else 0
+    total_t         = sla_overall.get("total") or 0
+    breached_t      = sla_overall.get("breached") or 0
+    escalated_t     = sla_overall.get("escalated") or 0
+    breach_rate     = round(breached_t / total_t * 100, 1) if total_t else 0
+    escalation_rate = round(escalated_t / total_t * 100, 1) if total_t else 0
+    avg_respond_mins = float(sla_overall.get("avg_respond_mins") or 0)
+    avg_resolve_mins = float(sla_overall.get("avg_resolve_mins") or 0)
+    sla_targets = {"respond":{"Critical":30,"High":60,"Medium":180,"Low":360},
+                   "resolve":{"Critical":360,"High":1080,"Medium":2880,"Low":4320}}
 
-    # ---------- MONTHLY BARS ----------
-    bars = fetch_all(
-        f"""
-        SELECT
-          to_char(t.created_at, 'Mon') AS label,
-          COUNT(*) AS value
-        FROM tickets t
-        LEFT JOIN departments d ON d.id = t.department_id
-        WHERE {where_clause}
-        GROUP BY label, date_trunc('month', t.created_at)
-        ORDER BY date_trunc('month', t.created_at)
-        """,
-        params,
-    )
+    prev_sla       = fetch_one(f"SELECT COUNT(*) AS total, COUNT(*) FILTER(WHERE t.resolve_breached OR t.respond_breached) AS breached FROM tickets t {dept_join} WHERE {prev_where}", prev_params) or {}
+    prev_total     = prev_sla.get("total") or 0
+    prev_breached  = prev_sla.get("breached") or 0
+    prev_breach_rate = round(prev_breached / prev_total * 100, 1) if prev_total else 0
 
-    # ---------- CATEGORY SHARE ----------
-    categories = fetch_all(
-        f"""
-        SELECT
-          d.name AS name,
-          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER ()) AS pct
-        FROM tickets t
-        LEFT JOIN departments d ON d.id = t.department_id
-        WHERE {where_clause}
-          AND d.name IS NOT NULL
-        GROUP BY d.name
-        ORDER BY pct DESC
-        """,
-        params,
-    )
+    breach_by_dept = fetch_all(f"SELECT COALESCE(d.name,'Unassigned') AS department, t.priority, COUNT(*) AS total, COUNT(*) FILTER(WHERE t.resolve_breached OR t.respond_breached) AS breached FROM tickets t {dept_join} WHERE {where} GROUP BY 1,2 ORDER BY 1,2", params)
+    dept_breach_map: Dict[str, dict] = {}
+    for r in breach_by_dept:
+        dept = r["department"]
+        if dept not in dept_breach_map:
+            dept_breach_map[dept] = {"department":dept,"total":0,"breached":0,"Critical":0,"High":0,"Medium":0,"Low":0,"Critical_total":0,"High_total":0,"Medium_total":0,"Low_total":0}
+        p2 = r["priority"]
+        dept_breach_map[dept]["total"] += r["total"]; dept_breach_map[dept]["breached"] += r["breached"]
+        if p2 in ("Critical","High","Medium","Low"):
+            dept_breach_map[dept][f"{p2}_total"] += r["total"]; dept_breach_map[dept][p2] += r["breached"]
+    breach_by_dept_out = sorted([{"department":dept,"total":v["total"],"breachRate":round(v["breached"]/v["total"]*100,1) if v["total"] else 0,"Critical":round(v["Critical"]/v["Critical_total"]*100,1) if v["Critical_total"] else 0,"High":round(v["High"]/v["High_total"]*100,1) if v["High_total"] else 0,"Medium":round(v["Medium"]/v["Medium_total"]*100,1) if v["Medium_total"] else 0,"Low":round(v["Low"]/v["Low_total"]*100,1) if v["Low_total"] else 0} for dept,v in dept_breach_map.items()], key=lambda x: -x["breachRate"])
 
-# =========================================================
-# MONTHLY TABLE
-# =========================================================
-    table = fetch_all(
-        f"""
-        SELECT
-          to_char(t.created_at, 'Month') AS month,
-          COUNT(*) AS total,
-          COUNT(*) FILTER (WHERE t.status = 'Resolved') AS resolved,
-          ROUND(
-            COUNT(*) FILTER (
-              WHERE t.resolved_at <= t.resolve_due_at
-                AND t.first_response_at IS NOT NULL
-            ) * 100.0 / NULLIF(COUNT(*), 0)
-          ) AS within_sla,
-          ROUND(
-            AVG(EXTRACT(EPOCH FROM (t.first_response_at - COALESCE(t.priority_assigned_at, t.created_at))) / 60)
-          ) AS avg_response,
-          ROUND(
-            AVG(EXTRACT(EPOCH FROM (t.resolved_at - COALESCE(t.priority_assigned_at, t.created_at))) / 86400), 1
-          ) AS avg_resolve
-        FROM tickets t
-        LEFT JOIN departments d ON d.id = t.department_id
-        WHERE {where_clause}
-        GROUP BY date_trunc('month', t.created_at), month
-        ORDER BY date_trunc('month', t.created_at)
-        """,
-        params,
-    )
+    breach_timeline_raw = fetch_all(f"SELECT date_trunc('day',t.created_at)::date AS day, t.priority, COUNT(*) AS total, COUNT(*) FILTER(WHERE t.resolve_breached OR t.respond_breached) AS breached FROM tickets t {dept_join} WHERE {where} GROUP BY 1,2 ORDER BY 1,2", params)
+    bt_map: Dict[str, dict] = {}
+    for r in breach_timeline_raw:
+        key = r["day"].isoformat()
+        if key not in bt_map: bt_map[key]={"day":key,"total":0,"Critical":0,"High":0,"Medium":0,"Low":0}
+        bt_map[key]["total"]+=r["total"]
+        if r["priority"] in ("Critical","High","Medium","Low"): bt_map[key][r["priority"]]+=r["breached"]
+    breach_timeline_out = sorted(bt_map.values(), key=lambda x: x["day"])
+
+    escalation_by_dept_raw = fetch_all(f"SELECT COALESCE(d.name,'Unassigned') AS department, COUNT(*) AS total, COUNT(*) FILTER(WHERE t.status='Escalated') AS escalated FROM tickets t {dept_join} WHERE {where} GROUP BY 1 ORDER BY escalated DESC", params)
+    escalation_by_dept_out = [{"department":r["department"],"total":r["total"],"escalated":r["escalated"],"rate":round(r["escalated"]/r["total"]*100,1) if r["total"] else 0} for r in escalation_by_dept_raw]
+
+    time_by_priority_raw = fetch_all(f"SELECT t.priority, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond, ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve, COUNT(*) AS total FROM tickets t {dept_join} WHERE {where} GROUP BY 1 ORDER BY CASE t.priority WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END", params)
+    time_by_priority_out = [{"priority":r["priority"],"avgRespond":float(r["avg_respond"] or 0),"avgResolve":float(r["avg_resolve"] or 0),"targetRespond":sla_targets["respond"].get(r["priority"],360),"targetResolve":sla_targets["resolve"].get(r["priority"],4320),"total":r["total"]} for r in time_by_priority_raw]
+
+    employee_perf = fetch_all(f"SELECT up.full_name AS name, up.employee_code AS emp_id, up.job_title AS role, COUNT(t.id) AS total, COUNT(t.id) FILTER(WHERE t.status='Resolved') AS resolved, COUNT(t.id) FILTER(WHERE t.resolve_breached OR t.respond_breached) AS breached, ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve_mins, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond_mins FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where} GROUP BY up.full_name,up.employee_code,up.job_title ORDER BY resolved DESC", params)
+    company_avg = fetch_one(f"SELECT ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond, COUNT(*) FILTER(WHERE t.resolve_breached OR t.respond_breached)::float/NULLIF(COUNT(*),0)*100 AS breach_rate FROM tickets t {dept_join} WHERE {where}", params) or {}
+    acceptance_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) AS total, COUNT(*) FILTER(WHERE trf.decision='accepted') AS accepted, COUNT(*) FILTER(WHERE trf.decision='declined_custom') AS declined FROM ticket_resolution_feedback trf JOIN tickets t ON t.id=trf.ticket_id JOIN user_profiles up ON up.user_id=trf.employee_user_id WHERE t.created_at>=%s AND t.created_at<%s GROUP BY up.full_name", [period_start, period_end])
+    acceptance_map = {r["name"]:{"total":r["total"],"accepted":r["accepted"],"declined":r["declined"],"rate":round(r["accepted"]/r["total"]*100,1) if r["total"] else 0} for r in acceptance_rows}
+    rescore_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority) AS rescored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Low' AND t.priority IN('Medium','High','Critical'))OR(t.model_priority='Medium' AND t.priority IN('High','Critical'))OR(t.model_priority='High' AND t.priority='Critical'))) AS upscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Critical' AND t.priority IN('Low','Medium','High'))OR(t.model_priority='High' AND t.priority IN('Low','Medium'))OR(t.model_priority='Medium' AND t.priority='Low'))) AS downscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL) AS total_with_model FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where} GROUP BY up.full_name", params)
+    rescore_map = {r["name"]:{"rescored":r["rescored"],"upscored":r["upscored"],"downscored":r["downscored"],"totalWithModel":r["total_with_model"],"rescoreRate":round(r["rescored"]/r["total_with_model"]*100,1) if r["total_with_model"] else 0} for r in rescore_rows}
+
+    co_breach=float(company_avg.get("breach_rate") or 0); co_resolve=float(company_avg.get("avg_resolve") or 0); co_respond=float(company_avg.get("avg_respond") or 0)
+    employee_out = []
+    for e in employee_perf:
+        name=e["name"]; total=e["total"] or 0; brate=round(e["breached"]/total*100,1) if total else 0
+        acc=acceptance_map.get(name,{"rate":None,"accepted":0,"declined":0,"total":0})
+        rsc=rescore_map.get(name,{"rescoreRate":0,"upscored":0,"downscored":0})
+        employee_out.append({"name":name,"empId":e["emp_id"],"role":e["role"],"ticketsHandled":total,"resolved":e["resolved"] or 0,"breached":e["breached"] or 0,"breachRate":brate,"avgResolveMins":float(e["avg_resolve_mins"] or 0),"avgRespondMins":float(e["avg_respond_mins"] or 0),"companyBreachRate":round(co_breach,1),"companyResolveMins":round(co_resolve,1),"companyRespondMins":round(co_respond,1),"acceptanceRate":acc["rate"],"acceptedCount":acc["accepted"],"declinedCount":acc["declined"],"rescoreRate":rsc["rescoreRate"],"upscored":rsc["upscored"],"downscored":rsc["downscored"],"alertLowVolume":total<5,"alertHighBreach":brate>10,"alertSlowResolve":float(e["avg_resolve_mins"] or 0)>480,"alertLowAcceptance":acc["rate"] is not None and acc["rate"]<50,"alertHighRescore":rsc["rescoreRate"]>30})
+    team_accept_avg = round(sum(e["acceptanceRate"] for e in employee_out if e["acceptanceRate"] is not None)/max(sum(1 for e in employee_out if e["acceptanceRate"] is not None),1),1)
+
+    top_cat_row = fetch_one(f"SELECT COALESCE(d.name,'Unassigned') AS name, COUNT(*) AS count FROM tickets t {dept_join} WHERE {where} GROUP BY 1 ORDER BY 2 DESC LIMIT 1", params)
+    top_category = top_cat_row["name"] if top_cat_row else "—"
+    repeat_row = fetch_one(f"SELECT COUNT(*) AS count FROM (SELECT t.created_by_user_id FROM tickets t {dept_join} WHERE {where} GROUP BY t.created_by_user_id HAVING COUNT(*)>1) r", params)
+    repeat_pct = round(repeat_row["count"]/total_t*100) if total_t else 0
+    bars_legacy = fetch_all(f"SELECT to_char(t.created_at,'Mon') AS label, COUNT(*) AS value FROM tickets t {dept_join} WHERE {where} GROUP BY label, date_trunc('month',t.created_at) ORDER BY date_trunc('month',t.created_at)", params)
+    categories_legacy = fetch_all(f"SELECT COALESCE(d.name,'Unassigned') AS name, COUNT(*)*100.0/SUM(COUNT(*)) OVER() AS pct FROM tickets t {dept_join} WHERE {where} GROUP BY 1", params)
+    table_legacy = fetch_all(f"SELECT to_char(t.created_at,'Month') AS month, COUNT(*) AS total, COUNT(*) FILTER(WHERE t.status='Resolved') AS resolved, ROUND(COUNT(*) FILTER(WHERE t.resolved_at<=t.resolve_due_at AND t.first_response_at IS NOT NULL)*100.0/NULLIF(COUNT(*),0)) AS within_sla, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60)) AS avg_response, ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/86400),1) AS avg_resolve FROM tickets t {dept_join} WHERE {where} GROUP BY date_trunc('month',t.created_at),month ORDER BY date_trunc('month',t.created_at)", params)
 
     return {
-        "kpis": {
-            "complaints": total_complaints,
-            "sla": f"{sla_pct}%",
-            "response": f"{round(avg_response)} mins",
-            "resolve": f"{round(avg_resolve,1)} days",
-            "topCategory": top_category,
-            "repeat": f"{repeat_pct}%"
-        },
-        "bars": bars,
-        "categories": categories,
-        "table": table
+        "kpis":{"complaints":total_t,"sla":f"{100-breach_rate}%","response":f"{round(avg_respond_mins)} mins","resolve":f"{round(avg_resolve_mins/60,1)} hrs","topCategory":top_category,"repeat":f"{repeat_pct}%"},
+        "bars": bars_legacy, "categories": categories_legacy, "table": table_legacy,
+        "sectionA":{"complaintVsInquiry":complaint_vs_inquiry,"dailyVolume":daily_volume_out,"recurringHeatmap":recurring_heatmap},
+        "sectionB":{"kpis":{"totalTickets":total_t,"breachRate":breach_rate,"prevBreachRate":prev_breach_rate,"breachDelta":round(breach_rate-prev_breach_rate,1),"escalationRate":escalation_rate,"avgRespondMins":round(avg_respond_mins,1),"avgResolveMins":round(avg_resolve_mins,1),"avgRespondHrs":round(avg_respond_mins/60,2),"avgResolveHrs":round(avg_resolve_mins/60,2)},"breachByDept":breach_by_dept_out,"breachTimeline":breach_timeline_out,"escalationByDept":escalation_by_dept_out,"timeByPriority":time_by_priority_out},
+        "sectionC":{"employees":employee_out,"teamAcceptAvg":team_accept_avg,"companyBreachRate":round(co_breach,1)},
     }
 #--------------------------------------------
 @app.get("/manager/notifications")
