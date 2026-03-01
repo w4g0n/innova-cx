@@ -10,6 +10,7 @@
 #   bash run_pipeline.sh --full-run --resume-from models/deberta_multitask/model.pt --weighted-safety-loss
 #   bash run_pipeline.sh --full-run --run-guarded-predict
 #   bash run_pipeline.sh --skip-label --generate-safety-rows 1000 --augment-with-safety --external-test output/safety_test_v2.csv
+#   bash run_pipeline.sh --skip-label --generate-safety-rows 1000 --safety-only-train --external-test output/safety_test_v2.csv
 
 set -eo pipefail  # Exit immediately on any error and propagate failures in pipes
 export PYTHONNOUSERSITE=1
@@ -37,6 +38,7 @@ UNCERTAINTY_MARGIN="0.15"
 GENERATE_SAFETY_ROWS="0"
 SAFETY_SYNTH_OUTPUT="output/safety_synth_1000.csv"
 AUGMENT_WITH_SAFETY=""
+SAFETY_ONLY_TRAIN=""
 AUGMENTED_OUTPUT="labeled_augmented.csv"
 EXTERNAL_TEST=""
 EXTERNAL_EVAL_REPORT="output/eval_external_report.json"
@@ -66,6 +68,7 @@ while [[ "$#" -gt 0 ]]; do
         --generate-safety-rows) GENERATE_SAFETY_ROWS="$2"; shift ;;
         --safety-synth-output) SAFETY_SYNTH_OUTPUT="$2"; shift ;;
         --augment-with-safety) AUGMENT_WITH_SAFETY="1" ;;
+        --safety-only-train) SAFETY_ONLY_TRAIN="1" ;;
         --augmented-output) AUGMENTED_OUTPUT="$2"; shift ;;
         --external-test) EXTERNAL_TEST="$2"; shift ;;
         --external-eval-report) EXTERNAL_EVAL_REPORT="$2"; shift ;;
@@ -122,8 +125,16 @@ fi
 if [ -n "$AUGMENT_WITH_SAFETY" ]; then
     log "Augment data : enabled -> ${AUGMENTED_OUTPUT}"
 fi
+if [ -n "$SAFETY_ONLY_TRAIN" ]; then
+    log "Safety only  : enabled (train on synthetic safety rows only)"
+fi
 if [ -n "$EXTERNAL_TEST" ]; then
     log "External test: ${EXTERNAL_TEST}"
+fi
+
+if [ -n "$AUGMENT_WITH_SAFETY" ] && [ -n "$SAFETY_ONLY_TRAIN" ]; then
+    log "ERROR: --augment-with-safety and --safety-only-train are mutually exclusive"
+    exit 1
 fi
 
 check_file "$INPUT"
@@ -210,7 +221,13 @@ fi
 # ─────────────────────────────────────────────
 
 TRAIN_INPUT="$LABELED"
-if [ -n "$AUGMENT_WITH_SAFETY" ] || [ "${GENERATE_SAFETY_ROWS}" != "0" ]; then
+if [ -n "$SAFETY_ONLY_TRAIN" ]; then
+    log "────────────────────────────────────"
+    log "STEP 3: Safety-only training input"
+    log "────────────────────────────────────"
+    check_file "$SAFETY_SYNTH_OUTPUT"
+    TRAIN_INPUT="$SAFETY_SYNTH_OUTPUT"
+elif [ -n "$AUGMENT_WITH_SAFETY" ] || [ "${GENERATE_SAFETY_ROWS}" != "0" ]; then
     log "────────────────────────────────────"
     log "STEP 3: Merge augmented training data"
     log "────────────────────────────────────"
