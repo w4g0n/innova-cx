@@ -191,10 +191,9 @@ export default function ComplaintTrends() {
                 ariaLabel="Filter by department"
                 options={[
                   { value: "All Departments", label: "All Departments" },
-                  { value: "Facilities Management", label: "Facilities Management" },
-                  { value: "Security", label: "Security" },
-                  { value: "Cleaning", label: "Cleaning" },
-                  { value: "IT Support", label: "IT Support" },
+                  { value: "Warehouse", label: "Warehouse" },
+                  { value: "Retail Store", label: "Retail Store" },
+                  { value: "Office", label: "Office" },
                 ]}
               />
 
