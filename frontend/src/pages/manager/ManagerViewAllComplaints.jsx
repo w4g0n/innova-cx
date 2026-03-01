@@ -12,9 +12,22 @@ import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
 import useScrollReveal from "../../utils/useScrollReveal";
 
+function getAuthToken() {
+  try {
+    const raw = localStorage.getItem("user");
+    if (raw) { const u = JSON.parse(raw); if (u?.access_token) return u.access_token; }
+  } catch { /* ignore */ }
+  return (
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") || ""
+  );
+}
+
 export default function ManagerViewComplaints() {
   const revealRef = useScrollReveal();
-  const token = localStorage.getItem("access_token");
+  const token = getAuthToken();
 
   // Tickets & Employees
   const [rows, setRows] = useState([]);
@@ -46,7 +59,7 @@ export default function ManagerViewComplaints() {
     };
 
     // Fetch complaints
-    fetch(apiUrl("/manager/complaints"), { headers })
+    fetch(apiUrl("/api/manager/complaints"), { headers })
       .then((res) => {
         if (res.status === 401) return null;
         return res.json();
@@ -63,7 +76,7 @@ export default function ManagerViewComplaints() {
       .catch(() => {});
       
     // Fetch employees for assignment modal
-    fetch(apiUrl("/manager/employees"), { headers })
+    fetch(apiUrl("/api/manager/employees"), { headers })
       .then((res) => {
         if (res.status === 401) return null;
         return res.json();
@@ -169,7 +182,7 @@ const confirmAssignment = async () => {
             : r
         )
       );
-    } catch (err) {
+    } catch {
       alert("Network error during reroute.");
     }
     closeMenu();

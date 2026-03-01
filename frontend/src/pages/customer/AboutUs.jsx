@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import "./AboutUs.css";
 import novaLogo from "../../assets/nova-logo.png";
 
+const HERO_WORDS = ["Intelligent", "Fast", "Empathetic", "Precise"];
+
 /* ─── Animated counter hook ─── */
 function useCounter(target, duration = 2000, start = false) {
   const [count, setCount] = useState(0);
@@ -69,10 +71,9 @@ export default function AboutUs() {
   const navigate = useNavigate();
 
   /* hero text cycle */
-  const heroWords = ["Intelligent", "Fast", "Empathetic", "Precise"];
   const [wordIdx, setWordIdx] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setWordIdx((i) => (i + 1) % heroWords.length), 2400);
+    const id = setInterval(() => setWordIdx((i) => (i + 1) % HERO_WORDS.length), 2400);
     return () => clearInterval(id);
   }, []);
 
@@ -163,7 +164,7 @@ export default function AboutUs() {
           <h1 className="au-hero-title">
             Customer Support,<br />
             <span className="au-hero-accent">
-              <span key={wordIdx} className="au-word-spin">{heroWords[wordIdx]}</span>
+              <span key={wordIdx} className="au-word-spin">{HERO_WORDS[wordIdx]}</span>
             </span>
           </h1>
           <p className="au-hero-sub">

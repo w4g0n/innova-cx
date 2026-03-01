@@ -105,17 +105,6 @@ export default function CustomerSettings() {
     }
   };
 
-  const onDownloadData = () => {
-    alert("Demo: This would download your data once the backend is connected.");
-  };
-
-  const onDeleteAccount = () => {
-    const ok = window.confirm(
-      "Demo only: This would request account deletion once the backend is connected. Continue?"
-    );
-    if (ok) alert("Demo: Delete request created (UI only).");
-  };
-
   return (
     <Layout role="customer">
       <div className="customerSettingsPage">

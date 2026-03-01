@@ -16,6 +16,9 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from pipeline import pipeline
+from agents.sentimentanalysis.step import get_sentiment_diagnostics
+from agents.classifier.step import get_classifier_diagnostics
+from agents.featureengineering.step import get_feature_engineering_diagnostics
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,7 +48,13 @@ BACKEND_URL = "http://backend:8000"
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": "orchestrator"}
+    return {
+        "status": "healthy",
+        "service": "orchestrator",
+        **get_sentiment_diagnostics(),
+        **get_classifier_diagnostics(),
+        **get_feature_engineering_diagnostics(),
+    }
 
 
 # ---------------------------------------------------------------------------
