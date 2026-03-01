@@ -1,4 +1,4 @@
-FROM node:18-bullseye
+FROM node:18-bullseye-slim
 
 # -------------------------------
 # System dependencies
@@ -7,8 +7,10 @@ FROM node:18-bullseye
 # - python3 + pip: Whisper + analysis
 # -------------------------------
 RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
     python3 \
     python3-pip \
+    build-essential \
     ffmpeg \
     libsndfile1 \
  && rm -rf /var/lib/apt/lists/*
@@ -17,12 +19,13 @@ RUN apt-get update && apt-get install -y \
 # App workspace
 # -------------------------------
 WORKDIR /app
+ENV NODE_ENV=production
 
 # -------------------------------
 # Node dependencies (cached layer)
 # -------------------------------
 COPY package*.json ./
-RUN npm install
+RUN npm ci --omit=dev && npm cache clean --force
 
 # -------------------------------
 # Python dependencies (cached layer)
