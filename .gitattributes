@@ -1,15 +1,18 @@
-postman/          merge=ours
-docs/             merge=ours
-CLOUD_README.md   merge=ours
+# Keep prod-live versions of these paths when merging from other branches.
 README.md         merge=ours
 test.csv          merge=ours
-Prototype/        merge=ours
+CLOUD_README.md   merge=ours
 deslop.pdf        merge=ours
-test.csv merge=ours 
-database/
-
-# Track large model artifacts in Git LFS
-data/synthesizerv7/models/**/*.safetensors filter=lfs diff=lfs merge=lfs -text
-data/synthesizerv7/models/**/*.bin filter=lfs diff=lfs merge=lfs -text
-data/synthesizerv7/models/**/*.pt filter=lfs diff=lfs merge=lfs -text
-data/synthesizerv7/models/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+data/             merge=ours
+postman/          merge=ours
+docs/             merge=ours
+Prototype/        merge=ours
+database/documentation/ merge=ours
+ai-models/docs/   merge=ours
+ai-models/readme.md merge=ours
+ai-models/README.md merge=ours
+ai-models/legacy/ merge=ours
+frontend/readme.md merge=ours
+frontend/README.md merge=ours
+backend/readme.md merge=ours
+backend/README.md merge=ours

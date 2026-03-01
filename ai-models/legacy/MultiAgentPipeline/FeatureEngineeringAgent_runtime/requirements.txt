@@ -1,4 +1,0 @@
-pandas
-scikit-learn
-numpy
-sentence-transformers==2.7.0
