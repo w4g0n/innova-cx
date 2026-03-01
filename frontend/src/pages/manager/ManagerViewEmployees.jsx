@@ -9,6 +9,25 @@ import EmployeeReportPDF from "../employee/EmployeeReportPDF";
 import { apiUrl } from "../../config/apiBase";
 import "./ManagerViewEmployees.css";
 
+const API_BASE = apiUrl("/api");
+
+function getAuthToken() {
+  const direct =
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken");
+  if (direct) return direct;
+  try {
+    const raw = localStorage.getItem("user");
+    if (!raw) return "";
+    const user = JSON.parse(raw);
+    return user?.access_token || "";
+  } catch {
+    return "";
+  }
+}
+
 /** Build a structured report object from the employee row data we have. */
 function buildEmployeeReport(emp) {
   const now   = new Date();
@@ -57,7 +76,7 @@ export default function ManagerViewEmployees() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
+    const token = getAuthToken();
     if (!token) {
       setEmployees([]);
       setLoading(false);
@@ -67,7 +86,7 @@ export default function ManagerViewEmployees() {
 
     const fetchEmployees = async () => {
       try {
-        const res = await fetch(apiUrl("/manager/employees"), {
+        const res = await fetch(`${API_BASE}/manager/employees`, {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,

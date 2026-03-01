@@ -10,6 +10,19 @@ import { apiUrl } from "../../config/apiBase";
 import "./Approvals.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 
+function getAuthToken() {
+  try {
+    const raw = localStorage.getItem("user");
+    if (raw) { const u = JSON.parse(raw); if (u?.access_token) return u.access_token; }
+  } catch { /* ignore */ }
+  return (
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") || ""
+  );
+}
+
 export default function Approvals() {
   const revealRef = useScrollReveal();
   const navigate = useNavigate();
@@ -23,7 +36,7 @@ export default function Approvals() {
 
   // ------------------- Fetch Approvals with Session -------------------
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
+    const token = getAuthToken();
     if (!token) {
       navigate("/login");
       return;
@@ -35,7 +48,7 @@ export default function Approvals() {
     };
 
     setLoading(true);
-    fetch(apiUrl("/manager/approvals"), { headers })
+    fetch(apiUrl("/api/manager/approvals"), { headers })
       .then((res) => {
         if (res.status === 401) navigate("/login");
         return res.json();
@@ -59,7 +72,7 @@ export default function Approvals() {
 
   // ------------------- Actions -------------------
   const decide = async (requestId, decision) => {
-    const token = localStorage.getItem("access_token");
+    const token = getAuthToken();
     if (!token) { navigate("/login"); return; }
 
     // Optimistic update
@@ -68,7 +81,7 @@ export default function Approvals() {
     );
 
     try {
-      const res = await fetch(apiUrl(`/manager/approvals/${requestId}`), {
+      const res = await fetch(apiUrl(`/api/manager/approvals/${requestId}`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
