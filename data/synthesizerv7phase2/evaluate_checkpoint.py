@@ -84,7 +84,15 @@ def main():
     num_labels_per_task = {col: len(class_map[col]) for col in LABEL_COLS}
 
     df = pd.read_csv(args.test)
-    required = [args.text_col] + LABEL_COLS
+    text_col = args.text_col
+    if text_col not in df.columns:
+        for candidate in ("issue_text", "transcript", "message", "description"):
+            if candidate in df.columns:
+                print(f"[WARN] --text-col '{text_col}' not found. Falling back to '{candidate}'.")
+                text_col = candidate
+                break
+
+    required = [text_col] + LABEL_COLS
     missing = [c for c in required if c not in df.columns]
     if missing:
         raise ValueError(f"Test CSV missing columns: {missing}")
@@ -99,7 +107,7 @@ def main():
     model.load_state_dict(torch.load(model_dir / "model.pt", map_location=device))
     model.eval()
 
-    ds = EvalDataset(df[args.text_col].astype(str).tolist(), tokenizer, max_length=max_length)
+    ds = EvalDataset(df[text_col].astype(str).tolist(), tokenizer, max_length=max_length)
     dl = DataLoader(ds, batch_size=args.batch_size, shuffle=False)
 
     pred_idx = {c: [] for c in LABEL_COLS}
@@ -162,6 +170,7 @@ def main():
     report = {
         "rows_evaluated": len(pred_df),
         "model_dir": str(model_dir),
+        "text_col_used": text_col,
         "metrics": metrics,
     }
     output_report = Path(args.output_report)
