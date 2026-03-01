@@ -60,9 +60,11 @@ function TicketModal({
   // reroute
   rerouteDepartment, setRerouteDepartment,
   rerouteReason, setRerouteReason,
+  rerouteError, setRerouteError,
   // rescore
   rescoreNewPriority, setRescoreNewPriority,
   rescoreReason, setRescoreReason,
+  rescoreError, setRescoreError,
   // resolve
   resolveDecision, setResolveDecision,
   resolutionSuggestion, suggestionBusy,
@@ -72,7 +74,7 @@ function TicketModal({
   resolveFiles, setResolveFiles,
   resolveBusy, setResolveBusy,
   // shared
-  closeModal, loadTicket, uploadAttachmentsOrThrow,
+  closeModal, loadTicket, uploadAttachmentsOrThrow, onSuccess,
 }) {
   if (!type || !ticket) return null;
 
@@ -112,9 +114,10 @@ function TicketModal({
             <textarea
               className="modal-textarea"
               value={rerouteReason}
-              onChange={(e) => setRerouteReason(e.target.value)}
+              onChange={(e) => { setRerouteReason(e.target.value); setRerouteError(""); }}
               placeholder="Explain why this ticket should be rerouted..."
             />
+            {rerouteError && <div className="modal-inline-error">{rerouteError}</div>}
           </>
         );
 
@@ -137,9 +140,10 @@ function TicketModal({
             <textarea
               className="modal-textarea"
               value={rescoreReason}
-              onChange={(e) => setRescoreReason(e.target.value)}
+              onChange={(e) => { setRescoreReason(e.target.value); setRescoreError(""); }}
               placeholder="Explain why the model score should be adjusted..."
             />
+            {rescoreError && <div className="modal-inline-error">{rescoreError}</div>}
           </>
         );
 
@@ -247,7 +251,7 @@ function TicketModal({
   const handleSubmit = async () => {
     if (type === "rescore") {
       if (!rescoreNewPriority || !rescoreReason.trim()) {
-        alert("Please select a priority and provide a reason.");
+        setRescoreError("Please select a priority and provide a reason.");
         return;
       }
       const token = getAuthToken();
@@ -263,16 +267,16 @@ function TicketModal({
         if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
         setRescoreReason("");
         closeModal();
-        alert("Rescore request submitted for manager approval.");
+        onSuccess("Rescore request submitted for manager approval.");
       } catch (e) {
-        alert(e?.message || "Failed to submit rescore request.");
+        setRescoreError(e?.message || "Failed to submit rescore request.");
       }
       return;
     }
 
     if (type === "reroute") {
       if (!rerouteDepartment || !rerouteReason.trim()) {
-        alert("Please select a department and provide a reason.");
+        setRerouteError("Please select a department and provide a reason.");
         return;
       }
       const token = getAuthToken();
@@ -289,16 +293,16 @@ function TicketModal({
         setRerouteDepartment("");
         setRerouteReason("");
         closeModal();
-        alert("Reroute request submitted for manager approval.");
+        onSuccess("Reroute request submitted for manager approval.");
       } catch (e) {
-        alert(e?.message || "Failed to submit reroute request.");
+        setRerouteError(e?.message || "Failed to submit reroute request.");
       }
       return;
     }
 
     if (type === "escalate") {
       closeModal();
-      alert("Escalate saved (UI only for now).");
+      onSuccess("Escalate saved (UI only for now).");
       return;
     }
 
@@ -334,7 +338,7 @@ function TicketModal({
       await loadTicket();
       setResolveFiles([]);
       closeModal();
-      alert("Ticket resolved successfully.");
+      onSuccess("Ticket resolved successfully.");
     } catch (e) {
       setResolveError(e?.message || "Could not resolve ticket.");
     } finally {
@@ -394,8 +398,20 @@ export default function ComplaintDetails() {
 
   const [rerouteDepartment, setRerouteDepartment] = useState("");
   const [rerouteReason, setRerouteReason] = useState("");
+  const [rerouteError, setRerouteError] = useState("");
+  const [rescoreError, setRescoreError] = useState("");
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  const closeModal = () => setModalType(null);
+  const showToast = (message, type = "success") => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast((t) => ({ ...t, show: false })), 4000);
+  };
+
+  const closeModal = () => {
+    setModalType(null);
+    setRerouteError("");
+    setRescoreError("");
+  };
 
   useEffect(() => {
     if (modalType !== "resolve") return;
@@ -543,14 +559,28 @@ export default function ComplaintDetails() {
         </section>
       </div>
 
+      {toast.show && (
+        <div className={`ticket-toast ticket-toast--${toast.type}`}>
+          <span className="ticket-toast__msg">{toast.message}</span>
+          <button
+            className="ticket-toast__close"
+            onClick={() => setToast((t) => ({ ...t, show: false }))}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <TicketModal
         type={modalType}
         ticket={ticket}
         id={id}
         rerouteDepartment={rerouteDepartment} setRerouteDepartment={setRerouteDepartment}
         rerouteReason={rerouteReason} setRerouteReason={setRerouteReason}
+        rerouteError={rerouteError} setRerouteError={setRerouteError}
         rescoreNewPriority={rescoreNewPriority} setRescoreNewPriority={setRescoreNewPriority}
         rescoreReason={rescoreReason} setRescoreReason={setRescoreReason}
+        rescoreError={rescoreError} setRescoreError={setRescoreError}
         resolveDecision={resolveDecision} setResolveDecision={setResolveDecision}
         resolutionSuggestion={resolutionSuggestion} suggestionBusy={suggestionBusy}
         finalResolution={finalResolution} setFinalResolution={setFinalResolution}
@@ -561,6 +591,7 @@ export default function ComplaintDetails() {
         closeModal={closeModal}
         loadTicket={loadTicket}
         uploadAttachmentsOrThrow={uploadAttachmentsOrThrow}
+        onSuccess={showToast}
       />
     </Layout>
   );
