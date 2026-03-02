@@ -66,7 +66,7 @@ export default function CustomerLanding() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -143,13 +143,12 @@ export default function CustomerLanding() {
       listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, isOpen, isExpanded, novaView, listRef]);
 
-  const handleClose = () => setShowCloseConfirm(true);
+  const handleNewChat = () => setShowNewChatConfirm(true);
 
-  const confirmClose = () => {
-    setShowCloseConfirm(false);
-    setIsOpen(false);
-    setIsExpanded(false);
+  const confirmNewChat = () => {
+    setShowNewChatConfirm(false);
     setNovaView("chat");
+    resetSession();
   };
 
   const openHistory = () => {
@@ -168,6 +167,10 @@ export default function CustomerLanding() {
   };
 
   const confirmLogout = () => {
+    resetSession();
+    setIsOpen(false);
+    setIsExpanded(false);
+    setNovaView("chat");
     localStorage.removeItem("user");
     localStorage.removeItem("token");
     localStorage.removeItem("temp_token");
@@ -622,6 +625,13 @@ export default function CustomerLanding() {
               >
                 Fill a form
               </button>
+              <button
+                type="button"
+                className="novaTextBtn"
+                onClick={handleNewChat}
+              >
+                New chat
+              </button>
 
               <button
                 type="button"
@@ -668,7 +678,8 @@ export default function CustomerLanding() {
                 className="novaIconBtn"
                 onClick={() => {
                   setNovaView("chat");
-                  handleClose();
+                  setIsOpen(false);
+                  setIsExpanded(false);
                 }}
                 aria-label="Close"
               >
@@ -847,13 +858,13 @@ export default function CustomerLanding() {
                   </form>
                 </div>
 
-                {showCloseConfirm && (
+                {showNewChatConfirm && (
                   <div className="novaCloseModal">
                     <div className="novaCloseModalContent">
-                      <p>Are you sure you want to end the chat?</p>
+                      <p>Are you sure you want to start a new chat?</p>
                       <div className="novaCloseModalBtns">
-                        <button onClick={confirmClose}>Yes</button>
-                        <button onClick={() => setShowCloseConfirm(false)}>
+                        <button onClick={confirmNewChat}>Yes</button>
+                        <button onClick={() => setShowNewChatConfirm(false)}>
                           No
                         </button>
                       </div>

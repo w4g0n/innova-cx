@@ -12,6 +12,7 @@ import logging
 import httpx
 from pathlib import Path
 from functools import lru_cache
+from typing import Any
 
 from langchain_core.runnables import RunnableLambda
 
@@ -53,7 +54,10 @@ class _FallbackPredictor:
 
 @lru_cache(maxsize=1)
 def _load_predictor():
-    model_dir = os.getenv("SENTIMENT_MODEL_DIR", "/app/sentiment_models/sentiment-v7")
+    model_dir = os.getenv("SENTIMENT_MODEL_DIR", "").strip()
+    if not model_dir:
+        logger.info("sentiment | SENTIMENT_MODEL_DIR not set, using fallback predictor")
+        return _FallbackPredictor()
     model_pt = Path(model_dir) / "model.pt"
     if model_pt.exists():
         try:
@@ -66,6 +70,19 @@ def _load_predictor():
     else:
         logger.warning("sentiment | model.pt not found at %s, using fallback", model_dir)
     return _FallbackPredictor()
+
+
+def get_sentiment_diagnostics() -> dict[str, Any]:
+    model_dir = os.getenv("SENTIMENT_MODEL_DIR", "").strip()
+    model_enabled = bool(model_dir)
+    model_file_exists = bool(model_dir and (Path(model_dir) / "model.pt").exists())
+    mode = "model" if model_file_exists else "mock"
+    return {
+        "sentiment_model_dir": model_dir or None,
+        "sentiment_model_enabled": model_enabled,
+        "sentiment_model_file_exists": model_file_exists,
+        "sentiment_mode": mode,
+    }
 
 
 async def analyze_sentiment(state: dict) -> dict:

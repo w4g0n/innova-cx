@@ -11,11 +11,19 @@ Endpoints:
 
 import logging
 import json
+import uuid
 import httpx
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from pipeline import pipeline
+from agents.sentimentanalysis.step import get_sentiment_diagnostics
+from agents.classifier.step import get_classifier_diagnostics
+from agents.featureengineering.step import get_feature_engineering_diagnostics
+try:
+    from db import ensure_log_tables
+except Exception:  # pragma: no cover - optional dependency for backward compatibility
+    ensure_log_tables = None
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,12 +48,28 @@ BACKEND_URL = "http://backend:8000"
 
 
 # ---------------------------------------------------------------------------
+# Startup — ensure logging tables exist (if db module is available)
+# ---------------------------------------------------------------------------
+
+@app.on_event("startup")
+async def _startup():
+    if ensure_log_tables:
+        ensure_log_tables()
+
+
+# ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": "orchestrator"}
+    return {
+        "status": "healthy",
+        "service": "orchestrator",
+        **get_sentiment_diagnostics(),
+        **get_classifier_diagnostics(),
+        **get_feature_engineering_diagnostics(),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -143,8 +167,10 @@ async def process_text(
         "asset_type": selected_asset,
         "has_audio": bool(has_audio),
         "audio_features": parsed_audio_features,
+        "_execution_id": str(uuid.uuid4()),
     }
 
+    execution_id = state["_execution_id"]
     result = await pipeline.ainvoke(state)
     if result.get("label") == "inquiry":
         logger.info(
@@ -190,24 +216,26 @@ async def process_text(
             result.get("respond_due_at"),
             result.get("resolve_due_at"),
         )
-    return _build_response(result)
+    return _build_response(result, execution_id)
 
 
 # ---------------------------------------------------------------------------
 # Response builder
 # ---------------------------------------------------------------------------
 
-def _build_response(result: dict) -> dict:
+def _build_response(result: dict, execution_id: str = "") -> dict:
     if result.get("label") == "inquiry":
         return {
             "type": "inquiry",
             "ticket_id": result.get("ticket_id"),
+            "execution_id": execution_id,
             "priority": result.get("priority_score"),
             "priority_label": result.get("priority_label"),
         }
     return {
         "type": "complaint",
         "ticket_id": result.get("ticket_id"),
+        "execution_id": execution_id,
         "priority": result.get("priority_score"),
         "priority_label": result.get("priority_label"),
         "department": result.get("department"),

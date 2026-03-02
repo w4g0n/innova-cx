@@ -1,0 +1,15 @@
+# VCS and editor state
+.git
+.gitignore
+.DS_Store
+
+# Node/Python local artifacts
+node_modules/
+__pycache__/
+*.pyc
+
+# Runtime artifacts
+uploads/
+transcripts/
+.env
+.env.*

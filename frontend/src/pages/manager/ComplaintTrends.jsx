@@ -89,7 +89,6 @@ function StackedAreaChart({ data, keys, colors, totalKey = "total" }) {
               return `${x},${y}`;
             })
             .join(" ");
-          const bottomL = `${0},${H} ${W},${H}`;
           const revPts  = data
             .slice()
             .reverse()

@@ -28,7 +28,8 @@ import io
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
-    import sys, os as _os
+    import os as _os
+    import sys
     sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..'))
     from services import analytics_service as _analytics
     _ANALYTICS_READY = True
@@ -141,9 +142,61 @@ def _ensure_runtime_schema_compatibility() -> None:
                     );
                     """
                 )
+                # Employee reports must be unique per employee+month, not globally by month code.
+                # Keep backward compatibility for existing DB volumes created with report_code UNIQUE.
+                cur.execute("ALTER TABLE employee_reports DROP CONSTRAINT IF EXISTS employee_reports_report_code_key;")
+                cur.execute(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_reports_user_code
+                    ON employee_reports(employee_user_id, report_code);
+                    """
+                )
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
+                # Agent execution logging tables (orchestrator writes here)
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS model_execution_log (
+                        id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                        execution_id      UUID        NOT NULL,
+                        ticket_id         UUID,
+                        agent_name        VARCHAR(80) NOT NULL,
+                        model_version     VARCHAR(50),
+                        inference_time_ms INTEGER     NOT NULL DEFAULT 0,
+                        confidence_score  NUMERIC(5,4),
+                        error_flag        BOOLEAN     NOT NULL DEFAULT FALSE,
+                        error_message     TEXT,
+                        created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS agent_output_log (
+                        id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                        execution_id      UUID        NOT NULL,
+                        ticket_id         UUID,
+                        agent_name        VARCHAR(80) NOT NULL,
+                        step_order        INTEGER     NOT NULL,
+                        input_state       JSONB       NOT NULL DEFAULT '{}'::jsonb,
+                        output_state      JSONB       NOT NULL DEFAULT '{}'::jsonb,
+                        state_diff        JSONB       NOT NULL DEFAULT '{}'::jsonb,
+                        inference_time_ms INTEGER     NOT NULL DEFAULT 0,
+                        error_flag        BOOLEAN     NOT NULL DEFAULT FALSE,
+                        error_message     TEXT,
+                        created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
+                    """
+                )
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_execution_id ON model_execution_log(execution_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_ticket_id    ON model_execution_log(ticket_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_agent_name   ON model_execution_log(agent_name);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_created_at   ON model_execution_log(created_at);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_execution_id ON agent_output_log(execution_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_ticket_id    ON agent_output_log(ticket_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_agent_name   ON agent_output_log(agent_name);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_created_at   ON agent_output_log(created_at);")
     except Exception as exc:
         logger.warning("db_compat | failed to apply compatibility DDL: %s", exc)
 
@@ -1810,7 +1863,6 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
 
     Idempotent — if the report already exists it is refreshed in-place.
     """
-    from datetime import date as _date
     import calendar as _calendar
 
     month_start = datetime(year, month, 1, tzinfo=timezone.utc)
@@ -1848,6 +1900,33 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
         (user_id, month_start, month_end),
     )
 
+    # Fallback: if MV is stale/not refreshed, compute directly from base tickets table.
+    if not rows:
+        rows = fetch_all(
+            """
+            SELECT
+                t.id,
+                t.status,
+                t.priority,
+                COALESCE(t.respond_breached, FALSE) AS respond_breached,
+                COALESCE(t.resolve_breached, FALSE) AS resolve_breached,
+                (COALESCE(t.respond_breached, FALSE) OR COALESCE(t.resolve_breached, FALSE)) AS any_breached,
+                (t.status = 'Resolved') AS is_resolved,
+                (t.status = 'Escalated') AS is_escalated,
+                t.first_response_at,
+                EXTRACT(EPOCH FROM (t.first_response_at - COALESCE(t.priority_assigned_at, t.assigned_at, t.created_at))) / 60.0
+                    AS response_time_mins,
+                t.created_at,
+                date_trunc('week', t.created_at)::date AS week_start
+            FROM tickets t
+            WHERE t.assigned_to_user_id = %s
+              AND t.created_at >= %s
+              AND t.created_at <= %s
+            ORDER BY t.created_at
+            """,
+            (user_id, month_start, month_end),
+        )
+
     if not rows:
         return None  # no activity → no report
 
@@ -1857,7 +1936,6 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
     total      = len(rows)
     resolved   = sum(1 for r in rows if r["is_resolved"])
     escalated  = sum(1 for r in rows if r["is_escalated"])
-    overdue    = sum(1 for r in rows if r["status"] == "Overdue")
     breached   = sum(1 for r in rows if r["any_breached"])
     pending    = total - resolved
 
@@ -2009,7 +2087,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
                         (report_code, employee_user_id, month_label, subtitle,
                          kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (report_code) DO UPDATE
+                    ON CONFLICT (employee_user_id, report_code) DO UPDATE
                         SET month_label    = EXCLUDED.month_label,
                             subtitle       = EXCLUDED.subtitle,
                             kpi_rating     = EXCLUDED.kpi_rating,
@@ -2076,9 +2154,6 @@ def _ensure_recent_reports(user_id: str, months: int = 3) -> None:
     Ensures the last `months` calendar months have a generated report.
     Called on the reports list endpoint so every employee always sees data.
     """
-    from datetime import date as _date
-    import calendar as _calendar
-
     today = datetime.now(tz=timezone.utc)
     for i in range(months):
         m = today.month - i
@@ -2470,6 +2545,7 @@ def customer_ticket_details(
         SELECT
           tu.message,
           tu.update_type,
+          tu.meta,
           tu.created_at,
           up.full_name AS author_name
         FROM ticket_updates tu
@@ -2517,6 +2593,7 @@ def customer_ticket_details(
                 "message": u.get("message"),
                 "type": u.get("update_type"),
                 "author": u.get("author_name"),
+                "meta": u.get("meta") or {},
                 "date": u.get("created_at").isoformat() if u.get("created_at") else None,
             }
             for u in updates_rows
@@ -3715,18 +3792,22 @@ def get_manager_trends(
         if dept not in dept_breach_map:
             dept_breach_map[dept] = {"department":dept,"total":0,"breached":0,"Critical":0,"High":0,"Medium":0,"Low":0,"Critical_total":0,"High_total":0,"Medium_total":0,"Low_total":0}
         p2 = r["priority"]
-        dept_breach_map[dept]["total"] += r["total"]; dept_breach_map[dept]["breached"] += r["breached"]
+        dept_breach_map[dept]["total"] += r["total"]
+        dept_breach_map[dept]["breached"] += r["breached"]
         if p2 in ("Critical","High","Medium","Low"):
-            dept_breach_map[dept][f"{p2}_total"] += r["total"]; dept_breach_map[dept][p2] += r["breached"]
+            dept_breach_map[dept][f"{p2}_total"] += r["total"]
+            dept_breach_map[dept][p2] += r["breached"]
     breach_by_dept_out = sorted([{"department":dept,"total":v["total"],"breachRate":round(v["breached"]/v["total"]*100,1) if v["total"] else 0,"Critical":round(v["Critical"]/v["Critical_total"]*100,1) if v["Critical_total"] else 0,"High":round(v["High"]/v["High_total"]*100,1) if v["High_total"] else 0,"Medium":round(v["Medium"]/v["Medium_total"]*100,1) if v["Medium_total"] else 0,"Low":round(v["Low"]/v["Low_total"]*100,1) if v["Low_total"] else 0} for dept,v in dept_breach_map.items()], key=lambda x: -x["breachRate"])
 
     breach_timeline_raw = fetch_all(f"SELECT date_trunc('day',t.created_at)::date AS day, t.priority, COUNT(*) AS total, COUNT(*) FILTER(WHERE t.resolve_breached OR t.respond_breached) AS breached FROM tickets t {dept_join} WHERE {where} GROUP BY 1,2 ORDER BY 1,2", params)
     bt_map: Dict[str, dict] = {}
     for r in breach_timeline_raw:
         key = r["day"].isoformat()
-        if key not in bt_map: bt_map[key]={"day":key,"total":0,"Critical":0,"High":0,"Medium":0,"Low":0}
+        if key not in bt_map:
+            bt_map[key] = {"day":key,"total":0,"Critical":0,"High":0,"Medium":0,"Low":0}
         bt_map[key]["total"]+=r["total"]
-        if r["priority"] in ("Critical","High","Medium","Low"): bt_map[key][r["priority"]]+=r["breached"]
+        if r["priority"] in ("Critical","High","Medium","Low"):
+            bt_map[key][r["priority"]] += r["breached"]
     breach_timeline_out = sorted(bt_map.values(), key=lambda x: x["day"])
 
     escalation_by_dept_raw = fetch_all(f"SELECT COALESCE(d.name,'Unassigned') AS department, COUNT(*) AS total, COUNT(*) FILTER(WHERE t.status='Escalated') AS escalated FROM tickets t {dept_join} WHERE {where} GROUP BY 1 ORDER BY escalated DESC", params)
@@ -3737,15 +3818,19 @@ def get_manager_trends(
 
     employee_perf = fetch_all(f"SELECT up.full_name AS name, up.employee_code AS emp_id, up.job_title AS role, COUNT(t.id) AS total, COUNT(t.id) FILTER(WHERE t.status='Resolved') AS resolved, COUNT(t.id) FILTER(WHERE t.resolve_breached OR t.respond_breached) AS breached, ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve_mins, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond_mins FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where} GROUP BY up.full_name,up.employee_code,up.job_title ORDER BY resolved DESC", params)
     company_avg = fetch_one(f"SELECT ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond, COUNT(*) FILTER(WHERE t.resolve_breached OR t.respond_breached)::float/NULLIF(COUNT(*),0)*100 AS breach_rate FROM tickets t {dept_join} WHERE {where}", params) or {}
-    acceptance_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) AS total, COUNT(*) FILTER(WHERE trf.decision='accepted') AS accepted, COUNT(*) FILTER(WHERE trf.decision='declined_custom') AS declined FROM ticket_resolution_feedback trf JOIN tickets t ON t.id=trf.ticket_id JOIN user_profiles up ON up.user_id=trf.employee_user_id WHERE t.created_at>=%s AND t.created_at<%s GROUP BY up.full_name", [period_start, period_end])
+    acceptance_rows = fetch_all("SELECT up.full_name AS name, COUNT(*) AS total, COUNT(*) FILTER(WHERE trf.decision='accepted') AS accepted, COUNT(*) FILTER(WHERE trf.decision='declined_custom') AS declined FROM ticket_resolution_feedback trf JOIN tickets t ON t.id=trf.ticket_id JOIN user_profiles up ON up.user_id=trf.employee_user_id WHERE t.created_at>=%s AND t.created_at<%s GROUP BY up.full_name", [period_start, period_end])
     acceptance_map = {r["name"]:{"total":r["total"],"accepted":r["accepted"],"declined":r["declined"],"rate":round(r["accepted"]/r["total"]*100,1) if r["total"] else 0} for r in acceptance_rows}
     rescore_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority) AS rescored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Low' AND t.priority IN('Medium','High','Critical'))OR(t.model_priority='Medium' AND t.priority IN('High','Critical'))OR(t.model_priority='High' AND t.priority='Critical'))) AS upscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Critical' AND t.priority IN('Low','Medium','High'))OR(t.model_priority='High' AND t.priority IN('Low','Medium'))OR(t.model_priority='Medium' AND t.priority='Low'))) AS downscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL) AS total_with_model FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where} GROUP BY up.full_name", params)
     rescore_map = {r["name"]:{"rescored":r["rescored"],"upscored":r["upscored"],"downscored":r["downscored"],"totalWithModel":r["total_with_model"],"rescoreRate":round(r["rescored"]/r["total_with_model"]*100,1) if r["total_with_model"] else 0} for r in rescore_rows}
 
-    co_breach=float(company_avg.get("breach_rate") or 0); co_resolve=float(company_avg.get("avg_resolve") or 0); co_respond=float(company_avg.get("avg_respond") or 0)
+    co_breach = float(company_avg.get("breach_rate") or 0)
+    co_resolve = float(company_avg.get("avg_resolve") or 0)
+    co_respond = float(company_avg.get("avg_respond") or 0)
     employee_out = []
     for e in employee_perf:
-        name=e["name"]; total=e["total"] or 0; brate=round(e["breached"]/total*100,1) if total else 0
+        name = e["name"]
+        total = e["total"] or 0
+        brate = round(e["breached"] / total * 100, 1) if total else 0
         acc=acceptance_map.get(name,{"rate":None,"accepted":0,"declined":0,"total":0})
         rsc=rescore_map.get(name,{"rescoreRate":0,"upscored":0,"downscored":0})
         employee_out.append({"name":name,"empId":e["emp_id"],"role":e["role"],"ticketsHandled":total,"resolved":e["resolved"] or 0,"breached":e["breached"] or 0,"breachRate":brate,"avgResolveMins":float(e["avg_resolve_mins"] or 0),"avgRespondMins":float(e["avg_respond_mins"] or 0),"companyBreachRate":round(co_breach,1),"companyResolveMins":round(co_resolve,1),"companyRespondMins":round(co_respond,1),"acceptanceRate":acc["rate"],"acceptedCount":acc["accepted"],"declinedCount":acc["declined"],"rescoreRate":rsc["rescoreRate"],"upscored":rsc["upscored"],"downscored":rsc["downscored"],"alertLowVolume":total<5,"alertHighBreach":brate>10,"alertSlowResolve":float(e["avg_resolve_mins"] or 0)>480,"alertLowAcceptance":acc["rate"] is not None and acc["rate"]<50,"alertHighRescore":rsc["rescoreRate"]>30})
@@ -3821,8 +3906,9 @@ def manager_notifications(
 
     return {"unreadCount": int(unread_row.get("unread") or 0), "notifications": notifications}
 
-@api.post("/manager/notifications/{notification_id}/read")
-def manager_notification_mark_read(
+
+@app.post("/manager/notifications/{notification_id}/read")
+def manager_notification_mark_read_app(
     notification_id: str,
     user: Dict[str, Any] = Depends(require_manager),
 ):
@@ -3840,9 +3926,10 @@ def manager_notification_mark_read(
         raise HTTPException(status_code=404, detail="Notification not found")
     return {"ok": True}
 
-@api.post("/manager/notifications/read-all")
-def manager_notifications_mark_all_read(
-    user: Dict[str, Any] = Depends(require_manager),
+
+@app.post("/manager/notifications/read-all")
+def manager_notifications_mark_all_read_app(
+    authorization: Optional[str] = Header(default=None),
 ):
     execute(
         "UPDATE notifications SET read = TRUE WHERE user_id = %s AND read = FALSE;",
@@ -3866,6 +3953,34 @@ class OrchestratorComplaintRequest(BaseModel):
     label: Optional[str] = None
     status: Optional[str] = None
     classification_confidence: Optional[float] = None
+
+
+def _infer_orchestrator_stage(body: OrchestratorComplaintRequest) -> Dict[str, str]:
+    """
+    Best-effort stage inference for orchestrator activity trail.
+    This keeps customer-facing updates connected to actual orchestrator writes.
+    """
+    if body.priority is not None:
+        return {"id": "priority", "label": "Prioritization Agent"}
+    if (body.department or "").strip():
+        return {"id": "routing", "label": "Department Routing"}
+    if (body.status or "").strip() in {"Escalated", "Overdue"}:
+        return {"id": "sla", "label": "SLA Check"}
+    if body.sentiment is not None and body.audio_sentiment is not None:
+        return {"id": "combiner", "label": "Sentiment Combiner"}
+    if body.audio_sentiment is not None:
+        return {"id": "audio", "label": "Audio Analysis Agent"}
+    if body.sentiment is not None:
+        return {"id": "sentiment", "label": "Sentiment Analysis Agent"}
+    if body.classification_confidence is not None or (body.label or "").strip():
+        return {"id": "classification", "label": "Classification Agent"}
+    if body.keywords:
+        return {"id": "feature", "label": "Feature Engineering Agent"}
+    return {"id": "orchestrator", "label": "Controller / Orchestrator"}
+
+
+def _orchestrator_update_message(stage_label: str, ticket_code: str) -> str:
+    return f"[AI Stage] {stage_label} processed ticket {ticket_code}."
 
 
 class ChatbotProxyRequest(BaseModel):
@@ -3995,6 +4110,27 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         ),
                     )
                     updated = cur.fetchone()
+                    stage = _infer_orchestrator_stage(body)
+                    cur.execute(
+                        """
+                        INSERT INTO ticket_updates (
+                          ticket_id,
+                          author_user_id,
+                          update_type,
+                          message,
+                          from_status,
+                          to_status,
+                          meta
+                        )
+                        VALUES (%s, NULL, 'system', %s, NULL, %s, %s::jsonb);
+                        """,
+                        (
+                            existing[0],
+                            _orchestrator_update_message(stage["label"], updated[0]),
+                            updated[1],
+                            json.dumps({"source": "orchestrator", "stage_id": stage["id"], "stage_label": stage["label"]}),
+                        ),
+                    )
                     logger.info(
                         "orchestrator_ticket_update | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                         updated[0],
@@ -4079,6 +4215,37 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 ),
             )
             created = cur.fetchone()
+            stage = _infer_orchestrator_stage(body)
+            cur.execute(
+                """
+                INSERT INTO ticket_updates (
+                  ticket_id,
+                  author_user_id,
+                  update_type,
+                  message,
+                  from_status,
+                  to_status,
+                  meta
+                )
+                SELECT
+                  t.id,
+                  NULL,
+                  'system',
+                  %s,
+                  NULL,
+                  %s,
+                  %s::jsonb
+                FROM tickets t
+                WHERE t.ticket_code = %s
+                LIMIT 1;
+                """,
+                (
+                    _orchestrator_update_message(stage["label"], created[0]),
+                    created[1],
+                    json.dumps({"source": "orchestrator", "stage_id": stage["id"], "stage_label": stage["label"]}),
+                    created[0],
+                ),
+            )
             logger.info(
                 "orchestrator_ticket_create | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                 created[0],
