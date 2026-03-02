@@ -73,7 +73,15 @@
 }
 
 .ve-reportBtn:hover {
-  opacity: 0.95;
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  transition: filter var(--dur-fast), transform var(--dur-fast);
+}
+
+.ve-reportBtn--loading {
+  opacity: 0.65;
+  cursor: wait;
+  pointer-events: none;
 }
 
 .ve-empty {

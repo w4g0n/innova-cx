@@ -1,36 +1,74 @@
-import os
 import logging
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import os
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = os.environ.get("CHATBOT_MODEL", "tiiuae/Falcon3-1B-Instruct")
-HF_TOKEN = os.environ.get("HF_TOKEN") or None
 MAX_NEW_TOKENS = int(os.environ.get("CHATBOT_MAX_NEW_TOKENS", "96"))
 DO_SAMPLE = os.environ.get("CHATBOT_DO_SAMPLE", "true").lower() == "true"
 TEMPERATURE = float(os.environ.get("CHATBOT_TEMPERATURE", "0.7"))
 TOP_P = float(os.environ.get("CHATBOT_TOP_P", "0.9"))
 QUANTIZATION = os.environ.get("CHATBOT_QUANTIZATION", "none").strip().lower()
+HF_TOKEN = os.environ.get("HF_TOKEN") or None
 
-logger.info(f"Loading model: {MODEL_NAME} ...")
+CHATBOT_MODEL_PATH = os.environ.get("CHATBOT_MODEL_PATH", "").strip()
+CHATBOT_USE_MOCK = os.environ.get("CHATBOT_USE_MOCK", "true").lower() in {"1", "true", "yes"}
 
-_tokenizer = AutoTokenizer.from_pretrained(
-    MODEL_NAME,
-    token=HF_TOKEN,
-)
+_tokenizer = None
+_model = None
+_model_init_attempted = False
 
-def _load_model():
+
+def _model_enabled() -> bool:
+    return bool(CHATBOT_MODEL_PATH and (Path(CHATBOT_MODEL_PATH) / "config.json").exists())
+
+
+def get_llm_diagnostics() -> dict[str, Any]:
+    model_exists = _model_enabled()
+    mode = "model" if model_exists and not CHATBOT_USE_MOCK else "mock"
+    return {
+        "chatbot_model_path": CHATBOT_MODEL_PATH or None,
+        "chatbot_model_exists": model_exists,
+        "chatbot_use_mock": CHATBOT_USE_MOCK,
+        "chatbot_mode": mode,
+        "chatbot_model_loaded": _model is not None and _tokenizer is not None,
+    }
+
+
+def _init_model_once() -> None:
+    global _tokenizer, _model, _model_init_attempted
+
+    if _model_init_attempted:
+        return
+    _model_init_attempted = True
+
+    if CHATBOT_USE_MOCK:
+        logger.info("chatbot_llm | CHATBOT_USE_MOCK=true, skipping heavy model load")
+        return
+    if not _model_enabled():
+        logger.info("chatbot_llm | no valid CHATBOT_MODEL_PATH, using mock responses")
+        return
+
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    model_name = CHATBOT_MODEL_PATH
+    logger.info("chatbot_llm | loading model from %s", model_name)
+    _tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN)
+
     use_cuda = torch.cuda.is_available()
     model_kwargs = {
         "token": HF_TOKEN,
         "torch_dtype": torch.bfloat16 if use_cuda else torch.float32,
     }
 
-    # bitsandbytes quantization works best with CUDA GPUs.
     if QUANTIZATION in {"4bit", "8bit"}:
         if not use_cuda:
-            logger.warning("Quantization '%s' requested but CUDA is unavailable; loading without quantization.", QUANTIZATION)
+            logger.warning(
+                "chatbot_llm | quantization '%s' requested but CUDA unavailable; loading without quantization",
+                QUANTIZATION,
+            )
         else:
             try:
                 from transformers import BitsAndBytesConfig
@@ -45,26 +83,35 @@ def _load_model():
                 else:
                     model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
                 model_kwargs["device_map"] = "auto"
-                logger.info("Loading model with bitsandbytes quantization: %s", QUANTIZATION)
+                logger.info("chatbot_llm | loading with quantization=%s", QUANTIZATION)
             except Exception as exc:
-                logger.warning("Failed to enable quantization '%s'; falling back to normal load. err=%s", QUANTIZATION, exc)
+                logger.warning("chatbot_llm | quantization setup failed (%s), continuing without", exc)
 
-    return AutoModelForCausalLM.from_pretrained(MODEL_NAME, **model_kwargs)
+    _model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+    logger.info("chatbot_llm | model loaded")
 
 
-_model = _load_model()
-
-logger.info("Model loaded.")
+def _mock_response(messages: list[dict]) -> str:
+    user_msg = ""
+    for msg in reversed(messages or []):
+        if str(msg.get("role", "")).lower() == "user":
+            user_msg = str(msg.get("content", "")).strip()
+            break
+    if not user_msg:
+        return "I can help with that. Please share the key ticket details."
+    return (
+        "Mock mode is active (no local LLM model path configured). "
+        f"Captured request: {user_msg[:220]}"
+    )
 
 
 def generate_response(messages: list[dict]) -> str:
-    """
-    Generate a response from a list of chat messages.
+    _init_model_once()
+    if _model is None or _tokenizer is None:
+        return _mock_response(messages)
 
-    Args:
-        messages: List of dicts with 'role' and 'content' keys.
-                  e.g. [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
-    """
+    import torch
+
     text = _tokenizer.apply_chat_template(
         messages,
         tokenize=False,
@@ -72,7 +119,6 @@ def generate_response(messages: list[dict]) -> str:
     )
 
     inputs = _tokenizer([text], return_tensors="pt").to(_model.device)
-
     with torch.no_grad():
         gen_kwargs = {
             "max_new_tokens": MAX_NEW_TOKENS,
@@ -83,8 +129,6 @@ def generate_response(messages: list[dict]) -> str:
             gen_kwargs["top_p"] = TOP_P
         output_ids = _model.generate(**inputs, **gen_kwargs)
 
-    # Decode only the newly generated tokens (strip the prompt)
-    generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
+    generated_ids = output_ids[0][inputs["input_ids"].shape[1] :]
     response = _tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
-
-    return response
+    return response or _mock_response(messages)

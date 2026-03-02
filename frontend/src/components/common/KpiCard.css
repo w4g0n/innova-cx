@@ -1,4 +1,4 @@
-/*  KPI Card  */
+/* KPI Card */
 .kpiCard {
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
@@ -18,9 +18,7 @@
 .kpiCard::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0; left: 0; right: 0;
   height: 3px;
   background: var(--gradient-card-top);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;

@@ -11,6 +11,7 @@ Flow:
         → (complaint) [3] sentiment_step  (sentimentanalysis module)
         → (complaint) [4] sentiment_combiner_step (sentimentcombiner module)
         → (complaint) [5] feature_engineering_step
+            : recurrence check then feature labeling/modeling inside one agent
         → (complaint) [6] priority_step   (Fuzzy Logic)
         → [7] router_step        (Backend/Chatbot)
 """

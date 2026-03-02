@@ -18,6 +18,7 @@
   border: 1px solid rgba(255, 255, 255, 0.6);
   box-shadow: 0px 24px 48px rgba(60, 0, 102, 0.28);
   text-align: center;
+  animation: scaleIn 0.3s var(--ease-spring) both;
 }
 
 
@@ -64,8 +65,8 @@
 }
 
 .otp-input:focus {
-  border-color: #5924b4;
-  box-shadow: 0 0 0 3px rgba(89, 36, 180, 0.18);
+  border-color: var(--btn-primary);
+  box-shadow: var(--shadow-glow);
 }
 
 .auth-primary-btn {
@@ -84,7 +85,7 @@
 }
 
 .auth-primary-btn:hover {
-  background: color-mix(in srgb, var(--btn-primary) 85%, #000);
+  filter: brightness(0.90);
   transform: translateY(-1px);
 }
 
@@ -106,7 +107,7 @@
 .auth-link-btn {
   background: none;
   border: none;
-  color: #5924b4;
+  color: var(--btn-primary);
   font-weight: 600;
   cursor: pointer;
   padding: 0;

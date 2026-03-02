@@ -6,26 +6,28 @@ import "./ManagerDashboard.css";
 import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import { apiUrl } from "../../config/apiBase";
+import useScrollReveal from "../../utils/useScrollReveal";
 
 export default function ManagerDashboard() {
+  const revealRef = useScrollReveal();
   const token = localStorage.getItem("access_token");
 
-  // State to hold backend KPIs
+  // State to hold backend KPIs — keys match GET /api/manager response (camelCase)
   const [kpis, setKpis] = useState({
-    open_complaints: 0,
-    in_progress: 0,
-    resolved_today: 0,
-    active_employees: 0,
-    pending_approvals: 0,
+    openComplaints:   0,
+    inProgress:       0,
+    resolvedToday:    0,
+    activeEmployees:  0,
+    pendingApprovals: 0,
   });
 
   useEffect(() => {
     if (!token) return;
 
-    fetch(apiUrl("/manager"), {
+    fetch(apiUrl("/api/manager"), {
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`, // pass token in header
+        Authorization: `Bearer ${token}`,
       },
     })
       .then((res) => {
@@ -42,18 +44,18 @@ export default function ManagerDashboard() {
 
   return (
     <Layout role="manager">
-      <div className="mgrDashboard">
+      <div className="mgrDashboard" ref={revealRef}>
         <PageHeader
           title="Dr. Farhad - Facilities Management"
           subtitle="Quick overview of your department’s activity."
         />
 
         <section className="managerKpiRow">
-          <KpiCard label="Open Complaints" value={kpis.open_complaints} />
-          <KpiCard label="In Progress" value={kpis.in_progress} />
-          <KpiCard label="Resolved Today" value={kpis.resolved_today} />
-          <KpiCard label="Active Employees" value={kpis.active_employees} />
-          <KpiCard label="Pending Approvals" value={kpis.pending_approvals} />
+          <KpiCard label="Open Complaints" value={kpis.openComplaints} />
+          <KpiCard label="In Progress" value={kpis.inProgress} />
+          <KpiCard label="Resolved Today" value={kpis.resolvedToday} />
+          <KpiCard label="Active Employees" value={kpis.activeEmployees} />
+          <KpiCard label="Pending Approvals" value={kpis.pendingApprovals} />
         </section>
 
         <p className="managerIntro">

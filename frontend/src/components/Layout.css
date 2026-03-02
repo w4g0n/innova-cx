@@ -1,32 +1,31 @@
-/*  App shell  */
+/* App shell */
 .appShell {
   display: flex;
   min-height: 100vh;
 }
 
-/* Main content */
+/* Main content — tracks sidebar width via JS-updated CSS variable */
 .appContent {
   flex: 1;
   background: var(--screen-bg);
   padding: 24px 28px;
-  margin-left: var(--sidebar-current-width, var(--sidebar-width));
+  margin-left: var(--sidebar-current-width, var(--sidebar-collapsed));
   box-sizing: border-box;
-  width: calc(100% - var(--sidebar-current-width, var(--sidebar-width)));
-  /* Smooth shift when sidebar collapses */
+  width: calc(100% - var(--sidebar-current-width, var(--sidebar-collapsed)));
+  min-width: 0;
   transition:
     margin-left var(--dur-base) var(--ease-out),
     width var(--dur-base) var(--ease-out);
-  min-width: 0;
 }
 
-/* No-sidebar variant (for customer view) */
+/* No-sidebar variant */
 .appShell--noSidebar .appContent,
 .appContent--noSidebar {
   margin-left: 0;
   width: 100%;
 }
 
-/*  Mobile  */
+/* Mobile */
 @media (max-width: 768px) {
   .appContent {
     margin-left: 0 !important;

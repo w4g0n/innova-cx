@@ -1,17 +1,46 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import "../PublicLanding.css";
 import "./CustomerLanding.css";
 import novaLogo from "../../assets/nova-logo.png";
+import dccBg from "../../assets/dcc-bg.png";
 import CustomerFillForm from "./CustomerFillForm";
 import useNovaChatbot from "./chatbot.js";
 import { apiUrl } from "../../config/apiBase";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { getToken, getUser } from "../../utils/auth";
-import useScrollReveal from "../../utils/useScrollReveal";
+
+const FEATURES = [
+  {
+    icon: "🧠",
+    title: "Sentiment Analysis",
+    desc: "Our AI reads the emotional tone of every complaint in real time, ensuring the most distressed customers are never left waiting.",
+  },
+  {
+    icon: "🎯",
+    title: "Smart Prioritisation",
+    desc: "Tickets are automatically ranked by urgency and customer value so your team always works on what matters most.",
+  },
+  {
+    icon: "🎙️",
+    title: "Audio Intelligence",
+    desc: "Voice complaints are transcribed and analysed instantly — capturing nuance that text alone can miss.",
+  },
+  {
+    icon: "⚡",
+    title: "Instant Resolution",
+    desc: "AI-suggested resolutions cut average handling time dramatically, freeing your team for complex cases.",
+  },
+];
+
+const STATS = [
+  { value: "40%", label: "Faster resolution" },
+  { value: "3×", label: "Complaint throughput" },
+  { value: "98%", label: "Triage accuracy" },
+];
 
 export default function CustomerLanding() {
   const navigate = useNavigate();
-  const revealRef = useScrollReveal();
 
   const [embeddedFormType, setEmbeddedFormType] = useState("Complaint");
 
@@ -32,18 +61,13 @@ export default function CustomerLanding() {
     },
   });
 
-  const clusters = [
-    { title: "Business", desc: "Flexible office & workspace options" },
-    { title: "Logistics", desc: "Advanced warehousing & delivery solutions" },
-    { title: "Social", desc: "Restaurants, cafes & amenities" },
-  ];
-
   const profileRef = useRef(null);
   const notifRef = useRef(null);
 
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -53,7 +77,7 @@ export default function CustomerLanding() {
   const [user] = useState(() => getUser() || {});
   const [notifications, setNotifications] = useState([]);
 
-  // Fetch user and notifications from API
+  // Fetch notifications from API
   useEffect(() => {
     async function fetchNotifications() {
       try {
@@ -81,7 +105,10 @@ export default function CustomerLanding() {
   );
 
   const unreadCount = useMemo(
-    () => Array.isArray(notifications) ? notifications.filter((n) => !n.read).length : 0,
+    () =>
+      Array.isArray(notifications)
+        ? notifications.filter((n) => !n.read).length
+        : 0,
     [notifications]
   );
 
@@ -93,8 +120,10 @@ export default function CustomerLanding() {
   useEffect(() => {
     const onMouseDown = (e) => {
       const t = e.target;
-      if (profileRef.current && !profileRef.current.contains(t)) setProfileMenuOpen(false);
-      if (notifRef.current && !notifRef.current.contains(t)) setNotifOpen(false);
+      if (profileRef.current && !profileRef.current.contains(t))
+        setProfileMenuOpen(false);
+      if (notifRef.current && !notifRef.current.contains(t))
+        setNotifOpen(false);
     };
     const onKeyDown = (e) => {
       if (e.key === "Escape") closeAllPopovers();
@@ -110,7 +139,8 @@ export default function CustomerLanding() {
   useEffect(() => {
     if (!isOpen) return;
     if (novaView !== "chat") return;
-    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+    if (listRef.current)
+      listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, isOpen, isExpanded, novaView, listRef]);
 
   const handleClose = () => setShowCloseConfirm(true);
@@ -134,28 +164,48 @@ export default function CustomerLanding() {
 
   const handleLogout = () => {
     closeAllPopovers();
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("token");
     localStorage.removeItem("temp_token");
-    navigate("/");
+    localStorage.removeItem("access_token");
+    navigate("/login");
   };
 
-  const toggleNotifications = () => {
+  const toggleNotifications = async () => {
     setProfileMenuOpen(false);
-    setNotifOpen((v) => {
-      const next = !v;
-      if (next) {
-        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      }
+    setNotifOpen((prev) => {
+      const next = !prev;
       return next;
     });
+
+    if (!notifOpen) {
+      try {
+        const token = getToken();
+        const res = await fetch(
+          apiUrl("/api/customer/notifications?mark_read=true"),
+          {
+            method: "GET",
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        if (res.ok) {
+          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        } else {
+          console.error("Failed to mark notifications as read");
+        }
+      } catch (err) {
+        console.error("Error marking notifications as read:", err);
+      }
+    }
   };
 
   const toggleFormInChat = () => {
     closeAllPopovers();
-
     if (!isOpen) setIsOpen(true);
-
     setNovaView((prev) => {
       const next = prev === "form" ? "chat" : "form";
       if (next === "form") resetSession();
@@ -190,7 +240,7 @@ export default function CustomerLanding() {
   const startVoice = () => {
     const SR = getSpeechRecognition();
     if (!SR) {
-      alert("Voice input isn’t supported in this browser. Try Chrome.");
+      alert("Voice input isn't supported in this browser. Try Chrome.");
       return;
     }
 
@@ -264,7 +314,7 @@ export default function CustomerLanding() {
     if (!isoString) return "";
     const now = new Date();
     const date = new Date(isoString);
-    const diff = Math.floor((now - date) / 1000); // seconds
+    const diff = Math.floor((now - date) / 1000);
 
     if (diff < 60) return `${diff} sec${diff !== 1 ? "s" : ""} ago`;
     if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
@@ -274,28 +324,31 @@ export default function CustomerLanding() {
   };
 
   return (
-    <div className="customer-landing-page">
-      <div className="landing-bg-blobs" aria-hidden="true">
-        <span className="landing-blob landing-blob--one" />
-        <span className="landing-blob landing-blob--two" />
-        <span className="landing-blob landing-blob--three" />
-      </div>
+    <div className="customer-landing-page pl-root">
 
-      <div className="main-content" ref={revealRef}>
-        <nav className="navbar reveal">
-          <div className="logo">
-            <img src={novaLogo} alt="Dubai CommerCity" />
+      {/* ─── HERO ─────────────────────────────────────────────── */}
+      <section
+        className="pl-hero"
+        style={{ backgroundImage: `url(${dccBg})` }}
+      >
+        <div className="pl-hero-overlay" />
+
+        {/* NAV */}
+        <nav className="pl-nav">
+          <img src={novaLogo} alt="InnovaCX" className="pl-nav-logo" />
+
+          <div className="pl-nav-links">
+            <button
+              className="pl-nav-link"
+              onClick={() => navigate("/customer/about")}
+            >
+              About Us
+            </button>
           </div>
 
-          <ul className="nav-links">
-            <li><a href="#">Our Facilities</a></li>
-            <li><a href="#">Digital Ecosystem</a></li>
-            <li><a href="#">Newsroom</a></li>
-            <li><a href="#">Contact</a></li>
-            <li><a href="#" onClick={(e) => { e.preventDefault(); navigate("/customer/about"); }}>About</a></li>
-          </ul>
-
+          {/* Authenticated nav actions */}
           <div className="nav-actions">
+            {/* Notifications bell */}
             <div className="navAction" ref={notifRef}>
               <button
                 type="button"
@@ -303,37 +356,60 @@ export default function CustomerLanding() {
                 aria-label="Notifications"
                 onClick={toggleNotifications}
               >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path
-                    d="M12 22a2.25 2.25 0 0 0 2.2-1.8h-4.4A2.25 2.25 0 0 0 12 22Zm7-6V11a7 7 0 1 0-14 0v5l-2 2v1h18v-1l-2-2Z"
-                    fill="currentColor"
-                    opacity="0.95"
-                  />
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
 
                 {unreadCount > 0 && (
-                  <span className="notifBadge" aria-label={`${unreadCount} notifications`}>
+                  <span
+                    className="notifBadge"
+                    aria-label={`${unreadCount} notifications`}
+                  >
                     {unreadCount}
                   </span>
                 )}
               </button>
 
               {notifOpen && (
-                <div className="navPopover" role="menu" aria-label="Notifications">
+                <div
+                  className="navPopover"
+                  role="menu"
+                  aria-label="Notifications"
+                >
                   <div className="navPopoverHeader">Notifications</div>
                   <div className="navPopoverList">
                     {notifications.length === 0 ? (
                       <div className="navPopoverEmpty">No notifications</div>
                     ) : (
                       notifications.map((n) => (
-                        <div key={n.id} className={`navPopoverItem ${n.read ? "" : "unread"}`}>
+                        <div
+                          key={n.id}
+                          className={`navPopoverItem ${n.read ? "" : "unread"}`}
+                        >
                           <div className="navPopoverItemHeader">
-                            <div className="navPopoverItemTitle">{n.title || n.type || "Notification"}</div>
+                            <div className="navPopoverItemTitle">
+                              {n.title || n.type || "Notification"}
+                            </div>
                             {n.createdAt && (
-                              <div className="navPopoverItemTime">{formatTimeAgo(n.createdAt)}</div>
+                              <div className="navPopoverItemTime">
+                                {formatTimeAgo(n.createdAt)}
+                              </div>
                             )}
                           </div>
-                          <div className="navPopoverItemMeta">{n.message || ""}</div>
+                          <div className="navPopoverItemMeta">
+                            {n.message || ""}
+                          </div>
                         </div>
                       ))
                     )}
@@ -342,6 +418,7 @@ export default function CustomerLanding() {
               )}
             </div>
 
+            {/* Profile avatar */}
             <div className="navAction" ref={profileRef}>
               <button
                 type="button"
@@ -352,19 +429,33 @@ export default function CustomerLanding() {
                   setProfileMenuOpen((v) => !v);
                 }}
               >
-                <span className="navAvatarCircle" aria-hidden="true">{initialsFromEmail}</span>
+                <span className="navAvatarCircle" aria-hidden="true">
+                  {initialsFromEmail}
+                </span>
               </button>
 
               {profileMenuOpen && (
                 <div className="navDropdown" role="menu" aria-label="Profile">
-                  <button type="button" className="navDropdownItem" onClick={openHistory}>
+                  <button
+                    type="button"
+                    className="navDropdownItem"
+                    onClick={openHistory}
+                  >
                     My Tickets
                   </button>
-                  <button type="button" className="navDropdownItem" onClick={openSettings}>
+                  <button
+                    type="button"
+                    className="navDropdownItem"
+                    onClick={openSettings}
+                  >
                     Settings
                   </button>
                   <div className="navDropdownDivider" />
-                  <button type="button" className="navDropdownItem danger" onClick={handleLogout}>
+                  <button
+                    type="button"
+                    className="navDropdownItem danger"
+                    onClick={handleLogout}
+                  >
                     Logout
                   </button>
                 </div>
@@ -373,54 +464,145 @@ export default function CustomerLanding() {
           </div>
         </nav>
 
-        <section className="hero reveal">
-          <div className="hero-content">
-            <div className="hero-title-wrapper">
-              <h1 className="hero-title"><span className="hero-static">We are</span></h1>
-              <div className="hero-dynamic">
-                <div className="hero-dynamic-inner">
-                  <span>InnovaAI</span>
-                  <span>Transforming Customer Experience</span>
-                  <span>AI-Powered Ticket Prioritization</span>
-                </div>
-              </div>
-              <div className="hero-line" />
-            </div>
+        {/* HERO CONTENT */}
+        <div className="pl-hero-body">
+          <div className="pl-hero-eyebrow">Dubai CommerCity · AI-Powered CX</div>
 
-            <div className="hero-body">
-              <button className="btn-hero btn-hero--primary" onClick={() => navigate("/customer/about")}>About Us</button>
-              <p className="hero-desc">
-               We are transforming customer support with smart ticket prioritization. Using sentiment and audio analysis, our system identifies urgent issues and high-value customers, helping teams respond faster and more effectively.
-              </p>
-            </div>
+          <h1 className="pl-hero-headline">
+            <span className="pl-word pl-word--1">Transforming</span>
+            <span className="pl-word pl-word--2">Customer</span>
+            <span className="pl-word pl-word--3">Experience</span>
+          </h1>
+
+          <p className="pl-hero-sub">
+            InnovaCX uses sentiment analysis, audio intelligence, and machine
+            learning to route and resolve complaints faster than ever — so every
+            customer feels heard.
+          </p>
+
+          <div className="pl-hero-actions">
+            <button
+              className="pl-btn-primary"
+              onClick={() => navigate("/customer/mytickets")}
+            >
+              My Tickets
+            </button>
+            <button
+              className="pl-btn-ghost"
+              onClick={() => navigate("/customer/about")}
+            >
+              Learn More
+            </button>
           </div>
-        </section>
 
-        <section className="clusters reveal">
-          {clusters.map((c, i) => (
-            <div key={i} className="cluster-card reveal">
-              <h3>{c.title}</h3>
-              <p>{c.desc}</p>
+          {/* NOVA CTA */}
+          <button
+            className="pl-nova-pill"
+            onClick={() => setIsOpen(true)}
+            title="Chat with Nova AI"
+          >
+            <span className="pl-nova-dot" />
+            <span>Chat with Nova AI</span>
+            <span className="pl-nova-arrow">→</span>
+          </button>
+        </div>
+
+        {/* FLOATING STATS */}
+        <div className="pl-stats">
+          {STATS.map((s, i) => (
+            <div
+              key={i}
+              className="pl-stat"
+              style={{ animationDelay: `${i * 0.15}s` }}
+            >
+              <span className="pl-stat-value">{s.value}</span>
+              <span className="pl-stat-label">{s.label}</span>
             </div>
           ))}
-        </section>
+        </div>
 
-        <footer className="footer reveal">
-          <p>© 2026 Dubai CommerCity</p>
-          <div className="footer-links">
-            <span>Privacy Policy</span>
-            <span>Terms of Use</span>
-            <span>Contact</span>
-          </div>
-        </footer>
-      </div>
+        {/* SCROLL HINT */}
+        <div className="pl-scroll-hint">
+          <span className="pl-scroll-line" />
+          <span className="pl-scroll-text">Scroll</span>
+        </div>
+      </section>
 
+      {/* ─── FEATURES ─────────────────────────────────────────── */}
+      <section className="pl-features">
+        <div className="pl-section-label">What We Do</div>
+        <h2 className="pl-section-title">AI that works as hard as your team</h2>
+        <p className="pl-section-sub">
+          Four intelligent layers that ensure no complaint falls through the
+          cracks.
+        </p>
+
+        <div className="pl-feature-grid">
+          {FEATURES.map((f, i) => (
+            <div
+              key={i}
+              className="pl-feature-card"
+              style={{ animationDelay: `${i * 0.1}s` }}
+            >
+              <div className="pl-feature-icon">{f.icon}</div>
+              <h3 className="pl-feature-title">{f.title}</h3>
+              <p className="pl-feature-desc">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ─── CTA STRIP ────────────────────────────────────────── */}
+      <section className="pl-cta-strip">
+        <div className="pl-cta-inner">
+          <h2 className="pl-cta-headline">Need help? We've got you.</h2>
+          <p className="pl-cta-sub">
+            Chat with Nova, submit a complaint, or track your existing tickets —
+            all in one place.
+          </p>
+          <button
+            className="pl-btn-primary pl-btn-large"
+            onClick={() => setIsOpen(true)}
+          >
+            Chat with Nova
+          </button>
+        </div>
+      </section>
+
+      {/* ─── FOOTER ───────────────────────────────────────────── */}
+      <footer className="pl-footer">
+        <img src={novaLogo} alt="InnovaCX" className="pl-footer-logo" />
+        <div className="pl-footer-links">
+          <button
+            className="pl-footer-link"
+            onClick={() => navigate("/customer/about")}
+          >
+            About Us
+          </button>
+          <button
+            className="pl-footer-link"
+            onClick={() => navigate("/customer/mytickets")}
+          >
+            My Tickets
+          </button>
+          <button
+            className="pl-footer-link"
+            onClick={() => navigate("/customer/settings")}
+          >
+            Settings
+          </button>
+        </div>
+        <p className="pl-footer-copy">© 2026 Dubai CommerCity · InnovaCX</p>
+      </footer>
+
+      {/* ─── NOVA WIDGET LAUNCHER ─────────────────────────────── */}
       {!isOpen && (
         <button className="novaWidgetLauncher" onClick={() => setIsOpen(true)}>
           <span className="novaWidgetDot" /> Chat with Nova
         </button>
       )}
 
+      {/* ─── NOVA WIDGET ──────────────────────────────────────── */}
       {isOpen && (
         <div className={`novaWidget ${isExpanded ? "expanded" : ""} open`}>
           <div className="novaWidgetHeader">
@@ -491,13 +673,22 @@ export default function CustomerLanding() {
                 aria-label="Close"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  <path
+                    d="M6 6l12 12M18 6 6 18"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
                 </svg>
               </button>
             </div>
           </div>
 
-          <div className={`novaWidgetBody ${novaView === "form" ? "novaWidgetBody--form" : ""}`}>
+          <div
+            className={`novaWidgetBody ${
+              novaView === "form" ? "novaWidgetBody--form" : ""
+            }`}
+          >
             {novaView === "form" ? (
               <div className="novaFormHost">
                 <CustomerFillForm
@@ -512,14 +703,23 @@ export default function CustomerLanding() {
                   {messages.map((m) => (
                     <div
                       key={m.id}
-                      className={`novaMsg ${m.from === "user" ? "novaMsg--user" : "novaMsg--bot"}`}
+                      className={`novaMsg ${
+                        m.from === "user" ? "novaMsg--user" : "novaMsg--bot"
+                      }`}
                     >
                       <div className="novaBubble">
-                        {m.typing ? <div className="novaTyping"><span /><span /><span /></div> : m.text}
+                        {m.typing ? (
+                          <div className="novaTyping">
+                            <span />
+                            <span />
+                            <span />
+                          </div>
+                        ) : (
+                          m.text
+                        )}
                       </div>
                     </div>
                   ))}
-
                 </div>
 
                 <div className="novaComposerWrap">
@@ -527,7 +727,11 @@ export default function CustomerLanding() {
                     <div className={`novaVoiceBar ${voiceBusy ? "isBusy" : ""}`}>
                       <div className="novaVoiceLeft">
                         <div className="novaVoiceText">
-                          {voiceBusy ? "Transcribing…" : (voiceDraft.trim() ? "Review & insert" : "Listening…")}
+                          {voiceBusy
+                            ? "Transcribing…"
+                            : voiceDraft.trim()
+                            ? "Review & insert"
+                            : "Listening…"}
                         </div>
                         <div className="novaWaves" aria-hidden="true">
                           <span className="novaWave" />
@@ -546,8 +750,19 @@ export default function CustomerLanding() {
                           aria-label="Cancel recording"
                           disabled={voiceBusy}
                         >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M6 6l12 12M18 6 6 18"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
                           </svg>
                         </button>
 
@@ -558,7 +773,13 @@ export default function CustomerLanding() {
                           aria-label="Insert transcript"
                           disabled={voiceBusy}
                         >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden="true"
+                          >
                             <path
                               d="M20 6L9 17l-5-5"
                               stroke="currentColor"
@@ -571,6 +792,7 @@ export default function CustomerLanding() {
                       </div>
                     </div>
                   )}
+
                   <form
                     className="novaComposer"
                     onSubmit={(e) => {
@@ -579,44 +801,49 @@ export default function CustomerLanding() {
                       setText("");
                     }}
                   >
-
-                      <button
-                        type="button"
-                        className={`novaMicBtn ${voiceActive ? "active" : ""}`}
-                        aria-label="Voice input"
-                        onClick={() => {
-                          if (voiceActive) cancelVoice();
-                          else startVoice();
-                        }}
+                    <button
+                      type="button"
+                      className={`novaMicBtn ${voiceActive ? "active" : ""}`}
+                      aria-label="Voice input"
+                      onClick={() => {
+                        if (voiceActive) cancelVoice();
+                        else startVoice();
+                      }}
+                    >
+                      <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden="true"
                       >
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                          <path
-                            d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z"
-                            fill="currentColor"
-                            opacity="0.95"
-                          />
-                          <path
-                            d="M19 11a7 7 0 0 1-14 0"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                          />
-                          <path
-                            d="M12 18v3"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      </button>
+                        <path
+                          d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z"
+                          fill="currentColor"
+                          opacity="0.95"
+                        />
+                        <path
+                          d="M19 11a7 7 0 0 1-14 0"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M12 18v3"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </button>
 
-                      <input
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        placeholder="Type a message…"
-                      />
+                    <input
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                      placeholder="Type a message…"
+                    />
 
-                      <button type="submit">Send</button>
+                    <button type="submit">Send</button>
                   </form>
                 </div>
 
@@ -626,13 +853,28 @@ export default function CustomerLanding() {
                       <p>Are you sure you want to end the chat?</p>
                       <div className="novaCloseModalBtns">
                         <button onClick={confirmClose}>Yes</button>
-                        <button onClick={() => setShowCloseConfirm(false)}>No</button>
+                        <button onClick={() => setShowCloseConfirm(false)}>
+                          No
+                        </button>
                       </div>
                     </div>
                   </div>
                 )}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── LOGOUT CONFIRM MODAL ─────────────────────────────── */}
+      {showLogoutConfirm && (
+        <div className="novaCloseModal">
+          <div className="novaCloseModalContent">
+            <p>Are you sure you want to log out?</p>
+            <div className="novaCloseModalBtns">
+              <button onClick={confirmLogout}>Log out</button>
+              <button onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
+            </div>
           </div>
         </div>
       )}

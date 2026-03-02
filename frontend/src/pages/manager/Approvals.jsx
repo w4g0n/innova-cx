@@ -8,8 +8,23 @@ import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import { apiUrl } from "../../config/apiBase";
 import "./Approvals.css";
+import useScrollReveal from "../../utils/useScrollReveal";
+
+function getAuthToken() {
+  try {
+    const raw = localStorage.getItem("user");
+    if (raw) { const u = JSON.parse(raw); if (u?.access_token) return u.access_token; }
+  } catch { /* ignore */ }
+  return (
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") || ""
+  );
+}
 
 export default function Approvals() {
+  const revealRef = useScrollReveal();
   const navigate = useNavigate();
 
   // ------------------- State -------------------
@@ -17,10 +32,11 @@ export default function Approvals() {
   const [requestType, setRequestType] = useState("All Request Types");
   const [status, setStatus] = useState("All Status");
   const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // ------------------- Fetch Approvals with Session -------------------
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
+    const token = getAuthToken();
     if (!token) {
       navigate("/login");
       return;
@@ -31,7 +47,8 @@ export default function Approvals() {
       Authorization: `Bearer ${token}`,
     };
 
-    fetch(apiUrl("/manager/approvals"), { headers })
+    setLoading(true);
+    fetch(apiUrl("/api/manager/approvals"), { headers })
       .then((res) => {
         if (res.status === 401) navigate("/login");
         return res.json();
@@ -39,7 +56,7 @@ export default function Approvals() {
       .then((data) => {
         const formatted = data.map((a) => ({
           requestId: a.requestId,
-          ticketId: a.ticketCode, // showing CX-XXXX instead of UUID
+          ticketId: a.ticketCode,
           type: a.type,
           current: a.current,
           requested: a.requested,
@@ -49,12 +66,13 @@ export default function Approvals() {
         }));
         setRows(formatted);
       })
-      .catch((err) => console.error("Error fetching approvals:", err));
+      .catch((err) => console.error("Error fetching approvals:", err))
+      .finally(() => setLoading(false));
   }, [navigate]);
 
   // ------------------- Actions -------------------
   const decide = async (requestId, decision) => {
-    const token = localStorage.getItem("access_token");
+    const token = getAuthToken();
     if (!token) { navigate("/login"); return; }
 
     // Optimistic update
@@ -63,7 +81,7 @@ export default function Approvals() {
     );
 
     try {
-      const res = await fetch(apiUrl(`/manager/approvals/${requestId}`), {
+      const res = await fetch(apiUrl(`/api/manager/approvals/${requestId}`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -120,17 +138,17 @@ export default function Approvals() {
   // ------------------- JSX -------------------
   return (
     <Layout role="manager">
-      <div className="mgrApprovals">
+      <div className="mgrApprovals" ref={revealRef}>
         <PageHeader
           title="Approvals"
           subtitle="Approve or reject requests for rescoring and rerouting complaints."
         />
 
         <section className="kpiRow">
-          <KpiCard label="Total Requests" value={totals.total} caption="All approval requests" />
-          <KpiCard label="Pending" value={totals.pending} caption="Awaiting decision" />
-          <KpiCard label="Approved" value={totals.approved} caption="Approved by manager" />
-          <KpiCard label="Rejected" value={totals.rejected} caption="Rejected by manager" />
+          <KpiCard label="Total Requests" value={loading ? "—" : totals.total} caption="All approval requests" />
+          <KpiCard label="Pending"        value={loading ? "—" : totals.pending} caption="Awaiting decision" />
+          <KpiCard label="Approved"       value={loading ? "—" : totals.approved} caption="Approved by manager" />
+          <KpiCard label="Rejected"       value={loading ? "—" : totals.rejected} caption="Rejected by manager" />
         </section>
 
         <section className="searchSection">
@@ -194,7 +212,14 @@ export default function Approvals() {
               </thead>
 
               <tbody>
-                {filtered.map((r) => (
+                {loading && (
+                  <tr>
+                    <td className="emptyRow" colSpan={9} style={{ textAlign: "center", color: "rgba(17,17,17,0.45)" }}>
+                      Loading requests…
+                    </td>
+                  </tr>
+                )}
+                {!loading && filtered.map((r) => (
                   <tr key={r.requestId}>
                     <td>{r.requestId}</td>
                     <td className="ticketLink">{r.ticketId}</td>
@@ -237,7 +262,7 @@ export default function Approvals() {
                   </tr>
                 ))}
 
-                {filtered.length === 0 && (
+                {!loading && filtered.length === 0 && (
                   <tr>
                     <td className="emptyRow" colSpan={9}>
                       No approval requests match your filters.

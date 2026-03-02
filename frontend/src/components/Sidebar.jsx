@@ -2,8 +2,9 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import "./Sidebar.css";
 import logo from "../assets/nova-logo.png";
+import ConfirmDialog from "./common/ConfirmDialog";
 
-/*  SVG icon set */
+/* SVG icon set */
 const Icon = {
   bell: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -88,23 +89,34 @@ const Icon = {
       <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   ),
-  chevronLeft: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-      <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  /* Lock closed — shown when pinned (click to unpin) */
+  lockClosed: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+      <rect x="5" y="11" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="2.5" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   ),
-  chevronRight: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-      <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  /* Lock open — shown when unpinned (click to pin) */
+  lockOpen: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+      <rect x="5" y="11" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="2.5" />
+      <path d="M8 11V7a4 4 0 0 1 8 0" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  ),
+  users: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M17 11h4M19 9v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   ),
 };
 
-/*  Menu definitions */
+/* Menu definitions */
 const menus = {
   customer: [
     { label: "Notifications", to: "/customer/notifications", icon: "bell" },
-    { label: "My Tickets",    to: "/customer/history",        icon: "tickets" },
+    { label: "My Tickets",    to: "/customer/mytickets",      icon: "tickets" },
     { label: "Fill a Form",   to: "/customer/fill-form",      icon: "form" },
   ],
   employee: [
@@ -126,38 +138,51 @@ const menus = {
     { label: "Dashboard",        to: "/operator", end: true,       icon: "dashboard" },
     { label: "Model Analysis",   to: "/operator/model-analysis",   icon: "model" },
     { label: "Chatbot Analysis", to: "/operator/chatbot-analysis", icon: "chatbot" },
+    { label: "Manage Users",     to: "/operator/users",            icon: "users" },
   ],
 };
 
 export default function Sidebar({ role }) {
   const navigate = useNavigate();
 
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem("sidebar-collapsed") === "true"
+  /* Pinned = stays open without hover */
+  const [pinned, setPinned] = useState(
+    () => localStorage.getItem("sidebar-pinned") === "true"
   );
+  const [hovered, setHovered] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
 
-  /* Sync CSS variable + localStorage whenever collapsed changes */
-  useEffect(() => {
-    const w = collapsed ? "var(--sidebar-collapsed)" : "var(--sidebar-width)";
-    document.documentElement.style.setProperty("--sidebar-current-width", w);
-    localStorage.setItem("sidebar-collapsed", String(collapsed));
-  }, [collapsed]);
+  const isExpanded = pinned || hovered;
 
-  /* Also apply on first mount (handles page refresh) */
   useEffect(() => {
-    const w = collapsed ? "var(--sidebar-collapsed)" : "var(--sidebar-width)";
-    document.documentElement.style.setProperty("--sidebar-current-width", w);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    localStorage.setItem("sidebar-pinned", String(pinned));
+  }, [pinned]);
+
+  /* Push page content as sidebar resizes */
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--sidebar-current-width",
+      isExpanded ? "210px" : "var(--sidebar-collapsed)"
+    );
+  }, [isExpanded]);
 
   const menu = menus[role] || [];
 
-  const handleLogout = () => {
+  /* Open logout confirmation */
+  const handleLogout = () => setLogoutOpen(true);
+
+  /* Actually perform the logout */
+  const doLogout = () => {
     localStorage.removeItem("user");
     navigate("/");
   };
 
   return (
-    <aside className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`}>
+    <aside
+      className={`sidebar${isExpanded ? " sidebar--expanded" : ""}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       {/* Brand */}
       <div className="sidebar__brand">
         <img src={logo} alt="InnovaCX Logo" className="sidebar__logo" />
@@ -189,40 +214,60 @@ export default function Sidebar({ role }) {
 
       {/* Bottom controls */}
       <div className="sidebar__bottom">
-        <button
-          className="sidebar__bottomBtn"
-          type="button"
+        <NavLink
+          to={`/${role}/settings`}
           title="Settings"
           aria-label="Settings"
+          className={({ isActive }) =>
+            isActive
+              ? "sidebar__bottomBtn sidebar__bottomBtn--active"
+              : "sidebar__bottomBtn"
+          }
         >
           <span className="sidebar__icon" aria-hidden="true">{Icon.settings}</span>
           <span className="sidebar__label">Settings</span>
-        </button>
+        </NavLink>
 
         <button
-          className="sidebar__bottomBtn"
-          type="button"
           onClick={handleLogout}
+          type="button"
           title="Logout"
           aria-label="Logout"
+          className="sidebar__bottomBtn sidebar__logoutBtn"
         >
           <span className="sidebar__icon" aria-hidden="true">{Icon.logout}</span>
           <span className="sidebar__label">Logout</span>
         </button>
 
-        {/* Collapse / expand toggle */}
+        {/* Pin toggle — lock icon */}
         <button
-          className="sidebar__toggleBtn"
+          className={`sidebar__pinBtn${pinned ? " sidebar__pinBtn--active" : ""}`}
           type="button"
-          onClick={() => setCollapsed((c) => !c)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={() => setPinned((p) => !p)}
+          aria-label={pinned ? "Unpin sidebar" : "Pin sidebar open"}
+          title={pinned ? "Unpin sidebar" : "Pin sidebar open"}
         >
           <span aria-hidden="true">
-            {collapsed ? Icon.chevronRight : Icon.chevronLeft}
+            {pinned ? Icon.lockClosed : Icon.lockOpen}
           </span>
         </button>
       </div>
+
+      {/* Logout confirm dialog */}
+      <ConfirmDialog
+        open={logoutOpen}
+        variant="info"  
+        icon="🔓"
+        title="Log Out"
+        message="Are you sure you want to log out of InnovaCX?"
+        confirmLabel="Log Out"
+        cancelLabel="Cancel"
+        onCancel={() => setLogoutOpen(false)}
+        onConfirm={() => {
+          setLogoutOpen(false);
+          doLogout();
+        }}
+      />
     </aside>
   );
 }

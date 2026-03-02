@@ -1,13 +1,71 @@
 import Layout from "../../components/Layout";
 import { useMemo, useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { PDFDownloadLink } from "@react-pdf/renderer";
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import KpiCard from "../../components/common/KpiCard";
+import EmployeeReportPDF from "../employee/EmployeeReportPDF";
 import { apiUrl } from "../../config/apiBase";
 import "./ManagerViewEmployees.css";
 
-const API_BASE = apiUrl("");
+const API_BASE = apiUrl("/api");
+
+function getAuthToken() {
+  const direct =
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken");
+  if (direct) return direct;
+  try {
+    const raw = localStorage.getItem("user");
+    if (!raw) return "";
+    const user = JSON.parse(raw);
+    return user?.access_token || "";
+  } catch {
+    return "";
+  }
+}
+
+/** Build a structured report object from the employee row data we have. */
+function buildEmployeeReport(emp) {
+  const now   = new Date();
+  const month = now.toLocaleString("default", { month: "long", year: "numeric" });
+  const total = (emp.completed || 0) + (emp.inProgress || 0);
+  const slaPct = total > 0 ? `${Math.round(((emp.completed || 0) / total) * 100)}%` : "N/A";
+  const rating =
+    (emp.completed || 0) >= 20 ? "Excellent" :
+    (emp.completed || 0) >= 10 ? "Good"      : "Needs Improvement";
+
+  return {
+    month,
+    kpis: {
+      rating,
+      resolved:    emp.completed  || 0,
+      sla:         slaPct,
+      avgResponse: "N/A",
+    },
+    summary: [
+      { label: "Total Assigned",  value: String(total) },
+      { label: "Completed",       value: String(emp.completed  || 0) },
+      { label: "In Progress",     value: String(emp.inProgress || 0) },
+      { label: "SLA Compliance",  value: slaPct },
+      { label: "Role",            value: emp.role || "Employee" },
+    ],
+    weekly: [
+      { week: "Week 1", assigned: "—", resolved: "—", sla: "—", avg: "—" },
+      { week: "Week 2", assigned: "—", resolved: "—", sla: "—", avg: "—" },
+      { week: "Week 3", assigned: "—", resolved: "—", sla: "—", avg: "—" },
+      { week: "Week 4", assigned: "—", resolved: "—", sla: "—", avg: "—" },
+    ],
+    notes: [
+      `${emp.name} completed ${emp.completed || 0} ticket(s) this period.`,
+      `${emp.inProgress || 0} ticket(s) are currently in progress.`,
+      "Full weekly breakdown requires backend analytics integration.",
+    ],
+  };
+}
 
 export default function ManagerViewEmployees() {
   const navigate = useNavigate();
@@ -18,7 +76,7 @@ export default function ManagerViewEmployees() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
+    const token = getAuthToken();
     if (!token) {
       setEmployees([]);
       setLoading(false);
@@ -160,12 +218,23 @@ export default function ManagerViewEmployees() {
                       <td>{e.completed || 0}</td>
                       <td>{e.inProgress || 0}</td>
                       <td>
-                        <Link
-                          className="ve-reportBtn"
-                          to={`/manager/employees/${e.id}`}
+                        <PDFDownloadLink
+                          document={
+                            <EmployeeReportPDF
+                              report={buildEmployeeReport(e)}
+                              employeeName={e.name}
+                              employeeId={e.id}
+                              downloadDate={new Date()}
+                            />
+                          }
+                          fileName={`report-${e.id}-${new Date().toISOString().slice(0, 10)}.pdf`}
                         >
-                          View report
-                        </Link>
+                          {({ loading: pdfLoading }) => (
+                            <span className={`ve-reportBtn${pdfLoading ? " ve-reportBtn--loading" : ""}`}>
+                              {pdfLoading ? "Preparing…" : "⬇ View Report"}
+                            </span>
+                          )}
+                        </PDFDownloadLink>
                       </td>
                     </tr>
                   ))}

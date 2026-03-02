@@ -10,9 +10,24 @@ import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
+import useScrollReveal from "../../utils/useScrollReveal";
+
+function getAuthToken() {
+  try {
+    const raw = localStorage.getItem("user");
+    if (raw) { const u = JSON.parse(raw); if (u?.access_token) return u.access_token; }
+  } catch { /* ignore */ }
+  return (
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") || ""
+  );
+}
 
 export default function ManagerViewComplaints() {
-  const token = localStorage.getItem("access_token");
+  const revealRef = useScrollReveal();
+  const token = getAuthToken();
 
   // Tickets & Employees
   const [rows, setRows] = useState([]);
@@ -33,8 +48,7 @@ export default function ManagerViewComplaints() {
   const [openMenuFor, setOpenMenuFor] = useState(null);
 
   // Departments for rerouting (dummy placeholder, replace with real list if needed)
-  const departments = ["Maintenance", "IT", "Security", "Cleaning", "Facilities"];
-
+  const [departments, setDepartments] = useState([]);
   // Fetch tickets & employees with session token
   useEffect(() => {
     if (!token) return;
@@ -45,7 +59,7 @@ export default function ManagerViewComplaints() {
     };
 
     // Fetch complaints
-    fetch(apiUrl("/manager/complaints"), { headers })
+    fetch(apiUrl("/api/manager/complaints"), { headers })
       .then((res) => {
         if (res.status === 401) return null;
         return res.json();
@@ -56,8 +70,13 @@ export default function ManagerViewComplaints() {
         setRows([]);
       });
 
+    fetch(apiUrl("/manager/departments"), { headers })
+      .then((res) => res.json())
+      .then((data) => Array.isArray(data) && setDepartments(data))
+      .catch(() => {});
+      
     // Fetch employees for assignment modal
-    fetch(apiUrl("/manager/employees"), { headers })
+    fetch(apiUrl("/api/manager/employees"), { headers })
       .then((res) => {
         if (res.status === 401) return null;
         return res.json();
@@ -91,9 +110,30 @@ export default function ManagerViewComplaints() {
 
   const clearSelection = () => setSelectedEmployee("");
 
-  const confirmAssignment = () => {
-    if (!activeTicketId) return;
+const confirmAssignment = async () => {
+  if (!activeTicketId) return;
 
+  console.log("PATCH →", apiUrl(`/manager/complaints/${activeTicketId}/assign`));
+  console.log("body →", JSON.stringify({ employee_name: selectedEmployee || null }));
+
+  try {
+    const res = await fetch(apiUrl(`/manager/complaints/${activeTicketId}/assign`), {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ employee_name: selectedEmployee || null }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("Assignment failed:", err);
+      alert(`Failed to update assignment: ${err.detail || res.statusText}`);
+      return;
+    }
+
+    // Optimistically update local state after confirmed DB write
     setRows((prev) =>
       prev.map((r) => {
         if (r.id !== activeTicketId) return r;
@@ -112,18 +152,39 @@ export default function ManagerViewComplaints() {
         };
       })
     );
+  } catch (err) {
+    console.error("Network error during assignment:", err);
+    alert("Network error. Please try again.");
+  }
 
-    closeAssignModal();
-  };
+  closeAssignModal();
+};
 
-  const handleReroute = (ticketId, dept) => {
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === ticketId
-          ? { ...r, status: "Unassigned", assignee: "—", action: "Assign", reroutedTo: dept }
-          : r
-      )
-    );
+  const handleReroute = async (ticketId, dept) => {
+    try {
+      const res = await fetch(apiUrl(`/manager/complaints/${ticketId}/department`), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ department: dept }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Failed to reroute: ${err.detail || res.statusText}`);
+        return;
+      }
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === ticketId
+            ? { ...r, department: dept, reroutedTo: dept }
+            : r
+        )
+      );
+    } catch {
+      alert("Network error during reroute.");
+    }
     closeMenu();
   };
 
@@ -164,7 +225,7 @@ export default function ManagerViewComplaints() {
   // ------------------- JSX -------------------
   return (
     <Layout role="manager">
-      <main className="mv-main" onClick={closeMenu}>
+      <main className="mv-main" ref={revealRef} onClick={closeMenu}>
         <section className="mv-header">
           <PageHeader
             title="View All Complaints"
@@ -248,7 +309,7 @@ export default function ManagerViewComplaints() {
 
             <tbody>
               {filteredRows.map((r, idx) => {
-                const showMore = r.status === "Unassigned";
+                const showMore = true;
                 const showCancelReroute = Boolean(r.reroutedTo);
                 const openUp = idx >= filteredRows.length - 2;
 
@@ -260,7 +321,7 @@ export default function ManagerViewComplaints() {
                         to={`/manager/complaints/${r.id}`}
                         state={{ ticket: r }}
                       >
-                        {r.id}
+                        {r.ticket_code}
                       </Link>
                     </td>
                     <td className="mv-subjectCell mv-cellGrow">{r.subject}</td>
@@ -277,7 +338,7 @@ export default function ManagerViewComplaints() {
                     <td className="mv-cellMid">
                       <div className="mv-assigneeCell">
                         <div className="mv-ellipsis">{r.assignee}</div>
-                        {r.reroutedTo && r.assignee === "—" && (
+                        {r.reroutedTo && (
                           <span className="mv-reroutePill">Rerouted: {r.reroutedTo}</span>
                         )}
                       </div>
