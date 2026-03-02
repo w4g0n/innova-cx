@@ -1184,6 +1184,7 @@ SET value=EXCLUDED.value;
 \ir scripts/sla.sql
 \ir scripts/is_recurring.sql
 \ir services/suggested.sql
+\ir migrations/001_agent_execution_logs.sql
 
 -- =========================================================
 -- Dev/Test safety: ensure ticket assignments match current

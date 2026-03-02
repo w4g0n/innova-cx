@@ -154,6 +154,49 @@ def _ensure_runtime_schema_compatibility() -> None:
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
+                # Agent execution logging tables (orchestrator writes here)
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS model_execution_log (
+                        id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                        execution_id      UUID        NOT NULL,
+                        ticket_id         UUID,
+                        agent_name        VARCHAR(80) NOT NULL,
+                        model_version     VARCHAR(50),
+                        inference_time_ms INTEGER     NOT NULL DEFAULT 0,
+                        confidence_score  NUMERIC(5,4),
+                        error_flag        BOOLEAN     NOT NULL DEFAULT FALSE,
+                        error_message     TEXT,
+                        created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS agent_output_log (
+                        id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                        execution_id      UUID        NOT NULL,
+                        ticket_id         UUID,
+                        agent_name        VARCHAR(80) NOT NULL,
+                        step_order        INTEGER     NOT NULL,
+                        input_state       JSONB       NOT NULL DEFAULT '{}'::jsonb,
+                        output_state      JSONB       NOT NULL DEFAULT '{}'::jsonb,
+                        state_diff        JSONB       NOT NULL DEFAULT '{}'::jsonb,
+                        inference_time_ms INTEGER     NOT NULL DEFAULT 0,
+                        error_flag        BOOLEAN     NOT NULL DEFAULT FALSE,
+                        error_message     TEXT,
+                        created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
+                    """
+                )
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_execution_id ON model_execution_log(execution_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_ticket_id    ON model_execution_log(ticket_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_agent_name   ON model_execution_log(agent_name);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_created_at   ON model_execution_log(created_at);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_execution_id ON agent_output_log(execution_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_ticket_id    ON agent_output_log(ticket_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_agent_name   ON agent_output_log(agent_name);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_created_at   ON agent_output_log(created_at);")
     except Exception as exc:
         logger.warning("db_compat | failed to apply compatibility DDL: %s", exc)
 
