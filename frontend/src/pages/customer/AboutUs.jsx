@@ -95,32 +95,32 @@ export default function AboutUs() {
     {
       icon: "🧠",
       title: "AI-Powered Prioritization",
-      desc: "Our engine analyses every ticket using NLP and sentiment scoring to surface the most critical cases first — automatically.",
+      desc: "Our system analyzes every ticket using natural language processing and sentiment detection to identify urgent cases and bring the most critical issues to the top automatically.",
     },
     {
       icon: "🎙️",
       title: "Audio & Sentiment Analysis",
-      desc: "Voice calls are transcribed and emotionally scored in real-time, giving agents context before they even pick up.",
+      desc: "Customer voice calls can be transcribed and analyzed for sentiment, giving support agents useful context before they begin handling the case.",
     },
     {
       icon: "⚡",
       title: "Instant Escalation",
-      desc: "High-severity tickets skip the queue and land with the right team within seconds, slashing resolution time dramatically.",
+      desc: "High-priority tickets are automatically flagged and routed to the appropriate team, helping reduce delays and improve response times.",
     },
     {
       icon: "📊",
       title: "Live Analytics Dashboard",
-      desc: "Managers get a real-time view of team performance, ticket flow, and customer satisfaction — all in one place.",
+      desc: "Managers can view real-time insights into ticket volume, team performance, and customer sentiment through a centralized dashboard.",
     },
     {
       icon: "🔗",
       title: "Seamless Integration",
-      desc: "Plugs into your existing CRM, helpdesk, or e-commerce platform with minimal setup and zero downtime.",
+      desc: "InnovaCX can integrate with existing CRM, helpdesk, or e-commerce platforms, allowing businesses to incorporate the system into their current workflows.",
     },
     {
       icon: "🔒",
       title: "Enterprise-Grade Security",
-      desc: "End-to-end encryption, role-based access, and full audit logs keep your customer data safe and compliant.",
+      desc: "Customer data is protected through encryption, role-based access control, and detailed audit logs to support secure and responsible data handling.",
     },
   ];
 
@@ -188,15 +188,17 @@ export default function AboutUs() {
           <div className="au-section-tag">Our Purpose</div>
           <h2 className="au-section-title">Built to Make <em>Every Customer</em> Feel Heard</h2>
           <p className="au-mission-body">
-            InnovaCX is an AI-powered customer experience platform developed by InnovaAI — a team of
-            engineers and designers passionate about closing the gap between businesses and their customers.
-            We combine natural language processing, sentiment analysis, and smart routing to ensure that
-            no complaint goes unnoticed and no urgent case gets buried under the noise.
+            InnovaCX is an AI-powered customer experience platform developed by InnovaAI - a team of
+            engineers and designers focused on improving how businesses connect with their customers. 
+            By combining natural language processing, sentiment analysis, and intelligent routing, the platform 
+            helps businesses quickly identify important customer issues, prioritize urgent cases, and ensure that no complaint is overlooked.
+
           </p>
           <p className="au-mission-body">
-            Operating within the Dubai CommerCity ecosystem, InnovaCX serves e-commerce businesses,
-            logistics providers, and retail brands — giving every support team the power of a dedicated
-            AI co-pilot working around the clock.
+            Operating within the Dubai CommerCity ecosystem, InnovaCX supports e-commerce businesses, 
+            logistics providers, and retail brands by helping their customer support teams manage complaints
+            more efficiently. The platform acts as an AI assistant that works alongside support teams to analyze 
+            incoming issues, highlight urgent cases, and help ensure that customers receive timely responses.
           </p>
         </div>
 
@@ -254,18 +256,18 @@ export default function AboutUs() {
         <div className="au-roi-inner">
           <div className="au-roi-text">
             <div className="au-section-tag">Business Value</div>
-            <h2 className="au-section-title">Turn Support Costs Into Revenue Drivers</h2>
+            <h2 className="au-section-title">Turn Support Costs Into a Competitive Advantage</h2>
             <p className="au-roi-body">
-              Poor customer support costs businesses billions every year. Slow responses drive churn,
-              misdirected tickets waste agent hours, and unhappy customers leave bad reviews. InnovaCX
-              flips the equation.
+              Inefficient customer support can lead to lost customers, wasted agent time, and poor reviews.
+              InnovaCX helps businesses manage support more intelligently by identifying important issues faster
+              and organizing incoming requests more effectively.
             </p>
             <ul className="au-roi-list">
-              <li><span className="au-roi-bullet" />Reduce churn by resolving high-value customer issues <strong>3× faster</strong></li>
-              <li><span className="au-roi-bullet" />Cut operational costs with <strong>automated triage</strong> that replaces manual sorting</li>
-              <li><span className="au-roi-bullet" />Boost agent productivity — more tickets closed per shift, <strong>less burnout</strong></li>
-              <li><span className="au-roi-bullet" />Deliver <strong>measurable CSAT improvements</strong> within the first 30 days</li>
-              <li><span className="au-roi-bullet" />Scale support capacity <strong>without scaling headcount</strong></li>
+              <li><span className="au-roi-bullet" />Identify and prioritize the cases that matter most before they escalate.</li>
+              <li><span className="au-roi-bullet" />Automated ticket analysis and routing minimize manual sorting.</li>
+              <li><span className="au-roi-bullet" />Support teams can focus on solving problems instead of managing queues.</li>
+              <li><span className="au-roi-bullet" />Faster responses and better prioritization lead to more consistent support experiences.</li>
+              <li><span className="au-roi-bullet" />Handle growing ticket volumes without proportionally increasing support staff.</li>
             </ul>
           </div>
           <div className="au-roi-card">
@@ -307,7 +309,7 @@ export default function AboutUs() {
       <section className="au-cta-banner">
         <h2 className="au-cta-banner-title">Ready to Experience Smarter Support?</h2>
         <p className="au-cta-banner-sub">
-          Submit a ticket, chat with Nova, or explore the dashboard — your team's new AI co-pilot is ready.
+          Submit a ticket, chat with Nova, or explore the dashboard — your team’s new AI assistant is ready to help.
         </p>
         <button className="au-cta-primary large" onClick={() => navigate("/customer")}>
           Get Started →
