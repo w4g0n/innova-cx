@@ -55,11 +55,12 @@ const ManagerSettings = lazy(() => import("./pages/manager/ManagerSettings"));
 const OperatorNotifications = lazy(() =>
   import("./pages/operator/OperatorNotifications")
 );
-const ChatbotAnalysis = lazy(() => import("./pages/operator/ChatbotAnalysis"));
-const ModelAnalysis = lazy(() => import("./pages/operator/ModelAnalysis"));
+const QualityControl = lazy(() => import("./pages/operator/QualityControl"));
+const ModelHealth = lazy(() => import("./pages/operator/ModelHealth"));
 const OperatorDashboard = lazy(() => import("./pages/operator/OperatorDashboard"));
 const UsersManagement = lazy(() => import("./pages/operator/UsersManagement"));
 const OperatorSettings = lazy(() => import("./pages/operator/OperatorSettings"));
+const TicketReviewDetail = lazy(() => import("./pages/operator/TicketReviewDetail"));
 
 export default function App() {
   useEffect(() => {
@@ -288,18 +289,26 @@ export default function App() {
             }
           />
           <Route
-            path="/operator/model-analysis"
+            path="/operator/model-health"
             element={
               <ProtectedRoute role="operator">
-                <ModelAnalysis />
+                <ModelHealth />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/operator/chatbot-analysis"
+            path="/operator/quality-control"
             element={
               <ProtectedRoute role="operator">
-                <ChatbotAnalysis />
+                <QualityControl />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operator/quality-control/review/:ticketId"
+            element={
+              <ProtectedRoute role="operator">
+                <TicketReviewDetail />
               </ProtectedRoute>
             }
           />
