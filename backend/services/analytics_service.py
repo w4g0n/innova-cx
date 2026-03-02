@@ -3,23 +3,25 @@
 # InnovaCX – Analytics Service
 # =============================================================================
 # All analytics queries go here. They read ONLY from the materialized views:
-#   mv_ticket_base, mv_daily_volume, mv_employee_daily, mv_acceptance_daily
+#   mv_ticket_base, mv_daily_volume, mv_employee_daily, mv_acceptance_daily,
+#   mv_operator_qc_daily, mv_chatbot_daily
 #
 # Rules:
 #   - Never import from fastapi here (no HTTPException, no Depends)
-#   - Never touch base transactional tables (tickets, users, etc.) directly
+#   - Never touch base transactional tables directly for analytics reads
 #   - Accept Python primitives as params (dates, strings)
 #   - Return plain dicts/lists — the route handler shapes them into responses
 #
-# Imported by main.py like:
+# Imported by main.py:
 #   from services.analytics_service import get_trends_data, refresh_mvs
+#   analytics_service.init(fetch_one, fetch_all, db_connect)
 # =============================================================================
 
 from __future__ import annotations
 
 import logging
 from datetime import date, datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +30,9 @@ logger = logging.getLogger(__name__)
 # Call  analytics_service.init(fetch_one_fn, fetch_all_fn, db_connect_fn)
 # once during startup.
 
-_fetch_one   = None
-_fetch_all   = None
-_db_connect  = None
+_fetch_one  = None
+_fetch_all  = None
+_db_connect = None
 
 
 def init(fetch_one_fn, fetch_all_fn, db_connect_fn):
@@ -71,29 +73,22 @@ def _build_filters(
     department: str = "All Departments",
     priority: str = "All Priorities",
     table_alias: str = "",
-    use_date_col: bool = False,   # True  → filter on created_day (DATE column)
-                                  # False → filter on created_at  (TIMESTAMPTZ)
-    skip_priority: bool = False,  # True  → omit priority filter (mv_employee_daily has no priority col)
+    use_date_col: bool = False,
+    # True  → filter on created_day (DATE column)  → mv_daily_volume, mv_employee_daily
+    # False → filter on created_at  (TIMESTAMPTZ)  → mv_ticket_base
+    skip_priority: bool = False,
 ) -> Tuple[str, List[Any]]:
     """
     Returns (where_clause, params_list).
-
-    use_date_col=False (default): filters on created_at TIMESTAMPTZ
-                                  → use for mv_ticket_base
-    use_date_col=True:            filters on created_day DATE
-                                  → use for mv_daily_volume, mv_employee_daily,
-                                    mv_acceptance_daily
     """
     prefix = f"{table_alias}." if table_alias else ""
 
     if use_date_col:
-        # DATE column — cast the datetimes to date for correct comparison
         filters = [
             f"{prefix}created_day >= %s::date",
             f"{prefix}created_day <  %s::date",
         ]
     else:
-        # TIMESTAMPTZ column
         filters = [
             f"{prefix}created_at >= %s",
             f"{prefix}created_at <  %s",
@@ -186,7 +181,6 @@ def get_section_a(
     ]
 
     # ── A3: Recurring heatmap (dept × priority) ───────────────────────────
-    # mv_ticket_base has created_at (TIMESTAMPTZ) — use use_date_col=False
     where_base, params_base = _build_filters(period_start, period_end, department, priority, use_date_col=False)
     recurring_heatmap = _fetch_all(
         f"""
@@ -423,9 +417,6 @@ def get_section_c(
     priority: str,
 ) -> Dict[str, Any]:
 
-    # mv_employee_daily has created_day (DATE) → use_date_col=True
-    # NOTE: mv_employee_daily aggregates across priorities — no priority column exists.
-    # Priority filter is intentionally skipped here (skip_priority=True).
     where, params = _build_filters(
         period_start, period_end, department, priority, table_alias="e", use_date_col=True, skip_priority=True
     )
@@ -454,8 +445,7 @@ def get_section_c(
         params,
     )
 
-    # ── Company averages for comparison baseline ──────────────────────────
-    # mv_ticket_base has created_at (TIMESTAMPTZ) → use_date_col=False
+    # ── Company averages ──────────────────────────────────────────────────
     where_base, params_base = _build_filters(period_start, period_end, department, priority, use_date_col=False)
     company_avg = _fetch_one(
         f"""
@@ -473,7 +463,6 @@ def get_section_c(
     ) or {}
 
     # ── C2: Acceptance rates from mv_acceptance_daily ─────────────────────
-    # Filter by date only (no dept/priority filter on feedback table)
     acc_where = "created_month >= %s AND created_month < %s"
     acc_params = [
         date(period_start.year, period_start.month, 1),
@@ -502,7 +491,6 @@ def get_section_c(
         for r in acc_raw
     }
 
-    # ── Assemble employee array ───────────────────────────────────────────
     co_breach  = float(company_avg.get("breach_rate") or 0)
     co_resolve = float(company_avg.get("avg_resolve") or 0)
     co_respond = float(company_avg.get("avg_respond") or 0)
@@ -518,15 +506,15 @@ def get_section_c(
         acc = acceptance_map.get(name, {"rate": None, "accepted": 0, "declined": 0, "total": 0})
 
         employee_out.append({
-            "name":              name,
-            "empId":             e["emp_id"],
-            "role":              e["role"],
-            "ticketsHandled":    total,
-            "resolved":          int(e["resolved"] or 0),
-            "breached":          int(e["breached"] or 0),
-            "breachRate":        brate,
-            "avgResolveMins":    float(e["avg_resolve_mins"] or 0),
-            "avgRespondMins":    float(e["avg_respond_mins"] or 0),
+            "name":               name,
+            "empId":              e["emp_id"],
+            "role":               e["role"],
+            "ticketsHandled":     total,
+            "resolved":           int(e["resolved"] or 0),
+            "breached":           int(e["breached"] or 0),
+            "breachRate":         brate,
+            "avgResolveMins":     float(e["avg_resolve_mins"] or 0),
+            "avgRespondMins":     float(e["avg_respond_mins"] or 0),
             "companyBreachRate":  round(co_breach, 1),
             "companyResolveMins": round(co_resolve, 1),
             "companyRespondMins": round(co_respond, 1),
@@ -536,7 +524,6 @@ def get_section_c(
             "rescoreRate":        rescore_rate,
             "upscored":           int(e["upscored"] or 0),
             "downscored":         int(e["downscored"] or 0),
-            # Alert flags — same thresholds as before
             "alertLowVolume":     total < 5,
             "alertHighBreach":    brate > 10,
             "alertSlowResolve":   float(e["avg_resolve_mins"] or 0) > 480,
@@ -574,10 +561,8 @@ def get_legacy_kpis(
     avg_resolve_mins: float,
 ) -> Dict[str, Any]:
 
-    # mv_daily_volume uses created_day (DATE)
     where, params = _build_filters(period_start, period_end, department, priority, use_date_col=True)
 
-    # Top category by volume
     top_row = _fetch_one(
         f"""
         SELECT department_name AS name, SUM(total) AS count
@@ -591,7 +576,6 @@ def get_legacy_kpis(
     )
     top_category = top_row["name"] if top_row else "—"
 
-    # Recurring submitters count — mv_ticket_base uses created_at (TIMESTAMPTZ)
     where_base, params_base = _build_filters(period_start, period_end, department, priority, use_date_col=False)
     repeat_row = _fetch_one(
         f"""
@@ -607,7 +591,6 @@ def get_legacy_kpis(
     ) or {"count": 0}
     repeat_pct = round(int(repeat_row["count"]) / total_t * 100) if total_t else 0
 
-    # Monthly bar chart
     bars_raw = _fetch_all(
         f"""
         SELECT
@@ -623,7 +606,6 @@ def get_legacy_kpis(
     )
     bars_legacy = [{"label": r["label"], "value": int(r["value"])} for r in bars_raw]
 
-    # Categories pie
     cats_raw = _fetch_all(
         f"""
         SELECT
@@ -637,7 +619,6 @@ def get_legacy_kpis(
     )
     categories_legacy = [{"name": r["name"], "pct": float(r["pct"] or 0)} for r in cats_raw]
 
-    # Monthly summary table
     table_raw = _fetch_all(
         f"""
         SELECT
@@ -657,10 +638,10 @@ def get_legacy_kpis(
     )
     table_legacy = [
         {
-            "month":       r["month"],
-            "total":       int(r["total"] or 0),
-            "resolved":    int(r["resolved"] or 0),
-            "within_sla":  int(r["within_sla"] or 0),
+            "month":        r["month"],
+            "total":        int(r["total"] or 0),
+            "resolved":     int(r["resolved"] or 0),
+            "within_sla":   int(r["within_sla"] or 0),
             "avg_response": float(r["avg_response"] or 0),
             "avg_resolve":  float(r["avg_resolve"] or 0),
         }
@@ -709,10 +690,616 @@ def get_trends_data(
     )
 
     return {
-        # Legacy shape (ComplaintTrends.jsx reads these)
         **legacy,
-        # New sections
         "sectionA": get_section_a(period_start, period_end, department, priority),
         "sectionB": section_b,
         "sectionC": get_section_c(period_start, period_end, department, priority),
+    }
+
+
+# =============================================================================
+# OPERATOR ANALYTICS — Quality Control
+# Powers: GET /operator/analytics/qc
+# Reads from: mv_operator_qc_daily, mv_acceptance_daily, mv_ticket_base
+#
+# Sections returned:
+#   acceptance  (A) — acceptance/declined from mv_acceptance_daily
+#   rescoring   (B) — upscored/downscored per dept from mv_operator_qc_daily
+#   rerouting   (C) — rerouting requests per dept + review cases from mv_ticket_base
+#
+# All reads are MV-only. No base table queries.
+# =============================================================================
+
+def get_operator_qc_data(
+    period_start: datetime,
+    period_end: datetime,
+    department: str = "All Departments",
+) -> Dict[str, Any]:
+    """
+    Returns the full payload for /operator/analytics/qc.
+
+    JSON shape:
+    {
+      "acceptance": {
+        "kpis":      { totalResolutions, acceptanceRate, declinedRate, acceptedCount, declinedCount },
+        "trend":     [ { day, accepted, declined } ... ],
+        "breakdown": { accepted, declined }
+      },
+      "rescoring": {
+        "kpis":        { rescoreRate, upscores, downscores, unchanged, totalWithModel },
+        "byDepartment": [ { department, upscored, downscored } ... ]
+      },
+      "rerouting": {
+        "reassignmentByDept": [ { department, avg, reroutingRequests, reroutedTickets } ... ],
+        "reviewCases":        [ { ticketCode, ticketId, createdAt, department, priority,
+                                  modelPriority, wasRescored, wasUpscored, wasDownscored,
+                                  humanOverridden, overrideReason, isRecurring, status } ... ]
+      }
+    }
+    """
+    # ── Date boundaries ───────────────────────────────────────────────────────
+    # mv_acceptance_daily uses created_day (DATE)
+    # mv_operator_qc_daily uses created_day (DATE)
+    # mv_ticket_base uses created_at (TIMESTAMPTZ)
+
+    date_start = period_start.date() if hasattr(period_start, "date") else period_start
+    date_end   = period_end.date()   if hasattr(period_end,   "date") else period_end
+
+    # ── Build dept filter fragments ───────────────────────────────────────────
+    qc_dept_filter = ""
+    qc_dept_params: List[Any] = [date_start, date_end]
+    if department and department != "All Departments":
+        qc_dept_filter = "AND department_name = %s"
+        qc_dept_params.append(department)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # A: ACCEPTANCE — from mv_acceptance_daily
+    # Note: mv_acceptance_daily has no department_name column (it's per-employee).
+    # Dept filter is intentionally omitted for the acceptance section.
+    # ─────────────────────────────────────────────────────────────────────────
+    acc_params: List[Any] = [date_start, date_end]
+
+    acc_overall = _fetch_one(
+        """
+        SELECT
+            SUM(total)    AS total,
+            SUM(accepted) AS accepted,
+            SUM(declined) AS declined
+        FROM mv_acceptance_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+        """,
+        acc_params,
+    ) or {}
+
+    total_res  = int(acc_overall.get("total")    or 0)
+    total_acc  = int(acc_overall.get("accepted") or 0)
+    total_dec  = int(acc_overall.get("declined") or 0)
+    acc_rate   = round(total_acc / total_res * 100, 1) if total_res else 0
+    dec_rate   = round(total_dec / total_res * 100, 1) if total_res else 0
+
+    acc_trend_raw = _fetch_all(
+        """
+        SELECT
+            created_day     AS day,
+            SUM(accepted)   AS accepted,
+            SUM(declined)   AS declined
+        FROM mv_acceptance_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+        GROUP BY created_day
+        ORDER BY created_day
+        """,
+        acc_params,
+    )
+    acc_trend = [
+        {
+            "day":      r["day"].isoformat(),
+            "accepted": int(r["accepted"] or 0),
+            "declined": int(r["declined"] or 0),
+        }
+        for r in acc_trend_raw
+    ]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # B: RESCORING — from mv_operator_qc_daily
+    # ─────────────────────────────────────────────────────────────────────────
+    rescore_overall = _fetch_one(
+        f"""
+        SELECT
+            SUM(total)            AS total,
+            SUM(rescored)         AS rescored,
+            SUM(upscored)         AS upscored,
+            SUM(downscored)       AS downscored,
+            SUM(total_with_model) AS total_with_model
+        FROM mv_operator_qc_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+          {qc_dept_filter}
+        """,
+        qc_dept_params,
+    ) or {}
+
+    total_twm      = int(rescore_overall.get("total_with_model") or 0)
+    total_rescored = int(rescore_overall.get("rescored")  or 0)
+    total_up       = int(rescore_overall.get("upscored")  or 0)
+    total_down     = int(rescore_overall.get("downscored") or 0)
+    rescore_rate   = round(total_rescored / total_twm * 100, 1) if total_twm else 0
+    unchanged_pct  = round((total_twm - total_rescored) / total_twm * 100, 1) if total_twm else 0
+
+    rescore_by_dept_raw = _fetch_all(
+        f"""
+        SELECT
+            department_name AS department,
+            SUM(upscored)   AS upscored,
+            SUM(downscored) AS downscored
+        FROM mv_operator_qc_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+          {qc_dept_filter}
+        GROUP BY department_name
+        ORDER BY department_name
+        """,
+        qc_dept_params,
+    )
+    rescore_by_dept = [
+        {
+            "department": r["department"],
+            "upscored":   int(r["upscored"]   or 0),
+            "downscored": int(r["downscored"] or 0),
+        }
+        for r in rescore_by_dept_raw
+    ]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # C: REROUTING — from mv_operator_qc_daily (aggregate) + mv_ticket_base (cases)
+    # ─────────────────────────────────────────────────────────────────────────
+    reroute_raw = _fetch_all(
+        f"""
+        SELECT
+            department_name                             AS department,
+            SUM(rerouting_requests)                     AS rerouting_requests,
+            SUM(rerouted_tickets)                       AS rerouted_tickets,
+            ROUND(
+                SUM(rerouting_requests)::NUMERIC
+                / NULLIF(SUM(total), 0),
+                2
+            )                                           AS avg_per_ticket
+        FROM mv_operator_qc_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+          {qc_dept_filter}
+        GROUP BY department_name
+        ORDER BY avg_per_ticket DESC NULLS LAST
+        """,
+        qc_dept_params,
+    )
+    reassignment_by_dept = [
+        {
+            "department":        r["department"],
+            "avg":               float(r["avg_per_ticket"] or 0),
+            "reroutingRequests": int(r["rerouting_requests"] or 0),
+            "reroutedTickets":   int(r["rerouted_tickets"] or 0),
+        }
+        for r in reroute_raw
+    ]
+
+    # Review cases: tickets with human override, rescoring, or rerouting
+    # from mv_ticket_base — MV-only, no base table touch
+    base_where, base_params = _build_filters(
+        period_start, period_end,
+        department=department,
+        priority="All Priorities",
+        use_date_col=False,
+    )
+    review_raw = _fetch_all(
+        f"""
+        SELECT
+            ticket_code,
+            ticket_id,
+            created_at,
+            department_name,
+            priority,
+            model_priority,
+            was_rescored,
+            was_upscored,
+            was_downscored,
+            human_overridden,
+            override_reason,
+            is_recurring,
+            status
+        FROM mv_ticket_base
+        WHERE {base_where}
+          AND (human_overridden = TRUE OR was_rescored = TRUE)
+        ORDER BY created_at DESC
+        LIMIT 50
+        """,
+        base_params,
+    )
+    review_cases = [
+        {
+            "ticketCode":     r["ticket_code"],
+            "ticketId":       str(r["ticket_id"]),
+            "createdAt":      r["created_at"].isoformat() if r["created_at"] else None,
+            "department":     r["department_name"],
+            "priority":       r["priority"],
+            "modelPriority":  r["model_priority"],
+            "wasRescored":    bool(r["was_rescored"]),
+            "wasUpscored":    bool(r["was_upscored"]),
+            "wasDownscored":  bool(r["was_downscored"]),
+            "humanOverridden": bool(r["human_overridden"]),
+            "overrideReason": r["override_reason"],
+            "isRecurring":    bool(r["is_recurring"]),
+            "status":         r["status"],
+        }
+        for r in review_raw
+    ]
+
+    return {
+        "acceptance": {
+            "kpis": {
+                "totalResolutions": total_res,
+                "acceptanceRate":   acc_rate,
+                "declinedRate":     dec_rate,
+                "acceptedCount":    total_acc,
+                "declinedCount":    total_dec,
+            },
+            "trend":     acc_trend,
+            "breakdown": {"accepted": total_acc, "declined": total_dec},
+        },
+        "rescoring": {
+            "kpis": {
+                "rescoreRate":    rescore_rate,
+                "upscores":       total_up,
+                "downscores":     total_down,
+                "unchanged":      unchanged_pct,
+                "totalWithModel": total_twm,
+            },
+            "byDepartment": rescore_by_dept,
+        },
+        "rerouting": {
+            "reassignmentByDept": reassignment_by_dept,
+            "reviewCases":        review_cases,
+        },
+    }
+
+
+# =============================================================================
+# OPERATOR ANALYTICS — Model Health (Chatbot Agent tab)
+# Powers: GET /operator/analytics/model-health/chatbot
+# Reads from: mv_chatbot_daily (MV-only)
+# =============================================================================
+
+def get_operator_chatbot_data(
+    period_start: datetime,
+    period_end: datetime,
+) -> Dict[str, Any]:
+    """
+    Returns chatbot agent analytics for the ModelHealth Chatbot Agent tab.
+
+    JSON shape:
+    {
+      "kpis": {
+        "totalSessions", "containmentRate", "escalationRate", "avgMessagesPerSession"
+      },
+      "escalationTrend": [ { day, escalated, total, escalationRate } ... ]
+    }
+    """
+    date_start = period_start.date() if hasattr(period_start, "date") else period_start
+    date_end   = period_end.date()   if hasattr(period_end,   "date") else period_end
+
+    overall = _fetch_one(
+        """
+        SELECT
+            SUM(total_sessions)     AS total_sessions,
+            SUM(escalated_sessions) AS escalated_sessions,
+            SUM(contained_sessions) AS contained_sessions,
+            ROUND(AVG(avg_messages_per_session)
+                  FILTER (WHERE avg_messages_per_session IS NOT NULL), 1)
+                                    AS avg_msgs
+        FROM mv_chatbot_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+        """,
+        [date_start, date_end],
+    ) or {}
+
+    total_s    = int(overall.get("total_sessions")     or 0)
+    escalated  = int(overall.get("escalated_sessions") or 0)
+    contained  = int(overall.get("contained_sessions") or 0)
+    avg_msgs   = float(overall.get("avg_msgs")          or 0)
+
+    containment_rate  = round(contained  / total_s * 100, 1) if total_s else 0
+    escalation_rate   = round(escalated  / total_s * 100, 1) if total_s else 0
+
+    trend_raw = _fetch_all(
+        """
+        SELECT
+            created_day          AS day,
+            total_sessions       AS total,
+            escalated_sessions   AS escalated,
+            contained_sessions   AS contained,
+            esc_very_negative,
+            esc_negative,
+            esc_neutral,
+            esc_positive
+        FROM mv_chatbot_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+        ORDER BY created_day
+        """,
+        [date_start, date_end],
+    )
+    escalation_trend = [
+        {
+            "day":            r["day"].isoformat(),
+            "total":          int(r["total"]     or 0),
+            "escalated":      int(r["escalated"] or 0),
+            "contained":      int(r["contained"] or 0),
+            "escalationRate": round(
+                int(r["escalated"] or 0) / int(r["total"] or 1) * 100, 1
+            ),
+            # Sentiment-at-escalation buckets — consumed by ChatbotAgentView
+            "escVeryNegative": int(r["esc_very_negative"] or 0),
+            "escNegative":     int(r["esc_negative"]      or 0),
+            "escNeutral":      int(r["esc_neutral"]       or 0),
+            "escPositive":     int(r["esc_positive"]      or 0),
+        }
+        for r in trend_raw
+    ]
+
+    return {
+        "kpis": {
+            "totalSessions":          total_s,
+            "containmentRate":        containment_rate,
+            "escalationRate":         escalation_rate,
+            "avgMessagesPerSession":  avg_msgs,
+            "escalatedCount":         escalated,
+            "containedCount":         contained,
+        },
+        "escalationTrend": escalation_trend,
+    }
+
+
+# =============================================================================
+# OPERATOR ANALYTICS — Model Health: Sentiment Agent tab
+# Powers: GET /operator/analytics/model-health/sentiment
+# Reads from: mv_sentiment_daily (MV-only)
+# =============================================================================
+
+def get_operator_sentiment_data(
+    period_start: datetime,
+    period_end: datetime,
+    department: str = "All Departments",
+) -> Dict[str, Any]:
+    date_start = period_start.date() if hasattr(period_start, "date") else period_start
+    date_end   = period_end.date()   if hasattr(period_end,   "date") else period_end
+
+    dept_filter = ""
+    params: List[Any] = [date_start, date_end]
+    if department and department != "All Departments":
+        dept_filter = "AND department_name = %s"
+        params.append(department)
+
+    # ── Overall KPIs ─────────────────────────────────────────────────────
+    overall = _fetch_one(
+        f"""
+        SELECT
+            SUM(total_scored)                                       AS total_scored,
+            SUM(low_confidence)                                     AS low_confidence,
+            ROUND(
+                SUM(low_confidence)::NUMERIC / NULLIF(SUM(total_scored), 0) * 100, 1
+            )                                                       AS low_conf_rate,
+            ROUND(
+                SUM(avg_sentiment_score * total_scored)
+                / NULLIF(SUM(total_scored), 0)
+            , 3)                                                    AS weighted_avg_score,
+            SUM(positive_count)                                     AS positive_count,
+            SUM(neutral_count)                                      AS neutral_count,
+            SUM(negative_count)                                     AS negative_count,
+            SUM(very_negative_count)                                AS very_negative_count
+        FROM mv_sentiment_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+          {dept_filter}
+        """,
+        params,
+    ) or {}
+
+    total_scored     = int(overall.get("total_scored")     or 0)
+    low_conf_rate    = float(overall.get("low_conf_rate")  or 0)
+    avg_score        = float(overall.get("weighted_avg_score") or 0)
+    positive_count   = int(overall.get("positive_count")   or 0)
+    neutral_count    = int(overall.get("neutral_count")    or 0)
+    negative_count   = int(overall.get("negative_count")   or 0)
+    very_neg_count   = int(overall.get("very_negative_count") or 0)
+
+    # ── Score over time (daily) ──────────────────────────────────────────
+    trend_raw = _fetch_all(
+        f"""
+        SELECT
+            created_day AS day,
+            ROUND(
+                SUM(avg_sentiment_score * total_scored)
+                / NULLIF(SUM(total_scored), 0)
+            , 3) AS score
+        FROM mv_sentiment_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+          {dept_filter}
+        GROUP BY created_day
+        ORDER BY created_day
+        """,
+        params,
+    )
+    score_over_time = [
+        {
+            "date":  r["day"].strftime("%d %b").lstrip("0") or "0",
+            "score": float(r["score"] or 0),
+        }
+        for r in trend_raw
+    ]
+
+    # ── Sentiment by department ──────────────────────────────────────────
+    dept_raw = _fetch_all(
+        f"""
+        SELECT
+            department_name AS department,
+            ROUND(
+                SUM(avg_sentiment_score * total_scored)
+                / NULLIF(SUM(total_scored), 0)
+            , 3) AS avg
+        FROM mv_sentiment_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+          {dept_filter}
+        GROUP BY department_name
+        ORDER BY avg
+        """,
+        params,
+    )
+    sentiment_by_dept = [
+        {"department": r["department"], "avg": float(r["avg"] or 0)}
+        for r in dept_raw
+    ]
+
+    return {
+        "kpis": {
+            "lowConfidenceRate":   low_conf_rate,
+            "avgSentimentScore":   avg_score,
+            "totalScoredTickets":  total_scored,
+        },
+        "distribution": [
+            {"label": "Positive",      "value": positive_count},
+            {"label": "Neutral",       "value": neutral_count},
+            {"label": "Negative",      "value": negative_count},
+            {"label": "Very Negative", "value": very_neg_count},
+        ],
+        "scoreOverTime":    score_over_time,
+        "sentimentByDept":  sentiment_by_dept,
+    }
+
+
+# =============================================================================
+# OPERATOR ANALYTICS — Model Health: Feature Engineering Agent tab
+# Powers: GET /operator/analytics/model-health/feature
+# Reads from: mv_feature_daily (MV-only)
+# =============================================================================
+
+def get_operator_feature_data(
+    period_start: datetime,
+    period_end: datetime,
+    department: str = "All Departments",
+) -> Dict[str, Any]:
+    date_start = period_start.date() if hasattr(period_start, "date") else period_start
+    date_end   = period_end.date()   if hasattr(period_end,   "date") else period_end
+
+    dept_filter = ""
+    params: List[Any] = [date_start, date_end]
+    if department and department != "All Departments":
+        dept_filter = "AND department_name = %s"
+        params.append(department)
+
+    # ── Overall KPIs ─────────────────────────────────────────────────────
+    overall = _fetch_one(
+        f"""
+        SELECT
+            SUM(total_processed)                AS total_processed,
+            SUM(low_confidence)                 AS low_confidence,
+            SUM(recurring_count)                AS recurring_count,
+            SUM(safety_flag_count)              AS safety_flag_count,
+            SUM(severity_urgency_mismatch)      AS mismatch_count,
+            SUM(impact_high)                    AS impact_high,
+            SUM(impact_medium)                  AS impact_medium,
+            SUM(impact_low)                     AS impact_low
+        FROM mv_feature_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+          {dept_filter}
+        """,
+        params,
+    ) or {}
+
+    total      = int(overall.get("total_processed") or 0)
+    low_conf   = int(overall.get("low_confidence")  or 0)
+    recurring  = int(overall.get("recurring_count") or 0)
+    safety     = int(overall.get("safety_flag_count") or 0)
+    mismatch   = int(overall.get("mismatch_count")  or 0)
+    imp_high   = int(overall.get("impact_high")     or 0)
+    imp_med    = int(overall.get("impact_medium")   or 0)
+    imp_low    = int(overall.get("impact_low")      or 0)
+
+    low_conf_rate    = round(low_conf  / total * 100, 1) if total else 0
+    recurring_rate   = round(recurring / total * 100, 1) if total else 0
+    safety_rate      = round(safety    / total * 100, 1) if total else 0
+    mismatch_rate    = round(mismatch  / total * 100, 1) if total else 0
+
+    # ── Recurring rate daily trend ────────────────────────────────────────
+    recurring_raw = _fetch_all(
+        f"""
+        SELECT
+            created_day AS day,
+            ROUND(
+                SUM(recurring_count)::NUMERIC / NULLIF(SUM(total_processed), 0) * 100
+            , 1) AS rate
+        FROM mv_feature_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+          {dept_filter}
+        GROUP BY created_day
+        ORDER BY created_day
+        LIMIT 7
+        """,
+        params,
+    )
+    recurring_trend = [
+        {
+            "day":  r["day"].strftime("%a"),
+            "rate": float(r["rate"] or 0),
+        }
+        for r in recurring_raw
+    ]
+
+    # ── Business impact by department ─────────────────────────────────────
+    dept_raw = _fetch_all(
+        f"""
+        SELECT
+            department_name AS department,
+            ROUND(SUM(impact_high)::NUMERIC   / NULLIF(SUM(total_processed), 0) * 100, 1) AS high,
+            ROUND(SUM(impact_medium)::NUMERIC / NULLIF(SUM(total_processed), 0) * 100, 1) AS medium,
+            ROUND(SUM(impact_low)::NUMERIC    / NULLIF(SUM(total_processed), 0) * 100, 1) AS low
+        FROM mv_feature_daily
+        WHERE created_day >= %s::date
+          AND created_day <  %s::date
+          {dept_filter}
+        GROUP BY department_name
+        ORDER BY department_name
+        """,
+        params,
+    )
+    feature_by_dept = [
+        {
+            "department": r["department"],
+            "high":   float(r["high"]   or 0),
+            "medium": float(r["medium"] or 0),
+            "low":    float(r["low"]    or 0),
+        }
+        for r in dept_raw
+    ]
+
+    return {
+        "kpis": {
+            "safetyFlagRate":       safety_rate,
+            "recurringIssueRate":   recurring_rate,
+            "severityUrgencyMismatch": mismatch_rate,
+            "lowConfidenceRate":    low_conf_rate,
+            "totalProcessed":       total,
+        },
+        "businessImpact": [
+            {"label": "High",   "value": imp_high},
+            {"label": "Medium", "value": imp_med},
+            {"label": "Low",    "value": imp_low},
+        ],
+        "recurringTrend": recurring_trend,
+        "featureByDept":  feature_by_dept,
     }
