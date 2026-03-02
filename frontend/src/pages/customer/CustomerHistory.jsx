@@ -11,50 +11,48 @@ import { apiUrl } from "../../config/apiBase";
 import { getToken, authHeader } from "../../utils/auth";
 import "./CustomerHistory.css";
 
-const WORKFLOW_STAGES = [
-  { id: "submitted", label: "Submitted", owner: "Customer" },
-  { id: "ai_processing", label: "AI Processing", owner: "AI" },
-  { id: "routed", label: "Routed to Team", owner: "AI" },
-  { id: "employee_handling", label: "Employee Handling", owner: "Employee" },
-  { id: "resolved", label: "Resolved", owner: "Employee" },
-];
-
-const SLA_TARGETS = {
-  Critical: { minResponse: "30 min", minResolve: "6 hr" },
-  High: { minResponse: "1 hr", minResolve: "18 hr" },
-  Medium: { minResponse: "3 hr", minResolve: "2 days" },
-  Low: { minResponse: "6 hr", minResolve: "3 days" },
+/* ─── Friendly priority explanations for customers ─── */
+const PRIORITY_CONTEXT = {
+  Critical: {
+    color: "#dc2626",
+    bg: "rgba(220, 38, 38, 0.07)",
+    border: "rgba(220, 38, 38, 0.18)",
+    icon: "🔴",
+    headline: "Critical Priority",
+    reason:
+      "Our AI detected signs of high urgency or significant distress in your message. Your ticket has been placed at the very top of the queue for immediate attention.",
+  },
+  High: {
+    color: "#ea580c",
+    bg: "rgba(234, 88, 12, 0.07)",
+    border: "rgba(234, 88, 12, 0.18)",
+    icon: "🟠",
+    headline: "High Priority",
+    reason:
+      "Your issue was flagged as important and time-sensitive. Our team will attend to it ahead of standard requests.",
+  },
+  Medium: {
+    color: "#b45309",
+    bg: "rgba(180, 83, 9, 0.07)",
+    border: "rgba(180, 83, 9, 0.18)",
+    icon: "🟡",
+    headline: "Medium Priority",
+    reason:
+      "Your ticket has been placed in the standard queue. Our team is working through cases in order and will get to yours soon.",
+  },
+  Low: {
+    color: "#16a34a",
+    bg: "rgba(22, 163, 74, 0.07)",
+    border: "rgba(22, 163, 74, 0.18)",
+    icon: "🟢",
+    headline: "Low Priority",
+    reason:
+      "Our AI identified this as a routine inquiry. It will be handled once higher-priority tickets are resolved.",
+  },
 };
 
-function normalizeStatus(status) {
-  return String(status || "").toLowerCase().replaceAll(" ", "");
-}
-
-function getWorkflowState(status) {
-  const key = normalizeStatus(status);
-  if (key === "resolved") {
-    return { stageIndex: 4, stageLabel: "Resolved", owner: "Employee", note: "Ticket completed by support team." };
-  }
-  if (key === "assigned") {
-    return { stageIndex: 3, stageLabel: "Employee Handling", owner: "Employee", note: "Support staff is actively working on your ticket." };
-  }
-  if (key === "inprogress") {
-    return { stageIndex: 1, stageLabel: "AI Processing", owner: "AI", note: "AI analysis is in progress before final assignment." };
-  }
-  if (key === "escalated" || key === "overdue" || key === "reopened") {
-    return { stageIndex: 3, stageLabel: "Employee Handling (Escalated)", owner: "Employee", note: "Ticket has been escalated for urgent employee attention." };
-  }
-  if (key === "unassigned") {
-    return { stageIndex: 2, stageLabel: "Routed to Team", owner: "AI", note: "AI triage is complete and assignment is pending." };
-  }
-  if (key === "open") {
-    return { stageIndex: 1, stageLabel: "AI Processing", owner: "AI", note: "AI agents are classifying and prioritizing your ticket." };
-  }
-  return { stageIndex: 1, stageLabel: "AI Processing", owner: "AI", note: "Ticket is being processed." };
-}
-
-function getSlaTargets(priority) {
-  return SLA_TARGETS[String(priority || "")] || SLA_TARGETS.Medium;
+function getPriorityContext(priority) {
+  return PRIORITY_CONTEXT[String(priority || "")] || PRIORITY_CONTEXT.Medium;
 }
 
 export default function CustomerHistory() {
@@ -81,11 +79,10 @@ export default function CustomerHistory() {
 
         const data = await res.json();
 
-        // Map backend tickets to your UI format
         const mappedTickets = (data.tickets || []).map((t) => ({
           id: t.ticketId,
           title: t.subject,
-          type: t.ticketType, // optional: if you have type in backend, replace
+          type: t.ticketType,
           status: t.status,
           date: t.issueDate,
           priority: t.priority,
@@ -216,91 +213,76 @@ export default function CustomerHistory() {
               <p className="historyEmptySub">Try adjusting your search or filters.</p>
             </div>
           ) : (
-            ordered.map((item) => (
-              (() => {
-                const workflow = getWorkflowState(item.status);
-                const sla = getSlaTargets(item.priority);
-                return (
-              <article
-                key={item.id}
-                className="historyCard historyCard--click"
-                onClick={() => navigate(`/customer/ticket/${item.id}`)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    navigate(`/customer/ticket/${item.id}`);
-                  }
-                }}
-              >
-                <div className="historyCardLeft">
-                  <div className="historyMeta">
-                    <span className="historyId">{item.id}</span>
-                    <span className="historyDot">•</span>
-                    <span className="historyType">{item.type}</span>
-                    <span className="historyDot">•</span>
-                    <span className={`historyStatus status-${item.status.replace(" ", "")}`}>
-                      {item.status}
-                    </span>
-                  </div>
-
-                  <h3 className="historyTitle">{item.title}</h3>
-
-                  <div className="historyFooter">
-                    <span className="historyDate">{item.date}</span>
-                    <span className="historyDot">•</span>
-                    <div className="historyPriorityWrap">
-                      <span className="historyPriorityLabel">Priority:</span>
-                      <PriorityPill priority={item.priority} />
-                    </div>
-                  </div>
-                  <div className="historySlaRow">
-                    <span className="historySlaItem">
-                      <b>Min response:</b> {sla.minResponse}
-                    </span>
-                    <span className="historySlaDot">•</span>
-                    <span className="historySlaItem">
-                      <b>Min resolve:</b> {sla.minResolve}
-                    </span>
-                  </div>
-
-                  <div className="historyWorkflow">
-                    <div className="historyWorkflowHeader">
-                      <span className="historyWorkflowTitle">Workflow Stage</span>
-                      <span className={`historyWorkflowOwner owner-${workflow.owner.toLowerCase()}`}>
-                        {workflow.owner}
+            ordered.map((item) => {
+              const ctx = getPriorityContext(item.priority);
+              return (
+                <article
+                  key={item.id}
+                  className="historyCard historyCard--click"
+                  onClick={() => navigate(`/customer/ticket/${item.id}`)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      navigate(`/customer/ticket/${item.id}`);
+                    }
+                  }}
+                >
+                  <div className="historyCardLeft">
+                    <div className="historyMeta">
+                      <span className="historyId">{item.id}</span>
+                      <span className="historyDot">•</span>
+                      <span className="historyType">{item.type}</span>
+                      <span className="historyDot">•</span>
+                      <span className={`historyStatus status-${item.status.replace(" ", "")}`}>
+                        {item.status}
                       </span>
                     </div>
-                    <div className="historyWorkflowCurrent">{workflow.stageLabel}</div>
-                    <div className="historyWorkflowTrack" aria-label={`Workflow stage ${workflow.stageIndex + 1} of ${WORKFLOW_STAGES.length}`}>
-                      {WORKFLOW_STAGES.map((stage, index) => (
-                        <div
-                          key={stage.id}
-                          className={`historyWorkflowDot ${index <= workflow.stageIndex ? "is-done" : ""} ${index === workflow.stageIndex ? "is-current" : ""}`}
-                          title={`${stage.label} (${stage.owner})`}
-                        />
-                      ))}
-                    </div>
-                    <p className="historyWorkflowNote">{workflow.note}</p>
-                  </div>
-                </div>
 
-                <div className="historyCardRight">
-                  <button
-                    type="button"
-                    className="primaryPillBtn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/customer/ticket/${item.id}`);
-                    }}
-                  >
-                    View
-                  </button>
-                </div>
-              </article>
-                );
-              })()
-            ))
+                    <h3 className="historyTitle">{item.title}</h3>
+
+                    <div className="historyFooter">
+                      <span className="historyDate">{item.date}</span>
+                      <span className="historyDot">•</span>
+                      <div className="historyPriorityWrap">
+                        <span className="historyPriorityLabel">Priority:</span>
+                        <PriorityPill priority={item.priority} />
+                      </div>
+                    </div>
+
+                    {/* ── Friendly priority context ── */}
+                    <div
+                      className="historyPriorityContext"
+                      style={{ background: ctx.bg, borderColor: ctx.border }}
+                    >
+                      <span className="historyPriorityCtxIcon">{ctx.icon}</span>
+                      <div>
+                        <div
+                          className="historyPriorityCtxHeadline"
+                          style={{ color: ctx.color }}
+                        >
+                          {ctx.headline}
+                        </div>
+                        <p className="historyPriorityCtxReason">{ctx.reason}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="historyCardRight">
+                    <button
+                      type="button"
+                      className="primaryPillBtn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/customer/ticket/${item.id}`);
+                      }}
+                    >
+                      View
+                    </button>
+                  </div>
+                </article>
+              );
+            })
           )}
         </section>
       </div>
