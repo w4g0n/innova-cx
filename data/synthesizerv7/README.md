@@ -1,206 +1,132 @@
 # Synthesizer v7
 
-Four-phase synthetic data pipeline:
+Pipeline order is fixed to:
 
-1. `phase1-generate.py`  
-Generates synthetic support tickets (`unlabeled.csv`) with Phi-3.5 Mini.
-Default target size: 10,000 rows (7,500 complaints + 2,500 inquiries).
-2. `phase2-classify.py`  
-Adds complaint labels with DeBERTa zero-shot NLI (`labeled.csv`).
-3. `phase3-evaluate.py`  
-Evaluates classifier predictions against a labeled test set.
-4. `phase4-deduplicate.py`  
-Removes exact and near-duplicate rows from generated/classified data.
+1. `phase1-generate.py`
+2. `phase4-deduplicate.py`
+3. `phase2-classify.py`
+4. `phase3-evaluate.py` (prediction-only mode)
 
-## Files
-
-- `phase1-generate.py`
-- `phase2-classify.py`
-- `phase3-evaluate.py`
-- `phase4-deduplicate.py`
-- `setup_models.py` (downloads local model copies once)
-- `requirements.txt`
-- `models/` (local model storage)
+Default generator model: `microsoft/Phi-4-mini-instruct`  
+Default classifier model: `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli`
 
 ## Install
 
-From repo root:
-
 ```bash
-pip install -r data/synthesizerv7/requirements.txt
+pip install -r requirements.txt
 ```
 
-## One-time model download (recommended)
+If Phase 1 fails with `SlidingWindowCache` import errors, force-upgrade:
 
 ```bash
-python data/synthesizerv7/setup_models.py
+pip install -U "transformers>=4.55.0" "accelerate>=0.34.0" "tokenizers>=0.21.0"
 ```
 
-This downloads:
-
-- `microsoft/Phi-3.5-mini-instruct` to `data/synthesizerv7/models/generator/phi-3.5-mini-instruct/`
-- `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` to `data/synthesizerv7/models/classifier/deberta-v3-base-mnli-fever-anli/`
-
-Download behavior:
-
-- By default, existing local models are reused and skipped.
-- Re-download only if you explicitly run:
+## One-time model download
 
 ```bash
-python data/synthesizerv7/setup_models.py --force
+python3 setup_models.py
 ```
 
-## Run Pipeline
-
-### Phase 1: Generate synthetic tickets
+Override generator model if needed:
 
 ```bash
-python data/synthesizerv7/phase1-generate.py \
-  --dataset data/synthesizerv7/input.csv \
-  --output data/synthesizerv7/output/unlabeled.csv
+python3 setup_models.py --generator-model microsoft/Phi-4-mini-instruct --force
 ```
 
-Use 8-bit quantization explicitly (recommended for 16GB GPUs like T4):
+## Run full pipeline (recommended)
 
 ```bash
-python data/synthesizerv7/phase1-generate.py \
-  --dataset data/synthesizerv7/input.csv \
-  --output data/synthesizerv7/output/unlabeled.csv \
-  --quantization 8bit
+python3 run_pipeline.py \
+  --dataset input.csv \
+  --test test.csv \
+  --quantization auto
 ```
 
-If GPU memory is tight, lower generation length:
+Useful knobs:
+
+- `--complaints`, `--inquiries`
+- `--max-new-tokens`, `--retries`
+- `--similarity-threshold`
+- `--summary-output`
+
+Outputs go to `output/` by default:
+
+- `unlabeled.csv`
+- `unlabeled_deduplicated.csv`
+- `labeled.csv`
+- `predictions.csv`
+- `deduplication_stats.json`
+- `phase2_model_manifest.json`
+- `pipeline_summary.json`
+
+## Run phases manually
+
+### Phase 1
 
 ```bash
-python data/synthesizerv7/phase1-generate.py \
-  --dataset data/synthesizerv7/input.csv \
-  --output data/synthesizerv7/output/unlabeled.csv \
-  --quantization 8bit \
-  --max-new-tokens 64
+python3 phase1-generate.py \
+  --dataset input.csv \
+  --output output/unlabeled.csv \
+  --quantization auto
 ```
 
-All model phases (1/2/3) now include automatic runtime fallback:
-- Try GPU (and 8-bit if enabled)
-- If CUDA OOM happens during processing, they switch to CPU fallback and continue
-
-Phase 1 defaults are tuned for throughput/stability:
-- Greedy decoding by default (`--do-sample` is off)
-- Lower token budget (`--max-new-tokens 64`)
-- Fewer retries (`--retries 2`)
-
-Dry run:
+### Phase 4 (dedup is now second)
 
 ```bash
-python data/synthesizerv7/phase1-generate.py \
-  --dataset data/synthesizerv7/input.csv \
-  --output data/synthesizerv7/output/unlabeled.csv \
-  --dry-run
+python3 phase4-deduplicate.py \
+  --input output/unlabeled.csv \
+  --output output/unlabeled_deduplicated.csv \
+  --stats-output output/deduplication_stats.json
 ```
 
-### Phase 2: Derive labels
+### Phase 2
 
 ```bash
-python data/synthesizerv7/phase2-classify.py \
-  --input data/synthesizerv7/output/unlabeled.csv \
-  --output data/synthesizerv7/output/labeled.csv
+python3 phase2-classify.py \
+  --input output/unlabeled_deduplicated.csv \
+  --output output/labeled.csv \
+  --manifest-output output/phase2_model_manifest.json \
+  --quantization auto
 ```
 
-Use 8-bit quantization explicitly:
+### Phase 3 (prediction-only)
 
 ```bash
-python data/synthesizerv7/phase2-classify.py \
-  --input data/synthesizerv7/output/unlabeled.csv \
-  --output data/synthesizerv7/output/labeled.csv \
-  --quantization 8bit
+python3 phase3-evaluate.py \
+  --test test.csv \
+  --output output/predictions.csv \
+  --quantization auto
 ```
 
-Dry run:
+## Phase 3 input schema
 
-```bash
-python data/synthesizerv7/phase2-classify.py \
-  --input data/synthesizerv7/output/unlabeled.csv \
-  --output data/synthesizerv7/output/labeled.csv \
-  --dry-run
-```
+Required:
 
-### Phase 3: Evaluate on test set
+- `issue_text`
 
-```bash
-python data/synthesizerv7/phase3-evaluate.py \
-  --test data/synthesizerv7/test.csv
-```
+Legacy alias also accepted:
 
-Default output CSV path for predictions:
+- `text` (automatically mapped to `issue_text`)
 
-- `output/predictions.csv`
+Phase 3 outputs:
 
-Override output:
-
-```bash
-python data/synthesizerv7/phase3-evaluate.py \
-  --test data/synthesizerv7/test.csv \
-  --output data/synthesizerv7/output/predictions.csv
-```
-
-Use 8-bit quantization explicitly:
-
-```bash
-python data/synthesizerv7/phase3-evaluate.py \
-  --test data/synthesizerv7/test.csv \
-  --output data/synthesizerv7/output/predictions.csv \
-  --quantization 8bit
-```
-
-### Phase 4: Deduplicate non-exact duplicates
-
-```bash
-python data/synthesizerv7/phase4-deduplicate.py \
-  --input data/synthesizerv7/output/labeled.csv \
-  --output data/synthesizerv7/output/labeled_deduplicated.csv
-```
-
-Adjust near-duplicate threshold:
-
-```bash
-python data/synthesizerv7/phase4-deduplicate.py \
-  --input data/synthesizerv7/output/labeled.csv \
-  --output data/synthesizerv7/output/labeled_deduplicated.csv \
-  --similarity-threshold 0.92
-```
-
-## Model path behavior in scripts
-
-Each script first checks for local model directories:
-
-- Generator: `data/synthesizerv7/models/generator/phi-3.5-mini-instruct/`
-- Classifier: `data/synthesizerv7/models/classifier/deberta-v3-base-mnli-fever-anli/`
-
-If present, local paths are used.  
-If not present, scripts fall back to Hugging Face model IDs.
-
-## Required input schemas
-
-### Phase 1 input (`--dataset`)
-
-Must include column:
-
-- `transcript`
-
-### Phase 2 input (`--input`)
-
-Must include columns:
-
-- `ticket_type`
-- `subject`
-- `text`
-
-### Phase 3 input (`--test`)
-
-Must include columns:
-
-- `ticket_type`
-- `text`
+- `issue_text`
 - `issue_severity`
 - `issue_urgency`
 - `safety_concern`
 - `business_impact`
+
+## Reusing Phase 2 model for Feature Engineering Agent
+
+Phase 2 writes `output/phase2_model_manifest.json` with model + tokenizer metadata.
+
+To export from SSH machine, bundle model + manifest:
+
+```bash
+tar -czf phase2_model_bundle.tar.gz \
+  models/classifier/deberta-v3-base-mnli-fever-anli \
+  output/phase2_model_manifest.json
+```
+
+Then download `phase2_model_bundle.tar.gz` from your SSH session.

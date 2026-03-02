@@ -44,6 +44,8 @@ tmp/
 temp/
 *.tmp
 *.log
+.cache/
+hf_cache/
 
 # Database
 *.sqlite
@@ -61,6 +63,8 @@ data/synthesizerv7/models/classifier/deberta-v3-base-mnli-fever-anli/
 *.h5
 *.pkl
 *.joblib
+!data/synthesizerv7/models/
+!data/synthesizerv7/models/**
 
 # IDE
 .vscode/
@@ -97,6 +101,23 @@ terraform.tfvars
 
 # Project-specific
 ai-models/legacy/MultiAgentPipeline/SentimentAnalysisAgent_runtime/src/models/sentiment-v7/model.pt
+backend/services/chatbot/hf_cache/
+backend/services/chatbot/models/
+ai-models/MultiAgentPipeline/Orchestrator/feature_labeler_model/
+ai-models/MultiAgentPipeline/Orchestrator/feature_engineering_models/
+ai-models/MultiAgentPipeline/Orchestrator/models/classifier/*
+!ai-models/MultiAgentPipeline/Orchestrator/models/classifier/.gitignore
+!ai-models/MultiAgentPipeline/Orchestrator/models/classifier/.gitkeep
+ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/*
+!ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/.gitignore
+!ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/.gitkeep
+!ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/feature_labeler/
+ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/feature_labeler/*
+!ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/feature_labeler/.gitignore
+!ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/feature_labeler/.gitkeep
+ai-models/MultiAgentPipeline/Orchestrator/models/sentimentanalysis/*
+!ai-models/MultiAgentPipeline/Orchestrator/models/sentimentanalysis/.gitignore
+!ai-models/MultiAgentPipeline/Orchestrator/models/sentimentanalysis/.gitkeep
 .claude/worktrees/
  
 # PrioritizationAgent test artifacts (keep folder placeholders only)

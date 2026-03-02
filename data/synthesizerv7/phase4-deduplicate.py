@@ -7,13 +7,14 @@ This phase removes:
 2. Near duplicates (TF-IDF cosine similarity)
 
 Default flow:
-    input:  output/labeled.csv
-    output: output/labeled_deduplicated.csv
+    input:  output/unlabeled.csv
+    output: output/unlabeled_deduplicated.csv
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from pathlib import Path
 
@@ -113,11 +114,16 @@ def remove_near_duplicates(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Phase 4 deduplication (exact + near duplicates)")
-    parser.add_argument("--input", default="output/labeled.csv", help="Input CSV path")
+    parser.add_argument("--input", default="output/unlabeled.csv", help="Input CSV path")
     parser.add_argument(
         "--output",
-        default="output/labeled_deduplicated.csv",
+        default="output/unlabeled_deduplicated.csv",
         help="Output CSV path",
+    )
+    parser.add_argument(
+        "--stats-output",
+        default="output/deduplication_stats.json",
+        help="JSON output path for deduplication statistics",
     )
     parser.add_argument(
         "--text-column",
@@ -149,7 +155,8 @@ def main() -> None:
     df = pd.read_csv(input_path)
     require_columns(df, [args.text_column])
 
-    print(f"Loaded {len(df)} rows from: {input_path}")
+    initial_count = len(df)
+    print(f"Loaded {initial_count} rows from: {input_path}")
 
     exact_removed = 0
     if not args.skip_exact:
@@ -166,11 +173,25 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
 
+    stats_payload = {
+        "input_rows": int(initial_count),
+        "exact_removed": int(exact_removed),
+        "rows_before_near_dedup": int(before_near),
+        "near_removed": int(near_removed),
+        "multi_member_clusters": int(multi_member_clusters),
+        "final_rows": int(len(df)),
+        "similarity_threshold": float(args.similarity_threshold),
+    }
+    stats_path = Path(args.stats_output)
+    stats_path.parent.mkdir(parents=True, exist_ok=True)
+    stats_path.write_text(json.dumps(stats_payload, indent=2), encoding="utf-8")
+
     print(f"Phase 4B near duplicates removed: {near_removed}")
     print(f"Phase 4B multi-member clusters: {multi_member_clusters}")
     print(f"Rows before near-dedup: {before_near}")
     print(f"Final rows: {len(df)}")
     print(f"Saved deduplicated CSV to: {output_path}")
+    print(f"Saved dedup stats to: {stats_path}")
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ WORKDIR /app
 
 # Install system dependencies including tzdata for timezone
 RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     libpq-dev \

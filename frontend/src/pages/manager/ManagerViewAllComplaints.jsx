@@ -12,9 +12,22 @@ import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
 import useScrollReveal from "../../utils/useScrollReveal";
 
+function getAuthToken() {
+  try {
+    const raw = localStorage.getItem("user");
+    if (raw) { const u = JSON.parse(raw); if (u?.access_token) return u.access_token; }
+  } catch { /* ignore */ }
+  return (
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") || ""
+  );
+}
+
 export default function ManagerViewComplaints() {
   const revealRef = useScrollReveal();
-  const token = localStorage.getItem("access_token");
+  const token = getAuthToken();
 
   // Tickets & Employees
   const [rows, setRows] = useState([]);
@@ -35,8 +48,7 @@ export default function ManagerViewComplaints() {
   const [openMenuFor, setOpenMenuFor] = useState(null);
 
   // Departments for rerouting (dummy placeholder, replace with real list if needed)
-  const departments = ["Maintenance", "IT", "Security", "Cleaning", "Facilities"];
-
+  const [departments, setDepartments] = useState([]);
   // Fetch tickets & employees with session token
   useEffect(() => {
     if (!token) return;
@@ -47,7 +59,7 @@ export default function ManagerViewComplaints() {
     };
 
     // Fetch complaints
-    fetch(apiUrl("/manager/complaints"), { headers })
+    fetch(apiUrl("/api/manager/complaints"), { headers })
       .then((res) => {
         if (res.status === 401) return null;
         return res.json();
@@ -58,8 +70,13 @@ export default function ManagerViewComplaints() {
         setRows([]);
       });
 
+    fetch(apiUrl("/manager/departments"), { headers })
+      .then((res) => res.json())
+      .then((data) => Array.isArray(data) && setDepartments(data))
+      .catch(() => {});
+      
     // Fetch employees for assignment modal
-    fetch(apiUrl("/manager/employees"), { headers })
+    fetch(apiUrl("/api/manager/employees"), { headers })
       .then((res) => {
         if (res.status === 401) return null;
         return res.json();
@@ -143,14 +160,31 @@ const confirmAssignment = async () => {
   closeAssignModal();
 };
 
-  const handleReroute = (ticketId, dept) => {
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === ticketId
-          ? { ...r, status: "Unassigned", assignee: "—", action: "Assign", reroutedTo: dept }
-          : r
-      )
-    );
+  const handleReroute = async (ticketId, dept) => {
+    try {
+      const res = await fetch(apiUrl(`/manager/complaints/${ticketId}/department`), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ department: dept }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Failed to reroute: ${err.detail || res.statusText}`);
+        return;
+      }
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === ticketId
+            ? { ...r, department: dept, reroutedTo: dept }
+            : r
+        )
+      );
+    } catch {
+      alert("Network error during reroute.");
+    }
     closeMenu();
   };
 
@@ -275,7 +309,7 @@ const confirmAssignment = async () => {
 
             <tbody>
               {filteredRows.map((r, idx) => {
-                const showMore = r.status === "Unassigned";
+                const showMore = true;
                 const showCancelReroute = Boolean(r.reroutedTo);
                 const openUp = idx >= filteredRows.length - 2;
 
@@ -304,7 +338,7 @@ const confirmAssignment = async () => {
                     <td className="mv-cellMid">
                       <div className="mv-assigneeCell">
                         <div className="mv-ellipsis">{r.assignee}</div>
-                        {r.reroutedTo && r.assignee === "—" && (
+                        {r.reroutedTo && (
                           <span className="mv-reroutePill">Rerouted: {r.reroutedTo}</span>
                         )}
                       </div>

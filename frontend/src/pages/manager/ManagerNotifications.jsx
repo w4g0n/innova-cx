@@ -8,6 +8,25 @@ import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
 import "./ManagerNotifications.css";
 
+function getAuthToken() {
+  try {
+    const raw = localStorage.getItem("user");
+    if (raw) {
+      const user = JSON.parse(raw);
+      if (user?.access_token) return user.access_token;
+    }
+  } catch {
+    // ignore malformed user payload in storage
+  }
+  return (
+    localStorage.getItem("access_token")
+    || localStorage.getItem("token")
+    || localStorage.getItem("jwt")
+    || localStorage.getItem("authToken")
+    || ""
+  );
+}
+
 function formatTime(isoString) {
   if (!isoString) return "";
   const d = new Date(isoString);
@@ -30,6 +49,8 @@ function iconForType(type) {
   }
 }
 
+const API_BASE = apiUrl("/api");
+
 export default function ManagerNotifications() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
@@ -39,31 +60,47 @@ export default function ManagerNotifications() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const token = localStorage.getItem("access_token");
-
   const fetchNotifications = useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(apiUrl("/manager/notifications"), {
+      const res = await fetch(`${API_BASE}/manager/notifications`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 401) { navigate("/login"); return; }
-      if (!res.ok) throw new Error("Failed to load notifications");
+      if (!res.ok) throw new Error((await res.text()) || "Failed to load notifications");
       const data = await res.json();
-      setNotifications(data.notifications || []);
+      const normalized = (data.notifications || []).map((n) => {
+        const typeMap = {
+          approval: "ticket_assignment",
+          escalation: "status_change",
+          sla_breach: "sla_warning",
+        };
+        const codeMatch = (n.title || "").match(/([A-Z]{2,}-\d+)/);
+        return {
+          ...n,
+          type: typeMap[n.type] || n.type,
+          message: n.message || n.body || "",
+          ticketId: n.ticketId || (codeMatch ? codeMatch[1] : null),
+        };
+      });
+      setNotifications(normalized);
     } catch (e) {
       setError(e?.message || "Failed to load notifications.");
     } finally {
       setLoading(false);
     }
-  }, [token, navigate]);
+  }, [navigate]);
 
   useEffect(() => {
-    if (!token) { navigate("/login"); return; }
     fetchNotifications();
-  }, []);
-
+  }, [fetchNotifications]);
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
@@ -85,9 +122,11 @@ export default function ManagerNotifications() {
   }, [notifications, query, filter, onlyUnread]);
 
   const markAllRead = async () => {
+    const token = getAuthToken();
+    if (!token) return;
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     try {
-      await fetch(apiUrl("/manager/notifications/read-all"), {
+      await fetch(`${API_BASE}/manager/notifications/read-all`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -97,9 +136,11 @@ export default function ManagerNotifications() {
   };
 
   const onNotificationClick = async (n) => {
+    const token = getAuthToken();
+    if (!token) return;
     setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
     try {
-      await fetch(apiUrl(`/manager/notifications/${n.id}/read`), {
+      await fetch(`${API_BASE}/manager/notifications/${n.id}/read`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -179,7 +220,7 @@ export default function ManagerNotifications() {
                     <div className="empNotifs__message">{n.message}</div>
                     <div className="empNotifs__meta">
                       <span>{formatTime(n.timestamp)}</span>
-                      {n.ticketCode && <span>• {n.ticketCode}</span>}
+                      {(n.ticketCode || n.ticketId) && <span>• {n.ticketCode || n.ticketId}</span>}
                     </div>
                   </div>
                 </div>
