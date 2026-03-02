@@ -94,6 +94,7 @@ services:
     environment:
       PYTHONPATH: /app
       SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SENTIMENT_MODEL_DIR: "${SENTIMENT_MODEL_DIR:-/app/models/sentimentanalysis}"
       CLASSIFIER_MODEL_DIR: "${CLASSIFIER_MODEL_DIR:-/app/models/classifier}"
       CLASSIFIER_MODEL_PATH: "${CLASSIFIER_MODEL_PATH:-}"
@@ -102,6 +103,8 @@ services:
       FEATURE_ENGINEERING_STATE_DIR: "${FEATURE_ENGINEERING_STATE_DIR:-/app/models/featureengineering}"
       FEATURE_LABELER_FORCE_CPU: "${FEATURE_LABELER_FORCE_CPU:-false}"
     depends_on:
+      postgres:
+        condition: service_healthy
       backend:
         condition: service_started
     ports:

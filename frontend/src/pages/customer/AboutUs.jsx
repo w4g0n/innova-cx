@@ -327,7 +327,6 @@ export default function AboutUs() {
   const laneRefs = useRef({});
 
   const searchableText = (stage) => `${stage.agent} ${stage.model} ${stage.desc}`.toLowerCase();
-  const activeLayerIdx = PIPELINE_LAYERS.findIndex((layer) => layer.id === activeStage.layerId);
 
   const filteredLayers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -343,8 +342,13 @@ export default function AboutUs() {
     () => filteredLayers.flatMap((layer) => layer.stages),
     [filteredLayers]
   );
+  const fallbackStage = visibleStages[0] || PIPELINE_STAGES[0];
+  const resolvedActiveStage = visibleStages.find((stage) => stage.id === activeStage.id) || fallbackStage;
+  const resolvedKeyboardStageId = visibleStages.find((stage) => stage.id === keyboardStageId)
+    ? keyboardStageId
+    : fallbackStage.id;
 
-  const currentStageIndex = PIPELINE_STAGES.findIndex((stage) => stage.id === activeStage.id);
+  const currentStageIndex = PIPELINE_STAGES.findIndex((stage) => stage.id === resolvedActiveStage.id);
   const handlePrevStage = () => {
     if (currentStageIndex <= 0) return;
     setActiveStage(PIPELINE_STAGES[currentStageIndex - 1]);
@@ -358,22 +362,13 @@ export default function AboutUs() {
     setCollapsedLayers((prev) => ({ ...prev, [layerId]: !prev[layerId] }));
   };
 
-  useEffect(() => {
-    if (!visibleStages.find((stage) => stage.id === activeStage.id)) {
-      setActiveStage(visibleStages[0] || PIPELINE_STAGES[0]);
-    }
-    if (!visibleStages.find((stage) => stage.id === keyboardStageId)) {
-      setKeyboardStageId((visibleStages[0] || PIPELINE_STAGES[0]).id);
-    }
-  }, [visibleStages, activeStage.id, keyboardStageId]);
-
   const jumpToLayer = (layerId) => {
     laneRefs.current[layerId]?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handlePipelineKeyDown = (event) => {
     if (!visibleStages.length) return;
-    const keyIndex = visibleStages.findIndex((stage) => stage.id === keyboardStageId);
+    const keyIndex = visibleStages.findIndex((stage) => stage.id === resolvedKeyboardStageId);
     if (event.key === "ArrowRight" || event.key === "ArrowDown") {
       event.preventDefault();
       const next = visibleStages[Math.min(keyIndex + 1, visibleStages.length - 1)];
@@ -386,14 +381,14 @@ export default function AboutUs() {
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      const selected = visibleStages.find((stage) => stage.id === keyboardStageId);
+      const selected = visibleStages.find((stage) => stage.id === resolvedKeyboardStageId);
       if (selected) setActiveStage(selected);
     }
   };
 
   const getNodeRelation = (stage) => {
-    if (stage.id === activeStage.id) return "active";
-    if (stage.layerId === activeStage.layerId) return "same-lane";
+    if (stage.id === resolvedActiveStage.id) return "active";
+    if (stage.layerId === resolvedActiveStage.layerId) return "same-lane";
     return "unrelated";
   };
 
@@ -565,7 +560,7 @@ export default function AboutUs() {
             <button
               key={layer.id}
               type="button"
-              className={`au-lane-pill ${activeStage.layerId === layer.id ? "is-active" : ""}`}
+              className={`au-lane-pill ${resolvedActiveStage.layerId === layer.id ? "is-active" : ""}`}
               onClick={() => jumpToLayer(layer.id)}
               style={{ "--lane-color": layer.color }}
             >
@@ -601,10 +596,10 @@ export default function AboutUs() {
                       const renderNode = (stage) => (
                         <PipelineNode
                           stage={stage}
-                          isActive={activeStage.id === stage.id}
+                          isActive={resolvedActiveStage.id === stage.id}
                           isCompact={compactMode}
                           relation={getNodeRelation(stage)}
-                          isKeyboardFocus={keyboardStageId === stage.id}
+                          isKeyboardFocus={resolvedKeyboardStageId === stage.id}
                           onClick={() => {
                             setActiveStage(stage);
                             setKeyboardStageId(stage.id);
@@ -697,7 +692,7 @@ export default function AboutUs() {
           <div className="au-pipeline-detail-wrap">
             <div className="au-pipeline-panel-title">Selected Agent Details</div>
             <PipelineDetail
-              stage={activeStage}
+              stage={resolvedActiveStage}
               onPrev={handlePrevStage}
               onNext={handleNextStage}
               isFirst={currentStageIndex === 0}

@@ -142,6 +142,15 @@ def _ensure_runtime_schema_compatibility() -> None:
                     );
                     """
                 )
+                # Employee reports must be unique per employee+month, not globally by month code.
+                # Keep backward compatibility for existing DB volumes created with report_code UNIQUE.
+                cur.execute("ALTER TABLE employee_reports DROP CONSTRAINT IF EXISTS employee_reports_report_code_key;")
+                cur.execute(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_reports_user_code
+                    ON employee_reports(employee_user_id, report_code);
+                    """
+                )
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
@@ -1802,6 +1811,33 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
         (user_id, month_start, month_end),
     )
 
+    # Fallback: if MV is stale/not refreshed, compute directly from base tickets table.
+    if not rows:
+        rows = fetch_all(
+            """
+            SELECT
+                t.id,
+                t.status,
+                t.priority,
+                COALESCE(t.respond_breached, FALSE) AS respond_breached,
+                COALESCE(t.resolve_breached, FALSE) AS resolve_breached,
+                (COALESCE(t.respond_breached, FALSE) OR COALESCE(t.resolve_breached, FALSE)) AS any_breached,
+                (t.status = 'Resolved') AS is_resolved,
+                (t.status = 'Escalated') AS is_escalated,
+                t.first_response_at,
+                EXTRACT(EPOCH FROM (t.first_response_at - COALESCE(t.priority_assigned_at, t.assigned_at, t.created_at))) / 60.0
+                    AS response_time_mins,
+                t.created_at,
+                date_trunc('week', t.created_at)::date AS week_start
+            FROM tickets t
+            WHERE t.assigned_to_user_id = %s
+              AND t.created_at >= %s
+              AND t.created_at <= %s
+            ORDER BY t.created_at
+            """,
+            (user_id, month_start, month_end),
+        )
+
     if not rows:
         return None  # no activity → no report
 
@@ -1962,7 +1998,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
                         (report_code, employee_user_id, month_label, subtitle,
                          kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (report_code) DO UPDATE
+                    ON CONFLICT (employee_user_id, report_code) DO UPDATE
                         SET month_label    = EXCLUDED.month_label,
                             subtitle       = EXCLUDED.subtitle,
                             kpi_rating     = EXCLUDED.kpi_rating,

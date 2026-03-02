@@ -11,6 +11,52 @@ import { apiUrl } from "../../config/apiBase";
 import { getToken, authHeader } from "../../utils/auth";
 import "./CustomerHistory.css";
 
+const WORKFLOW_STAGES = [
+  { id: "submitted", label: "Submitted", owner: "Customer" },
+  { id: "ai_processing", label: "AI Processing", owner: "AI" },
+  { id: "routed", label: "Routed to Team", owner: "AI" },
+  { id: "employee_handling", label: "Employee Handling", owner: "Employee" },
+  { id: "resolved", label: "Resolved", owner: "Employee" },
+];
+
+const SLA_TARGETS = {
+  Critical: { minResponse: "30 min", minResolve: "6 hr" },
+  High: { minResponse: "1 hr", minResolve: "18 hr" },
+  Medium: { minResponse: "3 hr", minResolve: "2 days" },
+  Low: { minResponse: "6 hr", minResolve: "3 days" },
+};
+
+function normalizeStatus(status) {
+  return String(status || "").toLowerCase().replaceAll(" ", "");
+}
+
+function getWorkflowState(status) {
+  const key = normalizeStatus(status);
+  if (key === "resolved") {
+    return { stageIndex: 4, stageLabel: "Resolved", owner: "Employee", note: "Ticket completed by support team." };
+  }
+  if (key === "assigned") {
+    return { stageIndex: 3, stageLabel: "Employee Handling", owner: "Employee", note: "Support staff is actively working on your ticket." };
+  }
+  if (key === "inprogress") {
+    return { stageIndex: 1, stageLabel: "AI Processing", owner: "AI", note: "AI analysis is in progress before final assignment." };
+  }
+  if (key === "escalated" || key === "overdue" || key === "reopened") {
+    return { stageIndex: 3, stageLabel: "Employee Handling (Escalated)", owner: "Employee", note: "Ticket has been escalated for urgent employee attention." };
+  }
+  if (key === "unassigned") {
+    return { stageIndex: 2, stageLabel: "Routed to Team", owner: "AI", note: "AI triage is complete and assignment is pending." };
+  }
+  if (key === "open") {
+    return { stageIndex: 1, stageLabel: "AI Processing", owner: "AI", note: "AI agents are classifying and prioritizing your ticket." };
+  }
+  return { stageIndex: 1, stageLabel: "AI Processing", owner: "AI", note: "Ticket is being processed." };
+}
+
+function getSlaTargets(priority) {
+  return SLA_TARGETS[String(priority || "")] || SLA_TARGETS.Medium;
+}
+
 export default function CustomerHistory() {
   const navigate = useNavigate();
 
@@ -73,6 +119,13 @@ export default function CustomerHistory() {
       return matchesQuery && matchesType && matchesStatus;
     });
   }, [historyItems, query, type, status]);
+
+  const statusOptions = useMemo(() => {
+    const orderedDefaults = ["Open", "In Progress", "Assigned", "Escalated", "Overdue", "Resolved", "Reopened"];
+    const discovered = Array.from(new Set(historyItems.map((item) => item.status).filter(Boolean)));
+    const merged = [...orderedDefaults, ...discovered.filter((value) => !orderedDefaults.includes(value))];
+    return ["All", ...merged];
+  }, [historyItems]);
 
   const ordered = useMemo(() => {
     const rank = { Open: 0, "In Progress": 1, Resolved: 2 };
@@ -147,7 +200,7 @@ export default function CustomerHistory() {
             value={status}
             onChange={setStatus}
             ariaLabel="Filter by status"
-            options={["All", "Open", "In Progress", "Resolved"]}
+            options={statusOptions}
             minWidth={180}
           />
 
@@ -164,6 +217,10 @@ export default function CustomerHistory() {
             </div>
           ) : (
             ordered.map((item) => (
+              (() => {
+                const workflow = getWorkflowState(item.status);
+                const sla = getSlaTargets(item.priority);
+                return (
               <article
                 key={item.id}
                 className="historyCard historyCard--click"
@@ -197,6 +254,35 @@ export default function CustomerHistory() {
                       <PriorityPill priority={item.priority} />
                     </div>
                   </div>
+                  <div className="historySlaRow">
+                    <span className="historySlaItem">
+                      <b>Min response:</b> {sla.minResponse}
+                    </span>
+                    <span className="historySlaDot">•</span>
+                    <span className="historySlaItem">
+                      <b>Min resolve:</b> {sla.minResolve}
+                    </span>
+                  </div>
+
+                  <div className="historyWorkflow">
+                    <div className="historyWorkflowHeader">
+                      <span className="historyWorkflowTitle">Workflow Stage</span>
+                      <span className={`historyWorkflowOwner owner-${workflow.owner.toLowerCase()}`}>
+                        {workflow.owner}
+                      </span>
+                    </div>
+                    <div className="historyWorkflowCurrent">{workflow.stageLabel}</div>
+                    <div className="historyWorkflowTrack" aria-label={`Workflow stage ${workflow.stageIndex + 1} of ${WORKFLOW_STAGES.length}`}>
+                      {WORKFLOW_STAGES.map((stage, index) => (
+                        <div
+                          key={stage.id}
+                          className={`historyWorkflowDot ${index <= workflow.stageIndex ? "is-done" : ""} ${index === workflow.stageIndex ? "is-current" : ""}`}
+                          title={`${stage.label} (${stage.owner})`}
+                        />
+                      ))}
+                    </div>
+                    <p className="historyWorkflowNote">{workflow.note}</p>
+                  </div>
                 </div>
 
                 <div className="historyCardRight">
@@ -212,6 +298,8 @@ export default function CustomerHistory() {
                   </button>
                 </div>
               </article>
+                );
+              })()
             ))
           )}
         </section>
