@@ -3558,7 +3558,7 @@ def manager_notification_mark_read(
     return {"ok": True, "id": notification_id}
 
 
-@api.get("/manager/complaints/{ticket_id}")
+@app.get("/manager/complaints/{ticket_id}")
 def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends(require_manager)):
     ticket = fetch_one("""
         SELECT
@@ -3579,9 +3579,9 @@ def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends
         LEFT JOIN user_profiles up
             ON t.assigned_to_user_id = up.user_id
         LEFT JOIN departments d ON d.id = t.department_id
-        WHERE t.id = %s
+        WHERE t.ticket_code = %s OR t.id::text = %s
         LIMIT 1;
-    """, (ticket_id,))
+    """, (ticket_id, ticket_id))
 
     if not ticket:
         return {"error": "Ticket not found"}
