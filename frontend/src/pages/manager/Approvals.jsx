@@ -27,20 +27,15 @@ export default function Approvals() {
   const revealRef = useScrollReveal();
   const navigate = useNavigate();
 
-  // ------------------- State -------------------
   const [query, setQuery] = useState("");
   const [requestType, setRequestType] = useState("All Request Types");
   const [status, setStatus] = useState("All Status");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ------------------- Fetch Approvals with Session -------------------
   useEffect(() => {
     const token = getAuthToken();
-    if (!token) {
-      navigate("/login");
-      return;
-    }
+    if (!token) { navigate("/login"); return; }
 
     const headers = {
       "Content-Type": "application/json",
@@ -56,7 +51,8 @@ export default function Approvals() {
       .then((data) => {
         const formatted = data.map((a) => ({
           requestId: a.requestId,
-          ticketId: a.ticketCode,
+          ticketId: a.ticketCode,        // ticket code e.g. CX-1234
+          ticketUuid: a.ticketId,        // UUID for navigation
           type: a.type,
           current: a.current,
           requested: a.requested,
@@ -70,12 +66,10 @@ export default function Approvals() {
       .finally(() => setLoading(false));
   }, [navigate]);
 
-  // ------------------- Actions -------------------
   const decide = async (requestId, decision) => {
     const token = getAuthToken();
     if (!token) { navigate("/login"); return; }
 
-    // Optimistic update
     setRows((prev) =>
       prev.map((r) => (r.requestId === requestId ? { ...r, status: decision } : r))
     );
@@ -95,7 +89,6 @@ export default function Approvals() {
         throw new Error(err.detail || `Failed (${res.status})`);
       }
     } catch (e) {
-      // Rollback optimistic update on failure
       setRows((prev) =>
         prev.map((r) => (r.requestId === requestId ? { ...r, status: "Pending" } : r))
       );
@@ -103,15 +96,14 @@ export default function Approvals() {
     }
   };
 
-  // ------------------- Filtering -------------------
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
       const matchesQuery =
         !q ||
-        r.requestId.toLowerCase().includes(q) ||
-        r.ticketId.toLowerCase().includes(q) ||
-        r.submittedBy.toLowerCase().includes(q);
+        String(r.requestId).toLowerCase().includes(q) ||
+        String(r.ticketId).toLowerCase().includes(q) ||
+        String(r.submittedBy).toLowerCase().includes(q);
 
       const matchesType = requestType === "All Request Types" || r.type === requestType;
       const matchesStatus = status === "All Status" || r.status === status;
@@ -120,7 +112,6 @@ export default function Approvals() {
     });
   }, [rows, query, requestType, status]);
 
-  // ------------------- KPIs -------------------
   const totals = useMemo(() => {
     const total = rows.length;
     const pending = rows.filter((r) => r.status === "Pending").length;
@@ -135,7 +126,6 @@ export default function Approvals() {
     setStatus("All Status");
   };
 
-  // ------------------- JSX -------------------
   return (
     <Layout role="manager">
       <div className="mgrApprovals" ref={revealRef}>
@@ -221,8 +211,19 @@ export default function Approvals() {
                 )}
                 {!loading && filtered.map((r) => (
                   <tr key={r.requestId}>
-                    <td>{r.requestId}</td>
-                    <td className="ticketLink">{r.ticketId}</td>
+                    {/* Request ID → clickable link to the new details page */}
+                    <td>
+                      <span
+                        className="requestIdLink"
+                        onClick={() => navigate(`/manager/approvals/${r.requestId}`)}
+                      >
+                        {r.requestId}
+                      </span>
+                    </td>
+
+                    {/* Ticket ID → plain text, no hyperlink */}
+                    <td>{r.ticketId}</td>
+
                     <td>{r.type}</td>
                     <td>{r.current}</td>
                     <td>{r.requested}</td>

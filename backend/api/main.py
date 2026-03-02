@@ -1591,30 +1591,27 @@ class ManagerResolveRequest(BaseModel):
     final_resolution: str
     steps_taken: Optional[str] = None
 
-@api.post("/employee/tickets/{ticket_code}/rescore")
-def employee_rescore_ticket(
+@api.post("/employee/tickets/{ticket_code}/reroute")
+def employee_reroute_ticket(
     ticket_code: str,
-    body: EmployeeRescoreRequest,
+    body: EmployeeRerouteRequest,
     user: Dict[str, Any] = Depends(require_employee),
 ):
     user_id = user["id"]
-    allowed_priorities = {"Low", "Medium", "High", "Critical"}
-    new_priority = (body.new_priority or "").strip()
+    new_dept_name = (body.new_department or "").strip()
     reason = (body.reason or "").strip()
 
-    if new_priority not in allowed_priorities:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Invalid priority. Must be one of: {', '.join(sorted(allowed_priorities))}",
-        )
+    if not new_dept_name:
+        raise HTTPException(status_code=422, detail="New department is required")
     if not reason:
         raise HTTPException(status_code=422, detail="Reason is required")
 
     row = fetch_one(
         """
-        SELECT id, ticket_code, priority
-        FROM tickets
-        WHERE ticket_code = %s AND assigned_to_user_id = %s
+        SELECT t.id, t.ticket_code, d.name AS current_dept
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.ticket_code = %s AND t.assigned_to_user_id = %s
         LIMIT 1;
         """,
         (ticket_code, user_id),
@@ -1622,7 +1619,14 @@ def employee_rescore_ticket(
     if not row:
         raise HTTPException(status_code=404, detail="Ticket not found or not assigned to you")
 
-    current_priority = row["priority"]
+    new_dept = fetch_one(
+        "SELECT id, name FROM departments WHERE name = %s LIMIT 1;",
+        (new_dept_name,),
+    )
+    if not new_dept:
+        raise HTTPException(status_code=404, detail=f"Department '{new_dept_name}' not found")
+
+    current_dept = row.get("current_dept") or "Unknown"
     request_code = f"REQ-{int(time.time() * 1000) % 10000000}"
 
     with db_connect() as conn:
@@ -1635,29 +1639,45 @@ def employee_rescore_ticket(
                   request_reason, submitted_by_user_id,
                   submitted_at, status
                 )
-                VALUES (%s, %s, 'Rescoring', %s, %s, %s, %s, now(), 'Pending')
+                VALUES (%s, %s, 'Rerouting', %s, %s, %s, %s, now(), 'Pending')
                 RETURNING request_code;
                 """,
                 (
                     request_code,
                     row["id"],
-                    f"Priority: {current_priority}",
-                    f"Priority: {new_priority}",
+                    f"Dept: {current_dept}",
+                    f"Dept: {new_dept_name}",
                     reason,
                     user_id,
                 ),
             )
             result = cur.fetchone()
 
+            profile = fetch_one(
+                "SELECT full_name FROM user_profiles WHERE user_id = %s", (user_id,)
+            ) or {}
+            employee_name = profile.get("full_name") or user.get("email", "An employee")
+
+            # Only notify the employee themselves (confirmation)
+            # Manager is notified by the DB trigger notify_manager_on_approval_request
+            _insert_notification(
+                cur,
+                user_id=str(user_id),
+                notif_type="ticket_assignment",
+                title=f"Rerouting Request Submitted — {ticket_code}",
+                message=f"You requested a department change for {ticket_code}: {current_dept} → {new_dept_name}. Reason: {reason}. Awaiting manager approval.",
+                ticket_id=str(row["id"]),
+                priority=None,
+            )
+
     logger.info(
-        "employee_rescore | ticket=%s from=%s to=%s request=%s",
+        "employee_reroute | ticket=%s from=%s to=%s request=%s",
         ticket_code,
-        current_priority,
-        new_priority,
+        current_dept,
+        new_dept_name,
         result["request_code"],
     )
     return {"ok": True, "requestCode": result["request_code"], "status": "Pending"}
-
 
 @api.post("/employee/tickets/{ticket_code}/reroute")
 def employee_reroute_ticket(
@@ -1720,6 +1740,32 @@ def employee_reroute_ticket(
                 ),
             )
             result = cur.fetchone()
+
+            profile = fetch_one(
+                "SELECT full_name FROM user_profiles WHERE user_id = %s", (user_id,)
+            ) or {}
+            employee_name = profile.get("full_name") or user.get("email", "An employee")
+            manager_row = fetch_one("SELECT id FROM users WHERE role = 'manager' LIMIT 1;")
+            if manager_row and str(manager_row["id"]) != str(user_id):
+                _insert_notification(
+                    cur,
+                    user_id=str(manager_row["id"]),
+                    notif_type="ticket_assignment",
+                    title=f"Rerouting Request — {ticket_code}",
+                    message=f"{employee_name} requested a department change for {ticket_code}: {current_dept} → {new_dept_name}. Reason: {reason}",
+                    ticket_id=str(row["id"]),
+                    priority=None,
+                )
+            # Notify the employee themselves (confirmation)
+            _insert_notification(
+                cur,
+                user_id=str(user_id),
+                notif_type="ticket_assignment",
+                title=f"Rerouting Request Submitted — {ticket_code}",
+                message=f"You requested a department change for {ticket_code}: {current_dept} → {new_dept_name}. Reason: {reason}. Awaiting manager approval.",
+                ticket_id=str(row["id"]),
+                priority=None,
+            )
 
     logger.info(
         "employee_reroute | ticket=%s from=%s to=%s request=%s",
@@ -3189,17 +3235,7 @@ def route_ticket_department(
     if not dept:
         raise HTTPException(status_code=404, detail=f"Department '{dept_name}' not found")
 
-    execute(
-        """
-        UPDATE tickets
-        SET department_id = %s,
-            updated_at    = NOW()
-        WHERE id = %s
-        """,
-        (dept["id"], ticket_id),
-    )
-
-    # Notifications for reroute
+    # ✅ Fetch BEFORE updating so old_dept is still the current one
     t_info = fetch_one(
         """
         SELECT t.ticket_code, t.assigned_to_user_id, t.priority,
@@ -3210,37 +3246,46 @@ def route_ticket_department(
         """,
         (ticket_id,),
     ) or {}
+
+    execute(
+        """
+        UPDATE tickets
+        SET department_id = %s,
+            updated_at    = NOW()
+        WHERE id = %s
+        """,
+        (dept["id"], ticket_id),
+    )
+
     ticket_code  = t_info.get("ticket_code") or ticket_id
     assigned_uid = t_info.get("assigned_to_user_id")
     t_priority   = t_info.get("priority")
+    old_dept     = t_info.get("old_dept") or "Unknown"
 
     with db_connect() as conn:
         with conn.cursor() as cur:
-            # Notify manager (confirmation)
             _insert_notification(
                 cur,
                 user_id=str(user["id"]),
                 notif_type="status_change",
                 title=f"Ticket Rerouted: {ticket_code}",
-                message=f"You rerouted ticket {ticket_code} to department: {dept_name}.",
+                message=f"You rerouted ticket {ticket_code} from {old_dept} to {dept_name}.",
                 ticket_id=ticket_id,
                 priority=t_priority,
             )
 
-            # Notify assigned employee
             if assigned_uid and str(assigned_uid) != str(user["id"]):
                 _insert_notification(
                     cur,
                     user_id=str(assigned_uid),
                     notif_type="status_change",
                     title=f"Ticket Rerouted: {ticket_code}",
-                    message=f"Your ticket {ticket_code} has been rerouted to the {dept_name} department.",
+                    message=f"Your ticket {ticket_code} has been rerouted from {old_dept} to the {dept_name} department.",
                     ticket_id=ticket_id,
                     priority=t_priority,
                 )
 
     return {"ticket_id": ticket_id, "department": dept_name, "action": "rerouted"}
-
 
 @app.get("/manager/departments")
 def get_departments(authorization: Optional[str] = Header(default=None)):
@@ -3329,8 +3374,7 @@ class ApprovalDecisionRequest(BaseModel):
     decision: str          # "Approved" or "Rejected"
     decision_notes: Optional[str] = None
 
-
-@app.patch("/manager/approvals/{request_id}")
+@api.patch("/manager/approvals/{request_id}")
 def decide_approval(
     request_id: str,
     body: ApprovalDecisionRequest,
@@ -3366,10 +3410,10 @@ def decide_approval(
                 """
                 UPDATE approval_requests
                 SET
-                    status           = %s,
+                    status             = %s,
                     decided_by_user_id = %s,
-                    decided_at       = now(),
-                    decision_notes   = %s
+                    decided_at         = now(),
+                    decision_notes     = %s
                 WHERE id::text = %s;
                 """,
                 (decision, user["id"], body.decision_notes or "", request_id),
@@ -3377,12 +3421,11 @@ def decide_approval(
 
             # 2. If approved, apply the change to the ticket
             if decision == "Approved":
-                req_type = ar["request_type"]          # 'Rescoring' or 'Rerouting'
-                requested = ar["requested_value"] or "" # e.g. "Priority: Critical" / "Dept: Security"
+                req_type  = ar["request_type"]
+                requested = ar["requested_value"] or ""
                 ticket_id = ar["ticket_id"]
 
                 if req_type == "Rescoring":
-                    # Extract priority from "Priority: <value>"
                     new_priority = requested.replace("Priority:", "").strip()
                     allowed = {"Low", "Medium", "High", "Critical"}
                     if new_priority in allowed:
@@ -3392,7 +3435,6 @@ def decide_approval(
                         )
 
                 elif req_type == "Rerouting":
-                    # Extract department name from "Dept: <name>"
                     new_dept_name = requested.replace("Dept:", "").strip()
                     cur.execute(
                         "SELECT id FROM departments WHERE name = %s LIMIT 1;",
@@ -3404,8 +3446,10 @@ def decide_approval(
                             "UPDATE tickets SET department_id = %s WHERE id = %s;",
                             (dept_row["id"], ticket_id),
                         )
-                # ── Notifications for approval decision ──────────────────
-            # Fetch ticket info + submitter
+
+            # ── Notifications for approval decision ──────────────────────────
+            # NOTE: This block is OUTSIDE the "if decision == Approved" block
+            #       so it fires for BOTH Approved AND Rejected decisions.
             cur.execute(
                 """
                 SELECT
@@ -3423,17 +3467,17 @@ def decide_approval(
                 (request_id,),
             )
             ar_info = cur.fetchone() or {}
-            notif_ticket_code  = ar_info.get("ticket_code") or ""
-            notif_priority     = ar_info.get("priority")
-            submitter_uid      = ar_info.get("submitted_by_user_id")
-            notif_req_type     = (ar_info.get("request_type") or "").lower()
-            notif_current      = ar_info.get("current_value") or ""
-            notif_requested    = ar_info.get("requested_value") or ""
-            notif_ticket_id    = ar["ticket_id"]
+            notif_ticket_code = ar_info.get("ticket_code") or ""
+            notif_priority    = ar_info.get("priority")
+            submitter_uid     = ar_info.get("submitted_by_user_id")
+            notif_req_type    = (ar_info.get("request_type") or "").lower()
+            notif_current     = ar_info.get("current_value") or ""
+            notif_requested   = ar_info.get("requested_value") or ""
+            notif_ticket_id   = ar["ticket_id"]
 
             decision_word = "approved" if decision == "Approved" else "rejected"
 
-            # Notify the employee who submitted
+            # Notify the employee who submitted the request
             if submitter_uid and str(submitter_uid) != str(user["id"]):
                 _insert_notification(
                     cur,
@@ -3474,89 +3518,7 @@ def decide_approval(
 # Manager: Notifications
 # =========================================================
 
-@api.get("/manager/notifications")
-def get_manager_notifications(user: Dict[str, Any] = Depends(require_manager)):
-    notifications = []
-
-    # Pending approvals
-    pending = fetch_all("""
-        SELECT ar.id, ar.request_type, t.ticket_code, ar.submitted_at,
-               up.full_name AS submitted_by
-        FROM approval_requests ar
-        LEFT JOIN tickets t ON ar.ticket_id = t.id
-        LEFT JOIN user_profiles up ON ar.submitted_by_user_id = up.user_id
-        WHERE ar.status = 'Pending'
-        ORDER BY ar.submitted_at DESC LIMIT 10
-    """)
-    for a in pending:
-        notifications.append({
-            "id": f"approval-{a['id']}",
-            "type": "approval",
-            "title": f"Approval Requested — {a.get('request_type', '')}",
-            "body": f"{a.get('submitted_by', 'Someone')} requested a {(a.get('request_type') or '').lower()} on {a.get('ticket_code', 'a ticket')}",
-            "timestamp": a["submitted_at"].isoformat() if a.get("submitted_at") else "",
-            "read": False,
-        })
-
-    # Recently escalated tickets (last 48h)
-    escalated = fetch_all("""
-        SELECT t.id, t.ticket_code, t.subject, t.updated_at
-        FROM tickets t
-        WHERE t.status = 'Escalated'
-          AND t.updated_at >= now() - interval '48 hours'
-        ORDER BY t.updated_at DESC LIMIT 10
-    """)
-    for t in escalated:
-        notifications.append({
-            "id": f"escalated-{t['id']}",
-            "type": "escalation",
-            "title": f"Ticket Escalated — {t.get('ticket_code', '')}",
-            "body": t.get("subject", "No subject"),
-            "timestamp": t["updated_at"].isoformat() if t.get("updated_at") else "",
-            "read": False,
-        })
-
-    # SLA breaches in last 24h
-    breaches = fetch_all("""
-        SELECT t.id, t.ticket_code, t.subject, t.priority, t.updated_at
-        FROM tickets t
-        WHERE (t.respond_breached = true OR t.resolve_breached = true)
-          AND t.updated_at >= now() - interval '24 hours'
-        ORDER BY t.updated_at DESC LIMIT 10
-    """)
-    for t in breaches:
-        notifications.append({
-            "id": f"breach-{t['id']}",
-            "type": "sla_breach",
-            "title": f"SLA Breached — {t.get('ticket_code', '')}",
-            "body": f"{t.get('priority', '')} priority: {t.get('subject', 'No subject')}",
-            "timestamp": t["updated_at"].isoformat() if t.get("updated_at") else "",
-            "read": False,
-        })
-
-    notifications.sort(key=lambda n: n["timestamp"], reverse=True)
-    return {"notifications": notifications, "unread": len(notifications)}
-
-
 # =========================================================
-
-@api.post("/manager/notifications/read-all")
-def manager_notifications_mark_all_read(user: Dict[str, Any] = Depends(require_manager)):
-    """Mark all manager notifications as read.
-    Manager notifications are dynamically generated (not stored in DB),
-    so this is a no-op that returns success — the frontend updates state locally.
-    """
-    return {"ok": True, "message": "All notifications marked as read"}
-
-
-@api.post("/manager/notifications/{notification_id}/read")
-def manager_notification_mark_read(
-    notification_id: str,
-    user: Dict[str, Any] = Depends(require_manager),
-):
-    """Mark a single manager notification as read (no-op — state managed client-side)."""
-    return {"ok": True, "id": notification_id}
-
 
 @app.get("/manager/complaints/{ticket_id}")
 def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends(require_manager)):
@@ -3805,16 +3767,12 @@ def get_manager_trends(
         "sectionC":{"employees":employee_out,"teamAcceptAvg":team_accept_avg,"companyBreachRate":round(co_breach,1)},
     }
 #--------------------------------------------
-@app.get("/manager/notifications")
+@api.get("/manager/notifications")
 def manager_notifications(
     limit: int = Query(default=200, ge=1, le=500),
     only_unread: bool = Query(default=False),
-    authorization: Optional[str] = Header(default=None),
+    user: Dict[str, Any] = Depends(require_manager),   # ← use Depends, not Header
 ):
-    user = get_current_user(authorization)
-    if user.get("role") != "manager":
-        raise HTTPException(status_code=403, detail="Forbidden")
-
     user_id = user["id"]
 
     rows = fetch_all(
@@ -3863,16 +3821,11 @@ def manager_notifications(
 
     return {"unreadCount": int(unread_row.get("unread") or 0), "notifications": notifications}
 
-
-@app.post("/manager/notifications/{notification_id}/read")
+@api.post("/manager/notifications/{notification_id}/read")
 def manager_notification_mark_read(
     notification_id: str,
-    authorization: Optional[str] = Header(default=None),
+    user: Dict[str, Any] = Depends(require_manager),
 ):
-    user = get_current_user(authorization)
-    if user.get("role") != "manager":
-        raise HTTPException(status_code=403, detail="Forbidden")
-
     import uuid
     try:
         uuid.UUID(notification_id)
@@ -3887,21 +3840,16 @@ def manager_notification_mark_read(
         raise HTTPException(status_code=404, detail="Notification not found")
     return {"ok": True}
 
-
-@app.post("/manager/notifications/read-all")
+@api.post("/manager/notifications/read-all")
 def manager_notifications_mark_all_read(
-    authorization: Optional[str] = Header(default=None),
+    user: Dict[str, Any] = Depends(require_manager),
 ):
-    user = get_current_user(authorization)
-    if user.get("role") != "manager":
-        raise HTTPException(status_code=403, detail="Forbidden")
-
     execute(
         "UPDATE notifications SET read = TRUE WHERE user_id = %s AND read = FALSE;",
         (user["id"],),
     )
     return {"ok": True}
-    
+
 # =========================================================
 # Internal Orchestrator Endpoint (no JWT — Docker-network only)
 # =========================================================
