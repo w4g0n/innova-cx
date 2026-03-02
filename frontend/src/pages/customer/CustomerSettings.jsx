@@ -22,7 +22,7 @@ export default function CustomerSettings() {
   const user = useMemo(() => getUser() || {}, []);
   const displayName =
     user.name || user.full_name || user.fullName || user.username || "Customer";
-  const displayEmail = user.email || "—";
+  const displayEmail = user.email || "customer1@innova.cx";
 
   return (
     <Layout role="customer">
