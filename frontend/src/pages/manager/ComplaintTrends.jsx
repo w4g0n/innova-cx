@@ -390,14 +390,9 @@ export default function ComplaintTrends() {
               <PillSelect value={department} onChange={setDepartment} ariaLabel="Department"
                 options={[
                   { value: "All Departments",      label: "All Departments" },
-                  { value: "Facilities",           label: "Facilities" },
-                  { value: "Facilities Management",label: "Facilities Management" },
-                  { value: "Security",             label: "Security" },
-                  { value: "Cleaning",             label: "Cleaning" },
-                  { value: "IT Support",           label: "IT Support" },
-                  { value: "IT",                   label: "IT" },
-                  { value: "Maintenance",          label: "Maintenance" },
-                  { value: "HR",                   label: "HR" },
+                  { value: "Warehouse", label: "Warehouse" },
+                  { value: "Retail Store", label: "Retail Store" },
+                  { value: "Office", label: "Office" },
                 ]}
               />
               <PillSelect value={priority} onChange={setPriority} ariaLabel="Priority"

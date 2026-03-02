@@ -512,23 +512,28 @@ CREATE INDEX IF NOT EXISTS idx_approval_requests_ticket ON approval_requests(tic
 CREATE OR REPLACE FUNCTION notify_manager_on_approval_request()
 RETURNS TRIGGER AS $$
 DECLARE
-  v_manager_id     UUID;
-  v_ticket_code    TEXT;
+  v_manager_id      UUID;
+  v_ticket_code     TEXT;
   v_ticket_priority ticket_priority;
-  v_submitter_name TEXT;
-  v_title          TEXT;
-  v_message        TEXT;
+  v_submitter_name  TEXT;
+  v_submitter_role  user_role;
+  v_title           TEXT;
+  v_message         TEXT;
 BEGIN
-  -- Get the ticket info
+  SELECT role INTO v_submitter_role
+  FROM users WHERE id = NEW.submitted_by_user_id;
+
+  IF v_submitter_role = 'manager' THEN
+    RETURN NEW;
+  END IF;
+
   SELECT ticket_code, priority
   INTO v_ticket_code, v_ticket_priority
   FROM tickets WHERE id = NEW.ticket_id;
 
-  -- Get the submitter's name
   SELECT full_name INTO v_submitter_name
   FROM user_profiles WHERE user_id = NEW.submitted_by_user_id;
 
-  -- Find any active manager(s) — notifies all managers
   FOR v_manager_id IN
     SELECT id FROM users WHERE role = 'manager' AND is_active = TRUE
   LOOP
@@ -830,16 +835,11 @@ WHERE NOT EXISTS (
 );
 
 INSERT INTO departments (name) VALUES
-  ('IT'),
-  ('Facilities'),
-  ('Security'),
-  ('HR'),
-  ('Admin'),
-  ('Facilities Management'),
-  ('IT Support'),
-  ('Cleaning'),
-  ('Maintenance')
+  ('Warehouse'),
+  ('Office'),
+  ('Retail Store')
 ON CONFLICT (name) DO NOTHING;
+
 
 -- ✅ Use real bcrypt-compatible hashes from pgcrypto (fresh volumes work)
 -- mfa_enabled = FALSE and totp_secret = NULL so all users get a proper
@@ -864,31 +864,31 @@ ON CONFLICT (email) DO UPDATE
 -- Profiles
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
 SELECT u.id, 'Dr. Farhad', NULL, 'Department Manager',
-       (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1)
+       (SELECT id FROM departments WHERE name='Office' LIMIT 1)
 FROM users u WHERE u.email='manager@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
 SELECT u.id, 'Ahmed Hassan', 'EMP-1023', 'Senior Technician',
-       (SELECT id FROM departments WHERE name='Facilities' LIMIT 1)
+       (SELECT id FROM departments WHERE name='Warehouse' LIMIT 1)
 FROM users u WHERE u.email='ahmed@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
 SELECT u.id, 'Maria Lopez', 'EMP-1078', 'Technician',
-       (SELECT id FROM departments WHERE name='Facilities' LIMIT 1)
+       (SELECT id FROM departments WHERE name='Warehouse' LIMIT 1)
 FROM users u WHERE u.email='maria@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
 SELECT u.id, 'Omar Ali', 'EMP-1150', 'Assistant Technician',
-       (SELECT id FROM departments WHERE name='Facilities' LIMIT 1)
+       (SELECT id FROM departments WHERE name='Warehouse' LIMIT 1)
 FROM users u WHERE u.email='omar@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
 SELECT u.id, 'Sara Ahmed', 'EMP-1192', 'Technician',
-       (SELECT id FROM departments WHERE name='Cleaning' LIMIT 1)
+       (SELECT id FROM departments WHERE name='Office' LIMIT 1)
 FROM users u WHERE u.email='sara@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
@@ -924,8 +924,8 @@ ahmed AS (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
 maria AS (SELECT id FROM users WHERE email='maria@innova.cx' LIMIT 1),
 omar  AS (SELECT id FROM users WHERE email='omar@innova.cx' LIMIT 1),
 sara  AS (SELECT id FROM users WHERE email='sara@innova.cx' LIMIT 1),
-fac   AS (SELECT id FROM departments WHERE name='Facilities' LIMIT 1),
-it    AS (SELECT id FROM departments WHERE name='IT' LIMIT 1)
+fac   AS (SELECT id FROM departments WHERE name='Warehouse' LIMIT 1),
+it    AS (SELECT id FROM departments WHERE name='Office' LIMIT 1)
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, priority, status, department_id,
   created_by_user_id, assigned_to_user_id, created_at,
@@ -994,7 +994,7 @@ ON CONFLICT (ticket_code) DO NOTHING;
 WITH
 cust  AS (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
 ahmed AS (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
-fac   AS (SELECT id FROM departments WHERE name='Facilities' LIMIT 1)
+fac   AS (SELECT id FROM departments WHERE name='Warehouse' LIMIT 1)
 INSERT INTO tickets (
   ticket_code,
   subject,
@@ -1520,10 +1520,10 @@ WITH
   fatima AS (SELECT id FROM users WHERE email='fatima@innova.cx'   LIMIT 1),
   yousef AS (SELECT id FROM users WHERE email='yousef@innova.cx'   LIMIT 1),
   khalid AS (SELECT id FROM users WHERE email='khalid@innova.cx'   LIMIT 1),
-  fac    AS (SELECT id FROM departments WHERE name='Facilities'           LIMIT 1),
-  it     AS (SELECT id FROM departments WHERE name='IT Support'           LIMIT 1),
-  sec    AS (SELECT id FROM departments WHERE name='Security'             LIMIT 1),
-  cln    AS (SELECT id FROM departments WHERE name='Cleaning'             LIMIT 1)
+  fac    AS (SELECT id FROM departments WHERE name='Warehouse'      LIMIT 1),
+  it     AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1),
+  sec    AS (SELECT id FROM departments WHERE name='Retail Store'   LIMIT 1),
+  cln    AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1)
 
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, priority, status,
@@ -2229,10 +2229,10 @@ WITH
   fatima AS (SELECT id FROM users WHERE email='fatima@innova.cx'    LIMIT 1),
   yousef AS (SELECT id FROM users WHERE email='yousef@innova.cx'    LIMIT 1),
   khalid AS (SELECT id FROM users WHERE email='khalid@innova.cx'    LIMIT 1),
-  fac    AS (SELECT id FROM departments WHERE name='Facilities'      LIMIT 1),
-  it     AS (SELECT id FROM departments WHERE name='IT'              LIMIT 1),
-  sec    AS (SELECT id FROM departments WHERE name='Security'        LIMIT 1),
-  cln    AS (SELECT id FROM departments WHERE name='Cleaning'        LIMIT 1)
+  fac    AS (SELECT id FROM departments WHERE name='Warehouse'      LIMIT 1),
+  it     AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1),
+  sec    AS (SELECT id FROM departments WHERE name='Retail Store'   LIMIT 1),
+  cln    AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1)
 
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, priority, status,
