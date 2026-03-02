@@ -435,25 +435,26 @@ export default function ManagerComplaintDetails() {
 
   useEffect(() => {
     const token = getAuthToken();
-    setLoading(true);
-    setError(null);
 
-    fetch(apiUrl(`/manager/complaints/${id}`), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => {
+    const run = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(apiUrl(`/manager/complaints/${id}`), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) throw new Error("Ticket not found");
-        return res.json();
-      })
-      .then((data) => {
+        const data = await res.json();
         if (data.error) throw new Error(data.error);
         setTicket(data);
-        setLoading(false);
-      })
-      .catch((e) => {
+      } catch (e) {
         setError(e.message || "Could not load ticket details.");
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    run();
   }, [id]);
 
   if (loading) {

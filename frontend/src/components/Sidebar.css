@@ -136,6 +136,11 @@
   width: 20px;
   flex-shrink: 0;
 }
+.sidebar__icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
 
 /* Label — hidden by default, shown when expanded */
 .sidebar__label {
@@ -166,6 +171,41 @@
   border-top: 1px solid rgba(255, 255, 255, 0.09);
   flex-shrink: 0;
   align-items: stretch;
+}
+
+/* Collapsed mode: hard-size controls for consistent icon rail across roles */
+.sidebar:not(.sidebar--expanded) .sidebar__brand {
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar:not(.sidebar--expanded) .sidebar__link {
+  width: 44px;
+  min-height: 44px;
+  align-self: center;
+}
+
+.sidebar:not(.sidebar--expanded) .sidebar__pill {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 999px;
+  gap: 0;
+}
+
+.sidebar:not(.sidebar--expanded) .sidebar__bottom {
+  align-items: center;
+}
+
+.sidebar:not(.sidebar--expanded) .sidebar__bottomBtn {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  justify-content: center;
+  align-self: center;
+  gap: 0;
 }
 
 .sidebar__bottomBtn {
