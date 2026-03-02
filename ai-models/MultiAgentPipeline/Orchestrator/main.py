@@ -17,7 +17,13 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from pipeline import pipeline
-from db import ensure_log_tables
+from agents.sentimentanalysis.step import get_sentiment_diagnostics
+from agents.classifier.step import get_classifier_diagnostics
+from agents.featureengineering.step import get_feature_engineering_diagnostics
+try:
+    from db import ensure_log_tables
+except Exception:  # pragma: no cover - optional dependency for backward compatibility
+    ensure_log_tables = None
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,12 +48,13 @@ BACKEND_URL = "http://backend:8000"
 
 
 # ---------------------------------------------------------------------------
-# Startup — ensure logging tables exist
+# Startup — ensure logging tables exist (if db module is available)
 # ---------------------------------------------------------------------------
 
 @app.on_event("startup")
 async def _startup():
-    ensure_log_tables()
+    if ensure_log_tables:
+        ensure_log_tables()
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +63,13 @@ async def _startup():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": "orchestrator"}
+    return {
+        "status": "healthy",
+        "service": "orchestrator",
+        **get_sentiment_diagnostics(),
+        **get_classifier_diagnostics(),
+        **get_feature_engineering_diagnostics(),
+    }
 
 
 # ---------------------------------------------------------------------------

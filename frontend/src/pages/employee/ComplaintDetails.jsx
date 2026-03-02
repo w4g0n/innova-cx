@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { apiUrl } from "../../config/apiBase";
@@ -447,7 +447,7 @@ export default function ComplaintDetails() {
     loadSuggestion();
   }, [modalType, id]);
 
-  const loadTicket = async () => {
+  const loadTicket = useCallback(async () => {
     const token = getAuthToken();
     if (!token) { setError("Missing auth token."); setLoading(false); return; }
     setLoading(true);
@@ -465,9 +465,11 @@ export default function ComplaintDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  useEffect(() => { loadTicket(); }, [id]);
+  useEffect(() => {
+    loadTicket();
+  }, [loadTicket]);
 
   async function uploadAttachmentsOrThrow({ ticketCode, token, files }) {
     if (!files || files.length === 0) return;
