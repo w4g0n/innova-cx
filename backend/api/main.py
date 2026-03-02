@@ -2621,6 +2621,20 @@ def create_customer_ticket(
     ticket_id = None
     with db_connect() as conn:
         with conn.cursor() as cur:
+            # Assign a default department (General or first available)
+            cur.execute(
+                """
+                SELECT id FROM departments WHERE LOWER(name) = 'general' LIMIT 1;
+                """
+            )
+            default_dept_row = cur.fetchone()
+            if not default_dept_row:
+                cur.execute(
+                    "SELECT id FROM departments ORDER BY name LIMIT 1;"
+                )
+                default_dept_row = cur.fetchone()
+            default_dept_id = default_dept_row[0] if default_dept_row else None
+
             cur.execute(
                 """
                 INSERT INTO tickets (
@@ -2632,20 +2646,22 @@ def create_customer_ticket(
                     priority,
                     status,
                     created_by_user_id,
+                    department_id,
                     model_suggestion,
                     created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING id;
                 """,
                 (
                     ticket_code,
-                    body.type,         
+                    body.type,
                     body.subject,
                     body.details,
                     body.asset_type,
                     "Low",
                     "Unassigned",
                     user["id"],
+                    default_dept_id,
                     model_suggestion,
                 ),
             )
@@ -3315,16 +3331,20 @@ SELECT
     t.ticket_code,
     t.subject AS ticket_subject,
     ar.request_type AS type,
-    ar.current_value AS current,
+    ar.current_value AS stored_current,
     ar.requested_value AS requested,
     up.full_name AS submitted_by,
     ar.submitted_at AS submitted_on,
     ar.status AS status,
     du.full_name AS decided_by,
     ar.decided_at AS decision_date,
-    ar.decision_notes
+    ar.decision_notes,
+    -- Live ticket state (always up-to-date)
+    t.priority AS live_priority,
+    d.name AS live_department
 FROM approval_requests ar
 LEFT JOIN tickets t ON ar.ticket_id = t.id
+LEFT JOIN departments d ON d.id = t.department_id
 LEFT JOIN user_profiles up ON ar.submitted_by_user_id = up.user_id
 LEFT JOIN user_profiles du ON ar.decided_by_user_id = du.user_id
 ORDER BY ar.submitted_at DESC;
@@ -3336,13 +3356,22 @@ ORDER BY ar.submitted_at DESC;
         submitted_on = a["submitted_on"].isoformat() if a.get("submitted_on") else ""
         decision_date = a["decision_date"].isoformat() if a.get("decision_date") else ""
 
+        req_type = (a.get("type") or "").lower()
+        # Use live ticket state for "current" so it's always accurate
+        if "rescor" in req_type:
+            live_current = f"Priority: {a.get('live_priority') or ''}" if a.get("live_priority") else (a.get("stored_current") or "")
+        elif "rerout" in req_type:
+            live_current = f"Dept: {a.get('live_department') or ''}" if a.get("live_department") else (a.get("stored_current") or "")
+        else:
+            live_current = a.get("stored_current") or ""
+
         result.append({
             "requestId": a["request_id"],
             "ticketId": a["ticket_id"],
             "ticketCode": a.get("ticket_code") or "",
             "ticketSubject": a.get("ticket_subject") or "No subject",
             "type": a.get("type") or "",
-            "current": a.get("current") or "",
+            "current": live_current,
             "requested": a.get("requested") or "",
             "submittedBy": a.get("submitted_by") or "—",
             "submittedOn": submitted_on,
@@ -3367,11 +3396,8 @@ class ApprovalDecisionRequest(BaseModel):
 def decide_approval(
     request_id: str,
     body: ApprovalDecisionRequest,
-    authorization: Optional[str] = Header(default=None),
+    user: Dict[str, Any] = Depends(require_manager),
 ):
-    user = get_current_user(authorization)
-    if user.get("role") != "manager":
-        raise HTTPException(status_code=403, detail="Forbidden")
     decision = (body.decision or "").strip()
     if decision not in ("Approved", "Rejected"):
         raise HTTPException(status_code=422, detail="decision must be 'Approved' or 'Rejected'")

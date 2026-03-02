@@ -835,11 +835,14 @@ WHERE NOT EXISTS (
 );
 
 INSERT INTO departments (name) VALUES
-  ('Warehouse'),
-  ('Office'),
-  ('Retail Store')
+  ('Facilities Management'),
+  ('Legal and Compliance'),
+  ('Safety & Security'),
+  ('HR'),
+  ('Leasing'),
+  ('Maintenance'),
+  ('IT')
 ON CONFLICT (name) DO NOTHING;
-
 
 -- ✅ Use real bcrypt-compatible hashes from pgcrypto (fresh volumes work)
 -- mfa_enabled = FALSE and totp_secret = NULL so all users get a proper
@@ -862,33 +865,34 @@ ON CONFLICT (email) DO UPDATE
 
 
 -- Profiles
+-- Profiles
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
 SELECT u.id, 'Dr. Farhad', NULL, 'Department Manager',
-       (SELECT id FROM departments WHERE name='Office' LIMIT 1)
+       (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1)
 FROM users u WHERE u.email='manager@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
 SELECT u.id, 'Ahmed Hassan', 'EMP-1023', 'Senior Technician',
-       (SELECT id FROM departments WHERE name='Warehouse' LIMIT 1)
+       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1)
 FROM users u WHERE u.email='ahmed@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
 SELECT u.id, 'Maria Lopez', 'EMP-1078', 'Technician',
-       (SELECT id FROM departments WHERE name='Warehouse' LIMIT 1)
+       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1)
 FROM users u WHERE u.email='maria@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
 SELECT u.id, 'Omar Ali', 'EMP-1150', 'Assistant Technician',
-       (SELECT id FROM departments WHERE name='Warehouse' LIMIT 1)
+       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1)
 FROM users u WHERE u.email='omar@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
 SELECT u.id, 'Sara Ahmed', 'EMP-1192', 'Technician',
-       (SELECT id FROM departments WHERE name='Office' LIMIT 1)
+       (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1)
 FROM users u WHERE u.email='sara@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
@@ -1110,7 +1114,7 @@ INSERT INTO approval_requests (
 )
 SELECT
   'REQ-3110', t.id, 'Rerouting',
-  'Dept: Facilities', 'Dept: Security',
+  'Dept: Maintenance', 'Dept: Safety & Security',
   'Security review required due to access-control implications.',
   (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
   to_timestamp('18/11/2025 11:05','DD/MM/YYYY HH24:MI'),
@@ -1520,10 +1524,10 @@ WITH
   fatima AS (SELECT id FROM users WHERE email='fatima@innova.cx'   LIMIT 1),
   yousef AS (SELECT id FROM users WHERE email='yousef@innova.cx'   LIMIT 1),
   khalid AS (SELECT id FROM users WHERE email='khalid@innova.cx'   LIMIT 1),
-  fac    AS (SELECT id FROM departments WHERE name='Warehouse'      LIMIT 1),
-  it     AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1),
-  sec    AS (SELECT id FROM departments WHERE name='Retail Store'   LIMIT 1),
-  cln    AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1)
+  fac   AS (SELECT id FROM departments WHERE name='Warehouse'      LIMIT 1),
+  it    AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1),
+  sec   AS (SELECT id FROM departments WHERE name='Retail Store'   LIMIT 1),
+  cln   AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1)
 
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, priority, status,
@@ -2134,7 +2138,7 @@ INSERT INTO approval_requests (
   request_reason, submitted_by_user_id, submitted_at, status
 )
 SELECT 'REQ-3145', t.id, 'Rerouting',
-  'Dept: IT', 'Dept: Facilities',
+  'Dept: IT', 'Dept: Maintenance',
   'Root cause is physical cabling, not software — needs Facilities team.',
   (SELECT id FROM users WHERE email='fatima@innova.cx'),
   '2026-02-12 11:30:00+00', 'Approved'
@@ -2229,10 +2233,10 @@ WITH
   fatima AS (SELECT id FROM users WHERE email='fatima@innova.cx'    LIMIT 1),
   yousef AS (SELECT id FROM users WHERE email='yousef@innova.cx'    LIMIT 1),
   khalid AS (SELECT id FROM users WHERE email='khalid@innova.cx'    LIMIT 1),
-  fac    AS (SELECT id FROM departments WHERE name='Warehouse'      LIMIT 1),
-  it     AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1),
-  sec    AS (SELECT id FROM departments WHERE name='Retail Store'   LIMIT 1),
-  cln    AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1)
+  fac   AS (SELECT id FROM departments WHERE name='Warehouse'      LIMIT 1),
+  it    AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1),
+  sec   AS (SELECT id FROM departments WHERE name='Retail Store'   LIMIT 1),
+  cln   AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1)
 
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, priority, status,
