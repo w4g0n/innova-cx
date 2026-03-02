@@ -8,22 +8,23 @@ import SettingsLayout, {
   SettingsSelect,
   SettingsSaveButton,
   DangerZone,
+  ChangePasswordModal,
 } from "../../components/common/SettingsLayout";
 
 import "../../components/common/SettingsLayout.css";
 import "./EmployeeSettings.css";
 
 const TABS = [
-  { id: "profile", icon: "👤", label: "Profile" },
+  { id: "profile",  icon: "👤", label: "Profile" },
   { id: "security", icon: "🔒", label: "Security" },
-  { id: "notifs", icon: "🔔", label: "Notifications" },
-  { id: "prefs", icon: "🎨", label: "Preferences" },
+  { id: "notifs",   icon: "🔔", label: "Notifications" },
+  { id: "prefs",    icon: "🎨", label: "Preferences" },
 ];
 
 export default function EmployeeSettings() {
   const [tab, setTab] = useState("profile");
+  const [showPwModal, setShowPwModal] = useState(false);
 
-  // Demo state (replace with your real user state later)
   const [profile, setProfile] = useState({
     fullName: "Employee User",
     email: "employee@innovacx.com",
@@ -57,13 +58,6 @@ export default function EmployeeSettings() {
     return `${a}${b}`;
   }, [profile.fullName]);
 
-  const handleSave = () => {
-    // Plug in API call later if you want:
-    // await api.updateEmployeeSettings(...)
-    console.log("Saving settings:", { profile, security, notifs, prefs });
-    alert("Settings saved (demo).");
-  };
-
   return (
     <Layout role="employee">
       <div className="employeeSettingsPage">
@@ -75,20 +69,24 @@ export default function EmployeeSettings() {
           activeTab={tab}
           onTabChange={setTab}
         >
+          {/* ── Profile ── */}
           {tab === "profile" && (
             <>
-              <SettingsCard title="Personal Information" description="Update your basic profile details.">
+              <SettingsCard
+                icon="👤"
+                title="Personal Information"
+                description="Name and email are managed by your administrator."
+              >
                 <SettingsField
                   label="Full Name"
                   value={profile.fullName}
-                  onChange={(v) => setProfile((p) => ({ ...p, fullName: v }))}
-                  placeholder="Enter your name"
+                  readOnly
                 />
                 <SettingsField
                   label="Email"
+                  type="email"
                   value={profile.email}
-                  onChange={(v) => setProfile((p) => ({ ...p, email: v }))}
-                  placeholder="name@company.com"
+                  readOnly
                 />
                 <SettingsField
                   label="Phone"
@@ -98,7 +96,11 @@ export default function EmployeeSettings() {
                 />
               </SettingsCard>
 
-              <SettingsCard title="Work Details" description="Optional fields for internal context.">
+              <SettingsCard
+                icon="🏢"
+                title="Work Details"
+                description="Optional fields for internal context."
+              >
                 <SettingsField
                   label="Department"
                   value={profile.department}
@@ -114,21 +116,44 @@ export default function EmployeeSettings() {
               </SettingsCard>
 
               <div className="settingsFooterRow">
-                <SettingsSaveButton onClick={handleSave} label="Save Changes" />
+                <SettingsSaveButton onClick={() => {}} label="Save Changes" />
               </div>
             </>
           )}
 
+          {/* ── Security ── */}
           {tab === "security" && (
             <>
-              <SettingsCard title="Account Security" description="Protect your account and control session behavior.">
+              <SettingsCard
+                icon="🔑"
+                title="Password"
+                description="Keep your account secure with a strong, unique password."
+              >
+                <div className="settingsPasswordRow">
+                  <div>
+                    <p className="settingsPasswordLabel">Password</p>
+                    <p className="settingsPasswordSub">
+                      Update your password at any time to protect your account.
+                    </p>
+                  </div>
+                  <SettingsSaveButton
+                    label="Change Password"
+                    onClick={() => setShowPwModal(true)}
+                  />
+                </div>
+              </SettingsCard>
+
+              <SettingsCard
+                icon="🛡️"
+                title="Account Security"
+                description="Protect your account and control session behavior."
+              >
                 <SettingsToggle
                   label="Enable Two-Factor Authentication (2FA)"
                   description="Adds an extra layer of security to your account."
                   checked={security.twoFA}
                   onChange={(checked) => setSecurity((s) => ({ ...s, twoFA: checked }))}
                 />
-
                 <SettingsSelect
                   label="Session Timeout"
                   description="Automatically log out after inactivity."
@@ -138,37 +163,42 @@ export default function EmployeeSettings() {
                     { label: "15 minutes", value: "15" },
                     { label: "30 minutes", value: "30" },
                     { label: "60 minutes", value: "60" },
-                    { label: "Never", value: "0" },
+                    { label: "Never",      value: "0"  },
                   ]}
                 />
               </SettingsCard>
 
               <DangerZone
                 title="Danger Zone"
-                description="Be careful — these actions can’t be undone."
+                description="Be careful — these actions cannot be undone."
                 actions={[
                   {
                     label: "Log out from all devices",
                     kind: "warning",
-                    onClick: () => alert("Logged out from all devices (demo)."),
+                    onClick: () => {},
                   },
                   {
                     label: "Deactivate my account",
                     kind: "danger",
-                    onClick: () => alert("Account deactivated (demo)."),
+                    onClick: () => {},
                   },
                 ]}
               />
 
               <div className="settingsFooterRow">
-                <SettingsSaveButton onClick={handleSave} label="Save Changes" />
+                <SettingsSaveButton onClick={() => {}} label="Save Changes" />
               </div>
             </>
           )}
 
+          {/* ── Notifications ── */}
           {tab === "notifs" && (
             <>
-              <SettingsCard title="Notifications" description="Choose how you want to be notified.">
+              <SettingsCard
+                icon="🔔"
+                title="Notifications"
+                description="Choose how you want to be notified."
+              >
                 <SettingsToggle
                   label="Email Notifications"
                   description="Get updates by email."
@@ -190,14 +220,19 @@ export default function EmployeeSettings() {
               </SettingsCard>
 
               <div className="settingsFooterRow">
-                <SettingsSaveButton onClick={handleSave} label="Save Changes" />
+                <SettingsSaveButton onClick={() => {}} label="Save Changes" />
               </div>
             </>
           )}
 
+          {/* ── Preferences ── */}
           {tab === "prefs" && (
             <>
-              <SettingsCard title="Preferences" description="Personalize your experience.">
+              <SettingsCard
+                icon="🎨"
+                title="Preferences"
+                description="Personalise your experience."
+              >
                 <SettingsSelect
                   label="Theme"
                   description="Controls the app appearance."
@@ -205,11 +240,10 @@ export default function EmployeeSettings() {
                   onChange={(v) => setPrefs((p) => ({ ...p, theme: v }))}
                   options={[
                     { label: "System", value: "System" },
-                    { label: "Light", value: "Light" },
-                    { label: "Dark", value: "Dark" },
+                    { label: "Light",  value: "Light"  },
+                    { label: "Dark",   value: "Dark"   },
                   ]}
                 />
-
                 <SettingsSelect
                   label="Layout Density"
                   description="Adjust spacing to fit more or less content."
@@ -217,10 +251,9 @@ export default function EmployeeSettings() {
                   onChange={(v) => setPrefs((p) => ({ ...p, density: v }))}
                   options={[
                     { label: "Comfortable", value: "Comfortable" },
-                    { label: "Compact", value: "Compact" },
+                    { label: "Compact",     value: "Compact"     },
                   ]}
                 />
-
                 <SettingsSelect
                   label="Language"
                   description="Language for UI labels."
@@ -228,17 +261,22 @@ export default function EmployeeSettings() {
                   onChange={(v) => setPrefs((p) => ({ ...p, language: v }))}
                   options={[
                     { label: "English", value: "English" },
-                    { label: "Arabic", value: "Arabic" },
+                    { label: "Arabic",  value: "Arabic"  },
                   ]}
                 />
               </SettingsCard>
 
               <div className="settingsFooterRow">
-                <SettingsSaveButton onClick={handleSave} label="Save Changes" />
+                <SettingsSaveButton onClick={() => {}} label="Save Changes" />
               </div>
             </>
           )}
         </SettingsLayout>
+
+        {/* ── Change Password Modal ── */}
+        {showPwModal && (
+          <ChangePasswordModal onClose={() => setShowPwModal(false)} />
+        )}
       </div>
     </Layout>
   );

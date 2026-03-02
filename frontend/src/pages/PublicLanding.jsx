@@ -48,15 +48,6 @@ export default function PublicLanding() {
         <nav className="pl-nav">
           <img src={novaLogo} alt="InnovaCX" className="pl-nav-logo" />
 
-          <div className="pl-nav-links">
-            <button
-              className="pl-nav-link"
-              onClick={() => navigate("/about")}
-            >
-              About Us
-            </button>
-          </div>
-
           <button
             className="pl-nav-login"
             onClick={() => navigate("/login")}
@@ -92,7 +83,7 @@ export default function PublicLanding() {
               className="pl-btn-ghost"
               onClick={() => navigate("/about")}
             >
-              Learn More
+              About Us
             </button>
           </div>
 
@@ -121,7 +112,6 @@ export default function PublicLanding() {
         {/* SCROLL HINT */}
         <div className="pl-scroll-hint">
           <span className="pl-scroll-line" />
-          <span className="pl-scroll-text">Scroll</span>
         </div>
       </section>
 
@@ -141,19 +131,6 @@ export default function PublicLanding() {
               <p className="pl-feature-desc">{f.desc}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* ─── CTA STRIP ────────────────────────────────────────── */}
-      <section className="pl-cta-strip">
-        <div className="pl-cta-inner">
-          <h2 className="pl-cta-headline">Ready to see it in action?</h2>
-          <p className="pl-cta-sub">
-            Log in to access your dashboard, submit complaints, or chat with Nova.
-          </p>
-          <button className="pl-btn-primary pl-btn-large" onClick={() => navigate("/login")}>
-            Log In to InnovaCX
-          </button>
         </div>
       </section>
 
