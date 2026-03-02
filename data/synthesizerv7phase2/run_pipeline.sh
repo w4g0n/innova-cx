@@ -11,6 +11,7 @@
 #   bash run_pipeline.sh --full-run --run-guarded-predict
 #   bash run_pipeline.sh --skip-label --generate-safety-rows 1000 --augment-with-safety --external-test output/safety_test_v2.csv
 #   bash run_pipeline.sh --skip-label --generate-safety-rows 1000 --safety-only-train --external-test output/safety_test_v2.csv
+#   bash run_pipeline.sh --scratch-combined --generate-safety-rows 1000 --external-test test_dataset_v2.csv
 
 set -eo pipefail  # Exit immediately on any error and propagate failures in pipes
 export PYTHONNOUSERSITE=1
@@ -43,6 +44,9 @@ AUGMENTED_OUTPUT="labeled_augmented.csv"
 EXTERNAL_TEST=""
 EXTERNAL_EVAL_REPORT="output/eval_external_report.json"
 EXTERNAL_EVAL_PREDS="output/eval_external_predictions.csv"
+LABEL_SAFETY_SYNTH=""
+SAFETY_LABELED_OUTPUT="output/safety_synth_1000_labeled.csv"
+SCRATCH_COMBINED=""
 TRAIN_INPUT=""
 
 # ─────────────────────────────────────────────
@@ -73,10 +77,29 @@ while [[ "$#" -gt 0 ]]; do
         --external-test) EXTERNAL_TEST="$2"; shift ;;
         --external-eval-report) EXTERNAL_EVAL_REPORT="$2"; shift ;;
         --external-eval-preds) EXTERNAL_EVAL_PREDS="$2"; shift ;;
+        --label-safety-synth) LABEL_SAFETY_SYNTH="1" ;;
+        --safety-labeled-output) SAFETY_LABELED_OUTPUT="$2"; shift ;;
+        --scratch-combined) SCRATCH_COMBINED="1" ;;
         *) echo "Unknown arg: $1"; exit 1 ;;
     esac
     shift
 done
+
+# Preset workflow:
+# - label input.csv with Phi-4
+# - label safety synthetic CSV with Phi-4
+# - merge both labeled datasets
+# - train from scratch (ignore resume checkpoint)
+if [ -n "$SCRATCH_COMBINED" ]; then
+    SKIP_LABEL=""
+    FULL_RUN="1"
+    AUGMENT_WITH_SAFETY="1"
+    SAFETY_ONLY_TRAIN=""
+    LABEL_SAFETY_SYNTH="1"
+    if [ -n "$RESUME_FROM" ]; then
+        RESUME_FROM=""
+    fi
+fi
 
 # ─────────────────────────────────────────────
 # HELPERS
@@ -127,6 +150,12 @@ if [ -n "$AUGMENT_WITH_SAFETY" ]; then
 fi
 if [ -n "$SAFETY_ONLY_TRAIN" ]; then
     log "Safety only  : enabled (train on synthetic safety rows only)"
+fi
+if [ -n "$LABEL_SAFETY_SYNTH" ]; then
+    log "Safety label : enabled -> ${SAFETY_LABELED_OUTPUT}"
+fi
+if [ -n "$SCRATCH_COMBINED" ]; then
+    log "Scratch mode : combined labeled input + labeled safety synth"
 fi
 if [ -n "$EXTERNAL_TEST" ]; then
     log "External test: ${EXTERNAL_TEST}"
@@ -217,6 +246,25 @@ if [ "${GENERATE_SAFETY_ROWS}" != "0" ]; then
 fi
 
 # ─────────────────────────────────────────────
+# STEP 2B — LABEL SAFETY SYNTHETIC DATA (OPTIONAL)
+# ─────────────────────────────────────────────
+
+SAFETY_SYNTH_FOR_TRAIN="$SAFETY_SYNTH_OUTPUT"
+if [ -n "$LABEL_SAFETY_SYNTH" ]; then
+    log "────────────────────────────────────"
+    log "STEP 2B: Label safety synthetic data (Phi-4)"
+    log "────────────────────────────────────"
+
+    check_file "$SAFETY_SYNTH_OUTPUT"
+    "$PYTHON_BIN" label.py \
+        --input "$SAFETY_SYNTH_OUTPUT" \
+        --output "$SAFETY_LABELED_OUTPUT" \
+        2>&1 | tee logs/label_safety.log
+    check_file "$SAFETY_LABELED_OUTPUT"
+    SAFETY_SYNTH_FOR_TRAIN="$SAFETY_LABELED_OUTPUT"
+fi
+
+# ─────────────────────────────────────────────
 # STEP 3 — MERGE AUGMENTED TRAINING DATA (OPTIONAL)
 # ─────────────────────────────────────────────
 
@@ -225,17 +273,17 @@ if [ -n "$SAFETY_ONLY_TRAIN" ]; then
     log "────────────────────────────────────"
     log "STEP 3: Safety-only training input"
     log "────────────────────────────────────"
-    check_file "$SAFETY_SYNTH_OUTPUT"
-    TRAIN_INPUT="$SAFETY_SYNTH_OUTPUT"
+    check_file "$SAFETY_SYNTH_FOR_TRAIN"
+    TRAIN_INPUT="$SAFETY_SYNTH_FOR_TRAIN"
 elif [ -n "$AUGMENT_WITH_SAFETY" ] || [ "${GENERATE_SAFETY_ROWS}" != "0" ]; then
     log "────────────────────────────────────"
     log "STEP 3: Merge augmented training data"
     log "────────────────────────────────────"
 
-    check_file "$SAFETY_SYNTH_OUTPUT"
+    check_file "$SAFETY_SYNTH_FOR_TRAIN"
     "$PYTHON_BIN" merge_training_data.py \
         --base "$LABELED" \
-        --add "$SAFETY_SYNTH_OUTPUT" \
+        --add "$SAFETY_SYNTH_FOR_TRAIN" \
         --output "$AUGMENTED_OUTPUT" \
         2>&1 | tee logs/merge_training.log
 
