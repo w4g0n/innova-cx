@@ -2420,6 +2420,7 @@ def customer_ticket_details(
         SELECT
           tu.message,
           tu.update_type,
+          tu.meta,
           tu.created_at,
           up.full_name AS author_name
         FROM ticket_updates tu
@@ -2467,6 +2468,7 @@ def customer_ticket_details(
                 "message": u.get("message"),
                 "type": u.get("update_type"),
                 "author": u.get("author_name"),
+                "meta": u.get("meta") or {},
                 "date": u.get("created_at").isoformat() if u.get("created_at") else None,
             }
             for u in updates_rows
@@ -3924,6 +3926,34 @@ class OrchestratorComplaintRequest(BaseModel):
     classification_confidence: Optional[float] = None
 
 
+def _infer_orchestrator_stage(body: OrchestratorComplaintRequest) -> Dict[str, str]:
+    """
+    Best-effort stage inference for orchestrator activity trail.
+    This keeps customer-facing updates connected to actual orchestrator writes.
+    """
+    if body.priority is not None:
+        return {"id": "priority", "label": "Prioritization Agent"}
+    if (body.department or "").strip():
+        return {"id": "routing", "label": "Department Routing"}
+    if (body.status or "").strip() in {"Escalated", "Overdue"}:
+        return {"id": "sla", "label": "SLA Check"}
+    if body.sentiment is not None and body.audio_sentiment is not None:
+        return {"id": "combiner", "label": "Sentiment Combiner"}
+    if body.audio_sentiment is not None:
+        return {"id": "audio", "label": "Audio Analysis Agent"}
+    if body.sentiment is not None:
+        return {"id": "sentiment", "label": "Sentiment Analysis Agent"}
+    if body.classification_confidence is not None or (body.label or "").strip():
+        return {"id": "classification", "label": "Classification Agent"}
+    if body.keywords:
+        return {"id": "feature", "label": "Feature Engineering Agent"}
+    return {"id": "orchestrator", "label": "Controller / Orchestrator"}
+
+
+def _orchestrator_update_message(stage_label: str, ticket_code: str) -> str:
+    return f"[AI Stage] {stage_label} processed ticket {ticket_code}."
+
+
 class ChatbotProxyRequest(BaseModel):
     message: str
     user_id: str
@@ -4051,6 +4081,27 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         ),
                     )
                     updated = cur.fetchone()
+                    stage = _infer_orchestrator_stage(body)
+                    cur.execute(
+                        """
+                        INSERT INTO ticket_updates (
+                          ticket_id,
+                          author_user_id,
+                          update_type,
+                          message,
+                          from_status,
+                          to_status,
+                          meta
+                        )
+                        VALUES (%s, NULL, 'system', %s, NULL, %s, %s::jsonb);
+                        """,
+                        (
+                            existing[0],
+                            _orchestrator_update_message(stage["label"], updated[0]),
+                            updated[1],
+                            json.dumps({"source": "orchestrator", "stage_id": stage["id"], "stage_label": stage["label"]}),
+                        ),
+                    )
                     logger.info(
                         "orchestrator_ticket_update | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                         updated[0],
@@ -4135,6 +4186,37 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 ),
             )
             created = cur.fetchone()
+            stage = _infer_orchestrator_stage(body)
+            cur.execute(
+                """
+                INSERT INTO ticket_updates (
+                  ticket_id,
+                  author_user_id,
+                  update_type,
+                  message,
+                  from_status,
+                  to_status,
+                  meta
+                )
+                SELECT
+                  t.id,
+                  NULL,
+                  'system',
+                  %s,
+                  NULL,
+                  %s,
+                  %s::jsonb
+                FROM tickets t
+                WHERE t.ticket_code = %s
+                LIMIT 1;
+                """,
+                (
+                    _orchestrator_update_message(stage["label"], created[0]),
+                    created[1],
+                    json.dumps({"source": "orchestrator", "stage_id": stage["id"], "stage_label": stage["label"]}),
+                    created[0],
+                ),
+            )
             logger.info(
                 "orchestrator_ticket_create | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                 created[0],

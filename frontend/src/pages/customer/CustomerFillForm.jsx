@@ -269,12 +269,12 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
               </div>
 
               <div className="custTwoPillsItem">
-                <label className="custLabel">Asset</label>
+                <label className="custLabel">Unit Type</label>
                 <div className="custPillHolder">
                   <PillSelect
                     value={assetType}
                     onChange={setAssetType}
-                    ariaLabel="Select asset type"
+                    ariaLabel="Select unit type"
                     options={[
                       { value: "Office", label: "Office" },
                       { value: "Warehouse", label: "Warehouse" },
