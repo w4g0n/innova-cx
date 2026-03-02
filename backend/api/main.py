@@ -142,6 +142,15 @@ def _ensure_runtime_schema_compatibility() -> None:
                     );
                     """
                 )
+                # Employee reports must be unique per employee+month, not globally by month code.
+                # Keep backward compatibility for existing DB volumes created with report_code UNIQUE.
+                cur.execute("ALTER TABLE employee_reports DROP CONSTRAINT IF EXISTS employee_reports_report_code_key;")
+                cur.execute(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_reports_user_code
+                    ON employee_reports(employee_user_id, report_code);
+                    """
+                )
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
@@ -1845,6 +1854,33 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
         (user_id, month_start, month_end),
     )
 
+    # Fallback: if MV is stale/not refreshed, compute directly from base tickets table.
+    if not rows:
+        rows = fetch_all(
+            """
+            SELECT
+                t.id,
+                t.status,
+                t.priority,
+                COALESCE(t.respond_breached, FALSE) AS respond_breached,
+                COALESCE(t.resolve_breached, FALSE) AS resolve_breached,
+                (COALESCE(t.respond_breached, FALSE) OR COALESCE(t.resolve_breached, FALSE)) AS any_breached,
+                (t.status = 'Resolved') AS is_resolved,
+                (t.status = 'Escalated') AS is_escalated,
+                t.first_response_at,
+                EXTRACT(EPOCH FROM (t.first_response_at - COALESCE(t.priority_assigned_at, t.assigned_at, t.created_at))) / 60.0
+                    AS response_time_mins,
+                t.created_at,
+                date_trunc('week', t.created_at)::date AS week_start
+            FROM tickets t
+            WHERE t.assigned_to_user_id = %s
+              AND t.created_at >= %s
+              AND t.created_at <= %s
+            ORDER BY t.created_at
+            """,
+            (user_id, month_start, month_end),
+        )
+
     if not rows:
         return None  # no activity → no report
 
@@ -2005,7 +2041,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
                         (report_code, employee_user_id, month_label, subtitle,
                          kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (report_code) DO UPDATE
+                    ON CONFLICT (employee_user_id, report_code) DO UPDATE
                         SET month_label    = EXCLUDED.month_label,
                             subtitle       = EXCLUDED.subtitle,
                             kpi_rating     = EXCLUDED.kpi_rating,
@@ -2463,6 +2499,7 @@ def customer_ticket_details(
         SELECT
           tu.message,
           tu.update_type,
+          tu.meta,
           tu.created_at,
           up.full_name AS author_name
         FROM ticket_updates tu
@@ -2510,6 +2547,7 @@ def customer_ticket_details(
                 "message": u.get("message"),
                 "type": u.get("update_type"),
                 "author": u.get("author_name"),
+                "meta": u.get("meta") or {},
                 "date": u.get("created_at").isoformat() if u.get("created_at") else None,
             }
             for u in updates_rows
@@ -3967,6 +4005,34 @@ class OrchestratorComplaintRequest(BaseModel):
     classification_confidence: Optional[float] = None
 
 
+def _infer_orchestrator_stage(body: OrchestratorComplaintRequest) -> Dict[str, str]:
+    """
+    Best-effort stage inference for orchestrator activity trail.
+    This keeps customer-facing updates connected to actual orchestrator writes.
+    """
+    if body.priority is not None:
+        return {"id": "priority", "label": "Prioritization Agent"}
+    if (body.department or "").strip():
+        return {"id": "routing", "label": "Department Routing"}
+    if (body.status or "").strip() in {"Escalated", "Overdue"}:
+        return {"id": "sla", "label": "SLA Check"}
+    if body.sentiment is not None and body.audio_sentiment is not None:
+        return {"id": "combiner", "label": "Sentiment Combiner"}
+    if body.audio_sentiment is not None:
+        return {"id": "audio", "label": "Audio Analysis Agent"}
+    if body.sentiment is not None:
+        return {"id": "sentiment", "label": "Sentiment Analysis Agent"}
+    if body.classification_confidence is not None or (body.label or "").strip():
+        return {"id": "classification", "label": "Classification Agent"}
+    if body.keywords:
+        return {"id": "feature", "label": "Feature Engineering Agent"}
+    return {"id": "orchestrator", "label": "Controller / Orchestrator"}
+
+
+def _orchestrator_update_message(stage_label: str, ticket_code: str) -> str:
+    return f"[AI Stage] {stage_label} processed ticket {ticket_code}."
+
+
 class ChatbotProxyRequest(BaseModel):
     message: str
     user_id: str
@@ -4094,6 +4160,27 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         ),
                     )
                     updated = cur.fetchone()
+                    stage = _infer_orchestrator_stage(body)
+                    cur.execute(
+                        """
+                        INSERT INTO ticket_updates (
+                          ticket_id,
+                          author_user_id,
+                          update_type,
+                          message,
+                          from_status,
+                          to_status,
+                          meta
+                        )
+                        VALUES (%s, NULL, 'system', %s, NULL, %s, %s::jsonb);
+                        """,
+                        (
+                            existing[0],
+                            _orchestrator_update_message(stage["label"], updated[0]),
+                            updated[1],
+                            json.dumps({"source": "orchestrator", "stage_id": stage["id"], "stage_label": stage["label"]}),
+                        ),
+                    )
                     logger.info(
                         "orchestrator_ticket_update | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                         updated[0],
@@ -4178,6 +4265,37 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 ),
             )
             created = cur.fetchone()
+            stage = _infer_orchestrator_stage(body)
+            cur.execute(
+                """
+                INSERT INTO ticket_updates (
+                  ticket_id,
+                  author_user_id,
+                  update_type,
+                  message,
+                  from_status,
+                  to_status,
+                  meta
+                )
+                SELECT
+                  t.id,
+                  NULL,
+                  'system',
+                  %s,
+                  NULL,
+                  %s,
+                  %s::jsonb
+                FROM tickets t
+                WHERE t.ticket_code = %s
+                LIMIT 1;
+                """,
+                (
+                    _orchestrator_update_message(stage["label"], created[0]),
+                    created[1],
+                    json.dumps({"source": "orchestrator", "stage_id": stage["id"], "stage_label": stage["label"]}),
+                    created[0],
+                ),
+            )
             logger.info(
                 "orchestrator_ticket_create | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                 created[0],
