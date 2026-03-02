@@ -1657,94 +1657,6 @@ def employee_reroute_ticket(
                 "SELECT full_name FROM user_profiles WHERE user_id = %s", (user_id,)
             ) or {}
             employee_name = profile.get("full_name") or user.get("email", "An employee")
-
-            # Only notify the employee themselves (confirmation)
-            # Manager is notified by the DB trigger notify_manager_on_approval_request
-            _insert_notification(
-                cur,
-                user_id=str(user_id),
-                notif_type="ticket_assignment",
-                title=f"Rerouting Request Submitted — {ticket_code}",
-                message=f"You requested a department change for {ticket_code}: {current_dept} → {new_dept_name}. Reason: {reason}. Awaiting manager approval.",
-                ticket_id=str(row["id"]),
-                priority=None,
-            )
-
-    logger.info(
-        "employee_reroute | ticket=%s from=%s to=%s request=%s",
-        ticket_code,
-        current_dept,
-        new_dept_name,
-        result["request_code"],
-    )
-    return {"ok": True, "requestCode": result["request_code"], "status": "Pending"}
-
-@api.post("/employee/tickets/{ticket_code}/reroute")
-def employee_reroute_ticket(
-    ticket_code: str,
-    body: EmployeeRerouteRequest,
-    user: Dict[str, Any] = Depends(require_employee),
-):
-    user_id = user["id"]
-    new_dept_name = (body.new_department or "").strip()
-    reason = (body.reason or "").strip()
-
-    if not new_dept_name:
-        raise HTTPException(status_code=422, detail="New department is required")
-    if not reason:
-        raise HTTPException(status_code=422, detail="Reason is required")
-
-    row = fetch_one(
-        """
-        SELECT t.id, t.ticket_code, d.name AS current_dept
-        FROM tickets t
-        LEFT JOIN departments d ON d.id = t.department_id
-        WHERE t.ticket_code = %s AND t.assigned_to_user_id = %s
-        LIMIT 1;
-        """,
-        (ticket_code, user_id),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Ticket not found or not assigned to you")
-
-    new_dept = fetch_one(
-        "SELECT id, name FROM departments WHERE name = %s LIMIT 1;",
-        (new_dept_name,),
-    )
-    if not new_dept:
-        raise HTTPException(status_code=404, detail=f"Department '{new_dept_name}' not found")
-
-    current_dept = row.get("current_dept") or "Unknown"
-    request_code = f"REQ-{int(time.time() * 1000) % 10000000}"
-
-    with db_connect() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                INSERT INTO approval_requests (
-                  request_code, ticket_id, request_type,
-                  current_value, requested_value,
-                  request_reason, submitted_by_user_id,
-                  submitted_at, status
-                )
-                VALUES (%s, %s, 'Rerouting', %s, %s, %s, %s, now(), 'Pending')
-                RETURNING request_code;
-                """,
-                (
-                    request_code,
-                    row["id"],
-                    f"Dept: {current_dept}",
-                    f"Dept: {new_dept_name}",
-                    reason,
-                    user_id,
-                ),
-            )
-            result = cur.fetchone()
-
-            profile = fetch_one(
-                "SELECT full_name FROM user_profiles WHERE user_id = %s", (user_id,)
-            ) or {}
-            employee_name = profile.get("full_name") or user.get("email", "An employee")
             manager_row = fetch_one("SELECT id FROM users WHERE role = 'manager' LIMIT 1;")
             if manager_row and str(manager_row["id"]) != str(user_id):
                 _insert_notification(
@@ -3841,7 +3753,7 @@ def manager_notification_mark_read(
     return {"ok": True}
 
 @api.post("/manager/notifications/read-all")
-def manager_notifications_mark_all_read(
+def manager_notifications_mark_all_read_app(
     user: Dict[str, Any] = Depends(require_manager),
 ):
     execute(
