@@ -20,9 +20,9 @@ export PYTHONNOUSERSITE=1
 # DEFAULTS
 # ─────────────────────────────────────────────
 
-INPUT="input.csv"
-LABELED="labeled.csv"
-MODELS_DIR="models/"
+INPUT="Input/input.csv"
+LABELED="output/labeled.csv"
+MODELS_DIR="output/models/"
 EPOCHS=1
 DRY_RUN=""
 MAX_COMPLAINTS=200
@@ -40,14 +40,15 @@ GENERATE_SAFETY_ROWS="0"
 SAFETY_SYNTH_OUTPUT="output/safety_synth_1000.csv"
 AUGMENT_WITH_SAFETY=""
 SAFETY_ONLY_TRAIN=""
-AUGMENTED_OUTPUT="labeled_augmented.csv"
-EXTERNAL_TEST=""
+AUGMENTED_OUTPUT="output/labeled_augmented.csv"
+EXTERNAL_TEST="test/test_dataset_v2.csv"
 EXTERNAL_EVAL_REPORT="output/eval_external_report.json"
 EXTERNAL_EVAL_PREDS="output/eval_external_predictions.csv"
 LABEL_SAFETY_SYNTH=""
 SAFETY_LABELED_OUTPUT="output/safety_synth_1000_labeled.csv"
 SCRATCH_COMBINED=""
 TRAIN_INPUT=""
+LOG_DIR="output/logs"
 
 # ─────────────────────────────────────────────
 # PARSE ARGS
@@ -114,9 +115,38 @@ check_file() {
     fi
 }
 
+resolve_input_path() {
+    if [ -f "$INPUT" ]; then
+        return
+    fi
+    for candidate in "Input/input.csv" "input.csv"; do
+        if [ -f "$candidate" ]; then
+            INPUT="$candidate"
+            return
+        fi
+    done
+}
+
+resolve_external_test_path() {
+    if [ -z "$EXTERNAL_TEST" ] || [ -f "$EXTERNAL_TEST" ]; then
+        return
+    fi
+    local base
+    base="$(basename "$EXTERNAL_TEST")"
+    for candidate in "test/$base" "test/test_dataset_v2.csv" "test_dataset_v2.csv"; do
+        if [ -f "$candidate" ]; then
+            EXTERNAL_TEST="$candidate"
+            return
+        fi
+    done
+}
+
 # ─────────────────────────────────────────────
 # PRE-FLIGHT
 # ─────────────────────────────────────────────
+
+resolve_input_path
+resolve_external_test_path
 
 log "Starting pipeline"
 log "Input        : $INPUT"
@@ -185,8 +215,9 @@ else
 fi
 log "Python       : $PYTHON_BIN"
 
+mkdir -p "output/"
 mkdir -p "$MODELS_DIR"
-mkdir -p "logs/"
+mkdir -p "$LOG_DIR"
 
 # ─────────────────────────────────────────────
 # STEP 1 — LABEL
@@ -203,7 +234,7 @@ if [ -z "$SKIP_LABEL" ]; then
         LABEL_CMD+=("--max-complaints" "$MAX_COMPLAINTS")
     fi
 
-    "${LABEL_CMD[@]}" 2>&1 | tee logs/label.log
+    "${LABEL_CMD[@]}" 2>&1 | tee "$LOG_DIR/label.log"
 else
     log "────────────────────────────────────"
     log "STEP 1: Labeling skipped (--skip-label)"
@@ -226,7 +257,7 @@ fi
 if [ -n "$DRY_RUN" ]; then
     log "DRY RUN complete: training skipped by design"
     log "  Labeled CSV       : $LABELED"
-    log "  Logs              : logs/"
+    log "  Logs              : $LOG_DIR/"
     exit 0
 fi
 
@@ -242,7 +273,7 @@ if [ "${GENERATE_SAFETY_ROWS}" != "0" ]; then
     "$PYTHON_BIN" generate_safety_phi4.py \
         --rows "$GENERATE_SAFETY_ROWS" \
         --output "$SAFETY_SYNTH_OUTPUT" \
-        2>&1 | tee logs/generate_safety.log
+        2>&1 | tee "$LOG_DIR/generate_safety.log"
 fi
 
 # ─────────────────────────────────────────────
@@ -259,7 +290,7 @@ if [ -n "$LABEL_SAFETY_SYNTH" ]; then
     "$PYTHON_BIN" label.py \
         --input "$SAFETY_SYNTH_OUTPUT" \
         --output "$SAFETY_LABELED_OUTPUT" \
-        2>&1 | tee logs/label_safety.log
+        2>&1 | tee "$LOG_DIR/label_safety.log"
     check_file "$SAFETY_LABELED_OUTPUT"
     SAFETY_SYNTH_FOR_TRAIN="$SAFETY_LABELED_OUTPUT"
 fi
@@ -285,7 +316,7 @@ elif [ -n "$AUGMENT_WITH_SAFETY" ] || [ "${GENERATE_SAFETY_ROWS}" != "0" ]; then
         --base "$LABELED" \
         --add "$SAFETY_SYNTH_FOR_TRAIN" \
         --output "$AUGMENTED_OUTPUT" \
-        2>&1 | tee logs/merge_training.log
+        2>&1 | tee "$LOG_DIR/merge_training.log"
 
     TRAIN_INPUT="$AUGMENTED_OUTPUT"
 fi
@@ -308,7 +339,7 @@ TRAIN_CMD=(
 [ -n "$WEIGHTED_SAFETY_LOSS" ] && TRAIN_CMD+=(--weighted-safety-loss)
 [ -n "$SAFETY_POSITIVE_WEIGHT" ] && TRAIN_CMD+=(--safety-positive-weight "$SAFETY_POSITIVE_WEIGHT")
 
-"${TRAIN_CMD[@]}" 2>&1 | tee logs/train.log
+"${TRAIN_CMD[@]}" 2>&1 | tee "$LOG_DIR/train.log"
 
 # ─────────────────────────────────────────────
 # STEP 5 — GUARDED PREDICTION (OPTIONAL)
@@ -330,7 +361,7 @@ if [ -n "$RUN_GUARDED_PREDICT" ]; then
         --model-dir "${MODELS_DIR%/}/deberta_multitask" \
         --safety-threshold "$SAFETY_THRESHOLD" \
         --uncertainty-margin "$UNCERTAINTY_MARGIN" \
-        2>&1 | tee logs/predict_guarded.log
+        2>&1 | tee "$LOG_DIR/predict_guarded.log"
 fi
 
 # ─────────────────────────────────────────────
@@ -348,7 +379,7 @@ if [ -n "$EXTERNAL_TEST" ]; then
         --model-dir "${MODELS_DIR%/}/deberta_multitask" \
         --output-report "$EXTERNAL_EVAL_REPORT" \
         --output-preds "$EXTERNAL_EVAL_PREDS" \
-        2>&1 | tee logs/eval_external.log
+        2>&1 | tee "$LOG_DIR/eval_external.log"
 fi
 
 # ─────────────────────────────────────────────
@@ -370,5 +401,5 @@ if [ -n "$EXTERNAL_TEST" ]; then
     log "  External report   : $EXTERNAL_EVAL_REPORT"
     log "  External preds    : $EXTERNAL_EVAL_PREDS"
 fi
-log "  Logs              : logs/"
+log "  Logs              : $LOG_DIR/"
 log "────────────────────────────────────"
