@@ -8,6 +8,7 @@ import asyncio
 import hmac
 import base64
 import hashlib
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
 
@@ -673,34 +674,246 @@ def predict_is_recurring(*, user_id: str, subject: str, details: str) -> bool:
         return False
 
 
-CHATBOT_URL = os.getenv("CHATBOT_URL", "http://chatbot:8000")
-CHATBOT_URL_LOCAL = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001")
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+SUGGESTED_RESOLUTION_MODEL_NAME = os.getenv(
+    "SUGGESTED_RESOLUTION_MODEL_NAME",
+    "google/flan-t5-base",
+).strip()
+SUGGESTED_RESOLUTION_MODEL_PATH = os.getenv("SUGGESTED_RESOLUTION_MODEL_PATH", "").strip()
+SUGGESTED_RESOLUTION_USE_MOCK = _bool_env("SUGGESTED_RESOLUTION_USE_MOCK", True)
+SUGGESTED_RESOLUTION_MAX_NEW_TOKENS = int(os.getenv("SUGGESTED_RESOLUTION_MAX_NEW_TOKENS", "160"))
+SUGGESTED_RESOLUTION_PIPELINE_ONLY = _bool_env("SUGGESTED_RESOLUTION_PIPELINE_ONLY", True)
+SUGGESTED_RESOLUTION_EXAMPLES_MAX = int(os.getenv("SUGGESTED_RESOLUTION_EXAMPLES_MAX", "12"))
+SUGGESTED_RESOLUTION_EXAMPLES_PATH = Path(
+    os.getenv("SUGGESTED_RESOLUTION_EXAMPLES_PATH", "/app/data/suggested_resolution/examples.json")
+)
+ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8004").rstrip("/")
+ORCHESTRATOR_URL_LOCAL = os.getenv("ORCHESTRATOR_URL_LOCAL", "http://localhost:8004").rstrip("/")
+
+_resolution_model = None
+_resolution_tokenizer = None
+_resolution_model_load_attempted = False
+_pipeline_mode_cache = {"value": None, "checked_at": 0.0}
+
+
+def _is_pipeline_mode_active(force_refresh: bool = False) -> bool:
+    """
+    Pipeline mode can be forced with PIPELINE_MODE=true/false.
+    Otherwise we infer from orchestrator health.
+    """
+    explicit = os.getenv("PIPELINE_MODE", "").strip().lower()
+    if explicit in {"1", "true", "yes", "on"}:
+        return True
+    if explicit in {"0", "false", "no", "off"}:
+        return False
+
+    now = time.time()
+    if not force_refresh and _pipeline_mode_cache["value"] is not None and now - float(_pipeline_mode_cache["checked_at"]) < 60:
+        return bool(_pipeline_mode_cache["value"])
+
+    active = False
+    for base in [ORCHESTRATOR_URL, ORCHESTRATOR_URL_LOCAL]:
+        try:
+            with httpx.Client(timeout=1.5) as client:
+                resp = client.get(f"{base}/health")
+                if resp.status_code == 200:
+                    active = True
+                    break
+        except Exception:
+            continue
+    _pipeline_mode_cache["value"] = active
+    _pipeline_mode_cache["checked_at"] = now
+    return active
+
+
+def _load_resolution_examples(limit: int = 4) -> list[dict]:
+    if not SUGGESTED_RESOLUTION_EXAMPLES_PATH.exists():
+        return []
+    try:
+        payload = json.loads(SUGGESTED_RESOLUTION_EXAMPLES_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    examples = payload.get("examples") if isinstance(payload, dict) else []
+    if not isinstance(examples, list):
+        return []
+    return examples[: max(0, int(limit))]
+
+
+def _format_resolution_examples_for_prompt(limit: int = 4) -> str:
+    examples = _load_resolution_examples(limit=limit)
+    if not examples:
+        return ""
+    lines = []
+    for index, ex in enumerate(examples, start=1):
+        lines.append(
+            (
+                f"Example {index}\n"
+                f"Priority: {ex.get('priority')}\n"
+                f"Department: {ex.get('department')}\n"
+                f"Subject: {ex.get('subject')}\n"
+                f"Details: {ex.get('details')}\n"
+                f"Final Resolution: {ex.get('final_resolution')}"
+            )
+        )
+    return "\n\n".join(lines)
+
+
+def _rebuild_resolution_examples(max_examples: int = SUGGESTED_RESOLUTION_EXAMPLES_MAX) -> Dict[str, Any]:
+    max_examples = max(1, min(int(max_examples), 50))
+    rows = fetch_all(
+        """
+        SELECT
+          trf.decision,
+          trf.suggested_resolution,
+          trf.employee_resolution,
+          trf.final_resolution,
+          trf.created_at,
+          t.ticket_code,
+          t.ticket_type,
+          t.priority,
+          t.subject,
+          t.details,
+          d.name AS department
+        FROM ticket_resolution_feedback trf
+        JOIN tickets t ON t.id = trf.ticket_id
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE trf.final_resolution IS NOT NULL
+          AND BTRIM(trf.final_resolution) <> ''
+        ORDER BY trf.created_at DESC
+        LIMIT 500;
+        """
+    )
+
+    examples: list[dict] = []
+    seen_ticket_codes: set[str] = set()
+    for row in rows:
+        ticket_code = str(row.get("ticket_code") or "").strip()
+        if ticket_code and ticket_code in seen_ticket_codes:
+            continue
+        if ticket_code:
+            seen_ticket_codes.add(ticket_code)
+
+        details = str(row.get("details") or "").strip()
+        final_resolution = str(row.get("final_resolution") or "").strip()
+        if not details or not final_resolution:
+            continue
+
+        examples.append(
+            {
+                "ticket_code": ticket_code,
+                "ticket_type": str(row.get("ticket_type") or ""),
+                "priority": str(row.get("priority") or ""),
+                "department": str(row.get("department") or ""),
+                "subject": str(row.get("subject") or ""),
+                "details": details,
+                "decision": str(row.get("decision") or ""),
+                "suggested_resolution": str(row.get("suggested_resolution") or ""),
+                "employee_resolution": str(row.get("employee_resolution") or ""),
+                "final_resolution": final_resolution,
+                "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+            }
+        )
+        if len(examples) >= max_examples:
+            break
+
+    payload = {
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "model_name": SUGGESTED_RESOLUTION_MODEL_NAME,
+        "examples": examples,
+    }
+    SUGGESTED_RESOLUTION_EXAMPLES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SUGGESTED_RESOLUTION_EXAMPLES_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return {"ok": True, "examples_written": len(examples), "feedback_rows": len(rows)}
+
+
+def _load_suggested_resolution_model() -> None:
+    global _resolution_model, _resolution_tokenizer, _resolution_model_load_attempted
+    if _resolution_model_load_attempted:
+        return
+    _resolution_model_load_attempted = True
+
+    if SUGGESTED_RESOLUTION_USE_MOCK:
+        logger.info("suggested_resolution_agent | mock_mode=true; model load skipped")
+        return
+
+    model_ref = SUGGESTED_RESOLUTION_MODEL_PATH or SUGGESTED_RESOLUTION_MODEL_NAME
+    try:
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer  # type: ignore
+
+        _resolution_tokenizer = AutoTokenizer.from_pretrained(model_ref)
+        _resolution_model = AutoModelForSeq2SeqLM.from_pretrained(model_ref)
+        logger.info("suggested_resolution_agent | loaded model=%s", model_ref)
+    except Exception as exc:
+        logger.warning("suggested_resolution_agent | model_load_failed model=%s err=%s", model_ref, exc)
+        _resolution_model = None
+        _resolution_tokenizer = None
+
+
+def _fallback_resolution_suggestion(ticket: Dict[str, Any]) -> str:
+    department = str(ticket.get("department_name") or "assigned department")
+    priority = str(ticket.get("priority") or "Medium")
+    details = str(ticket.get("details") or "").strip()
+    details_snippet = details[:220] + ("..." if len(details) > 220 else "")
+    return (
+        f"1) Validate the issue in {department} scope and confirm current impact level ({priority}). "
+        f"2) Apply the department SOP fix for: {details_snippet}. "
+        f"3) Re-test with the requester and capture evidence (screenshots/logs/work notes). "
+        f"4) Update the ticket with root cause, actions performed, and preventive follow-up before closure."
+    )
 
 
 def _generate_resolution_suggestion(ticket: Dict[str, Any]) -> str:
-    payload = {
-        "ticket_code": ticket.get("ticket_code"),
-        "ticket_type": ticket.get("ticket_type") or "Complaint",
-        "subject": ticket.get("subject") or "No subject",
-        "details": ticket.get("details") or "",
-        "priority": ticket.get("priority") or "Medium",
-        "department": ticket.get("department_name") or "General",
-        "status": ticket.get("status") or "Assigned",
-    }
-    last_error = None
-    for base in [CHATBOT_URL, CHATBOT_URL_LOCAL]:
+    if SUGGESTED_RESOLUTION_PIPELINE_ONLY and not _is_pipeline_mode_active():
+        raise HTTPException(status_code=409, detail="Suggested Resolution Agent is available only in pipeline mode")
+
+    _load_suggested_resolution_model()
+
+    examples = _format_resolution_examples_for_prompt(limit=4)
+    prompt = (
+        "You are Suggested Resolution Agent (Flan-T5-Base) for employee ticket handling.\n"
+        "Generate one practical resolution plan.\n"
+        "Rules: be safe, avoid assumptions about access, include verification and closure update, plain text.\n"
+        "Keep output under 180 words.\n\n"
+        f"Ticket Code: {ticket.get('ticket_code')}\n"
+        f"Type: {ticket.get('ticket_type') or 'Complaint'}\n"
+        f"Priority: {ticket.get('priority') or 'Medium'}\n"
+        f"Status: {ticket.get('status') or 'Assigned'}\n"
+        f"Department: {ticket.get('department_name') or 'General'}\n"
+        f"Subject: {ticket.get('subject') or 'No subject'}\n"
+        f"Details: {ticket.get('details') or ''}\n"
+    )
+    if examples:
+        prompt += f"\nReference successful examples:\n{examples}\n"
+    prompt += "\nSuggested resolution:"
+
+    if _resolution_model is not None and _resolution_tokenizer is not None:
         try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.post(f"{base}/api/suggest-resolution", json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-                suggestion = str(data.get("suggested_resolution") or "").strip()
-                if suggestion:
-                    return suggestion
+            encoded = _resolution_tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=1024,
+            )
+            generated = _resolution_model.generate(
+                **encoded,
+                max_new_tokens=max(32, min(SUGGESTED_RESOLUTION_MAX_NEW_TOKENS, 256)),
+                do_sample=False,
+                num_beams=4,
+            )
+            output = _resolution_tokenizer.decode(generated[0], skip_special_tokens=True).strip()
+            output = " ".join(output.split())
+            if output:
+                return output
         except Exception as exc:
-            last_error = exc
-            continue
-    raise HTTPException(status_code=503, detail=f"Resolution suggestion service unavailable: {last_error}")
+            logger.warning("suggested_resolution_agent | inference_failed err=%s", exc)
+
+    return _fallback_resolution_suggestion(ticket)
 
 def _insert_notification(
     cur,
@@ -726,63 +939,16 @@ def _insert_notification(
     )
 
 def _trigger_resolution_retraining() -> None:
-    for base in [CHATBOT_URL, CHATBOT_URL_LOCAL]:
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                resp = client.post(f"{base}/api/retrain-resolution-model", json={"max_examples": 12})
-                resp.raise_for_status()
-                logger.info("resolution_retrain | triggered via %s", base)
-                return
-        except Exception:
-            continue
-    logger.warning("resolution_retrain | failed to trigger retraining endpoint")
+    try:
+        result = _rebuild_resolution_examples(max_examples=SUGGESTED_RESOLUTION_EXAMPLES_MAX)
+        logger.info(
+            "resolution_retrain | ok examples_written=%s feedback_rows=%s",
+            result.get("examples_written"),
+            result.get("feedback_rows"),
+        )
+    except Exception as exc:
+        logger.warning("resolution_retrain | failed err=%s", exc)
 
-
-def _generate_suggestion_if_ready(ticket_code: str) -> None:
-    """
-    Generate and persist suggested resolution once ticket has both:
-      - first priority assignment timestamp
-      - assigned department
-    """
-    row = fetch_one(
-        """
-        SELECT
-          t.id,
-          t.ticket_code,
-          t.ticket_type,
-          t.subject,
-          t.details,
-          t.priority,
-          t.status,
-          t.priority_assigned_at,
-          t.suggested_resolution,
-          d.name AS department_name
-        FROM tickets t
-        LEFT JOIN departments d ON d.id = t.department_id
-        WHERE t.ticket_code = %s
-        LIMIT 1;
-        """,
-        (ticket_code,),
-    )
-    if not row:
-        return
-    if not row.get("priority_assigned_at") or not row.get("department_name"):
-        return
-    if str(row.get("suggested_resolution") or "").strip():
-        return
-
-    suggestion = _generate_resolution_suggestion(row)
-    execute(
-        """
-        UPDATE tickets
-        SET
-          suggested_resolution = %s,
-          suggested_resolution_model = %s,
-          suggested_resolution_generated_at = now()
-        WHERE id = %s;
-        """,
-        (suggestion, "falcon", row["id"]),
-    )
 
 # =========================================================
 # Helpers for response/resolution time
@@ -1369,6 +1535,9 @@ def employee_resolution_suggestion(
     ticket_code: str,
     user: Dict[str, Any] = Depends(require_employee),
 ):
+    if SUGGESTED_RESOLUTION_PIPELINE_ONLY and not _is_pipeline_mode_active():
+        raise HTTPException(status_code=409, detail="Suggested Resolution Agent is available only in pipeline mode")
+
     user_id = user["id"]
     row = fetch_one(
         """
@@ -1411,10 +1580,66 @@ def employee_resolution_suggestion(
               suggested_resolution_generated_at = now()
             WHERE id = %s;
             """,
-            (suggestion, "falcon", row["id"]),
+            (suggestion, "flan-t5-base", row["id"]),
         )
 
     return {"ticketId": row["ticket_code"], "suggestedResolution": suggestion}
+
+
+@api.post("/internal/tickets/{ticket_code}/generate-suggested-resolution")
+def internal_generate_suggested_resolution(ticket_code: str):
+    if SUGGESTED_RESOLUTION_PIPELINE_ONLY and not _is_pipeline_mode_active():
+        raise HTTPException(status_code=409, detail="Suggested Resolution Agent is available only in pipeline mode")
+
+    row = fetch_one(
+        """
+        SELECT
+          t.id,
+          t.ticket_code,
+          t.ticket_type,
+          t.subject,
+          t.details,
+          t.priority,
+          t.status,
+          t.priority_assigned_at,
+          t.suggested_resolution,
+          d.name AS department_name
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.ticket_code = %s
+        LIMIT 1;
+        """,
+        (ticket_code,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    if not row.get("priority_assigned_at") or not row.get("department_name"):
+        raise HTTPException(
+            status_code=409,
+            detail="Suggested resolution is available after priority and department are assigned",
+        )
+
+    suggestion = str(row.get("suggested_resolution") or "").strip()
+    if not suggestion:
+        suggestion = _generate_resolution_suggestion(row)
+        execute(
+            """
+            UPDATE tickets
+            SET
+              suggested_resolution = %s,
+              suggested_resolution_model = %s,
+              suggested_resolution_generated_at = now()
+            WHERE id = %s;
+            """,
+            (suggestion, "flan-t5-base", row["id"]),
+        )
+
+    return {
+        "ticketId": row["ticket_code"],
+        "suggestedResolution": suggestion,
+        "model": "flan-t5-base",
+    }
 
 
 @api.get("/employee/tickets/{ticket_code}")
@@ -4505,12 +4730,11 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
 
             if incoming_ticket_code:
                 cur.execute(
-                    "SELECT id, priority_assigned_at FROM tickets WHERE ticket_code = %s LIMIT 1",
+                    "SELECT id FROM tickets WHERE ticket_code = %s LIMIT 1",
                     (incoming_ticket_code,),
                 )
                 existing = cur.fetchone()
                 if existing:
-                    had_priority_before = existing[1] is not None
                     subject_update = (body.subject or "").strip() or None
 
                     details_update = body.transcript if body.transcript else None
@@ -4606,15 +4830,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         updated[4],
                         updated[5],
                     )
-                    if (not had_priority_before) and updated[3]:
-                        try:
-                            _generate_suggestion_if_ready(updated[0])
-                        except Exception as exc:
-                            logger.warning(
-                                "suggested_resolution | generation failed at first priority assignment ticket=%s err=%s",
-                                updated[0],
-                                exc,
-                            )
                     return {
                         "ticket_id": updated[0],
                         "status": updated[1],
@@ -4736,16 +4951,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 created[4],
                 created[5],
             )
-            if created[3]:
-                try:
-                    _generate_suggestion_if_ready(created[0])
-                except Exception as exc:
-                    logger.warning(
-                        "suggested_resolution | generation failed at ticket creation ticket=%s err=%s",
-                        created[0],
-                        exc,
-                    )
-
     return {
         "ticket_id": created[0],
         "status": created[1],

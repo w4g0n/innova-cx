@@ -19,7 +19,9 @@ Flow:
         -> [6] FeatureEngineeringAgent / feature_engineering_step
             : recurrence check then feature labeling/modeling
         -> [7] PrioritizationAgent / priority_step (Fuzzy Logic)
-        -> [8] DepartmentRoutingAgent / router_step (Backend/Chatbot)
+        -> [8] DepartmentRoutingAgent / router_step (Backend)
+        -> [9] SuggestedResolutionAgent / suggested_resolution_step
+            : triggers dedicated suggested resolution generation in backend
 """
 
 from langchain_core.runnables import RunnableLambda, RunnableSequence
@@ -32,6 +34,7 @@ from agents.sentimentcombiner.step import combine_sentiment
 from agents.featureengineering.step import engineer_features
 from agents.priority.step import score_priority
 from agents.router.step import route_and_store
+from agents.suggestedresolution.step import generate_suggested_resolution
 
 try:
     from execution_logger import logged_step
@@ -54,4 +57,5 @@ pipeline: RunnableSequence = (
     | _step("FeatureEngineeringAgent", engineer_features, 6)
     | _step("PrioritizationAgent", score_priority, 7)
     | _step("DepartmentRoutingAgent", route_and_store, 8)
+    | _step("SuggestedResolutionAgent", generate_suggested_resolution, 9)
 )

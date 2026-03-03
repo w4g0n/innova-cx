@@ -171,7 +171,7 @@ function TicketModal({
       case "resolve":
         return (
           <>
-            <label>Model Suggested Resolution (Falcon)</label>
+            <label>Model Suggested Resolution (Flan-T5-Base)</label>
             <div className="model-suggestion">
               {suggestionBusy ? "Generating..." : (resolutionSuggestion || "No suggestion available.")}
             </div>
