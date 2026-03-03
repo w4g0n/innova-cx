@@ -64,6 +64,132 @@ BEGIN
 END $$;
 
 
+-- =============================================================================
+-- PREREQUISITE COLUMNS — safe to re-run (all IF NOT EXISTS)
+-- Ensures this file can be applied to existing volumes that never ran
+-- 000_analytics_prerequisites.sql, without requiring that file first.
+-- =============================================================================
+
+-- tickets: analytics columns (added by 000_analytics_prerequisites.sql)
+ALTER TABLE public.tickets
+    ADD COLUMN IF NOT EXISTS human_overridden BOOLEAN     NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS override_reason  TEXT,
+    ADD COLUMN IF NOT EXISTS is_recurring     BOOLEAN     NOT NULL DEFAULT FALSE;
+
+-- sessions: chatbot tracking columns (added by 000_analytics_prerequisites.sql)
+ALTER TABLE public.sessions
+    ADD COLUMN IF NOT EXISTS bot_model_version  TEXT,
+    ADD COLUMN IF NOT EXISTS escalated_to_human BOOLEAN     NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS escalated_at       TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS linked_ticket_id   UUID REFERENCES public.tickets(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_sessions_escalated_flag
+    ON public.sessions (escalated_to_human, created_at)
+    WHERE escalated_to_human = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_sessions_linked_ticket
+    ON public.sessions (linked_ticket_id)
+    WHERE linked_ticket_id IS NOT NULL;
+
+-- user_chat_logs: sentiment columns (added by 000_analytics_prerequisites.sql)
+ALTER TABLE public.user_chat_logs
+    ADD COLUMN IF NOT EXISTS sentiment_score  NUMERIC(4,3),
+    ADD COLUMN IF NOT EXISTS category         TEXT,
+    ADD COLUMN IF NOT EXISTS response_time_ms INTEGER;
+
+-- bot_response_logs: extra columns (added by 000_analytics_prerequisites.sql)
+ALTER TABLE public.bot_response_logs
+    ADD COLUMN IF NOT EXISTS kb_match_score NUMERIC(5,4),
+    ADD COLUMN IF NOT EXISTS response_type  TEXT,
+    ADD COLUMN IF NOT EXISTS ticket_id      UUID REFERENCES public.tickets(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_brl_ticket_id
+    ON public.bot_response_logs (ticket_id);
+
+-- employee_reports: extra columns (added by 000_analytics_prerequisites.sql)
+ALTER TABLE public.employee_reports
+    ADD COLUMN IF NOT EXISTS model_version TEXT NOT NULL DEFAULT 'report-gen-v1.0',
+    ADD COLUMN IF NOT EXISTS generated_by  TEXT NOT NULL DEFAULT 'system',
+    ADD COLUMN IF NOT EXISTS period_start  DATE,
+    ADD COLUMN IF NOT EXISTS period_end    DATE;
+
+-- ENUMs for agent output tables (idempotent)
+DO $$ BEGIN
+    CREATE TYPE agent_name_type AS ENUM (
+        'sentiment', 'priority', 'routing', 'sla', 'resolution', 'feature'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE execution_status AS ENUM (
+        'running', 'success', 'failed', 'skipped'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE trigger_source AS ENUM (
+        'ingest', 'reprocess', 'manual', 'scheduled'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- model_execution_log (needed as FK parent for sentiment_outputs/feature_outputs)
+CREATE TABLE IF NOT EXISTS public.model_execution_log (
+    id                  UUID             PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id        UUID             NOT NULL DEFAULT gen_random_uuid(),
+    ticket_id           UUID             REFERENCES public.tickets(id) ON DELETE CASCADE,
+    agent_name          agent_name_type,
+    model_version       VARCHAR(50),
+    triggered_by        trigger_source   NOT NULL DEFAULT 'ingest',
+    started_at          TIMESTAMPTZ      NOT NULL DEFAULT now(),
+    completed_at        TIMESTAMPTZ,
+    status              execution_status NOT NULL DEFAULT 'success',
+    input_token_count   INTEGER,
+    output_token_count  INTEGER,
+    infra_metadata      JSONB            NOT NULL DEFAULT '{}'::jsonb,
+    inference_time_ms   INTEGER          NOT NULL DEFAULT 0,
+    confidence_score    NUMERIC(5,4),
+    error_flag          BOOLEAN          NOT NULL DEFAULT FALSE,
+    error_message       TEXT,
+    created_at          TIMESTAMPTZ      NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_mel_ticket_id_mv  ON public.model_execution_log (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_mel_status_mv     ON public.model_execution_log (status);
+CREATE INDEX IF NOT EXISTS idx_mel_started_at_mv ON public.model_execution_log (started_at DESC);
+
+-- sentiment_outputs (queried by mv_sentiment_daily)
+CREATE TABLE IF NOT EXISTS public.sentiment_outputs (
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id     UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id        UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version    TEXT         NOT NULL,
+    sentiment_label  TEXT         NOT NULL,
+    sentiment_score  NUMERIC(6,4) NOT NULL,
+    confidence_score NUMERIC(5,4) NOT NULL,
+    emotion_tags     TEXT[]       NOT NULL DEFAULT '{}',
+    raw_scores       JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    is_current       BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_so_ticket_id_mv  ON public.sentiment_outputs (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_so_is_current_mv ON public.sentiment_outputs (ticket_id, is_current) WHERE is_current = TRUE;
+
+-- feature_outputs (queried by mv_feature_daily)
+CREATE TABLE IF NOT EXISTS public.feature_outputs (
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id     UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id        UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version    TEXT         NOT NULL,
+    asset_category   TEXT,
+    topic_labels     TEXT[]       NOT NULL DEFAULT '{}',
+    confidence_score NUMERIC(5,4) NOT NULL,
+    raw_features     JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    is_current       BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_fo_ticket_id_mv  ON public.feature_outputs (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_fo_is_current_mv ON public.feature_outputs (ticket_id, is_current) WHERE is_current = TRUE;
+
+
 
 -- =============================================================================
 -- EXTRA INDEXES ON BASE TABLES (safe to re-run — all IF NOT EXISTS)
@@ -570,9 +696,9 @@ CREATE INDEX IF NOT EXISTS idx_analytics_refresh_log_at
 
 -- =============================================================================
 -- REFRESH FUNCTION — all 8 MVs in dependency order
--- Initial populate uses non-CONCURRENT (safe on empty tables / first-run).
--- Subsequent calls via backend loop and pg_cron use CONCURRENT (requires the
--- unique indexes created above, which always exist by this point in the file).
+-- Uses CONCURRENT refresh (requires unique indexes created above).
+-- On first-run the indexes are always present because they were created earlier
+-- in this same script. The function is safe to call any number of times.
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION refresh_analytics_mvs()
@@ -597,15 +723,33 @@ DECLARE
     v_ms_feature    INT;
     v_ms_total      INT;
     v_result        JSONB;
+    v_has_data      BOOLEAN;
 BEGIN
-    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_ticket_base;       t1 := clock_timestamp();
-    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_daily_volume;      t2 := clock_timestamp();
-    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_employee_daily;    t3 := clock_timestamp();
-    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_acceptance_daily;  t4 := clock_timestamp();
-    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_operator_qc_daily; t5 := clock_timestamp();
-    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_chatbot_daily;     t6 := clock_timestamp();
-    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_sentiment_daily;   t7 := clock_timestamp();
-    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_feature_daily;     t8 := clock_timestamp();
+    -- Use CONCURRENT only when the MV has been populated at least once
+    -- (CONCURRENT requires a unique index AND at least one prior populate).
+    -- Check mv_ticket_base as the bellwether — if it has rows, all MVs do.
+    SELECT EXISTS (SELECT 1 FROM mv_ticket_base LIMIT 1) INTO v_has_data;
+
+    IF v_has_data THEN
+        REFRESH MATERIALIZED VIEW CONCURRENTLY mv_ticket_base;       t1 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW CONCURRENTLY mv_daily_volume;      t2 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW CONCURRENTLY mv_employee_daily;    t3 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW CONCURRENTLY mv_acceptance_daily;  t4 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW CONCURRENTLY mv_operator_qc_daily; t5 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW CONCURRENTLY mv_chatbot_daily;     t6 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW CONCURRENTLY mv_sentiment_daily;   t7 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW CONCURRENTLY mv_feature_daily;     t8 := clock_timestamp();
+    ELSE
+        -- First populate — CONCURRENT not allowed on empty MVs
+        REFRESH MATERIALIZED VIEW mv_ticket_base;       t1 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW mv_daily_volume;      t2 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW mv_employee_daily;    t3 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW mv_acceptance_daily;  t4 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW mv_operator_qc_daily; t5 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW mv_chatbot_daily;     t6 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW mv_sentiment_daily;   t7 := clock_timestamp();
+        REFRESH MATERIALIZED VIEW mv_feature_daily;     t8 := clock_timestamp();
+    END IF;
 
     v_ms_base       := ROUND(EXTRACT(EPOCH FROM (t1 - t0)) * 1000);
     v_ms_daily      := ROUND(EXTRACT(EPOCH FROM (t2 - t1)) * 1000);
@@ -654,18 +798,12 @@ $$ LANGUAGE plpgsql;
 
 -- =============================================================================
 -- INITIAL POPULATE
--- NON-CONCURRENT on all 8 MVs — safe on empty tables / first-run.
--- The refresh function uses CONCURRENT for all future refreshes.
+-- Called only when this file is first applied. The SELECT refresh_analytics_mvs()
+-- call handles both first-run (non-CONCURRENT) and re-run (CONCURRENT) cases
+-- automatically via the v_has_data check inside the function.
 -- =============================================================================
 
-REFRESH MATERIALIZED VIEW mv_ticket_base;
-REFRESH MATERIALIZED VIEW mv_daily_volume;
-REFRESH MATERIALIZED VIEW mv_employee_daily;
-REFRESH MATERIALIZED VIEW mv_acceptance_daily;
-REFRESH MATERIALIZED VIEW mv_operator_qc_daily;
-REFRESH MATERIALIZED VIEW mv_chatbot_daily;
-REFRESH MATERIALIZED VIEW mv_sentiment_daily;
-REFRESH MATERIALIZED VIEW mv_feature_daily;
+SELECT refresh_analytics_mvs() AS initial_populate_result;
 
 
 -- =============================================================================
