@@ -169,7 +169,7 @@ export default function UsersManagement() {
         lastLogin: u.lastLogin ?? u.last_login ?? "—",
       }));
       setUsers(normalized);
-    } catch (e) {
+    } catch {
       setUsersError("Failed to load users. Check the backend and network.");
       setUsers([]);
     } finally {
@@ -179,7 +179,6 @@ export default function UsersManagement() {
 
   useEffect(() => {
     fetchUsers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // -------------------------
@@ -247,7 +246,7 @@ export default function UsersManagement() {
     if (name === "role" && value === "customer") {
       setEdit((p) => ({ ...p, role: value, department: "" }));
       setErrors((prev) => {
-        const { department, ...rest } = prev;
+        const { department: _department, ...rest } = prev;
         return rest;
       });
       return;
@@ -318,7 +317,7 @@ export default function UsersManagement() {
       setToast({ type: "success", message: data?.message ?? "User updated successfully." });
       closeManage();
       await fetchUsers();
-    } catch (err) {
+    } catch {
       setToast({ type: "error", message: "Failed to update user. Check the backend and network." });
     }
   };
@@ -354,7 +353,7 @@ export default function UsersManagement() {
     if (name === "role" && value === "customer") {
       setCreate((p) => ({ ...p, role: value, department: "" }));
       setErrors((prev) => {
-        const { department, ...rest } = prev;
+        const { department: _department, ...rest } = prev;
         return rest;
       });
       return;
@@ -426,7 +425,7 @@ export default function UsersManagement() {
       setToast({ type: "success", message: data?.message ?? "User created successfully." });
       closeCreate();
       await fetchUsers();
-    } catch (err) {
+    } catch {
       setToast({ type: "error", message: "Failed to create user. Check the backend and network." });
     }
   };
@@ -468,7 +467,7 @@ export default function UsersManagement() {
           });
           closeConfirm();
           await fetchUsers();
-        } catch (e) {
+        } catch {
           setToast({ type: "error", message: "Failed to update user status. Check backend/network." });
           closeConfirm();
         }
@@ -506,7 +505,7 @@ export default function UsersManagement() {
           setToast({ type: "success", message: data?.message ?? "User deleted." });
           closeConfirm();
           await fetchUsers();
-        } catch (e) {
+        } catch {
           setToast({ type: "error", message: "Failed to delete user. Check backend/network." });
           closeConfirm();
         }
@@ -746,7 +745,7 @@ export default function UsersManagement() {
                     }));
 
                     setErrors((prev) => {
-                      const { phone, ...rest } = prev;
+                      const { phone: _phone, ...rest } = prev;
                       return rest;
                     });
                   }}
@@ -864,7 +863,7 @@ export default function UsersManagement() {
                         phoneCountry: (countryData?.countryCode || "ae").toLowerCase(),
                       }));
                       setErrors((prev) => {
-                        const { phone, ...rest } = prev;
+                        const { phone: _phone, ...rest } = prev;
                         return rest;
                       });
                     }}
