@@ -103,6 +103,7 @@ async def process_audio(
 async def process_text(
     text: str = Form(...),
     ticket_id: str | None = Form(default=None),
+    subject: str | None = Form(default=None),
     ticket_type: str | None = Form(default=None),
     has_audio: bool | None = Form(default=None),
     audio_features: str | None = Form(default=None),
@@ -131,6 +132,7 @@ async def process_text(
     initial_payload = {
         "transcript": text.strip(),
         "ticket_id": ticket_id.strip() if ticket_id else None,
+        "subject": subject.strip() if subject else None,
         "label": selected_type if selected_type in {"complaint", "inquiry"} else "complaint",
         "status": "Open",
     }
@@ -160,6 +162,7 @@ async def process_text(
     state = {
         "text": text.strip(),
         "ticket_id": ticket_id,
+        "subject": subject.strip() if subject else None,
         "ticket_type": selected_type,
         "has_audio": bool(has_audio),
         "audio_features": parsed_audio_features,

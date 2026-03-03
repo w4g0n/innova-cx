@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -36,6 +37,14 @@ class ResolutionSuggestionRequest(BaseModel):
 
 class ResolutionSuggestionResponse(BaseModel):
     suggested_resolution: str
+
+
+class SubjectSuggestionRequest(BaseModel):
+    details: str = Field(..., min_length=1)
+
+
+class SubjectSuggestionResponse(BaseModel):
+    subject: str
 
 
 class ResolutionRetrainRequest(BaseModel):
@@ -105,6 +114,29 @@ def suggest_resolution(req: ResolutionSuggestionRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Resolution suggestion error: {e}") from e
+
+
+@router.post("/suggest-subject", response_model=SubjectSuggestionResponse)
+def suggest_subject(req: SubjectSuggestionRequest):
+    try:
+        prompt = (
+            "Generate a clear subject line (5-8 words) for this support ticket.\n"
+            "Use sentence case.\n"
+            "Do not use quotes, prefixes, labels, or punctuation at the end.\n"
+            "Return only the subject line.\n\n"
+            f"Ticket: {req.details}"
+        )
+        subject = generate_response([{"role": "user", "content": prompt}]).strip()
+        subject = subject.splitlines()[0].strip() if subject else ""
+        subject = re.sub(r'^["\']|["\']$', "", subject).strip()
+        subject = re.sub(r"[.!?;:,]+$", "", subject).strip()
+        if not subject:
+            raise HTTPException(status_code=502, detail="Model returned empty subject")
+        return {"subject": subject}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Subject suggestion error: {e}") from e
 
 
 @router.post("/retrain-resolution-model")

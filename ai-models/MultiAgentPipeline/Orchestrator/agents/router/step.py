@@ -1,5 +1,5 @@
 """
-Step 7 — Department Routing Agent
+Step 8 — Department Routing Agent
 =================================
 Routes tickets to one of seven departments via zero-shot NLI (DeBERTa).
 If confidence is below threshold, the ticket is left unassigned for manager review.
@@ -136,6 +136,7 @@ def _build_orchestrator_payload(
     should_auto_route = bool(routed_department) and route_confidence >= ROUTING_CONFIDENCE_THRESHOLD
     return {
         "ticket_id": state.get("ticket_id"),
+        "subject": state.get("subject"),
         "transcript": state["text"],
         "sentiment": state.get("text_sentiment", 0.0),
         "audio_sentiment": state.get("audio_sentiment", 0.0),

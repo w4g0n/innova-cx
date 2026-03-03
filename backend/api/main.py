@@ -4233,6 +4233,7 @@ def manager_notifications_mark_all_read_app(
 
 class OrchestratorComplaintRequest(BaseModel):
     ticket_id: Optional[str] = None
+    subject: Optional[str] = None
     transcript: Optional[str] = None
     sentiment: Optional[float] = None
     audio_sentiment: Optional[float] = None
@@ -4251,6 +4252,22 @@ def _infer_orchestrator_stage(body: OrchestratorComplaintRequest) -> Dict[str, s
     Best-effort stage inference for orchestrator activity trail.
     This keeps customer-facing updates connected to actual orchestrator writes.
     """
+    subject_only_update = bool((body.subject or "").strip()) and all(
+        value is None or (isinstance(value, str) and not value.strip())
+        for value in (
+            body.priority,
+            body.department,
+            body.department_candidate,
+            body.label,
+            body.status,
+            body.classification_confidence,
+            body.routing_model,
+            body.sentiment,
+            body.audio_sentiment,
+        )
+    ) and not body.keywords
+    if subject_only_update:
+        return {"id": "subject", "label": "Subject Generation Agent"}
     if body.priority is not None:
         return {"id": "priority", "label": "Prioritization Agent"}
     if (body.department or "").strip() or (body.department_candidate or "").strip():
@@ -4494,9 +4511,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 existing = cur.fetchone()
                 if existing:
                     had_priority_before = existing[1] is not None
-                    subject_update = None
-                    if requested_department and ticket_type:
-                        subject_update = f"[{requested_department}] Automated {ticket_type.lower()}"
+                    subject_update = (body.subject or "").strip() or None
 
                     details_update = body.transcript if body.transcript else None
                     now_utc = datetime.now(timezone.utc) if priority_label else None
@@ -4507,7 +4522,10 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         UPDATE tickets
                         SET
                           ticket_type = COALESCE(%s, ticket_type),
-                          subject = COALESCE(%s, subject),
+                          subject = CASE
+                            WHEN NULLIF(BTRIM(subject), '') IS NULL THEN COALESCE(%s, subject)
+                            ELSE subject
+                          END,
                           details = COALESCE(%s, details),
                           priority = COALESCE(%s, priority),
                           status = COALESCE(%s, status),
@@ -4614,10 +4632,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             ticket_type_create = ticket_type or "Complaint"
             priority_create = priority_label or "Medium"
             status_create = normalized_status or "Open"
-            if requested_department:
-                subject = f"[{requested_department}] Automated {ticket_type_create.lower()}"
-            else:
-                subject = f"Automated {ticket_type_create.lower()}"
+            subject = (body.subject or "").strip()
             details = body.transcript
 
             cur.execute(
