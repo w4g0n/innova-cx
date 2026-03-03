@@ -3578,8 +3578,9 @@ WHERE NOT EXISTS (
 );
 
 -- ---------------------------------------------------------------------------
--- FINAL: Refresh all analytics materialized views
+-- NOTE: Analytics materialized views are created and refreshed by
+-- zzz_analytics_mvs.sh, which runs after this file in the Docker init
+-- sequence. No refresh call needed here.
 -- ---------------------------------------------------------------------------
-SELECT analytics.refresh_all_materialized_views();
 
 COMMIT;
