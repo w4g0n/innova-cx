@@ -66,7 +66,7 @@ export default function CustomerLanding() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showNewChatConfirm, setShowNewChatConfirm] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -143,12 +143,13 @@ export default function CustomerLanding() {
       listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, isOpen, isExpanded, novaView, listRef]);
 
-  const handleNewChat = () => setShowNewChatConfirm(true);
+  const handleClose = () => setShowCloseConfirm(true);
 
-  const confirmNewChat = () => {
-    setShowNewChatConfirm(false);
+  const confirmClose = () => {
+    setShowCloseConfirm(false);
     setNovaView("chat");
-    resetSession();
+    setIsOpen(false);
+    setIsExpanded(false);
   };
 
   const openHistory = () => {
@@ -340,15 +341,6 @@ export default function CustomerLanding() {
         <nav className="pl-nav">
           <img src={novaLogo} alt="InnovaCX" className="pl-nav-logo" />
 
-          <div className="pl-nav-links">
-            <button
-              className="pl-nav-link"
-              onClick={() => navigate("/customer/about")}
-            >
-              About Us
-            </button>
-          </div>
-
           {/* Authenticated nav actions */}
           <div className="nav-actions">
             {/* Notifications bell */}
@@ -494,7 +486,7 @@ export default function CustomerLanding() {
               className="pl-btn-ghost"
               onClick={() => navigate("/customer/about")}
             >
-              Learn More
+              About Us
             </button>
           </div>
 
@@ -527,7 +519,6 @@ export default function CustomerLanding() {
         {/* SCROLL HINT */}
         <div className="pl-scroll-hint">
           <span className="pl-scroll-line" />
-          <span className="pl-scroll-text">Scroll</span>
         </div>
       </section>
 
@@ -552,23 +543,6 @@ export default function CustomerLanding() {
               <p className="pl-feature-desc">{f.desc}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* ─── CTA STRIP ────────────────────────────────────────── */}
-      <section className="pl-cta-strip">
-        <div className="pl-cta-inner">
-          <h2 className="pl-cta-headline">Need help? We've got you.</h2>
-          <p className="pl-cta-sub">
-            Chat with Nova, submit a complaint, or track your existing tickets —
-            all in one place.
-          </p>
-          <button
-            className="pl-btn-primary pl-btn-large"
-            onClick={() => setIsOpen(true)}
-          >
-            Chat with Nova
-          </button>
         </div>
       </section>
 
@@ -627,14 +601,6 @@ export default function CustomerLanding() {
               </button>
               <button
                 type="button"
-                className="novaTextBtn"
-                onClick={handleNewChat}
-              >
-                New chat
-              </button>
-
-              <button
-                type="button"
                 className="novaIconBtn"
                 onClick={toggleExpand}
                 aria-label={isExpanded ? "Exit fullscreen" : "Enter fullscreen"}
@@ -676,11 +642,7 @@ export default function CustomerLanding() {
               <button
                 type="button"
                 className="novaIconBtn"
-                onClick={() => {
-                  setNovaView("chat");
-                  setIsOpen(false);
-                  setIsExpanded(false);
-                }}
+                onClick={handleClose}
                 aria-label="Close"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -858,22 +820,22 @@ export default function CustomerLanding() {
                   </form>
                 </div>
 
-                {showNewChatConfirm && (
-                  <div className="novaCloseModal">
-                    <div className="novaCloseModalContent">
-                      <p>Are you sure you want to start a new chat?</p>
-                      <div className="novaCloseModalBtns">
-                        <button onClick={confirmNewChat}>Yes</button>
-                        <button onClick={() => setShowNewChatConfirm(false)}>
-                          No
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </>
             )}
           </div>
+          {showCloseConfirm && (
+            <div className="novaCloseModal">
+              <div className="novaCloseModalContent">
+                <p>Are you sure you want to close the chat?</p>
+                <div className="novaCloseModalBtns">
+                  <button onClick={confirmClose}>Yes, close</button>
+                  <button onClick={() => setShowCloseConfirm(false)}>
+                    Keep chatting
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -49,6 +49,9 @@ const ManagerViewAllComplaints = lazy(() =>
 const ManagerComplaintDetails = lazy(() =>
   import("./pages/manager/ManagerComplaintDetails")
 );
+const ApprovalRequestDetails = lazy(() =>
+  import("./pages/manager/ApprovalRequestDetails")
+);
 const ViewEmployees = lazy(() => import("./pages/manager/ManagerViewEmployees"));
 const ManagerSettings = lazy(() => import("./pages/manager/ManagerSettings"));
 
@@ -252,6 +255,14 @@ export default function App() {
             element={
               <ProtectedRoute role="manager">
                 <Approvals />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/manager/approvals/:requestId"
+            element={
+              <ProtectedRoute role="manager">
+                <ApprovalRequestDetails />
               </ProtectedRoute>
             }
           />

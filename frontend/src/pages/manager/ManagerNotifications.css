@@ -97,13 +97,14 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  gap: 1px;
 }
 
 .empNotifs__topRow {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;   
+  gap: 7px;            
+  flex-wrap: wrap;      
 }
 
 .empNotifs__title {
@@ -114,12 +115,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 340px;   /* ← add this so title doesn't push pill off */
 }
 
 .empNotifs__message {
   font-size: 13px;
   color: rgba(17, 17, 17, 0.62);
-  margin-top: 4px;
+  margin-top: 2px;   /* ← was 4px */
   line-height: 1.5;
 }
 
