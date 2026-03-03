@@ -57,6 +57,10 @@ function getSlaTargets(priority) {
   return SLA_TARGETS[String(priority || "")] || SLA_TARGETS.Medium;
 }
 
+function formatTicketSource(value) {
+  return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
+}
+
 export default function CustomerHistory() {
   const navigate = useNavigate();
 
@@ -86,6 +90,7 @@ export default function CustomerHistory() {
           id: t.ticketId,
           title: t.subject,
           type: t.ticketType, // optional: if you have type in backend, replace
+          source: formatTicketSource(t.ticketSource),
           status: t.status,
           date: t.issueDate,
           priority: t.priority,
@@ -238,6 +243,8 @@ export default function CustomerHistory() {
                     <span className="historyId">{item.id}</span>
                     <span className="historyDot">•</span>
                     <span className="historyType">{item.type}</span>
+                    <span className="historyDot">•</span>
+                    <span className="historyType">{item.source}</span>
                     <span className="historyDot">•</span>
                     <span className={`historyStatus status-${item.status.replace(" ", "")}`}>
                       {item.status}

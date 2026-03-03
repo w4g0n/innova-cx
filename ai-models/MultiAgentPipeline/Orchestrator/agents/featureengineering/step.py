@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -21,6 +20,8 @@ import numpy as np
 import torch
 from langchain_core.runnables import RunnableLambda
 from transformers import pipeline
+
+from db import db_connect
 
 logger = logging.getLogger(__name__)
 
@@ -55,22 +56,6 @@ SAFETY_KEYWORDS = (
     "chemical",
     "toxic",
 )
-
-_RECURRING_PATTERNS = (
-    r"\\bagain\\b",
-    r"\\brepeatedly\\b",
-    r"\\bmultiple times\\b",
-    r"\\bstill not fixed\\b",
-    r"\\bnot the first time\\b",
-    r"\\bfor weeks\\b",
-    r"\\bfor months\\b",
-    r"\\bfifth time\\b",
-    r"\\bthird time\\b",
-    r"\\bsecond time\\b",
-    r"\\bcalled before\\b",
-    r"\\breported (this )?before\\b",
-)
-_RECURRING_REGEX = re.compile("|".join(_RECURRING_PATTERNS), re.IGNORECASE)
 
 LABEL_CONFIGS = {
     "issue_severity": {
@@ -260,9 +245,70 @@ def _apply_recurrence_step(state: dict, text: str) -> None:
     if explicit is not None:
         state["is_recurring"] = explicit
         state["is_recurring_source"] = "state"
-    else:
-        state["is_recurring"] = bool(_RECURRING_REGEX.search(text))
-        state["is_recurring_source"] = "heuristic"
+        return
+
+    ticket_code = str(state.get("ticket_id") or "").strip()
+    if ticket_code:
+        ticket_recurrence = _compute_ticket_recurrence(ticket_code)
+        if ticket_recurrence is not None:
+            state["is_recurring"] = ticket_recurrence
+            state["is_recurring_source"] = "sql_function"
+            return
+
+    state["is_recurring"] = False
+    state["is_recurring_source"] = "fallback_false"
+
+
+def _compute_ticket_recurrence(ticket_code: str) -> bool | None:
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT created_by_user_id, subject, details FROM tickets WHERE ticket_code = %s LIMIT 1;",
+                    (ticket_code,),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+
+        user_id, subject, details = row[0], row[1], row[2]
+        if not user_id:
+            return None
+        return _predict_is_recurring_db(
+            user_id=str(user_id),
+            subject=str(subject or ""),
+            details=str(details or ""),
+        )
+    except Exception as exc:
+        logger.warning("feature_engineering | recurrence ticket lookup failed (%s)", exc)
+        return None
+
+
+def _predict_is_recurring_db(*, user_id: str, subject: str, details: str) -> bool | None:
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT to_regprocedure('compute_is_recurring_ticket(uuid,text,text,integer)')
+                           IS NOT NULL AS exists;
+                    """
+                )
+                exists_row = cur.fetchone()
+                if not exists_row or not bool(exists_row[0]):
+                    return None
+
+                cur.execute(
+                    "SELECT compute_is_recurring_ticket(%s::uuid, %s, %s) AS is_recurring;",
+                    (user_id, subject, details),
+                )
+                result = cur.fetchone()
+                if not result:
+                    return None
+                return bool(result[0])
+    except Exception as exc:
+        logger.warning("feature_engineering | recurrence sql failed (%s)", exc)
+        return None
 
 
 def _apply_labeling_step(state: dict, text: str) -> None:

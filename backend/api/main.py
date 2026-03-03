@@ -163,6 +163,7 @@ def _ensure_runtime_schema_compatibility() -> None:
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_source TEXT NOT NULL DEFAULT 'user';")
                 cur.execute(
                     """
                     CREATE TABLE IF NOT EXISTS ticket_resolution_feedback (
@@ -1316,6 +1317,7 @@ def employee_tickets(user: Dict[str, Any] = Depends(require_employee)):
           t.subject,
           t.priority,
           t.status,
+          t.ticket_source,
           t.created_at,
           t.priority_assigned_at,
           t.assigned_at,
@@ -1353,6 +1355,7 @@ def employee_tickets(user: Dict[str, Any] = Depends(require_employee)):
                 "subject": r.get("subject"),
                 "priority": r.get("priority"),
                 "status": r.get("status"),
+                "ticketSource": r.get("ticket_source") or "user",
                 "issueDate": issue_date,
                 "responseTime": response_time,
                 "resolutionTime": resolution_time,
@@ -1665,6 +1668,7 @@ def employee_ticket_details(
           t.first_response_at,
           t.resolved_at,
           t.suggested_resolution,
+          t.ticket_source,
           t.model_suggestion,
           up.full_name AS submitter_name,
           up.phone     AS submitter_phone,
@@ -1731,6 +1735,7 @@ def employee_ticket_details(
         "ticketId": row.get("ticket_code"),
         "priority": row.get("priority"),
         "status": row.get("status"),
+        "ticketSource": row.get("ticket_source") or "user",
         "issueDate": issue_date,
         "modelSuggestion": row.get("suggested_resolution") or row.get("model_suggestion"),
         "metrics": {
@@ -2733,6 +2738,7 @@ def customer_mytickets(
           subject,
           priority,
           ticket_type,
+          ticket_source,
           status,
           created_at,
           priority_assigned_at,
@@ -2769,6 +2775,7 @@ def customer_mytickets(
                 "subject": r.get("subject"),
                 "priority": r.get("priority"),
                 "ticketType": r.get("ticket_type"),
+                "ticketSource": r.get("ticket_source") or "user",
                 "status": r.get("status"),
                 "issueDate": issue_date,
                 "responseTime": response_time,
@@ -2803,6 +2810,7 @@ def customer_ticket_details(
           t.assigned_at,
           t.first_response_at,
           t.resolved_at,
+          t.ticket_source,
           t.model_suggestion,
           up.full_name AS assigned_employee_name
         FROM tickets t
@@ -2865,6 +2873,7 @@ def customer_ticket_details(
         "ticketId": row.get("ticket_code"),
         "priority": row.get("priority"),
         "status": row.get("status"),
+        "ticketSource": row.get("ticket_source") or "user",
         "issueDate": issue_date,
         "modelSuggestion": row.get("model_suggestion"),
         "assignedEmployee": row.get("assigned_employee_name") or None,
@@ -3010,6 +3019,7 @@ def create_customer_ticket(
                     status,
                     created_by_user_id,
                     model_suggestion,
+                    ticket_source,
                     created_at
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING id;
@@ -3023,6 +3033,7 @@ def create_customer_ticket(
                     "Unassigned",
                     user["id"],
                     model_suggestion,
+                    "user",
                 ),
             )
             ticket_id = cur.fetchone()[0]
@@ -3202,6 +3213,7 @@ def get_complaints(user: Dict[str, Any] = Depends(require_manager)):
             t.assigned_at,
             t.first_response_at,
             t.resolved_at,
+            t.ticket_source,
             t.assigned_to_user_id,
             up.full_name AS assignee_name,
             d.name AS department_name
@@ -3233,6 +3245,7 @@ def get_complaints(user: Dict[str, Any] = Depends(require_manager)):
             "priority": (t.get("priority") or "").lower(),
             "priorityText": priority_text,
             "status": t["status"],
+            "ticketSource": t.get("ticket_source") or "user",
             "assignee": assignee,
             "issueDate": issue_date,
             "respondTime": respond_time,
@@ -4115,6 +4128,7 @@ def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends
             t.assigned_at,
             t.first_response_at,
             t.resolved_at,
+            t.ticket_source,
             up.full_name AS assignee_name,
             d.name AS department_name
         FROM tickets t
@@ -4148,6 +4162,7 @@ def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends
         "priority": priority_raw,
         "priorityText": priority_text,
         "status": ticket["status"],
+        "ticketSource": ticket.get("ticket_source") or "user",
         "assignee": assignee,
         "details": ticket.get("details") or "",
         "issueDate": issue_date,

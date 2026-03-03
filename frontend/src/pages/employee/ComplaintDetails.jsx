@@ -16,6 +16,10 @@ function getAuthToken() {
   );
 }
 
+function formatTicketSource(value) {
+  return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
+}
+
 // ─── AttachmentThumb ────────────────────────────────────────────────────────
 function AttachmentThumb({ url, fileName }) {
   const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(fileName || "");
@@ -513,6 +517,7 @@ export default function ComplaintDetails() {
           <h2 className="section-title">Summary</h2>
           <div className="summary-grid">
             <div><span className="label">Issue Date:</span> {ticket.issueDate}</div>
+            <div><span className="label">Ticket Source:</span> {formatTicketSource(ticket.ticketSource)}</div>
             <div><span className="label">Mean Time To Respond:</span> {ticket.metrics?.meanTimeToRespond}</div>
             <div><span className="label">Mean Time To Resolve:</span> {ticket.metrics?.meanTimeToResolve}</div>
             <div><span className="label">Submitted By:</span> {ticket.submittedBy?.name}</div>

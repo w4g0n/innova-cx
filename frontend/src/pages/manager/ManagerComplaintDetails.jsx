@@ -14,6 +14,10 @@ function getAuthToken() {
   );
 }
 
+function formatTicketSource(value) {
+  return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
+}
+
 function ManagerTicketModal({
   type,
   ticket,
@@ -533,6 +537,10 @@ export default function ManagerComplaintDetails() {
             <div>
               <span className="label">Submitted By</span>
               {ticket.submittedBy || "—"}
+            </div>
+            <div>
+              <span className="label">Ticket Source</span>
+              {formatTicketSource(ticket.ticketSource)}
             </div>
           </div>
         </section>

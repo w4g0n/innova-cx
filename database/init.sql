@@ -181,6 +181,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   model_department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
   model_confidence    NUMERIC(5,2),
   model_suggestion    TEXT,
+  ticket_source       TEXT NOT NULL DEFAULT 'user',
   final_resolution    TEXT,
   resolved_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL
 );
