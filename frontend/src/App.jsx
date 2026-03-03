@@ -17,12 +17,8 @@ const CustomerTicketDetails = lazy(() =>
   import("./pages/customer/CustomerTicketDetails")
 );
 const CustomerSettings = lazy(() => import("./pages/customer/CustomerSettings"));
-const CustomerAuthPage = lazy(() =>
-  import("./pages/customer/CustomerAuthPage")
-);
+const CustomerAuthPage = lazy(() => import("./pages/customer/CustomerAuthPage"));
 const AboutUs = lazy(() => import("./pages/customer/AboutUs"));
-
-
 
 const EmployeeNotifications = lazy(() =>
   import("./pages/employee/EmployeeNotifications")
@@ -65,6 +61,19 @@ const UsersManagement = lazy(() => import("./pages/operator/UsersManagement"));
 const OperatorSettings = lazy(() => import("./pages/operator/OperatorSettings"));
 const TicketReviewDetail = lazy(() => import("./pages/operator/TicketReviewDetail"));
 
+const isStaffHost = () => window.location.hostname.startsWith("staff.");
+
+function RootGate() {
+  // "/" entry behavior differs by host
+  return isStaffHost() ? <Navigate to="/login" replace /> : <PublicLanding />;
+}
+
+function PublicOnly({ children }) {
+  // block customer public pages on staff subdomain
+  if (isStaffHost()) return <Navigate to="/login" replace />;
+  return children;
+}
+
 export default function App() {
   useEffect(() => {
     document.title = "InnovaCX";
@@ -92,14 +101,32 @@ export default function App() {
         }
       >
         <Routes>
-          {/* Public routes — no auth required */}
-          <Route path="/" element={<PublicLanding />} />
+          {/* Root split */}
+          <Route path="/" element={<RootGate />} />
+
+          {/* Public customer-only pages */}
+          <Route
+            path="/about"
+            element={
+              <PublicOnly>
+                <AboutUs />
+              </PublicOnly>
+            }
+          />
+          <Route
+            path="/verify"
+            element={
+              <PublicOnly>
+                <CustomerAuthPage />
+              </PublicOnly>
+            }
+          />
+
+          {/* Login should work on staff; you can still allow it on customer if you want */}
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/verify" element={<CustomerAuthPage />} />
-          <Route path="/about" element={<AboutUs />} />
 
-          
+          {/* Customer protected routes */}
           <Route
             path="/customer"
             element={
@@ -108,14 +135,10 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          
           <Route
             path="/customer/dashboard"
             element={<Navigate to="/customer" replace />}
           />
-
-          
           <Route
             path="/customer/notifications"
             element={
@@ -148,7 +171,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/customer/settings"
             element={
@@ -157,7 +179,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/customer/about"
             element={
@@ -167,7 +188,7 @@ export default function App() {
             }
           />
 
-          
+          {/* Employee */}
           <Route
             path="/employee"
             element={
@@ -217,7 +238,7 @@ export default function App() {
             }
           />
 
-          
+          {/* Manager */}
           <Route
             path="/manager"
             element={
@@ -290,7 +311,8 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          
+
+          {/* Operator */}
           <Route
             path="/operator"
             element={
@@ -347,6 +369,9 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

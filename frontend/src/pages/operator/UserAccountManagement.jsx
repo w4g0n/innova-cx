@@ -1,194 +1,260 @@
-import Layout from "../../components/Layout"; // adjust if your Layout path is different
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Layout from "../../components/Layout";
+import PageHeader from "../../components/common/PageHeader";
+import PillSelect from "../../components/common/PillSelect";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
+import PhoneInput from "react-phone-input-2";
+import "react-phone-input-2/lib/style.css";
+import { parsePhoneNumberFromString } from "libphonenumber-js";
 import "./UserAccountManagement.css";
 
-const initialForm = {
-  // identity
-  fullName: "",
-  email: "",
-  phone: "",
-  location: "",
+// ── Config ────────────────────────────────────────────────────────────────────
+const API_BASE = 'http://127.0.0.1:8000/api';
 
-  // auth (backend will hash later)
-  password: "",
-  confirmPassword: "",
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function authHeaders() {
+  const token = localStorage.getItem("access_token");
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
-  // org + access
-  role: "employee", // employee | manager | operator | customer
-  department: "",
-  status: "active", // active | inactive
-};
+const ROLE_OPTIONS = [
+  { value: "customer", label: "Customer" },
+  { value: "employee", label: "Employee" },
+  { value: "manager", label: "Manager" },
+  { value: "operator", label: "Operator" },
+];
 
-function validate(form) {
-  const errors = {};
+function isValidEmail(email) {
+  return /^\S+@\S+\.\S+$/.test(email);
+}
 
-  if (!form.fullName.trim()) errors.fullName = "Full name is required.";
-  if (!form.email.trim()) errors.email = "Email is required.";
-  if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) errors.email = "Invalid email format.";
-  if (!form.phone.trim()) errors.phone = "Phone is required.";
-
-  if (!form.location.trim()) errors.location = "Location is required.";
-
-  if (!form.password) errors.password = "Password is required.";
-  if (form.password && form.password.length < 8) errors.password = "Password must be at least 8 characters.";
-  if (form.confirmPassword !== form.password) errors.confirmPassword = "Passwords do not match.";
-
-  if (!form.role) errors.role = "Role is required.";
-  if (!form.department.trim()) errors.department = "Department is required.";
-
-  return errors;
+function toPhoneInputValue(e164) {
+  if (!e164) return "";
+  return e164.startsWith("+") ? e164.slice(1) : e164;
+}
+function fromPhoneInputValue(digits) {
+  if (!digits) return "";
+  return digits.startsWith("+") ? digits : `+${digits}`;
+}
+function countryFromE164(e164) {
+  const p = parsePhoneNumberFromString(e164 || "");
+  return (p?.country || "AE").toLowerCase();
+}
+function validateE164Phone(e164) {
+  if (!e164) return "Phone is required.";
+  const p = parsePhoneNumberFromString(e164);
+  if (!p || !p.isValid()) return "Invalid phone number.";
+  return "";
 }
 
 export default function UserAccountManagement() {
-  const [form, setForm] = useState(initialForm);
-  const [touched, setTouched] = useState({});
-  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    fullName: "",
+    email: "",
+    phoneE164: "",
+    phoneCountry: "ae",
+    location: "",
+    role: "customer",
+    department: "",
+    password: "",
+    confirmPassword: "",
+  });
+
+  const [errors, setErrors] = useState({});
   const [toast, setToast] = useState({ type: "", message: "" });
 
-  const errors = useMemo(() => validate(form), [form]);
-  const isValid = Object.keys(errors).length === 0;
+  const [confirm, setConfirm] = useState({
+    open: false,
+    icon: null,
+    title: "",
+    message: "",
+    variant: "danger",
+    onConfirm: null,
+  });
+  const closeConfirm = () => setConfirm((c) => ({ ...c, open: false }));
 
   const onChange = (e) => {
     const { name, value } = e.target;
-    setForm((p) => ({ ...p, [name]: value }));
-  };
 
-  const onBlur = (e) => {
-    setTouched((p) => ({ ...p, [e.target.name]: true }));
-  };
-
-  const showError = (key) => touched[key] && errors[key];
-
-  const reset = () => {
-    setForm(initialForm);
-    setTouched({});
-    setToast({ type: "", message: "" });
-  };
-
-  const onSubmit = async (e) => {
-    e.preventDefault();
-
-    // mark required fields as touched so errors show
-    setTouched({
-      fullName: true,
-      email: true,
-      phone: true,
-      location: true,
-      password: true,
-      confirmPassword: true,
-      role: true,
-      department: true,
-    });
-
-    if (!isValid) {
-      setToast({ type: "error", message: "Please fix the highlighted fields." });
+    if (name === "role" && value === "customer") {
+      setForm((p) => ({ ...p, role: value, department: "" }));
+      setErrors((prev) => {
+        const { department, ...rest } = prev;
+        return rest;
+      });
       return;
     }
 
-    setSubmitting(true);
+    setForm((p) => ({ ...p, [name]: value }));
+  };
+
+  const validate = () => {
+    const e = {};
+    if (!form.fullName.trim()) e.fullName = "Full name is required.";
+    if (!form.email.trim()) e.email = "Email is required.";
+    if (form.email && !isValidEmail(form.email)) e.email = "Invalid email format.";
+
+    const phoneErr = validateE164Phone(form.phoneE164);
+    if (phoneErr) e.phone = phoneErr;
+
+    if (!form.location.trim()) e.location = "Location is required.";
+
+    if (form.role !== "customer" && !form.department.trim()) {
+      e.department = "Department is required for non-customer roles.";
+    }
+
+    if (!form.password) e.password = "Password is required.";
+    if (form.password && form.password.length < 8) e.password = "Min 8 characters.";
+    if (form.confirmPassword !== form.password) e.confirmPassword = "Passwords do not match.";
+
+    return e;
+  };
+
+  const createUser = async () => {
     setToast({ type: "", message: "" });
 
+    const e = validate();
+    setErrors(e);
+    if (Object.keys(e).length) {
+      setToast({ type: "error", message: "Fix the highlighted fields." });
+      return;
+    }
+
+    const payload = {
+      fullName: form.fullName.trim(),
+      email: form.email.trim(),
+      phone: form.phoneE164,
+      location: form.location.trim(),
+      password: form.password,
+      role: form.role,
+      ...(form.role !== "customer" ? { department: form.department.trim() } : {}),
+    };
+
     try {
-      // FRONTEND ONLY (no backend):
-      const payload = { ...form };
-      delete payload.confirmPassword; // never send confirmPassword
-
-      console.log("CREATE USER (frontend-only mock):", payload);
-
-      setToast({ type: "success", message: "User created (mock). Check console." });
-      reset();
-    } catch (err) {
-      setToast({
-        type: "error",
-        message: err?.message || "Something went wrong.",
+      const res = await fetch(`${API_BASE}/operator/user-creation`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
       });
-    } finally {
-      setSubmitting(false);
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setToast({
+          type: "error",
+          message: data?.detail ?? `Failed to create user (HTTP ${res.status}).`,
+        });
+        return;
+      }
+
+      setToast({ type: "success", message: data?.message ?? "User created successfully." });
+      setForm((p) => ({
+        ...p,
+        fullName: "",
+        email: "",
+        phoneE164: "",
+        phoneCountry: "ae",
+        location: "",
+        role: "customer",
+        department: "",
+        password: "",
+        confirmPassword: "",
+      }));
+    } catch (err) {
+      setToast({ type: "error", message: "Failed to create user. Check the backend and network." });
     }
   };
 
   return (
     <Layout role="operator">
       <div className="uamPage">
-        <div className="uamHeader">
-          <h1>User Account Management</h1>
-        </div>
+        <PageHeader
+          title="Create User"
+          subtitle="Create a new user account. Customers do not require a department."
+        />
 
-        {toast.message ? (
-          <div className={`uamToast ${toast.type === "success" ? "success" : "error"}`}>
+        {toast.message && (
+          <div className={`umToast ${toast.type === "success" ? "success" : "error"}`}>
             {toast.message}
           </div>
-        ) : null}
+        )}
 
-        <form className="uamCard" onSubmit={onSubmit}>
-          <div className="uamSectionTitle">User Details</div>
-
+        <div className="uamCard">
           <div className="uamGrid">
             <div className="uamField">
               <label>Full Name *</label>
-              <input
-                name="fullName"
-                value={form.fullName}
-                onChange={onChange}
-                onBlur={onBlur}
-                placeholder="e.g., Hana Ayad"
-              />
-              {showError("fullName") ? <span className="uamError">{errors.fullName}</span> : null}
+              <input name="fullName" value={form.fullName} onChange={onChange} placeholder="e.g. Hana Ayad" />
+              {errors.fullName && <span className="umErr">{errors.fullName}</span>}
             </div>
 
             <div className="uamField">
               <label>Email *</label>
-              <input
-                name="email"
-                value={form.email}
-                onChange={onChange}
-                onBlur={onBlur}
-                placeholder="e.g., hana@company.com"
-              />
-              {showError("email") ? <span className="uamError">{errors.email}</span> : null}
+              <input name="email" value={form.email} onChange={onChange} placeholder="e.g. hana@company.com" />
+              {errors.email && <span className="umErr">{errors.email}</span>}
             </div>
 
             <div className="uamField">
               <label>Phone *</label>
-              <input
-                name="phone"
-                value={form.phone}
-                onChange={onChange}
-                onBlur={onBlur}
-                placeholder="e.g., +971 50 123 4567"
+              <PhoneInput
+                country={form.phoneCountry}
+                value={toPhoneInputValue(form.phoneE164)}
+                onChange={(digits, countryData) => {
+                let cleanDigits = digits || "";
+                const dialCode = countryData?.dialCode || "";
+                if (cleanDigits.startsWith(dialCode + "0")) {
+                  cleanDigits = dialCode + cleanDigits.slice(dialCode.length + 1);
+                }
+                const e164 = cleanDigits ? `+${cleanDigits}` : "";
+                setCreate((p) => ({
+                  ...p,
+                  phoneE164: e164,
+                  phoneCountry: (countryData?.countryCode || "ae").toLowerCase(),
+                }));
+                setErrors((prev) => {
+                  const { phone, ...rest } = prev;
+                  return rest;
+                });
+              }}
+                enableSearch
+                autoFormat={false}
+                countryCodeEditable={false}
+                inputProps={{ name: "phone", required: true }}
               />
-              {showError("phone") ? <span className="uamError">{errors.phone}</span> : null}
+              {errors.phone && <span className="umErr">{errors.phone}</span>}
             </div>
 
             <div className="uamField">
               <label>Location *</label>
-              <input
-                name="location"
-                value={form.location}
-                onChange={onChange}
-                onBlur={onBlur}
-                placeholder="e.g., Dubai, UAE"
-              />
-              {showError("location") ? <span className="uamError">{errors.location}</span> : null}
+              <input name="location" value={form.location} onChange={onChange} placeholder="e.g. Dubai, UAE" />
+              {errors.location && <span className="umErr">{errors.location}</span>}
             </div>
-          </div>
 
-          <div className="uamDivider" />
+            <div className="uamField">
+              <label>Role *</label>
+              <PillSelect
+                value={form.role}
+                onChange={(v) => onChange({ target: { name: "role", value: v } })}
+                ariaLabel="Role"
+                options={ROLE_OPTIONS}
+              />
+            </div>
 
-          <div className="uamSectionTitle">Login Credentials</div>
+            {/* Department only for non-customer */}
+            {form.role !== "customer" && (
+              <div className="uamField">
+                <label>Department *</label>
+                <input name="department" value={form.department} onChange={onChange} placeholder="e.g. Customer Support" />
+                {errors.department && <span className="umErr">{errors.department}</span>}
+              </div>
+            )}
 
-          <div className="uamGrid">
             <div className="uamField">
               <label>Password *</label>
-              <input
-                type="password"
-                name="password"
-                value={form.password}
-                onChange={onChange}
-                onBlur={onBlur}
-                placeholder="Minimum 8 characters"
-              />
-              {showError("password") ? <span className="uamError">{errors.password}</span> : null}
+              <input type="password" name="password" value={form.password} onChange={onChange} placeholder="Minimum 8 characters" />
+              {errors.password && <span className="umErr">{errors.password}</span>}
             </div>
 
             <div className="uamField">
@@ -198,64 +264,29 @@ export default function UserAccountManagement() {
                 name="confirmPassword"
                 value={form.confirmPassword}
                 onChange={onChange}
-                onBlur={onBlur}
                 placeholder="Re-enter password"
               />
-              {showError("confirmPassword") ? (
-                <span className="uamError">{errors.confirmPassword}</span>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="uamDivider" />
-
-          <div className="uamSectionTitle">Access & Organization</div>
-
-          <div className="uamGrid">
-            <div className="uamField">
-              <label>Role *</label>
-              <select name="role" value={form.role} onChange={onChange} onBlur={onBlur}>
-                <option value="customer">Customer</option>
-                <option value="employee">Employee</option>
-                <option value="manager">Manager</option>
-                <option value="operator">Operator</option>
-              </select>
-              {showError("role") ? <span className="uamError">{errors.role}</span> : null}
-            </div>
-
-            <div className="uamField">
-              <label>Department *</label>
-              <input
-                name="department"
-                value={form.department}
-                onChange={onChange}
-                onBlur={onBlur}
-                placeholder="e.g., Customer Support"
-              />
-              {showError("department") ? <span className="uamError">{errors.department}</span> : null}
-            </div>
-
-            <div className="uamField">
-              <label>Status</label>
-              <select name="status" value={form.status} onChange={onChange}>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
+              {errors.confirmPassword && <span className="umErr">{errors.confirmPassword}</span>}
             </div>
           </div>
 
           <div className="uamActions">
-            <button type="button" className="uamBtn secondary" onClick={reset} disabled={submitting}>
-              Clear
-            </button>
-            <button type="submit" className="uamBtn primary" disabled={submitting}>
-              {submitting ? "Creating..." : "Create User"}
+            <button className="filterPillBtn" type="button" onClick={createUser}>
+              Create User
             </button>
           </div>
+        </div>
 
-          <div className="uamFootnote">
-          </div>
-        </form>
+        <ConfirmDialog
+          open={confirm.open}
+          icon={confirm.icon}
+          title={confirm.title}
+          message={confirm.message}
+          variant={confirm.variant}
+          confirmLabel="Confirm"
+          onConfirm={confirm.onConfirm}
+          onCancel={closeConfirm}
+        />
       </div>
     </Layout>
   );

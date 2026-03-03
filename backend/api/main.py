@@ -25,6 +25,7 @@ from pydantic import BaseModel
 import pyotp  # for RFC 6238 TOTP
 import qrcode
 import io
+import re as _re
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
@@ -4023,18 +4024,21 @@ async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
 # =========================================================
 # OPERATOR ANALYTICS ENDPOINTS
 # =========================================================
-
-@api.get("/operator/analytics/qc")
-def get_operator_qc(
-    timeRange: str = Query("last30days"),
-    department: str = Query("All Departments"),
-    user: Dict[str, Any] = Depends(require_operator),
+def _parse_time_range(
+    timeRange: str,
+    dateFrom: Optional[str] = None,
+    dateTo:   Optional[str] = None,
 ):
     """
-    Quality-Control analytics for QualityControl.jsx.
-    Reads from: mv_operator_qc_daily, mv_acceptance_daily, mv_ticket_base.
-    All paths are MV-only — no base table queries.
+    Resolves (period_start, period_end) from either explicit ISO date strings
+    or a named preset. Custom range takes priority when both dateFrom and dateTo
+    are provided.
     """
+    if dateFrom and dateTo:
+        period_start = fetch_one("SELECT %s::timestamptz AS ts", [dateFrom])["ts"]
+        period_end   = fetch_one("SELECT (%s::date + interval '1 day - 1 second')::timestamptz AS ts", [dateTo])["ts"]
+        return period_start, period_end
+
     range_sql = {
         "last7days":    "now() - interval '7 days'",
         "Last 7 Days":  "now() - interval '7 days'",
@@ -4046,46 +4050,76 @@ def get_operator_qc(
     start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
     period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
     period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    return period_start, period_end
 
-    if _ANALYTICS_READY:
-        try:
-            return _analytics.get_operator_qc_data(
-                period_start=period_start,
-                period_end=period_end,
-                department=department,
-            )
-        except Exception as _svc_err:
-            logger.error(
-                "analytics_service.get_operator_qc_data failed. err=%s", _svc_err
-            )
-            raise HTTPException(status_code=500, detail=f"Analytics service error: {_svc_err}")
+@api.get("/operator/analytics/qc/acceptance")
+def get_operator_qc_acceptance(
+    timeRange:  str           = Query("last30days"),
+    department: str           = Query("All Departments"),
+    dateFrom:   Optional[str] = Query(None),
+    dateTo:     Optional[str] = Query(None),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Acceptance tab — called only when that tab is clicked."""
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
+    if not _ANALYTICS_READY:
+        raise HTTPException(status_code=503, detail="Analytics MVs not ready.")
+    try:
+        full = _analytics.get_operator_qc_data(period_start, period_end, department)
+        return full["acceptance"]
+    except Exception as e:
+        logger.error("get_operator_qc_acceptance failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
-    raise HTTPException(
-        status_code=503,
-        detail="Analytics MVs not ready. Run database/scripts/analytics_mvs.sql first."
-    )
 
+@api.get("/operator/analytics/qc/rescoring")
+def get_operator_qc_rescoring(
+    timeRange:  str           = Query("last30days"),
+    department: str           = Query("All Departments"),
+    dateFrom:   Optional[str] = Query(None),
+    dateTo:     Optional[str] = Query(None),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Rescoring tab — called only when that tab is clicked."""
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
+    if not _ANALYTICS_READY:
+        raise HTTPException(status_code=503, detail="Analytics MVs not ready.")
+    try:
+        full = _analytics.get_operator_qc_data(period_start, period_end, department)
+        return full["rescoring"]
+    except Exception as e:
+        logger.error("get_operator_qc_rescoring failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/operator/analytics/qc/rerouting")
+def get_operator_qc_rerouting(
+    timeRange:  str           = Query("last30days"),
+    department: str           = Query("All Departments"),
+    dateFrom:   Optional[str] = Query(None),
+    dateTo:     Optional[str] = Query(None),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Rerouting tab — called only when that tab is clicked."""
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
+    if not _ANALYTICS_READY:
+        raise HTTPException(status_code=503, detail="Analytics MVs not ready.")
+    try:
+        full = _analytics.get_operator_qc_data(period_start, period_end, department)
+        return full["rerouting"]
+    except Exception as e:
+        logger.error("get_operator_qc_rerouting failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api.get("/operator/analytics/model-health/chatbot")
 def get_operator_chatbot(
-    timeRange: str = Query("last30days"),
+    timeRange: str           = Query("last30days"),
+    dateFrom:  Optional[str] = Query(None),
+    dateTo:    Optional[str] = Query(None),
+    department: Optional[str] = Query(None),
     user: Dict[str, Any] = Depends(require_operator),
 ):
-    """
-    Chatbot agent analytics for ModelHealth.jsx (Chatbot Agent tab).
-    Reads from: mv_chatbot_daily (MV-only).
-    """
-    range_sql = {
-        "last7days":    "now() - interval '7 days'",
-        "Last 7 Days":  "now() - interval '7 days'",
-        "last30days":   "now() - interval '30 days'",
-        "Last 30 Days": "now() - interval '30 days'",
-        "quarter":      "date_trunc('quarter', now())",
-        "This Quarter": "date_trunc('quarter', now())",
-    }
-    start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
-    period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
-    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
 
     if _ANALYTICS_READY:
         try:
@@ -4107,25 +4141,13 @@ def get_operator_chatbot(
 
 @api.get("/operator/analytics/model-health/sentiment")
 def get_operator_sentiment(
-    timeRange: str = Query("last30days"),
-    department: str = Query("All Departments"),
+    timeRange: str           = Query("last30days"),
+    dateFrom:  Optional[str] = Query(None),
+    dateTo:    Optional[str] = Query(None),
+    department: Optional[str] = Query(None),
     user: Dict[str, Any] = Depends(require_operator),
 ):
-    """
-    Sentiment agent analytics for ModelHealth.jsx (Sentiment Agent tab).
-    Reads from: mv_sentiment_daily (MV-only).
-    """
-    range_sql = {
-        "last7days":    "now() - interval '7 days'",
-        "Last 7 Days":  "now() - interval '7 days'",
-        "last30days":   "now() - interval '30 days'",
-        "Last 30 Days": "now() - interval '30 days'",
-        "quarter":      "date_trunc('quarter', now())",
-        "This Quarter": "date_trunc('quarter', now())",
-    }
-    start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
-    period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
-    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
 
     if _ANALYTICS_READY:
         try:
@@ -4146,25 +4168,13 @@ def get_operator_sentiment(
 
 @api.get("/operator/analytics/model-health/feature")
 def get_operator_feature(
-    timeRange: str = Query("last30days"),
-    department: str = Query("All Departments"),
+    timeRange: str           = Query("last30days"),
+    dateFrom:  Optional[str] = Query(None),
+    dateTo:    Optional[str] = Query(None),
+    department: Optional[str] = Query(None),
     user: Dict[str, Any] = Depends(require_operator),
 ):
-    """
-    Feature engineering agent analytics for ModelHealth.jsx (Feature Agent tab).
-    Reads from: mv_feature_daily (MV-only).
-    """
-    range_sql = {
-        "last7days":    "now() - interval '7 days'",
-        "Last 7 Days":  "now() - interval '7 days'",
-        "last30days":   "now() - interval '30 days'",
-        "Last 30 Days": "now() - interval '30 days'",
-        "quarter":      "date_trunc('quarter', now())",
-        "This Quarter": "date_trunc('quarter', now())",
-    }
-    start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
-    period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
-    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
 
     if _ANALYTICS_READY:
         try:
@@ -4181,6 +4191,416 @@ def get_operator_feature(
         status_code=503,
         detail="Analytics MVs not ready. Run database/scripts/analytics_mvs.sql first."
     )
+
+# =========================================================
+# Operator – User Management
+# =========================================================
+_VALID_ROLES    = {"customer", "employee", "manager", "operator"}
+_VALID_STATUSES = {"active", "inactive"}
+_SAFE_TEXT_RE   = _re.compile(r'^[\w\s\-\.,\'\+\(\)@/]+$', _re.UNICODE)
+
+
+def _sanitize_text(value: str, field: str, max_len: int = 120) -> str:
+    v = value.strip()
+    if not v:
+        raise HTTPException(status_code=422, detail=f"{field} must not be empty.")
+    if len(v) > max_len:
+        raise HTTPException(status_code=422, detail=f"{field} exceeds maximum length of {max_len}.")
+    if not _SAFE_TEXT_RE.match(v):
+        raise HTTPException(status_code=422, detail=f"{field} contains invalid characters.")
+    return v
+
+
+def _sanitize_email(value: str) -> str:
+    v = value.strip().lower()
+    pattern = _re.compile(r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-.]+$')
+    if not pattern.match(v):
+        raise HTTPException(status_code=422, detail="Invalid email address.")
+    if len(v) > 254:
+        raise HTTPException(status_code=422, detail="Email address too long.")
+    return v
+
+
+class CreateUserRequest(BaseModel):
+    fullName:   str
+    email:      str
+    phone:      str
+    location:   str
+    password:   str
+    role:       str
+    # Department is required for non-customer roles; for customers it can be omitted/empty.
+    department: Optional[str] = None
+    status:     str = "active"
+
+
+@api.post("/operator/user-creation")
+def operator_create_user(
+    body: CreateUserRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Create a new user (operator-only).
+    - All fields sanitized/validated before touching the DB.
+    - Password hashed with bcrypt (cost 12) – plain text never persisted.
+    - Every DB write uses parameterised queries; no string interpolation.
+    """
+    if current_user.get("role") != "operator":
+        raise HTTPException(status_code=403, detail="Only operators can create users.")
+
+    # Sanitize & validate
+    full_name  = _sanitize_text(body.fullName,   "Full name")
+    email      = _sanitize_email(body.email)
+    phone      = _sanitize_text(body.phone,      "Phone",      max_len=30)
+    location   = _sanitize_text(body.location,   "Location")
+
+    # Department is only applicable for non-customer roles.
+    department: Optional[str] = None
+    if body.role != "customer":
+        if not (body.department or "").strip():
+            raise HTTPException(status_code=422, detail="Department is required for non-customer roles.")
+        department = _sanitize_text(body.department, "Department")
+
+    if body.role not in _VALID_ROLES:
+        raise HTTPException(status_code=422, detail=f"Invalid role '{body.role}'.")
+    if body.status not in _VALID_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Invalid status '{body.status}'.")
+
+    raw_password = body.password
+    if not raw_password or len(raw_password) < 8:
+        raise HTTPException(status_code=422, detail="Password must be at least 8 characters.")
+    if len(raw_password) > 128:
+        raise HTTPException(status_code=422, detail="Password too long (max 128 characters).")
+
+    # Hash with bcrypt cost-12
+    password_hash = bcrypt.hashpw(
+        raw_password.encode("utf-8"), bcrypt.gensalt(rounds=12)
+    ).decode("utf-8")
+
+    # Persist (fully parameterised)
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+                cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+                if cur.fetchone():
+                    raise HTTPException(status_code=409, detail="A user with that email already exists.")
+
+                dept_id = None
+                if department is not None:
+                    cur.execute(
+                        "SELECT id FROM departments WHERE LOWER(name) = LOWER(%s)", (department,)
+                    )
+                    dept_row = cur.fetchone()
+                    if dept_row:
+                        dept_id = dept_row["id"]
+                    else:
+                        cur.execute(
+                            "INSERT INTO departments (name) VALUES (%s) RETURNING id", (department,)
+                        )
+                        dept_id = cur.fetchone()["id"]
+
+                is_active = body.status == "active"
+                cur.execute(
+                    """
+                    INSERT INTO users (email, password_hash, role, is_active, mfa_enabled)
+                    VALUES (%s, %s, %s::user_role, %s, FALSE)
+                    RETURNING id
+                    """,
+                    (email, password_hash, body.role, is_active),
+                )
+                user_id = cur.fetchone()["id"]
+
+                cur.execute(
+                    """
+                    INSERT INTO user_profiles (user_id, full_name, phone, location, department_id)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (str(user_id), full_name, phone, location, dept_id),
+                )
+
+            conn.commit()
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("operator_create_user error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to create user. Please try again.")
+
+    logger.info(
+        "operator_create_user | user_id=%s email=%s role=%s by operator=%s",
+        user_id, email, body.role, current_user["id"],
+    )
+
+    return {
+        "success": True,
+        "userId": str(user_id),
+        "message": f"User '{full_name}' created successfully.",
+    }
+
+
+@api.get("/operator/users")
+def operator_list_users(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Return all users with profiles (operator-only)."""
+    if current_user.get("role") != "operator":
+        raise HTTPException(status_code=403, detail="Only operators can view users.")
+
+    rows = fetch_all(
+        """
+        SELECT
+            u.id,
+            u.email,
+            u.role,
+            u.is_active,
+            u.created_at,
+            up.full_name,
+            up.phone,
+            up.location,
+            d.name AS department
+        FROM users u
+        LEFT JOIN user_profiles up ON up.user_id = u.id
+        LEFT JOIN departments    d  ON d.id = up.department_id
+        ORDER BY u.created_at DESC
+        """,
+    )
+
+    return [
+        {
+            "id":         str(r["id"]),
+            "email":      r["email"],
+            "role":       r["role"],
+            "status":     "active" if r["is_active"] else "inactive",
+            "createdAt":  r["created_at"].isoformat() if r.get("created_at") else None,
+            "fullName":   r.get("full_name") or "",
+            "phone":      r.get("phone") or "",
+            "location":   r.get("location") or "",
+            "department": r.get("department") or "",
+        }
+        for r in rows
+    ]
+
+
+class UpdateUserRequest(BaseModel):
+    fullName: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    # Department is only applicable for non-customer roles
+    department: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None
+    # Optional password update
+    password: Optional[str] = None
+
+
+class UpdateUserStatusRequest(BaseModel):
+    status: str
+
+
+@api.put("/operator/users/{user_id}")
+def operator_update_user(
+    user_id: str,
+    body: UpdateUserRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Update user + profile (operator-only)."""
+    if current_user.get("role") != "operator":
+        raise HTTPException(status_code=403, detail="Only operators can update users.")
+
+    # Load current state
+    existing = fetch_one(
+        """
+        SELECT
+            u.id,
+            u.email,
+            u.role,
+            u.is_active,
+            up.full_name,
+            up.phone,
+            up.location,
+            up.department_id,
+            d.name AS department
+        FROM users u
+        LEFT JOIN user_profiles up ON up.user_id = u.id
+        LEFT JOIN departments d ON d.id = up.department_id
+        WHERE u.id = %s
+        """,
+        (user_id,),
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    new_email = _sanitize_email(body.email) if body.email is not None else existing["email"]
+
+    new_role = (body.role or existing["role"] or "customer").lower()
+    if new_role not in _VALID_ROLES:
+        raise HTTPException(status_code=422, detail=f"Invalid role '{new_role}'.")
+
+    new_status = (body.status or ("active" if existing["is_active"] else "inactive")).lower()
+    if new_status not in _VALID_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Invalid status '{new_status}'.")
+
+    new_full_name = _sanitize_text(body.fullName, "Full name") if body.fullName is not None else (existing.get("full_name") or "")
+    new_phone = _sanitize_text(body.phone, "Phone", max_len=30) if body.phone is not None else (existing.get("phone") or "")
+    new_location = _sanitize_text(body.location, "Location") if body.location is not None else (existing.get("location") or "")
+
+    # Department rules:
+    # - customer: department cleared (NULL)
+    # - non-customer: department required; can keep existing if not provided
+    department_value: Optional[str] = None
+    if new_role != "customer":
+        if body.department is not None:
+            department_value = _sanitize_text(body.department, "Department")
+        else:
+            # keep existing, but must exist for non-customer roles
+            department_value = (existing.get("department") or "").strip()
+            if not department_value:
+                raise HTTPException(status_code=422, detail="Department is required for non-customer roles.")
+
+    # Optional password update
+    password_hash: Optional[str] = None
+    if body.password is not None:
+        if not body.password or len(body.password) < 8:
+            raise HTTPException(status_code=422, detail="Password must be at least 8 characters.")
+        if len(body.password) > 128:
+            raise HTTPException(status_code=422, detail="Password too long (max 128 characters).")
+        password_hash = bcrypt.hashpw(
+            body.password.encode("utf-8"), bcrypt.gensalt(rounds=12)
+        ).decode("utf-8")
+
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Email uniqueness if changed
+                if new_email != existing["email"]:
+                    cur.execute("SELECT id FROM users WHERE email = %s", (new_email,))
+                    row = cur.fetchone()
+                    if row:
+                        raise HTTPException(status_code=409, detail="A user with that email already exists.")
+
+                # Department lookup/create (if applicable)
+                dept_id = None
+                if department_value is not None:
+                    cur.execute(
+                        "SELECT id FROM departments WHERE LOWER(name) = LOWER(%s)", (department_value,)
+                    )
+                    dept_row = cur.fetchone()
+                    if dept_row:
+                        dept_id = dept_row["id"]
+                    else:
+                        cur.execute(
+                            "INSERT INTO departments (name) VALUES (%s) RETURNING id", (department_value,)
+                        )
+                        dept_id = cur.fetchone()["id"]
+
+                # Update users
+                is_active = new_status == "active"
+                if password_hash is not None:
+                    cur.execute(
+                        """
+                        UPDATE users
+                        SET email=%s, role=%s::user_role, is_active=%s, password_hash=%s
+                        WHERE id=%s
+                        """,
+                        (new_email, new_role, is_active, password_hash, user_id),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE users
+                        SET email=%s, role=%s::user_role, is_active=%s
+                        WHERE id=%s
+                        """,
+                        (new_email, new_role, is_active, user_id),
+                    )
+
+                # Ensure profile row exists, then update
+                cur.execute("SELECT user_id FROM user_profiles WHERE user_id=%s", (user_id,))
+                has_profile = cur.fetchone() is not None
+                if not has_profile:
+                    cur.execute(
+                        """
+                        INSERT INTO user_profiles (user_id, full_name, phone, location, department_id)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (user_id, new_full_name, new_phone, new_location, dept_id),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE user_profiles
+                        SET full_name=%s, phone=%s, location=%s, department_id=%s
+                        WHERE user_id=%s
+                        """,
+                        (new_full_name, new_phone, new_location, dept_id, user_id),
+                    )
+
+            conn.commit()
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("operator_update_user error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to update user. Please try again.")
+
+    return {"success": True, "message": "User updated successfully."}
+
+
+@api.patch("/operator/users/{user_id}/status")
+def operator_update_user_status(
+    user_id: str,
+    body: UpdateUserStatusRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Activate/Deactivate user (operator-only)."""
+    if current_user.get("role") != "operator":
+        raise HTTPException(status_code=403, detail="Only operators can update users.")
+
+    status = (body.status or "").lower()
+    if status not in _VALID_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Invalid status '{status}'.")
+
+    is_active = status == "active"
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET is_active=%s WHERE id=%s", (is_active, user_id))
+                if cur.rowcount == 0:
+                    raise HTTPException(status_code=404, detail="User not found.")
+            conn.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("operator_update_user_status error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to update user status.")
+
+    return {"success": True, "message": f"User {status}."}
+
+
+@api.delete("/operator/users/{user_id}")
+def operator_delete_user(
+    user_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Delete a user (operator-only)."""
+    if current_user.get("role") != "operator":
+        raise HTTPException(status_code=403, detail="Only operators can delete users.")
+
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM users WHERE id=%s", (user_id,))
+                if cur.rowcount == 0:
+                    raise HTTPException(status_code=404, detail="User not found.")
+            conn.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("operator_delete_user error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete user.")
+
+    return {"success": True, "message": "User deleted successfully."}
 
 
 # =========================================================
