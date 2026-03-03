@@ -1157,21 +1157,27 @@ FROM tickets t WHERE t.ticket_code='CX-4630'
 ON CONFLICT (ticket_id, step_no) DO NOTHING;
 
 -- Placeholder tickets required for approvals linkage
-INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2011', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3101',
-       'Complaint','Medium','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       'Complaint','Medium','Unassigned',
+       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('18/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2011');
 
-INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2034', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3110',
-       'Complaint','Medium','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       'Complaint','Medium','Unassigned',
+       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('18/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2034');
 
-INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2078', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3125',
-       'Complaint','High','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       'Complaint','High','Unassigned',
+       (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('17/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2078');
 
@@ -2221,7 +2227,7 @@ INSERT INTO approval_requests (
 )
 SELECT 'REQ-3145', t.id, 'Rerouting',
   'Dept: IT', 'Dept: Maintenance',
-  'Root cause is physical cabling, not software — needs Facilities team.',
+  'Root cause is physical cabling, not software — needs Maintenance team.',
   (SELECT id FROM users WHERE email='fatima@innova.cx'),
   '2026-02-12 11:30:00+00', 'Approved'
 FROM tickets t WHERE t.ticket_code='CX-4587'
@@ -2244,8 +2250,8 @@ INSERT INTO approval_requests (
   request_reason, submitted_by_user_id, submitted_at, status
 )
 SELECT 'REQ-3155', t.id, 'Rerouting',
-  'Dept: Facilities', 'Dept: IT',
-  'Parking access card issue is a system/software problem, not hardware.',
+  'Dept: Legal & Compliance', 'Dept: IT',
+  'Parking access card issue is a system/software problem — needs IT.',
   (SELECT id FROM users WHERE email='omar@innova.cx'),
   '2026-02-16 14:20:00+00', 'Rejected'
 FROM tickets t WHERE t.ticket_code='CX-4725'
@@ -2268,8 +2274,8 @@ INSERT INTO approval_requests (
   request_reason, submitted_by_user_id, submitted_at, status
 )
 SELECT 'REQ-3165', t.id, 'Rerouting',
-  'Dept: Security', 'Dept: Facilities',
-  'Structural issue confirmed — requires Facilities, not Security.',
+  'Dept: Safety & Security', 'Dept: Facilities Management',
+  'Structural issue confirmed — requires Facilities Management, not Security.',
   (SELECT id FROM users WHERE email='bilal@innova.cx'),
   '2026-02-25 13:10:00+00', 'Pending'
 FROM tickets t WHERE t.ticket_code='CX-M53'
@@ -2798,11 +2804,11 @@ BEGIN;
 -- ---------------------------------------------------------------------------
 
 INSERT INTO public.model_execution_log (
-  ticket_id, agent_name, model_version, triggered_by,
+  execution_id, ticket_id, agent_name, model_version, triggered_by,
   started_at, completed_at, status,
   input_token_count, output_token_count, infra_metadata
 )
-SELECT t.id,
+SELECT gen_random_uuid(), t.id,
   v.agent_name::agent_name_type,
   v.model_version,
   v.triggered_by::trigger_source,
