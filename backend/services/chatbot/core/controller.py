@@ -1,11 +1,4 @@
-import os
 import re
-import urllib.parse
-import urllib.request
-
-from sqlalchemy import text
-
-from .db import engine
 from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression
 from .llm import generate_response
 from .logger import log_bot_response, log_user_message
@@ -382,11 +375,6 @@ def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
         )
         transition(session, "ticket_created")
         rtype = "ticket_created"
-        _dispatch_sentiment_feed(
-            session_id=session_id,
-            ticket_id=result["ticket_id"],
-            ticket_type=category,
-        )
     else:
         response = (
             f"I encountered an issue creating your ticket: {result['error']}. "
@@ -442,47 +430,6 @@ def _result(
         "show_buttons":  buttons or [],
         "session_id":    session_id,
     }
-
-
-def _dispatch_sentiment_feed(
-    session_id: str,
-    ticket_id: str,
-    ticket_type: str | None = None,
-) -> None:
-    try:
-        with engine.connect() as conn:
-            rows = conn.execute(
-                text(
-                    "SELECT message FROM user_chat_logs "
-                    "WHERE session_id = :sid ORDER BY created_at ASC"
-                ),
-                {"sid": session_id},
-            ).fetchall()
-
-        transcript = "\n".join(row.message for row in rows if row.message).strip()
-        if not transcript:
-            return
-
-        url = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8004/process/text")
-        payload = {
-            "text":        transcript,
-            "ticket_id":   ticket_id,
-            "ticket_type": ticket_type or "complaint",
-            "has_audio":   "false",
-        }
-        encoded = urllib.parse.urlencode(payload).encode("utf-8")
-        request = urllib.request.Request(
-            url,
-            data=encoded,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            method="POST",
-        )
-        with urllib.request.urlopen(request, timeout=8):
-            pass
-    except Exception:
-        # Never block the user response if the sentiment feed dispatch fails
-        return
-
 
 # ── Backward-compatible wrappers (used by local_model_test.py) ────────────────
 

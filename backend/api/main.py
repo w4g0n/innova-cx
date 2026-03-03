@@ -26,6 +26,10 @@ from pydantic import BaseModel
 import pyotp  # for RFC 6238 TOTP
 import qrcode
 import io
+try:
+    from .ticket_creation_gate import create_ticket_via_gate, dispatch_ticket_to_orchestrator
+except ImportError:
+    from ticket_creation_gate import create_ticket_via_gate, dispatch_ticket_to_orchestrator
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
@@ -2999,44 +3003,23 @@ def create_customer_ticket(
     body: CreateTicketRequest,
     user: Dict[str, Any] = Depends(require_customer),
 ):
-    # Generate a unique ticket code (could also use DB sequence)
-    ticket_code = f"CX-{int(time.time())}-{user['id']}"
     is_recurring = predict_is_recurring(user_id=user["id"], subject=body.subject, details=body.details)
     model_suggestion = json.dumps({"is_recurring": is_recurring})
 
-    # Insert ticket into database
-    ticket_id = None
+    created_ticket = None
     with db_connect() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO tickets (
-                    ticket_code,
-                    ticket_type,
-                    subject,
-                    details,
-                    priority,
-                    status,
-                    created_by_user_id,
-                    model_suggestion,
-                    ticket_source,
-                    created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING id;
-                """,
-                (
-                    ticket_code,
-                    body.type,         
-                    body.subject,
-                    body.details,
-                    "Low",
-                    "Unassigned",
-                    user["id"],
-                    model_suggestion,
-                    "user",
-                ),
+            created_ticket = create_ticket_via_gate(
+                cur,
+                created_by_user_id=user["id"],
+                ticket_type=body.type,
+                subject=body.subject,
+                details=body.details,
+                priority="Low",
+                status="Unassigned",
+                ticket_source="user",
+                model_suggestion=model_suggestion,
             )
-            ticket_id = cur.fetchone()[0]
 
             # Insert attachments if any
             for att in body.attachments or []:
@@ -3045,18 +3028,27 @@ def create_customer_ticket(
                     INSERT INTO ticket_attachments (ticket_id, file_name)
                     VALUES (%s, %s);
                     """,
-                    (ticket_id, att.name),
+                    (created_ticket["id"], att.name),
                 )
+
+    dispatch_ticket_to_orchestrator(
+        ticket_code=created_ticket["ticket_code"],
+        details=body.details,
+        orchestrator_url=ORCHESTRATOR_URL,
+        orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
+        ticket_type=(body.type or "Complaint"),
+        subject=body.subject,
+    )
 
     return {
         "ok": True,
         "message": "Ticket created successfully",
         "ticket": {
-            "ticketId": ticket_code,
-            "ticketType": body.type, 
+            "ticketId": created_ticket["ticket_code"],
+            "ticketType": body.type,
             "subject": body.subject,
-            "priority": "Normal",
-            "status": "New",
+            "priority": created_ticket["priority"],
+            "status": created_ticket["status"],
             "is_recurring": is_recurring,
         },
     }
@@ -4473,6 +4465,8 @@ def manager_notifications_mark_all_read_app(
 
 class OrchestratorComplaintRequest(BaseModel):
     ticket_id: Optional[str] = None
+    created_by_user_id: Optional[str] = None
+    ticket_source: Optional[str] = None
     subject: Optional[str] = None
     transcript: Optional[str] = None
     sentiment: Optional[float] = None
@@ -4714,6 +4708,10 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
         )
 
     system_user_id = row["id"]
+    requested_created_by_user_id = (body.created_by_user_id or "").strip() or None
+    resolved_created_by_user_id = system_user_id
+    raw_ticket_source = (body.ticket_source or "").strip().lower()
+    resolved_ticket_source = raw_ticket_source if raw_ticket_source else "orchestrator"
     incoming_ticket_code = (body.ticket_id or "").strip() or None
 
     priority_map = {1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
@@ -4740,6 +4738,16 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
 
     with db_connect() as conn:
         with conn.cursor() as cur:
+            if requested_created_by_user_id:
+                cur.execute("SELECT id FROM users WHERE id = %s LIMIT 1;", (requested_created_by_user_id,))
+                requested_user = cur.fetchone()
+                if not requested_user:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"created_by_user_id '{requested_created_by_user_id}' was not found",
+                    )
+                resolved_created_by_user_id = requested_user[0]
+
             department_id, requested_department = _get_or_create_department_id(cur, requested_department)
             candidate_department_id, candidate_department = _get_or_create_department_id(cur, candidate_department)
 
@@ -4858,73 +4866,47 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             if not body.transcript:
                 raise HTTPException(status_code=422, detail="transcript is required when creating a new ticket")
 
-            ticket_code = f"CX-{int(time.time())}"
             ticket_type_create = ticket_type or "Complaint"
             priority_create = priority_label or "Medium"
             status_create = normalized_status or "Open"
             subject = (body.subject or "").strip()
             details = body.transcript
 
-            cur.execute(
-                """
-                INSERT INTO tickets (
-                    ticket_code,
-                    ticket_type,
-                    subject,
-                    details,
-                    priority,
-                    status,
-                    created_by_user_id,
-                    department_id,
-                    sentiment_score,
-                    sentiment_label,
-                    model_priority,
-                    model_department_id,
-                    model_confidence,
-                    priority_assigned_at,
-                    created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING ticket_code, status, priority, priority_assigned_at, respond_due_at, resolve_due_at;
-                """,
-                (
-                    ticket_code,
-                    ticket_type_create,
-                    subject,
-                    details,
-                    priority_create,
-                    status_create,
-                    system_user_id,
-                    department_id,
-                    body.sentiment,
-                    "orchestrator",
-                    priority_label,
-                    candidate_department_id or department_id,
-                    routing_confidence,
-                    datetime.now(timezone.utc),
-                ),
+            created = create_ticket_via_gate(
+                cur,
+                created_by_user_id=resolved_created_by_user_id,
+                ticket_type=ticket_type_create,
+                subject=subject,
+                details=details,
+                priority=priority_create,
+                status=status_create,
+                ticket_source=resolved_ticket_source,
+                department_id=department_id,
+                sentiment_score=body.sentiment,
+                sentiment_label="orchestrator",
+                model_priority=priority_label,
+                model_department_id=candidate_department_id or department_id,
+                model_confidence=routing_confidence,
+                priority_assigned_at=datetime.now(timezone.utc),
             )
-            created = cur.fetchone()
             needs_manager_review = (
                 not requested_department
                 and bool(candidate_department)
                 and routing_confidence < DEPARTMENT_ROUTING_THRESHOLD
             )
             if needs_manager_review:
-                cur.execute("SELECT id FROM tickets WHERE ticket_code = %s LIMIT 1;", (created[0],))
-                created_ticket_row = cur.fetchone()
-                if created_ticket_row:
-                    target_manager_id = _find_manager_for_department(cur, candidate_department_id)
-                    _create_agent_reroute_approval_if_needed(
-                        cur,
-                        ticket_id=created_ticket_row[0],
-                        ticket_code=created[0],
-                        current_department=requested_department or "Unassigned",
-                        predicted_department=candidate_department,
-                        confidence=routing_confidence,
-                        model_name=body.routing_model,
-                        submitted_by_user_id=system_user_id,
-                        target_manager_id=target_manager_id,
-                    )
+                target_manager_id = _find_manager_for_department(cur, candidate_department_id)
+                _create_agent_reroute_approval_if_needed(
+                    cur,
+                    ticket_id=created["id"],
+                    ticket_code=created["ticket_code"],
+                    current_department=requested_department or "Unassigned",
+                    predicted_department=candidate_department,
+                    confidence=routing_confidence,
+                    model_name=body.routing_model,
+                    submitted_by_user_id=system_user_id,
+                    target_manager_id=target_manager_id,
+                )
             stage = _infer_orchestrator_stage(body)
             cur.execute(
                 """
@@ -4950,30 +4932,40 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 LIMIT 1;
                 """,
                 (
-                    _orchestrator_update_message(stage["label"], created[0]),
-                    created[1],
+                    _orchestrator_update_message(stage["label"], created["ticket_code"]),
+                    created["status"],
                     json.dumps({"source": "orchestrator", "stage_id": stage["id"], "stage_label": stage["label"]}),
-                    created[0],
+                    created["ticket_code"],
                 ),
             )
             logger.info(
                 "orchestrator_ticket_create | ticket_id=%s status=%s priority=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
-                created[0],
-                created[1],
-                created[2],
+                created["ticket_code"],
+                created["status"],
+                created["priority"],
                 requested_department,
-                created[3],
-                created[4],
-                created[5],
+                created["priority_assigned_at"],
+                created["respond_due_at"],
+                created["resolve_due_at"],
             )
+    should_dispatch_orchestrator = resolved_ticket_source in {"chatbot", "user", "customer_form", "web"}
+    if should_dispatch_orchestrator:
+        dispatch_ticket_to_orchestrator(
+            ticket_code=created["ticket_code"],
+            details=details,
+            orchestrator_url=ORCHESTRATOR_URL,
+            orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
+            ticket_type=ticket_type_create,
+            subject=subject,
+        )
     return {
-        "ticket_id": created[0],
-        "status": created[1],
-        "priority": created[2],
+        "ticket_id": created["ticket_code"],
+        "status": created["status"],
+        "priority": created["priority"],
         "department": requested_department,
-        "priority_assigned_at": created[3].isoformat() if created[3] else None,
-        "respond_due_at": created[4].isoformat() if created[4] else None,
-        "resolve_due_at": created[5].isoformat() if created[5] else None,
+        "priority_assigned_at": created["priority_assigned_at"].isoformat() if created["priority_assigned_at"] else None,
+        "respond_due_at": created["respond_due_at"].isoformat() if created["respond_due_at"] else None,
+        "resolve_due_at": created["resolve_due_at"].isoformat() if created["resolve_due_at"] else None,
     }
 
 
