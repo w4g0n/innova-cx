@@ -326,8 +326,9 @@ for fname in ["e2e_current.json", "e2e_qwen.json"]:
 if not ids:
     print("")
 else:
-    # Format as PostgreSQL array literal: {uuid1,uuid2,...}
-    print("{" + ",".join(ids) + "}")
+    # Format as PostgreSQL array literal with surrounding single quotes for psql -v:
+    # psql -v session_ids="'{uuid1,uuid2}'" → :session_ids expands to '{uuid1,uuid2}'
+    print("'{" + ",".join(ids) + "}'")
 PYEOF
 )
 
