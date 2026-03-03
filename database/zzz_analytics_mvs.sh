@@ -45,6 +45,15 @@ done
 echo "==> Postgres is ready."
 
 # ---------------------------------------------------------------------------
+# Step 0: Migration 001 — model_execution_log + agent_output_log tables.
+#         Must run BEFORE prerequisites, which ALTER TABLE on these tables.
+#         Safe to re-run — uses CREATE TABLE IF NOT EXISTS throughout.
+# ---------------------------------------------------------------------------
+run_sql \
+    "migration 001 (model_execution_log, agent_output_log)" \
+    "/docker-entrypoint-initdb.d/migrations/001_agent_execution_logs.sql"
+
+# ---------------------------------------------------------------------------
 # Step 1: Prerequisites (ENUMs, missing columns, agent output tables).
 #         Safe to re-run — all statements use IF NOT EXISTS / DO $$ guards.
 # ---------------------------------------------------------------------------
