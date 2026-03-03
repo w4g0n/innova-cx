@@ -8,6 +8,8 @@ import PillSelect from "../../components/common/PillSelect";
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   PieChart,
   Pie,
   Cell,
@@ -17,6 +19,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  ReferenceLine,
 } from "recharts";
 
 import "./QualityControl.css";
@@ -344,7 +347,7 @@ function RescoringView({ data }) {
 function ReroutingView({ data }) {
   const navigate = useNavigate();
   if (!data) return null;
-  const { reassignmentByDept, reviewCases } = data;
+  const { reassignmentByDept, routingLatency = [], reviewCases } = data;
 
   return (
     <div className="ma-view">
@@ -370,6 +373,36 @@ function ReroutingView({ data }) {
               </div>
             </div>
           )}
+        </Card>
+
+        <Card
+          title="Routing Latency — Last 48 Hours"
+          subtitle="Hourly DepartmentRoutingAgent latency from model_execution_log. Tracks avg and p95 inference time."
+        >
+          <div className="ma-chart-box">
+            {routingLatency.length === 0 ? <EmptyState message="No routing latency samples in this period." /> : (
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={routingLatency} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                  <XAxis
+                    dataKey="hour"
+                    tick={{ fill: C.muted, fontSize: 11 }}
+                    tickFormatter={(v) => new Date(v).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  />
+                  <YAxis tick={{ fill: C.muted, fontSize: 12 }} unit="ms" />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 10, border: `1px solid ${C.border}` }}
+                    labelFormatter={(v) => new Date(v).toLocaleString()}
+                    formatter={(value, name) => [`${value} ms`, name === "avgMs" ? "Average" : "p95"]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <ReferenceLine y={500} stroke={C.amber} strokeDasharray="4 3" />
+                  <Line type="monotone" dataKey="avgMs" name="Average" stroke={C.blue} strokeWidth={2.2} dot={false} />
+                  <Line type="monotone" dataKey="p95Ms" name="p95" stroke={C.red} strokeWidth={2.2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </Card>
 
         <Card title="Cases Requiring Review" subtitle="Tickets with routing or priority overrides in the selected period.">

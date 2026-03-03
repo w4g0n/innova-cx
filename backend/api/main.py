@@ -3545,6 +3545,8 @@ class OrchestratorComplaintRequest(BaseModel):
     label: Optional[str] = None
     status: Optional[str] = None
     classification_confidence: Optional[float] = None
+    sentiment_label: Optional[str] = None
+    is_recurring: Optional[bool] = None
 
 
 class ChatbotProxyRequest(BaseModel):
@@ -3634,7 +3636,10 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
 
                     details_update = body.transcript if body.transcript else None
                     now_utc = datetime.now(timezone.utc) if priority_label else None
-                    sentiment_label_update = "orchestrator" if body.sentiment is not None else None
+                    sentiment_label_update = (
+                        (body.sentiment_label.strip() if body.sentiment_label else None)
+                        or ("orchestrator" if body.sentiment is not None else None)
+                    )
 
                     cur.execute(
                         """
@@ -3652,6 +3657,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                           model_priority = COALESCE(%s, model_priority),
                           model_department_id = COALESCE(%s, model_department_id),
                           model_confidence = COALESCE(%s, model_confidence),
+                          is_recurring = COALESCE(%s, is_recurring),
                           priority_assigned_at = COALESCE(%s, priority_assigned_at)
                         WHERE ticket_code = %s
                         RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
@@ -3669,6 +3675,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                             priority_label,
                             department_id,
                             body.classification_confidence,
+                            body.is_recurring,
                             now_utc,
                             incoming_ticket_code,
                         ),
@@ -3734,9 +3741,10 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     model_priority,
                     model_department_id,
                     model_confidence,
+                    is_recurring,
                     priority_assigned_at,
                     created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
                 """,
                 (
@@ -3750,10 +3758,11 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     system_user_id,
                     department_id,
                     body.sentiment,
-                    "orchestrator",
+                    (body.sentiment_label.strip() if body.sentiment_label else "orchestrator"),
                     priority_label,
                     department_id,
                     body.classification_confidence,
+                    body.is_recurring if body.is_recurring is not None else False,
                     datetime.now(timezone.utc),
                 ),
             )

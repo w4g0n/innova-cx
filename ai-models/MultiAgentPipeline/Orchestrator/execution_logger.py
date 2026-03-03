@@ -23,6 +23,7 @@ Logging failures never crash the pipeline.
 import copy
 import json
 import math
+import os
 import time
 import uuid
 import logging
@@ -101,6 +102,136 @@ def _extract_confidence(state: dict) -> float | None:
     return None
 
 
+def _extract_agent_confidence(agent_name: str, state: dict) -> float | None:
+    """
+    Agent-specific confidence extraction to avoid cross-step leakage
+    (e.g. classification confidence being reused for sentiment/feature steps).
+    """
+    agent = (agent_name or "").strip().lower()
+
+    candidates_by_agent = {
+        "classificationagent": ("class_confidence", "classification_confidence", "confidence_score"),
+        "sentimentagent": ("sentiment_confidence", "confidence_score"),
+        "featureengineeringagent": ("feature_confidence", "confidence_score"),
+        "prioritizationagent": ("model_confidence", "confidence_score"),
+        "departmentroutingagent": ("routing_confidence", "confidence_score"),
+        "audioanalysisagent": ("audio_confidence", "confidence_score"),
+    }
+    keys = candidates_by_agent.get(agent, ("confidence_score", "model_confidence"))
+    for key in keys:
+        val = state.get(key)
+        if val is None:
+            continue
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def _normalize_sentiment_label(label: Any, score: float) -> str:
+    raw = str(label or "").strip().lower()
+    mapping = {
+        "positive": "Positive",
+        "very_positive": "Positive",
+        "neutral": "Neutral",
+        "negative": "Negative",
+        "very_negative": "Very Negative",
+    }
+    if raw in mapping:
+        return mapping[raw]
+    if score < -0.6:
+        return "Very Negative"
+    if score < -0.2:
+        return "Negative"
+    if score < 0.2:
+        return "Neutral"
+    return "Positive"
+
+
+def _insert_agent_outputs(
+    cur,
+    *,
+    mel_id: str,
+    ticket_id: str | None,
+    agent_name: str,
+    output_state: dict,
+    confidence_score: float | None,
+) -> None:
+    """
+    Persist agent-specific outputs needed by analytics MVs.
+    Safe no-op when ticket_id is missing.
+    """
+    if not ticket_id:
+        return
+
+    agent = (agent_name or "").strip().lower()
+
+    if agent == "sentimentagent":
+        score = float(output_state.get("text_sentiment", 0.0) or 0.0)
+        label = _normalize_sentiment_label(output_state.get("sentiment_category"), score)
+        # Fallback confidence when model does not provide one.
+        conf = confidence_score if confidence_score is not None else _clamp01(abs(score) + 0.35)
+        cur.execute(
+            """
+            INSERT INTO sentiment_outputs (
+                execution_id, ticket_id, model_version,
+                sentiment_label, sentiment_score, confidence_score,
+                emotion_tags, raw_scores, is_current
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, TRUE)
+            """,
+            (
+                mel_id,
+                ticket_id,
+                os.getenv("SENTIMENT_MODEL_VERSION", "sentiment-v1.0"),
+                label,
+                score,
+                conf,
+                [],
+                json.dumps({"text_sentiment": score}),
+            ),
+        )
+        return
+
+    if agent == "featureengineeringagent":
+        raw_features = {
+            "business_impact": str(output_state.get("business_impact") or "").capitalize() or "Medium",
+            "safety_concern": bool(output_state.get("safety_concern", False)),
+            "issue_severity": str(output_state.get("issue_severity") or "").capitalize() or "Medium",
+            "issue_urgency": str(output_state.get("issue_urgency") or "").capitalize() or "Medium",
+            "is_recurring": bool(output_state.get("is_recurring", False)),
+            "source": output_state.get("feature_labels_source"),
+        }
+        source = str(output_state.get("feature_labels_source") or "").lower()
+        inferred_conf = 0.8 if source == "nli" else 0.55
+        conf = confidence_score if confidence_score is not None else inferred_conf
+        cur.execute(
+            """
+            INSERT INTO feature_outputs (
+                execution_id, ticket_id, model_version,
+                asset_category, topic_labels, confidence_score,
+                raw_features, is_current
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, TRUE)
+            """,
+            (
+                mel_id,
+                ticket_id,
+                os.getenv("FEATURE_MODEL_VERSION", "feature-v1.0"),
+                str(output_state.get("asset_type") or "General"),
+                list(output_state.get("keywords") or []),
+                conf,
+                json.dumps(raw_features),
+            ),
+        )
+        return
+
+
 def _write_logs(
     execution_id: str,
     ticket_id: str | None,
@@ -124,6 +255,7 @@ def _write_logs(
                         (execution_id, ticket_id, agent_name, inference_time_ms,
                          confidence_score, error_flag, error_message)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
                     """,
                     (
                         execution_id,
@@ -135,6 +267,8 @@ def _write_logs(
                         error_message,
                     ),
                 )
+                mel_id_row = cur.fetchone()
+                mel_id = str(mel_id_row[0]) if mel_id_row and mel_id_row[0] else None
                 cur.execute(
                     """
                     INSERT INTO agent_output_log
@@ -156,6 +290,16 @@ def _write_logs(
                         error_message,
                     ),
                 )
+                # Persist analytics source tables from real pipeline outputs.
+                if mel_id and not error_flag:
+                    _insert_agent_outputs(
+                        cur,
+                        mel_id=mel_id,
+                        ticket_id=ticket_id,
+                        agent_name=agent_name,
+                        output_state=output_state,
+                        confidence_score=confidence_score,
+                    )
     except Exception as exc:
         logger.error("execution_log | write failed agent=%s err=%s", agent_name, exc)
 
@@ -202,7 +346,7 @@ def logged_step(
         elapsed_ms = int((time.monotonic() - start) * 1000)
         output_snapshot = {k: v for k, v in copy.deepcopy(result).items() if not k.startswith("_")}
         state_diff = _compute_diff(input_snapshot, output_snapshot)
-        confidence = _extract_confidence(result)
+        confidence = _extract_agent_confidence(agent_name, result)
 
         _write_logs(
             execution_id=execution_id,

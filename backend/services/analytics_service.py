@@ -43,6 +43,30 @@ def init(fetch_one_fn, fetch_all_fn, db_connect_fn):
     _db_connect = db_connect_fn
 
 
+def _agent_name_candidates(*names: str) -> List[str]:
+    """Normalize agent_name variants to lowercase for resilient matching."""
+    return [n.strip().lower() for n in names if n and n.strip()]
+
+
+def _mel_time_column() -> str:
+    """
+    Backward-compatible timestamp column for model_execution_log.
+    Older schemas only have created_at.
+    """
+    row = _fetch_one(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'model_execution_log'
+              AND column_name = 'started_at'
+        ) AS has_started_at
+        """
+    ) or {}
+    return "started_at" if row.get("has_started_at") else "created_at"
+
+
 # ─── SLA targets (single source of truth, mirrors DB trigger) ────────────────
 SLA_TARGETS = {
     "respond": {"Critical": 30,  "High": 60,   "Medium": 180, "Low": 360},
@@ -727,14 +751,15 @@ def get_trends_data(
 # =============================================================================
 # OPERATOR ANALYTICS — Quality Control
 # Powers: GET /operator/analytics/qc
-# Reads from: mv_operator_qc_daily, mv_acceptance_daily, mv_ticket_base
+# Reads from: mv_operator_qc_daily, mv_acceptance_daily, mv_ticket_base,
+#             model_execution_log (routing latency)
 #
 # Sections returned:
 #   acceptance  (A) — acceptance/declined from mv_acceptance_daily
 #   rescoring   (B) — upscored/downscored per dept from mv_operator_qc_daily
 #   rerouting   (C) — rerouting requests per dept + review cases from mv_ticket_base
 #
-# All reads are MV-only. No base table queries.
+# Primary reads are MV-backed; routing latency reads model_execution_log directly.
 # =============================================================================
 
 def get_operator_qc_data(
@@ -911,6 +936,50 @@ def get_operator_qc_data(
         for r in reroute_raw
     ]
 
+    # Routing latency (last 48h) from model_execution_log as documented.
+    # We accept both registry names (DepartmentRoutingAgent) and legacy enum values (routing).
+    latency_params: List[Any] = [
+        period_end,
+        period_end,
+        _agent_name_candidates("DepartmentRoutingAgent", "routing"),
+    ]
+    latency_dept_clause = ""
+    if department and department != "All Departments":
+        latency_dept_clause = "AND COALESCE(d.name, 'Unassigned') = %s"
+        latency_params.append(department)
+
+    mel_time_col = _mel_time_column()
+    routing_latency_raw = _fetch_all(
+        f"""
+        SELECT
+            date_trunc('hour', mel.{mel_time_col}) AS hour_bucket,
+            ROUND(AVG(mel.inference_time_ms)::NUMERIC, 1) AS avg_ms,
+            ROUND(
+                percentile_cont(0.95) WITHIN GROUP (ORDER BY mel.inference_time_ms)::NUMERIC,
+                1
+            ) AS p95_ms
+        FROM model_execution_log mel
+        LEFT JOIN tickets t ON t.id = mel.ticket_id
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE mel.{mel_time_col} >= (%s::timestamptz - interval '48 hours')
+          AND mel.{mel_time_col} <  %s::timestamptz
+          AND mel.inference_time_ms IS NOT NULL
+          AND lower(mel.agent_name::text) = ANY(%s)
+          {latency_dept_clause}
+        GROUP BY hour_bucket
+        ORDER BY hour_bucket
+        """,
+        latency_params,
+    )
+    routing_latency = [
+        {
+            "hour": r["hour_bucket"].isoformat(),
+            "avgMs": float(r["avg_ms"] or 0),
+            "p95Ms": float(r["p95_ms"] or 0),
+        }
+        for r in routing_latency_raw
+    ]
+
     # Review cases: tickets with human override, rescoring, or rerouting
     # from mv_ticket_base — MV-only, no base table touch
     base_where, base_params = _build_filters(
@@ -986,6 +1055,7 @@ def get_operator_qc_data(
         },
         "rerouting": {
             "reassignmentByDept": reassignment_by_dept,
+            "routingLatency":     routing_latency,
             "reviewCases":        review_cases,
         },
     }
@@ -1108,6 +1178,7 @@ def get_operator_sentiment_data(
         dept_filter = "AND department_name = %s"
         params.append(department)
 
+    mel_time_col = _mel_time_column()
     # ── Overall KPIs ─────────────────────────────────────────────────────
     overall = _fetch_one(
         f"""
@@ -1140,6 +1211,27 @@ def get_operator_sentiment_data(
     neutral_count    = int(overall.get("neutral_count")    or 0)
     negative_count   = int(overall.get("negative_count")   or 0)
     very_neg_count   = int(overall.get("very_negative_count") or 0)
+
+    # Low-confidence rate from model_execution_log to align with model-health contract.
+    mel_low_conf = _fetch_one(
+        f"""
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE confidence_score < 0.60) AS low_conf
+        FROM model_execution_log
+        WHERE {mel_time_col} >= %s
+          AND {mel_time_col} <  %s
+          AND lower(agent_name::text) = ANY(%s)
+        """,
+        [
+            period_start,
+            period_end,
+            _agent_name_candidates("SentimentAgent", "sentiment"),
+        ],
+    ) or {}
+    mel_total = int(mel_low_conf.get("total") or 0)
+    mel_low = int(mel_low_conf.get("low_conf") or 0)
+    mel_low_conf_rate = round(mel_low / mel_total * 100, 1) if mel_total else 0
 
     # ── Score over time (daily) ──────────────────────────────────────────
     trend_raw = _fetch_all(
@@ -1192,7 +1284,7 @@ def get_operator_sentiment_data(
 
     return {
         "kpis": {
-            "lowConfidenceRate":   low_conf_rate,
+            "lowConfidenceRate":   mel_low_conf_rate,
             "avgSentimentScore":   avg_score,
             "totalScoredTickets":  total_scored,
         },
@@ -1227,6 +1319,7 @@ def get_operator_feature_data(
         dept_filter = "AND department_name = %s"
         params.append(department)
 
+    mel_time_col = _mel_time_column()
     # ── Overall KPIs ─────────────────────────────────────────────────────
     overall = _fetch_one(
         f"""
@@ -1260,6 +1353,27 @@ def get_operator_feature_data(
     recurring_rate   = round(recurring / total * 100, 1) if total else 0
     safety_rate      = round(safety    / total * 100, 1) if total else 0
     mismatch_rate    = round(mismatch  / total * 100, 1) if total else 0
+
+    # Low-confidence rate from model_execution_log to align with model-health contract.
+    mel_low_conf = _fetch_one(
+        f"""
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE confidence_score < 0.60) AS low_conf
+        FROM model_execution_log
+        WHERE {mel_time_col} >= %s
+          AND {mel_time_col} <  %s
+          AND lower(agent_name::text) = ANY(%s)
+        """,
+        [
+            period_start,
+            period_end,
+            _agent_name_candidates("FeatureEngineeringAgent", "feature"),
+        ],
+    ) or {}
+    mel_total = int(mel_low_conf.get("total") or 0)
+    mel_low = int(mel_low_conf.get("low_conf") or 0)
+    mel_low_conf_rate = round(mel_low / mel_total * 100, 1) if mel_total else 0
 
     # ── Recurring rate daily trend ────────────────────────────────────────
     recurring_raw = _fetch_all(
@@ -1319,7 +1433,7 @@ def get_operator_feature_data(
             "safetyFlagRate":       safety_rate,
             "recurringIssueRate":   recurring_rate,
             "severityUrgencyMismatch": mismatch_rate,
-            "lowConfidenceRate":    low_conf_rate,
+            "lowConfidenceRate":    mel_low_conf_rate,
             "totalProcessed":       total,
         },
         "businessImpact": [

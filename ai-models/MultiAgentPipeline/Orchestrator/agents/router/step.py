@@ -52,6 +52,7 @@ async def route_and_store(state: dict) -> dict:
             "transcript": state["text"],
             "asset_type": state.get("asset_type") or "General",
             "sentiment": state.get("text_sentiment", 0.0),
+            "sentiment_label": state.get("sentiment_category"),
             "audio_sentiment": state.get("audio_sentiment", 0.0),
             "priority": state.get("priority_score", 3),
             "department": selected_department,
@@ -59,6 +60,7 @@ async def route_and_store(state: dict) -> dict:
             "label": "inquiry",
             "status": "Assigned",
             "classification_confidence": state.get("class_confidence", 1.0),
+            "is_recurring": bool(state.get("is_recurring", False)),
         }
 
         try:
@@ -106,6 +108,7 @@ async def route_and_store(state: dict) -> dict:
         "transcript": state["text"],
         "asset_type": state.get("asset_type") or "General",
         "sentiment": state.get("text_sentiment", 0.0),
+        "sentiment_label": state.get("sentiment_category"),
         "audio_sentiment": state.get("audio_sentiment", 0.0),
         "priority": state.get("priority_score", 3),
         "department": state["department"],
@@ -113,6 +116,7 @@ async def route_and_store(state: dict) -> dict:
         "label": "complaint",
         "status": "Assigned",
         "classification_confidence": state.get("class_confidence", 1.0),
+        "is_recurring": bool(state.get("is_recurring", False)),
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:
