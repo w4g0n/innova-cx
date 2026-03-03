@@ -1157,21 +1157,27 @@ FROM tickets t WHERE t.ticket_code='CX-4630'
 ON CONFLICT (ticket_id, step_no) DO NOTHING;
 
 -- Placeholder tickets required for approvals linkage
-INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2011', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3101',
-       'Complaint','Medium','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       'Complaint','Medium','Unassigned',
+       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('18/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2011');
 
-INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2034', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3110',
-       'Complaint','Medium','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       'Complaint','Medium','Unassigned',
+       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('18/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2034');
 
-INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2078', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3125',
-       'Complaint','High','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       'Complaint','High','Unassigned',
+       (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('17/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2078');
 
@@ -2221,7 +2227,7 @@ INSERT INTO approval_requests (
 )
 SELECT 'REQ-3145', t.id, 'Rerouting',
   'Dept: IT', 'Dept: Maintenance',
-  'Root cause is physical cabling, not software — needs Facilities team.',
+  'Root cause is physical cabling, not software — needs Maintenance team.',
   (SELECT id FROM users WHERE email='fatima@innova.cx'),
   '2026-02-12 11:30:00+00', 'Approved'
 FROM tickets t WHERE t.ticket_code='CX-4587'
@@ -2244,8 +2250,8 @@ INSERT INTO approval_requests (
   request_reason, submitted_by_user_id, submitted_at, status
 )
 SELECT 'REQ-3155', t.id, 'Rerouting',
-  'Dept: Facilities', 'Dept: IT',
-  'Parking access card issue is a system/software problem, not hardware.',
+  'Dept: Legal & Compliance', 'Dept: IT',
+  'Parking access card issue is a system/software problem — needs IT.',
   (SELECT id FROM users WHERE email='omar@innova.cx'),
   '2026-02-16 14:20:00+00', 'Rejected'
 FROM tickets t WHERE t.ticket_code='CX-4725'
@@ -2268,8 +2274,8 @@ INSERT INTO approval_requests (
   request_reason, submitted_by_user_id, submitted_at, status
 )
 SELECT 'REQ-3165', t.id, 'Rerouting',
-  'Dept: Security', 'Dept: Facilities',
-  'Structural issue confirmed — requires Facilities, not Security.',
+  'Dept: Safety & Security', 'Dept: Facilities Management',
+  'Structural issue confirmed — requires Facilities Management, not Security.',
   (SELECT id FROM users WHERE email='bilal@innova.cx'),
   '2026-02-25 13:10:00+00', 'Pending'
 FROM tickets t WHERE t.ticket_code='CX-M53'
@@ -2790,10 +2796,266 @@ COMMIT;
 
 BEGIN;
 
--- NOTE: ML pipeline seed data (model_execution_log, sentiment_outputs,
--- priority_outputs, routing_outputs, sla_outputs, resolution_outputs,
--- feature_outputs) moved to zzz_seed_analytics.sql, which runs after
--- zzz_analytics_mvs.sh creates those tables.
+-- ---------------------------------------------------------------------------
+-- 1. MODEL EXECUTION LOG  (15 rows — one per agent type, across key tickets)
+--    agent_name_type: 'sentiment'|'priority'|'routing'|'sla'|'resolution'|'feature'
+--    execution_status: 'running'|'success'|'failed'|'skipped'
+--    trigger_source:   'ingest'|'reprocess'|'manual'|'scheduled'
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.model_execution_log (
+  execution_id, ticket_id, agent_name, model_version, triggered_by,
+  started_at, completed_at, status,
+  input_token_count, output_token_count, infra_metadata
+)
+SELECT gen_random_uuid(), t.id,
+  v.agent_name::agent_name_type,
+  v.model_version,
+  v.triggered_by::trigger_source,
+  v.started_at::timestamptz,
+  v.completed_at::timestamptz,
+  v.status::execution_status,
+  v.in_tok, v.out_tok,
+  v.infra
+FROM (VALUES
+  -- CX-R01 — sentiment (success)
+  ('CX-R01','sentiment','sentiment-v3.1','ingest',
+   '2026-03-01 06:31:00+00','2026-03-01 06:31:04+00','success',412,28,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R01 — priority (success)
+  ('CX-R01','priority','priority-v2.4','ingest',
+   '2026-03-01 06:31:05+00','2026-03-01 06:31:09+00','success',418,31,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R01 — routing (success)
+  ('CX-R01','routing','routing-v1.8','ingest',
+   '2026-03-01 06:31:10+00','2026-03-01 06:31:14+00','success',422,25,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R01 — sla (success)
+  ('CX-R01','sla','sla-v1.2','ingest',
+   '2026-03-01 06:31:15+00','2026-03-01 06:31:17+00','success',190,18,
+   '{"region":"me-south-1","instance":"ml-c5.large"}'::jsonb),
+  -- CX-R01 — resolution (success)
+  ('CX-R01','resolution','resolution-v2.0','ingest',
+   '2026-03-01 06:31:18+00','2026-03-01 06:31:26+00','success',610,142,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R01 — feature (success)
+  ('CX-R01','feature','feature-v1.5','ingest',
+   '2026-03-01 06:31:27+00','2026-03-01 06:31:30+00','success',380,44,
+   '{"region":"me-south-1","instance":"ml-c5.large"}'::jsonb),
+  -- CX-R06 — sentiment (success)
+  ('CX-R06','sentiment','sentiment-v3.1','ingest',
+   '2026-03-01 09:31:00+00','2026-03-01 09:31:05+00','success',388,26,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R06 — priority (success)
+  ('CX-R06','priority','priority-v2.4','ingest',
+   '2026-03-01 09:31:06+00','2026-03-01 09:31:10+00','success',395,30,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R06 — resolution (success)
+  ('CX-R06','resolution','resolution-v2.0','ingest',
+   '2026-03-01 09:31:11+00','2026-03-01 09:31:21+00','success',588,138,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-M55 — resolution (failed — tests error_rate view)
+  ('CX-M55','resolution','resolution-v2.0','reprocess',
+   '2026-02-22 08:50:00+00','2026-02-22 08:50:12+00','failed',601,0,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-M55 — resolution (success — retry after failure)
+  ('CX-M55','resolution','resolution-v2.0','reprocess',
+   '2026-02-22 09:05:00+00','2026-02-22 09:05:08+00','success',601,144,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-M41 — sentiment (success, manual trigger)
+  ('CX-M41','sentiment','sentiment-v3.1','manual',
+   '2025-12-03 07:02:00+00','2025-12-03 07:02:04+00','success',401,27,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-M41 — routing (skipped — dept already set)
+  ('CX-M41','routing','routing-v1.8','manual',
+   '2025-12-03 07:02:05+00','2025-12-03 07:02:06+00','skipped',0,0,
+   '{"skip_reason":"department_already_assigned"}'::jsonb),
+  -- CX-R04 — priority (success)
+  ('CX-R04','priority','priority-v2.4','ingest',
+   '2026-03-01 08:31:00+00','2026-03-01 08:31:04+00','success',376,29,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R10 — sentiment (running — tests in-flight view row)
+  ('CX-R10','sentiment','sentiment-v3.1','ingest',
+   '2026-03-01 11:30:30+00', NULL,'running',0,0,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb)
+) AS v(ticket_code, agent_name, model_version, triggered_by,
+       started_at, completed_at, status, in_tok, out_tok, infra)
+JOIN public.tickets t ON t.ticket_code = v.ticket_code;
+
+-- ---------------------------------------------------------------------------
+-- 2. SENTIMENT OUTPUTS  (is_current = TRUE triggers legacy sync)
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.sentiment_outputs (
+  execution_id, ticket_id, model_version,
+  sentiment_label, sentiment_score, confidence_score,
+  emotion_tags, raw_scores, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  sv.label, sv.score, sv.conf,
+  sv.emotions, sv.raw, TRUE
+FROM (VALUES
+  ('CX-R01','Negative',  -0.720, 0.9412, ARRAY['frustrated','urgent'],
+   '{"negative":0.9412,"neutral":0.0421,"positive":0.0167}'::jsonb),
+  ('CX-R06','Negative',  -0.600, 0.9107, ARRAY['angry','concerned'],
+   '{"negative":0.9107,"neutral":0.0621,"positive":0.0272}'::jsonb),
+  ('CX-M41','Negative',  -0.680, 0.9250, ARRAY['distressed','urgent'],
+   '{"negative":0.9250,"neutral":0.0500,"positive":0.0250}'::jsonb)
+) AS sv(ticket_code, label, score, conf, emotions, raw)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = sv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'sentiment'
+ AND mel.status     = 'success'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.sentiment_outputs so
+  WHERE so.ticket_id = mel.ticket_id AND so.is_current = TRUE
+);
+
+-- ---------------------------------------------------------------------------
+-- 3. PRIORITY OUTPUTS
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.priority_outputs (
+  execution_id, ticket_id, model_version,
+  model_priority, confidence_score, urgency_score, impact_score,
+  feature_vector, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  pv.priority::ticket_priority, pv.conf, pv.urgency, pv.impact,
+  pv.features, TRUE
+FROM (VALUES
+  ('CX-R01','Critical',0.9600,0.9800,0.9400,
+   '{"asset_type":"HVAC","complaint":true,"keywords":["AC","server","overheating"]}'::jsonb),
+  ('CX-R06','Critical',0.9400,0.9600,0.9200,
+   '{"asset_type":"Access Control","complaint":true,"keywords":["gate","badge","blocked"]}'::jsonb),
+  ('CX-R04','Medium',  0.8200,0.7500,0.8000,
+   '{"asset_type":"IT","inquiry":true,"keywords":["printer","network","floor"]}'::jsonb)
+) AS pv(ticket_code, priority, conf, urgency, impact, features)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = pv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'priority'
+ AND mel.status     = 'success'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.priority_outputs po
+  WHERE po.ticket_id = mel.ticket_id AND po.is_current = TRUE
+);
+
+-- ---------------------------------------------------------------------------
+-- 4. ROUTING OUTPUTS
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.routing_outputs (
+  execution_id, ticket_id, model_version,
+  suggested_dept_id, suggested_dept_name,
+  confidence_score, routing_reason, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  d.id, d.name, rv.conf, rv.reason, TRUE
+FROM (VALUES
+  ('CX-R01','Facilities',    0.9700,'HVAC failure classified as Facilities — mechanical asset type.'),
+  ('CX-R06','Security',      0.9500,'Access control issue maps to Security — badge system failure.')
+) AS rv(ticket_code, dept_name, conf, reason)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = rv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'routing'
+ AND mel.status     = 'success'
+JOIN public.departments d ON d.name = rv.dept_name
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.routing_outputs ro
+  WHERE ro.ticket_id = mel.ticket_id AND ro.is_current = TRUE
+);
+
+-- ---------------------------------------------------------------------------
+-- 5. SLA OUTPUTS
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.sla_outputs (
+  execution_id, ticket_id, model_version,
+  sla_tier, breach_risk_score,
+  response_deadline, resolution_deadline, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  sv.tier, sv.risk, sv.resp_dl, sv.res_dl, TRUE
+FROM (VALUES
+  ('CX-R01','Critical-P1', 0.9800,
+   '2026-03-01 07:00:00+00'::timestamptz,
+   '2026-03-01 12:30:00+00'::timestamptz),
+  ('CX-R06','Critical-P1', 0.9600,
+   '2026-03-01 10:00:00+00'::timestamptz,
+   '2026-03-01 15:30:00+00'::timestamptz)
+) AS sv(ticket_code, tier, risk, resp_dl, res_dl)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = sv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'sla'
+ AND mel.status     = 'success'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.sla_outputs so
+  WHERE so.ticket_id = mel.ticket_id AND so.is_current = TRUE
+);
+
+-- ---------------------------------------------------------------------------
+-- 6. RESOLUTION OUTPUTS
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.resolution_outputs (
+  execution_id, ticket_id, model_version,
+  suggested_resolution, confidence_score,
+  kb_references, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  rv.suggestion, rv.conf, rv.kb, TRUE
+FROM (VALUES
+  ('CX-R01', 0.9600,
+   'Activate backup cooling unit immediately. Dispatch HVAC technician to inspect compressor and thermostat. Confirm coolant pressure and replace failed components.',
+   '{"kb_ids":["KB-2201","KB-2209"],"similarity":[0.94,0.88]}'::jsonb),
+  ('CX-R06', 0.9400,
+   'Restart access control server and re-sync badge database. If restart fails, issue temporary manual access and schedule emergency firmware update.',
+   '{"kb_ids":["KB-3310","KB-3318"],"similarity":[0.91,0.87]}'::jsonb),
+  ('CX-M55', 0.9300,
+   'All UPS battery modules require replacement — recharging is insufficient given current capacity. Schedule maintenance window, swap modules, and run runtime certification test.',
+   '{"kb_ids":["KB-4401"],"similarity":[0.93]}'::jsonb)
+) AS rv(ticket_code, conf, suggestion, kb)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = rv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'resolution'
+ AND mel.status     = 'success'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.resolution_outputs ro
+  WHERE ro.ticket_id = mel.ticket_id AND ro.is_current = TRUE
+);
+
+-- ---------------------------------------------------------------------------
+-- 7. FEATURE OUTPUTS
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.feature_outputs (
+  execution_id, ticket_id, model_version,
+  asset_category, topic_labels, confidence_score, raw_features, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  fv.asset_cat, fv.topics, fv.conf, fv.raw, TRUE
+FROM (VALUES
+  ('CX-R01','HVAC',
+   ARRAY['cooling','mechanical','server-room','temperature'],0.9500,
+   '{"word_count":28,"avg_sentiment":-0.72,"capital_ratio":0.12}'::jsonb),
+  ('CX-R06','Access Control',
+   ARRAY['badge','security','gate','authentication'],0.9300,
+   '{"word_count":22,"avg_sentiment":-0.60,"capital_ratio":0.09}'::jsonb)
+) AS fv(ticket_code, asset_cat, topics, conf, raw)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = fv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'feature'
+ AND mel.status     = 'success'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.feature_outputs fo
+  WHERE fo.ticket_id = mel.ticket_id AND fo.is_current = TRUE
+);
 
 -- ---------------------------------------------------------------------------
 -- 8. CHAT CONVERSATIONS & MESSAGES
