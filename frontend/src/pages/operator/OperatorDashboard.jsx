@@ -1,40 +1,63 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
-import PillSelect from "../../components/common/PillSelect";
-import ExportPdfButton from "../../components/common/ExportPdfButton";
+import KpiCard from "../../components/common/KpiCard";
 import operatorDashboardData from "../../mock-data/operatorDashboard.json";
 import "./OperatorDashboard.css";
-import { PDFDownloadLink } from "@react-pdf/renderer";
-import OperatorDashboardPDF from "./OperatorDashboardPDF.jsx";
 import useScrollReveal from "../../utils/useScrollReveal";
 
 export default function OperatorDashboard() {
   const revealRef = useScrollReveal();
-  const navigate = useNavigate();
-  const [range, setRange] = useState("last_1_hour");
 
-  const [data, setData]       = useState(null);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     try {
       setLoading(true);
       setError(null);
       setData(operatorDashboardData);
-    } catch (err) { // eslint-disable-line no-unused-vars
+    } catch (err) {
       setError("Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, []);
+
+  const kpis = useMemo(() => {
+    if (!data) {
+      return {
+        systemErrors: 0,
+        fallbacks: 0,
+        routingFailures: 0,
+        ingestionQueue: 0,
+        modelQueue: 0,
+      };
+    }
+
+    const ingestion =
+      data.queues?.find((q) => /ingestion/i.test(q.name))?.value ?? 0;
+
+    const modelQ =
+      data.queues?.find((q) => /model/i.test(q.name))?.value ??
+      data.queues?.find((q) => /processing/i.test(q.name))?.value ??
+      0;
+
+    return {
+      systemErrors: data.errorFallbackOverview?.systemErrors?.count ?? 0,
+      fallbacks: data.errorFallbackOverview?.chatbotToHumanFallbacks?.count ?? 0,
+      routingFailures: data.errorFallbackOverview?.routingFailures?.count ?? 0,
+      ingestionQueue: ingestion,
+      modelQueue: modelQ,
+    };
+  }, [data]);
 
   if (loading) {
     return (
       <Layout role="operator">
-        <div className="opDash">Loading system dashboard…</div>
+        <div className="opDash">Loading…</div>
       </Layout>
     );
   }
@@ -47,195 +70,104 @@ export default function OperatorDashboard() {
     );
   }
 
-  const headerActions = (
-    <div className="opDash__topActions">
-      <div className="opDash__selectWrap">
-        <PillSelect
-          value={range}
-          onChange={setRange}
-          ariaLabel="Filter by time range"
-          options={[
-            { label: "Last 30 minutes", value: "last_30_min" },
-            { label: "Last 1 hour",     value: "last_1_hour" },
-            { label: "Today",           value: "today" },
-            { label: "Last 7 days",     value: "last_7_days" },
-          ]}
-        />
-      </div>
-
-      <PDFDownloadLink
-        className="exportPdfLink"
-        document={<OperatorDashboardPDF data={data} range={range} />}
-        fileName={`operator-dashboard-${new Date().toISOString().slice(0, 10)}.pdf`}
-      >
-        {({ loading: pdfLoading }) => (
-          <span className={`exportPdfBtn ${pdfLoading ? "isLoading" : ""}`}>
-            <ExportPdfButton loading={pdfLoading} />
-          </span>
-        )}
-      </PDFDownloadLink>
-    </div>
-  );
-
   return (
     <Layout role="operator">
-      <div className="opDash" ref={revealRef}>
-
+      <div className="opDash opDash--simple" ref={revealRef}>
         <PageHeader
           title="Operator System Dashboard"
-          subtitle="High-level health of the complaint-handling platform and AI services."
-          actions={headerActions}
+          subtitle="Quick overview of the platform’s operational state."
         />
 
-        {/* Row 1 — Core Services + Error Overview */}
-        <section className="opDash__cardsRow">
-          <article className="opDash__card">
-            <h2 className="opDash__cardTitle">Core Services Status</h2>
-            <p className="opDash__cardSubtitle">Real-time health of critical components.</p>
-
-            <div className="opDash__statusGrid">
-              {data.coreServices.map((svc) => (
-                <div key={svc.name} className="opDash__statusItem">
-                  <div className="opDash__statusLabel">{svc.name}</div>
-                  <span className={`opDash__statusPill opDash__status--${svc.severity}`}>
-                    {svc.status}
-                  </span>
-                  <p className="opDash__statusNote">{svc.note}</p>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="opDash__card opDash__card--narrow">
-            <h2 className="opDash__cardTitle">Error & Fallback Overview</h2>
-
-            <div className="opDash__miniKpiCol">
-              <MiniKpi
-                label="System errors"
-                {...data.errorFallbackOverview.systemErrors}
-              />
-              <MiniKpi
-                label="Chatbot → Human fallbacks"
-                {...data.errorFallbackOverview.chatbotToHumanFallbacks}
-              />
-              <MiniKpi
-                label="Routing failures"
-                {...data.errorFallbackOverview.routingFailures}
-                critical
-              />
-            </div>
-          </article>
+        {/* KPI ROW */}
+        <section className="operatorKpiRow">
+          <KpiCard label="System Errors" value={kpis.systemErrors} />
+          <KpiCard label="Chatbot Fallbacks" value={kpis.fallbacks} />
+          <KpiCard label="Routing Failures" value={kpis.routingFailures} />
+          <KpiCard label="Ingestion Queue" value={kpis.ingestionQueue} />
+          <KpiCard label="Model Queue" value={kpis.modelQueue} />
         </section>
 
-        {/* Row 2 — Integrations + Queue Health */}
-        <section className="opDash__cardsRow">
-          <article className="opDash__card">
-            <h2 className="opDash__cardTitle">Integrations Status</h2>
+        <p className="operatorIntro">
+          Use these quick actions to move between Operator screens.
+        </p>
 
-            <ul className="opDash__list">
-              {data.integrations.map((i) => (
-                <li key={i.name} className="opDash__listItem">
-                  <div>
-                    <div className="opDash__itemName">{i.name}</div>
-                    <div className="opDash__itemMeta">{i.note}</div>
-                  </div>
-                  <span className={`opDash__statusPill opDash__status--${i.severity}`}>
-                    {i.status}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </article>
-
-          <article className="opDash__card">
-            <h2 className="opDash__cardTitle">Pipeline & Queue Health</h2>
-
-            <div className="opDash__queueGrid">
-              {data.queues.map((q) => (
-                <div key={q.name} className="opDash__queueItem">
-                  <div className="opDash__queueLabel">{q.name}</div>
-                  <div className="opDash__queueValue">{q.value}</div>
-                  <div className={`opDash__queueNote${q.severity === "warning" ? " opDash__queueNote--warning" : ""}`}>
-                    {q.note}
-                  </div>
-                </div>
-              ))}
+        {/* 3 NAVIGATION CARDS ONLY */}
+        <section className="operatorQuickGrid">
+          <Link to="/operator/model-health" className="operatorQuickCard">
+            <span className="operatorQuickTag">Models</span>
+            <div className="operatorQuickTitle">Model Health</div>
+            <div className="operatorQuickDesc">
+              Service health, latency, drift indicators, and model stability checks.
             </div>
-          </article>
+            <div className="operatorQuickLink">Open →</div>
+          </Link>
+
+          <Link to="/operator/quality-control" className="operatorQuickCard">
+            <span className="operatorQuickTag">QA</span>
+            <div className="operatorQuickTitle">Quality Control</div>
+            <div className="operatorQuickDesc">
+              Review tickets, validate routing results, and approve corrections.
+            </div>
+            <div className="operatorQuickLink">Open →</div>
+          </Link>
+
+          <Link to="/operator/users" className="operatorQuickCard">
+            <span className="operatorQuickTag">Access</span>
+            <div className="operatorQuickTitle">Users Management</div>
+            <div className="operatorQuickDesc">
+              Manage RBAC roles, user access, and account status.
+            </div>
+            <div className="operatorQuickLink">Open →</div>
+          </Link>
         </section>
 
-        {/* Full-width — Event Feed */}
-        <section className="opDash__card opDash__card--full">
-          <h2 className="opDash__cardTitle">Incident & Event Feed</h2>
-
-          <ul className="opDash__eventFeed">
-            {data.eventFeed.map((e, idx) => (
-              <li key={idx} className={`opDash__eventItem opDash__event--${e.severity}`}>
-                <span className="opDash__eventDot" />
-                <div className="opDash__eventContent">
-                  <div className="opDash__eventHeader">
-                    <span className="opDash__eventTitle">{e.title}</span>
-                    <span className="opDash__eventTime">{e.time}</span>
-                  </div>
-                  <p className="opDash__eventDesc">{e.description}</p>
-                </div>
+        {/* SUMMARY (NO LINKS INSIDE) */}
+        <section className="operatorSummaryRow">
+          <div className="operatorSummaryCard">
+            <h3 className="operatorSummaryTitle">Model Health Summary</h3>
+            <ul className="operatorSummaryList">
+              <li>
+                <span>Overall status</span>
+                <b>Healthy</b>
               </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* Row 3 — AI Versions + Safety */}
-        <section className="opDash__cardsRow">
-          <article className="opDash__card">
-            <h2 className="opDash__cardTitle">AI & Chatbot Versions</h2>
-
-            <ul className="opDash__list">
-              {data.versions.map((v) => (
-                <li key={v.component} className="opDash__listItem">
-                  <div>
-                    <div className="opDash__itemName">{v.component}</div>
-                    <div className="opDash__itemMeta">
-                      {v.version} · Deployed {v.deployedAt}
-                    </div>
-                  </div>
-                  <button
-                    className="opDash__linkBtn"
-                    onClick={() => navigate("/operator/model-analysis")}
-                  >
-                    View details
-                  </button>
-                </li>
-              ))}
+              <li>
+                <span>Average latency</span>
+                <b>~420 ms</b>
+              </li>
+              <li>
+                <span>Error rate</span>
+                <b>0.6%</b>
+              </li>
+              <li>
+                <span>Drift detected</span>
+                <b>No</b>
+              </li>
             </ul>
-          </article>
+          </div>
 
-          <article className="opDash__card">
-            <h2 className="opDash__cardTitle">Safety & Maintenance</h2>
-
-            <ul className="opDash__safetyList">
-              {Object.entries(data.safetyMaintenance).map(([k, v]) => (
-                <li key={k} className="opDash__safetyItem">
-                  <span className="opDash__safetyLabel">{k}</span>
-                  <span className="opDash__configPill">{v}</span>
-                </li>
-              ))}
+          <div className="operatorSummaryCard">
+            <h3 className="operatorSummaryTitle">Quality Control Summary</h3>
+            <ul className="operatorSummaryList">
+              <li>
+                <span>Pending reviews</span>
+                <b>12</b>
+              </li>
+              <li>
+                <span>Average review time</span>
+                <b>4m 10s</b>
+              </li>
+              <li>
+                <span>Flagged tickets today</span>
+                <b>3</b>
+              </li>
+              <li>
+                <span>Oldest pending review</span>
+                <b>1h 22m</b>
+              </li>
             </ul>
-          </article>
+          </div>
         </section>
-
       </div>
     </Layout>
-  );
-}
-
-function MiniKpi({ label, count, trendLabel, critical }) {
-  return (
-    <div className="opDash__miniKpi">
-      <span className="opDash__miniKpiLabel">{label}</span>
-      <span className="opDash__miniKpiValue">{count}</span>
-      <span className={`opDash__miniKpiTrend${critical ? " opDash__miniKpiTrend--critical" : " opDash__miniKpiTrend--normal"}`}>
-        {trendLabel}
-      </span>
-    </div>
   );
 }
