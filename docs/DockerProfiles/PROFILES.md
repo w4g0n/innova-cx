@@ -20,7 +20,6 @@ Runs:
 - `frontend`
 - `backend`
 - `postgres`
-- `classifier`
 - `orchestrator`
 
 Command:
@@ -33,7 +32,6 @@ Runs:
 - `frontend`
 - `backend`
 - `postgres`
-- `classifier`
 - `orchestrator`
 - `chatbot`
 - `transcriber`

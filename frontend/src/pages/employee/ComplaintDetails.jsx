@@ -100,13 +100,12 @@ function TicketModal({
                 onChange={(e) => setRerouteDepartment(e.target.value)}
               >
                 <option value="" disabled>Select Department</option>
-                <option>Maintenance</option>
-                <option>IT Support</option>
-                <option>Cleaning</option>
-                <option>Security</option>
-                <option>Facilities</option>
+                <option>Facilities Management</option>
+                <option>Legal &amp; Compliance</option>
+                <option>Safety &amp; Security</option>
                 <option>HR</option>
-                <option>Admin</option>
+                <option>Leasing</option>
+                <option>Maintenance</option>
                 <option>IT</option>
               </select>
             </div>

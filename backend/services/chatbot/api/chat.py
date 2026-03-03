@@ -29,7 +29,6 @@ class ResolutionSuggestionRequest(BaseModel):
     ticket_type: str = Field(default="Complaint")
     subject: str = Field(..., min_length=1)
     details: str = Field(..., min_length=1)
-    asset_type: str = Field(default="General")
     priority: str = Field(default="Medium")
     department: str = Field(default="General")
     status: str = Field(default="Assigned")
@@ -89,7 +88,6 @@ def suggest_resolution(req: ResolutionSuggestionRequest):
             f"Priority: {req.priority}\n"
             f"Status: {req.status}\n"
             f"Department: {req.department}\n"
-            f"Asset Type: {req.asset_type}\n"
             f"Subject: {req.subject}\n"
             f"Details: {req.details}\n\n"
             "Provide a suggested resolution for the employee."
