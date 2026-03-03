@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
@@ -34,14 +34,6 @@ function isValidEmail(email) {
 function toPhoneInputValue(e164) {
   if (!e164) return "";
   return e164.startsWith("+") ? e164.slice(1) : e164;
-}
-function fromPhoneInputValue(digits) {
-  if (!digits) return "";
-  return digits.startsWith("+") ? digits : `+${digits}`;
-}
-function countryFromE164(e164) {
-  const p = parsePhoneNumberFromString(e164 || "");
-  return (p?.country || "AE").toLowerCase();
 }
 function validateE164Phone(e164) {
   if (!e164) return "Phone is required.";
@@ -82,7 +74,7 @@ export default function UserAccountManagement() {
     if (name === "role" && value === "customer") {
       setForm((p) => ({ ...p, role: value, department: "" }));
       setErrors((prev) => {
-        const { department, ...rest } = prev;
+        const { department: _department, ...rest } = prev;
         return rest;
       });
       return;
@@ -163,7 +155,7 @@ export default function UserAccountManagement() {
         password: "",
         confirmPassword: "",
       }));
-    } catch (err) {
+    } catch {
       setToast({ type: "error", message: "Failed to create user. Check the backend and network." });
     }
   };
@@ -208,13 +200,13 @@ export default function UserAccountManagement() {
                   cleanDigits = dialCode + cleanDigits.slice(dialCode.length + 1);
                 }
                 const e164 = cleanDigits ? `+${cleanDigits}` : "";
-                setCreate((p) => ({
+                setForm((p) => ({
                   ...p,
                   phoneE164: e164,
                   phoneCountry: (countryData?.countryCode || "ae").toLowerCase(),
                 }));
                 setErrors((prev) => {
-                  const { phone, ...rest } = prev;
+                  const { phone: _phone, ...rest } = prev;
                   return rest;
                 });
               }}
