@@ -58,9 +58,36 @@ def refresh_mvs() -> Dict[str, Any]:
     """
     Calls refresh_analytics_mvs() in Postgres.
     Returns the JSONB timing result from that function.
+    Falls back to non-concurrent refresh if CONCURRENT fails (e.g. empty MVs on first run).
     """
-    row = _fetch_one("SELECT refresh_analytics_mvs() AS result")
-    return row["result"] if row else {"ok": False}
+    try:
+        row = _fetch_one("SELECT refresh_analytics_mvs() AS result")
+        return row["result"] if row else {"ok": False}
+    except Exception as concurrent_err:
+        # CONCURRENT refresh requires at least one row; fall back to non-concurrent
+        # for first-run / empty MV situations.
+        logger.warning(
+            "refresh_mvs | CONCURRENT refresh failed (%s) — attempting non-concurrent fallback", concurrent_err
+        )
+        try:
+            mvs = [
+                "mv_ticket_base", "mv_daily_volume", "mv_employee_daily",
+                "mv_acceptance_daily", "mv_operator_qc_daily",
+                "mv_chatbot_daily", "mv_sentiment_daily", "mv_feature_daily",
+            ]
+            conn = _db_connect()
+            conn.autocommit = True
+            try:
+                with conn.cursor() as cur:
+                    for mv in mvs:
+                        cur.execute(f"REFRESH MATERIALIZED VIEW {mv}")  # non-concurrent
+                logger.info("refresh_mvs | non-concurrent fallback succeeded")
+                return {"ok": True, "fallback": "non_concurrent"}
+            finally:
+                conn.close()
+        except Exception as fallback_err:
+            logger.error("refresh_mvs | non-concurrent fallback also failed: %s", fallback_err)
+            raise
 
 
 # =============================================================================
