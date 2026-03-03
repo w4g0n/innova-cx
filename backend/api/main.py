@@ -189,7 +189,7 @@ async def _sla_heartbeat_loop() -> None:
 
 
 async def _analytics_refresh_loop() -> None:
-    """Background task: refreshes all 4 materialized views on a repeating
+    """Background task: refreshes all 8 materialized views on a repeating
     interval. Sleeps FIRST so the startup warm-up refresh isn't immediately
     duplicated. Interval is controlled by env var ANALYTICS_REFRESH_INTERVAL_HOURS
     (default 12 hours). Set to 0 to disable the loop entirely."""
@@ -208,6 +208,30 @@ async def _analytics_refresh_loop() -> None:
             logger.warning(
                 "analytics_refresh | refresh failed — will retry next cycle. err=%s", _e
             )
+
+
+def _check_analytics_mvs_exist() -> bool:
+    """
+    Returns True only if all required analytics materialized views exist
+    in the public schema. Queries pg_matviews (PostgreSQL system catalog —
+    always available, no application table dependency).
+    Called once at startup to gate _ANALYTICS_READY before any MV queries.
+    """
+    required = {
+        'mv_chatbot_daily',
+        'mv_sentiment_daily',
+        'mv_feature_daily',
+        'mv_operator_qc_daily',
+    }
+    try:
+        row = fetch_one(
+            "SELECT COUNT(*) AS cnt FROM pg_matviews"
+            " WHERE schemaname = 'public' AND matviewname = ANY(%s)",
+            (list(required),)
+        )
+        return int((row or {}).get("cnt", 0)) >= len(required)
+    except Exception:
+        return False
 
 
 def fetch_one(sql: str, params: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
@@ -372,7 +396,7 @@ def _ensure_dev_seed_users() -> None:
 
 @app.on_event("startup")
 async def _start_sla_heartbeat() -> None:
-    global _sla_heartbeat_task, _has_sla_policy_fn
+    global _sla_heartbeat_task, _has_sla_policy_fn, _ANALYTICS_READY
     _ensure_runtime_schema_compatibility()
 
     # ✅ permanent dev seed (works even with existing DB volume)
@@ -380,12 +404,21 @@ async def _start_sla_heartbeat() -> None:
 
     # ── Wire analytics service to DB helpers and warm-up refresh ─────────────
     if _ANALYTICS_READY:
-        try:
-            _analytics.init(fetch_one, fetch_all, db_connect)
-            _analytics.refresh_mvs()
-            logger.info("analytics_service | MVs refreshed and ready")
-        except Exception as _e:
-            logger.warning("analytics_service | startup refresh failed — will still serve from MVs. err=%s", _e)
+        if _check_analytics_mvs_exist():
+            try:
+                _analytics.init(fetch_one, fetch_all, db_connect)
+                _analytics.refresh_mvs()
+                logger.info("analytics_service | MVs refreshed and ready")
+            except Exception as _e:
+                logger.warning(
+                    "analytics_service | startup refresh failed — will still serve from existing MVs. err=%s", _e
+                )
+        else:
+            logger.warning(
+                "analytics_service | MVs not found in database. Analytics endpoints will return 503. "
+                "Run database/scripts/analytics_mvs.sql to enable."
+            )
+            _ANALYTICS_READY = False
 
     # Retry detecting the SLA function — DB may still be running init.sql on first boot
     for _attempt in range(10):
