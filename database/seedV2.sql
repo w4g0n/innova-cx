@@ -1240,8 +1240,7 @@ VALUES
   ('aaaaaaaa-0010-0010-0010-000000000010'::uuid, 'bot', NULL,
    'Thank you for reporting this. I have raised a High priority security ticket.',
    '2026-02-10 08:00:48+00','create_ticket','Security',0.20,FALSE,NULL)
-
-ON CONFLICT DO NOTHING;
+;
 
 -- =============================================================================
 -- 14. SESSIONS
@@ -1391,8 +1390,7 @@ VALUES
    '[{"role":"user","msg":"All CCTV down"},{"role":"bot","msg":"Critical ticket raised — escalating"}]',
    '2025-05-22 10:00:00+00','2025-05-22 10:30:00+00','chatbot-v2.0',
    TRUE,'2025-05-22 10:05:00+00', NULL)
-
-ON CONFLICT DO NOTHING;
+;
 
 -- =============================================================================
 -- 15. USER_CHAT_LOGS
@@ -1553,8 +1551,7 @@ VALUES
   ('A high priority network ticket has been raised for Floor 5. Our IT team will respond within 1 hour.',
    'create_ticket', 'ticket_creation', NULL, NULL,
    '2026-01-10 09:33:00+00', NULL)
-
-ON CONFLICT DO NOTHING;
+;
 
 -- =============================================================================
 -- 17. NOTIFICATIONS
@@ -2166,8 +2163,7 @@ VALUES
    '2026-01-15 06:00:00+00'),
   ('info', 'Quarterly security audit completed',
    'No critical vulnerabilities found. 3 medium findings resolved. Certificate issued.',
-   '2026-01-10 12:00:00+00')
-ON CONFLICT DO NOTHING;
+   '2026-01-10 12:00:00+00');
 
 -- =============================================================================
 -- 27. SYSTEM_VERSIONS
@@ -2360,7 +2356,7 @@ INSERT INTO public.sentiment_outputs (
   emotion_tags, raw_scores, is_current
 )
 SELECT mel.id, mel.ticket_id, mel.model_version,
-  sv.label, sv.score, sv.conf, sv.emotions, sv.raw, TRUE
+  sv.label, sv.score, sv.conf, sv.emotions, sv.raw::jsonb, TRUE
 FROM (VALUES
   ('CX-A001','Negative', -0.7800, 0.9412,
    ARRAY['frustrated','urgent','distressed'],
