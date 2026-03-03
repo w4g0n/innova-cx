@@ -1656,6 +1656,7 @@ def employee_rescore_ticket(
             profile = fetch_one(
                 "SELECT full_name FROM user_profiles WHERE user_id = %s", (user_id,)
             ) or {}
+            employee_name = profile.get("full_name") or user.get("email", "An employee")
 
             manager_row = fetch_one("SELECT id FROM users WHERE role = 'manager' LIMIT 1;")
             if manager_row and str(manager_row["id"]) != str(user_id):
@@ -1746,10 +1747,6 @@ def employee_reroute_ticket(
                 ),
             )
             result = cur.fetchone()
-
-            profile = fetch_one(
-                "SELECT full_name FROM user_profiles WHERE user_id = %s", (user_id,)
-            ) or {}
 
             # Only notify the employee themselves (confirmation)
             # Manager is notified by the DB trigger notify_manager_on_approval_request
