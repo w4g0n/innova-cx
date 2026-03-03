@@ -816,6 +816,8 @@ CREATE TABLE IF NOT EXISTS system_config_kv (
   value TEXT NOT NULL
 );
 
+
+
 -- =========================================================
 -- Seed data
 -- =========================================================
@@ -2688,5 +2690,896 @@ SET updated_at = now()
 WHERE priority_assigned_at IS NOT NULL
   AND first_response_at IS NOT NULL
   AND first_response_at < priority_assigned_at;
+
+COMMIT;
+
+-- =============================================================================
+-- InnovaCX — Extended Seed Inserts
+-- Covers: model_execution_log, all agent output tables, sentiment/priority/
+--         routing/sla/resolution/feature outputs, chat_conversations,
+--         chat_messages, sessions, user_chat_logs, bot_response_logs,
+--         ticket_attachments, ticket_updates, ticket_work_steps,
+--         system_event_feed additions, password_reset_tokens,
+--         employee_reports for remaining employees, approval decisions.
+--
+-- Pre-requisites: base init.sql must have already run (users, departments,
+--                 tickets CX-R01…CX-R10 and CX-M01…CX-M55 must exist).
+--
+-- Safe to re-run: all statements use ON CONFLICT / WHERE NOT EXISTS.
+-- =============================================================================
+
+BEGIN;
+
+-- ---------------------------------------------------------------------------
+-- 1. MODEL EXECUTION LOG  (15 rows — one per agent type, across key tickets)
+--    agent_name_type: 'sentiment'|'priority'|'routing'|'sla'|'resolution'|'feature'
+--    execution_status: 'running'|'success'|'failed'|'skipped'
+--    trigger_source:   'ingest'|'reprocess'|'manual'|'scheduled'
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.model_execution_log (
+  ticket_id, agent_name, model_version, triggered_by,
+  started_at, completed_at, status,
+  input_token_count, output_token_count, infra_metadata
+)
+SELECT t.id,
+  v.agent_name::agent_name_type,
+  v.model_version,
+  v.triggered_by::trigger_source,
+  v.started_at,
+  v.completed_at,
+  v.status::execution_status,
+  v.in_tok, v.out_tok,
+  v.infra
+FROM (VALUES
+  -- CX-R01 — sentiment (success)
+  ('CX-R01','sentiment','sentiment-v3.1','ingest',
+   '2026-03-01 06:31:00+00','2026-03-01 06:31:04+00','success',412,28,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R01 — priority (success)
+  ('CX-R01','priority','priority-v2.4','ingest',
+   '2026-03-01 06:31:05+00','2026-03-01 06:31:09+00','success',418,31,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R01 — routing (success)
+  ('CX-R01','routing','routing-v1.8','ingest',
+   '2026-03-01 06:31:10+00','2026-03-01 06:31:14+00','success',422,25,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R01 — sla (success)
+  ('CX-R01','sla','sla-v1.2','ingest',
+   '2026-03-01 06:31:15+00','2026-03-01 06:31:17+00','success',190,18,
+   '{"region":"me-south-1","instance":"ml-c5.large"}'::jsonb),
+  -- CX-R01 — resolution (success)
+  ('CX-R01','resolution','resolution-v2.0','ingest',
+   '2026-03-01 06:31:18+00','2026-03-01 06:31:26+00','success',610,142,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R01 — feature (success)
+  ('CX-R01','feature','feature-v1.5','ingest',
+   '2026-03-01 06:31:27+00','2026-03-01 06:31:30+00','success',380,44,
+   '{"region":"me-south-1","instance":"ml-c5.large"}'::jsonb),
+  -- CX-R06 — sentiment (success)
+  ('CX-R06','sentiment','sentiment-v3.1','ingest',
+   '2026-03-01 09:31:00+00','2026-03-01 09:31:05+00','success',388,26,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R06 — priority (success)
+  ('CX-R06','priority','priority-v2.4','ingest',
+   '2026-03-01 09:31:06+00','2026-03-01 09:31:10+00','success',395,30,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R06 — resolution (success)
+  ('CX-R06','resolution','resolution-v2.0','ingest',
+   '2026-03-01 09:31:11+00','2026-03-01 09:31:21+00','success',588,138,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-M55 — resolution (failed — tests error_rate view)
+  ('CX-M55','resolution','resolution-v2.0','reprocess',
+   '2026-02-22 08:50:00+00','2026-02-22 08:50:12+00','failed',601,0,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-M55 — resolution (success — retry after failure)
+  ('CX-M55','resolution','resolution-v2.0','reprocess',
+   '2026-02-22 09:05:00+00','2026-02-22 09:05:08+00','success',601,144,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-M41 — sentiment (success, manual trigger)
+  ('CX-M41','sentiment','sentiment-v3.1','manual',
+   '2025-12-03 07:02:00+00','2025-12-03 07:02:04+00','success',401,27,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-M41 — routing (skipped — dept already set)
+  ('CX-M41','routing','routing-v1.8','manual',
+   '2025-12-03 07:02:05+00','2025-12-03 07:02:06+00','skipped',0,0,
+   '{"skip_reason":"department_already_assigned"}'::jsonb),
+  -- CX-R04 — priority (success)
+  ('CX-R04','priority','priority-v2.4','ingest',
+   '2026-03-01 08:31:00+00','2026-03-01 08:31:04+00','success',376,29,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
+  -- CX-R10 — sentiment (running — tests in-flight view row)
+  ('CX-R10','sentiment','sentiment-v3.1','ingest',
+   '2026-03-01 11:30:30+00', NULL,'running',0,0,
+   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb)
+) AS v(ticket_code, agent_name, model_version, triggered_by,
+       started_at, completed_at, status, in_tok, out_tok, infra)
+JOIN public.tickets t ON t.ticket_code = v.ticket_code;
+
+-- ---------------------------------------------------------------------------
+-- 2. SENTIMENT OUTPUTS  (is_current = TRUE triggers legacy sync)
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.sentiment_outputs (
+  execution_id, ticket_id, model_version,
+  sentiment_label, sentiment_score, confidence_score,
+  emotion_tags, raw_scores, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  sv.label, sv.score, sv.conf,
+  sv.emotions, sv.raw, TRUE
+FROM (VALUES
+  ('CX-R01','Negative',  -0.720, 0.9412, ARRAY['frustrated','urgent'],
+   '{"negative":0.9412,"neutral":0.0421,"positive":0.0167}'::jsonb),
+  ('CX-R06','Negative',  -0.600, 0.9107, ARRAY['angry','concerned'],
+   '{"negative":0.9107,"neutral":0.0621,"positive":0.0272}'::jsonb),
+  ('CX-M41','Negative',  -0.680, 0.9250, ARRAY['distressed','urgent'],
+   '{"negative":0.9250,"neutral":0.0500,"positive":0.0250}'::jsonb)
+) AS sv(ticket_code, label, score, conf, emotions, raw)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = sv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'sentiment'
+ AND mel.status     = 'success'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.sentiment_outputs so
+  WHERE so.ticket_id = mel.ticket_id AND so.is_current = TRUE
+);
+
+-- ---------------------------------------------------------------------------
+-- 3. PRIORITY OUTPUTS
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.priority_outputs (
+  execution_id, ticket_id, model_version,
+  model_priority, confidence_score, urgency_score, impact_score,
+  feature_vector, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  pv.priority::ticket_priority, pv.conf, pv.urgency, pv.impact,
+  pv.features, TRUE
+FROM (VALUES
+  ('CX-R01','Critical',0.9600,0.9800,0.9400,
+   '{"asset_type":"HVAC","complaint":true,"keywords":["AC","server","overheating"]}'::jsonb),
+  ('CX-R06','Critical',0.9400,0.9600,0.9200,
+   '{"asset_type":"Access Control","complaint":true,"keywords":["gate","badge","blocked"]}'::jsonb),
+  ('CX-R04','Medium',  0.8200,0.7500,0.8000,
+   '{"asset_type":"IT","inquiry":true,"keywords":["printer","network","floor"]}'::jsonb)
+) AS pv(ticket_code, priority, conf, urgency, impact, features)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = pv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'priority'
+ AND mel.status     = 'success'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.priority_outputs po
+  WHERE po.ticket_id = mel.ticket_id AND po.is_current = TRUE
+);
+
+-- ---------------------------------------------------------------------------
+-- 4. ROUTING OUTPUTS
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.routing_outputs (
+  execution_id, ticket_id, model_version,
+  suggested_dept_id, suggested_dept_name,
+  confidence_score, routing_reason, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  d.id, d.name, rv.conf, rv.reason, TRUE
+FROM (VALUES
+  ('CX-R01','Facilities',    0.9700,'HVAC failure classified as Facilities — mechanical asset type.'),
+  ('CX-R06','Security',      0.9500,'Access control issue maps to Security — badge system failure.')
+) AS rv(ticket_code, dept_name, conf, reason)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = rv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'routing'
+ AND mel.status     = 'success'
+JOIN public.departments d ON d.name = rv.dept_name
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.routing_outputs ro
+  WHERE ro.ticket_id = mel.ticket_id AND ro.is_current = TRUE
+);
+
+-- ---------------------------------------------------------------------------
+-- 5. SLA OUTPUTS
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.sla_outputs (
+  execution_id, ticket_id, model_version,
+  sla_tier, breach_risk_score,
+  response_deadline, resolution_deadline, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  sv.tier, sv.risk, sv.resp_dl, sv.res_dl, TRUE
+FROM (VALUES
+  ('CX-R01','Critical-P1', 0.9800,
+   '2026-03-01 07:00:00+00'::timestamptz,
+   '2026-03-01 12:30:00+00'::timestamptz),
+  ('CX-R06','Critical-P1', 0.9600,
+   '2026-03-01 10:00:00+00'::timestamptz,
+   '2026-03-01 15:30:00+00'::timestamptz)
+) AS sv(ticket_code, tier, risk, resp_dl, res_dl)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = sv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'sla'
+ AND mel.status     = 'success'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.sla_outputs so
+  WHERE so.ticket_id = mel.ticket_id AND so.is_current = TRUE
+);
+
+-- ---------------------------------------------------------------------------
+-- 6. RESOLUTION OUTPUTS
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.resolution_outputs (
+  execution_id, ticket_id, model_version,
+  suggested_resolution, confidence_score,
+  kb_references, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  rv.suggestion, rv.conf, rv.kb, TRUE
+FROM (VALUES
+  ('CX-R01', 0.9600,
+   'Activate backup cooling unit immediately. Dispatch HVAC technician to inspect compressor and thermostat. Confirm coolant pressure and replace failed components.',
+   '{"kb_ids":["KB-2201","KB-2209"],"similarity":[0.94,0.88]}'::jsonb),
+  ('CX-R06', 0.9400,
+   'Restart access control server and re-sync badge database. If restart fails, issue temporary manual access and schedule emergency firmware update.',
+   '{"kb_ids":["KB-3310","KB-3318"],"similarity":[0.91,0.87]}'::jsonb),
+  ('CX-M55', 0.9300,
+   'All UPS battery modules require replacement — recharging is insufficient given current capacity. Schedule maintenance window, swap modules, and run runtime certification test.',
+   '{"kb_ids":["KB-4401"],"similarity":[0.93]}'::jsonb)
+) AS rv(ticket_code, conf, suggestion, kb)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = rv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'resolution'
+ AND mel.status     = 'success'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.resolution_outputs ro
+  WHERE ro.ticket_id = mel.ticket_id AND ro.is_current = TRUE
+);
+
+-- ---------------------------------------------------------------------------
+-- 7. FEATURE OUTPUTS
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.feature_outputs (
+  execution_id, ticket_id, model_version,
+  asset_category, topic_labels, confidence_score, raw_features, is_current
+)
+SELECT
+  mel.execution_id, mel.ticket_id, mel.model_version,
+  fv.asset_cat, fv.topics, fv.conf, fv.raw, TRUE
+FROM (VALUES
+  ('CX-R01','HVAC',
+   ARRAY['cooling','mechanical','server-room','temperature'],0.9500,
+   '{"word_count":28,"avg_sentiment":-0.72,"capital_ratio":0.12}'::jsonb),
+  ('CX-R06','Access Control',
+   ARRAY['badge','security','gate','authentication'],0.9300,
+   '{"word_count":22,"avg_sentiment":-0.60,"capital_ratio":0.09}'::jsonb)
+) AS fv(ticket_code, asset_cat, topics, conf, raw)
+JOIN public.model_execution_log mel
+  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = fv.ticket_code LIMIT 1)
+ AND mel.agent_name = 'feature'
+ AND mel.status     = 'success'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.feature_outputs fo
+  WHERE fo.ticket_id = mel.ticket_id AND fo.is_current = TRUE
+);
+
+-- ---------------------------------------------------------------------------
+-- 8. CHAT CONVERSATIONS & MESSAGES
+--    3 conversations: one resolved→ticket, one escalated, one bot-only
+-- ---------------------------------------------------------------------------
+
+-- Conv 1: Customer → Bot → Escalated to Operator → Linked to CX-R01
+INSERT INTO public.chat_conversations (id, customer_user_id, channel, created_at, ended_at, status)
+SELECT
+  '11111111-1111-1111-1111-000000000001'::uuid,
+  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  'web',
+  '2026-03-01 06:20:00+00',
+  '2026-03-01 06:35:00+00',
+  'closed'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.chat_conversations WHERE id='11111111-1111-1111-1111-000000000001'::uuid
+);
+
+INSERT INTO public.chat_messages (conversation_id, sender_type, sender_user_id, message_text, created_at, intent, category, sentiment_score, escalation_flag, linked_ticket_id)
+SELECT
+  '11111111-1111-1111-1111-000000000001'::uuid,
+  msg.sender_type::chat_sender_type,
+  CASE msg.email WHEN 'bot' THEN NULL ELSE (SELECT id FROM users WHERE email=msg.email) END,
+  msg.body, msg.ts::timestamptz, msg.intent, msg.category, msg.score, msg.escalate,
+  CASE WHEN msg.link_ticket IS NOT NULL THEN (SELECT id FROM tickets WHERE ticket_code=msg.link_ticket) ELSE NULL END
+FROM (VALUES
+  ('customer','customer1@innova.cx','2026-03-01 06:20:30+00','The server room AC is completely down and temperature is rising fast!',
+   'report_issue','HVAC',-0.75,FALSE,NULL),
+  ('bot','bot','2026-03-01 06:20:45+00','I understand. This sounds urgent. Can you confirm your building and floor?',
+   'collect_info','HVAC', 0.10,FALSE,NULL),
+  ('customer','customer1@innova.cx','2026-03-01 06:21:10+00','Building A, server room on ground floor. Temperature is at 30°C already.',
+   'provide_info','HVAC',-0.80,TRUE,NULL),
+  ('operator','operator@innova.cx','2026-03-01 06:25:00+00','I am creating a Critical ticket now and dispatching the HVAC team immediately.',
+   'resolution','HVAC', 0.20,FALSE,'CX-R01')
+) AS msg(sender_type, email, ts, body, intent, category, score, escalate, link_ticket)
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.chat_messages cm
+  WHERE cm.conversation_id='11111111-1111-1111-1111-000000000001'::uuid
+  LIMIT 1
+);
+
+-- Conv 2: Customer inquiry → Resolved by bot (no escalation)
+INSERT INTO public.chat_conversations (id, customer_user_id, channel, created_at, ended_at, status)
+SELECT
+  '22222222-2222-2222-2222-000000000002'::uuid,
+  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  'web',
+  '2026-02-28 10:00:00+00',
+  '2026-02-28 10:08:00+00',
+  'closed'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.chat_conversations WHERE id='22222222-2222-2222-2222-000000000002'::uuid
+);
+
+INSERT INTO public.chat_messages (conversation_id, sender_type, sender_user_id, message_text, created_at, intent, category, sentiment_score, escalation_flag)
+SELECT
+  '22222222-2222-2222-2222-000000000002'::uuid,
+  msg.sender_type::chat_sender_type,
+  CASE msg.email WHEN 'bot' THEN NULL ELSE (SELECT id FROM users WHERE email=msg.email) END,
+  msg.body, msg.ts::timestamptz, msg.intent, msg.category, msg.score, FALSE
+FROM (VALUES
+  ('customer','customer1@innova.cx','2026-02-28 10:00:20+00','What are the support hours for facilities management?',
+   'inquiry','General',0.10),
+  ('bot','bot','2026-02-28 10:00:35+00','Facilities Management is available 24/7 for critical issues and 7 AM – 10 PM for standard requests.',
+   'answer','General',0.50),
+  ('customer','customer1@innova.cx','2026-02-28 10:01:00+00','Great, thank you!',
+   'close','General',0.80)
+) AS msg(sender_type, email, ts, body, intent, category, score)
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.chat_messages cm
+  WHERE cm.conversation_id='22222222-2222-2222-2222-000000000002'::uuid
+  LIMIT 1
+);
+
+-- Conv 3: Security escalation → Linked to CX-R06
+INSERT INTO public.chat_conversations (id, customer_user_id, channel, created_at, ended_at, status)
+SELECT
+  '33333333-3333-3333-3333-000000000003'::uuid,
+  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  'mobile',
+  '2026-03-01 09:25:00+00',
+  '2026-03-01 09:40:00+00',
+  'closed'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.chat_conversations WHERE id='33333333-3333-3333-3333-000000000003'::uuid
+);
+
+INSERT INTO public.chat_messages (conversation_id, sender_type, sender_user_id, message_text, created_at, intent, category, sentiment_score, escalation_flag, linked_ticket_id)
+SELECT
+  '33333333-3333-3333-3333-000000000003'::uuid,
+  msg.sender_type::chat_sender_type,
+  CASE msg.email WHEN 'bot' THEN NULL ELSE (SELECT id FROM users WHERE email=msg.email) END,
+  msg.body, msg.ts::timestamptz, msg.intent, msg.category, msg.score, msg.escalate,
+  CASE WHEN msg.link_ticket IS NOT NULL THEN (SELECT id FROM tickets WHERE ticket_code=msg.link_ticket) ELSE NULL END
+FROM (VALUES
+  ('customer','customer1@innova.cx','2026-03-01 09:25:10+00','None of the badge readers at Gate 2 are working. My whole team is stuck outside!',
+   'report_issue','Access Control',-0.85,FALSE,NULL),
+  ('bot','bot','2026-03-01 09:25:25+00','I'm escalating this to an operator immediately given the severity.',
+   'escalate','Access Control',0.05,TRUE,NULL),
+  ('operator','operator@innova.cx','2026-03-01 09:30:00+00','Ticket CX-R06 raised as Critical. Omar Ali is on his way to Gate 2 now.',
+   'resolution','Access Control',0.30,FALSE,'CX-R06')
+) AS msg(sender_type, email, ts, body, intent, category, score, escalate, link_ticket)
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.chat_messages cm
+  WHERE cm.conversation_id='33333333-3333-3333-3333-000000000003'::uuid
+  LIMIT 1
+);
+
+-- ---------------------------------------------------------------------------
+-- 9. SESSIONS (chatbot state machine entries)
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.sessions (
+  user_id, current_state, context, history,
+  created_at, updated_at, bot_model_version,
+  escalated_to_human, escalated_at, linked_ticket_id
+)
+SELECT
+  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  'resolved',
+  '{"last_intent":"report_issue","asset":"HVAC","building":"A","floor":"Ground"}'::jsonb,
+  '[{"role":"user","msg":"AC down in server room"},{"role":"bot","msg":"Ticket raised"},{"role":"operator","msg":"Team dispatched"}]'::jsonb,
+  '2026-03-01 06:20:00+00',
+  '2026-03-01 06:35:00+00',
+  'chatbot-v2.1',
+  TRUE,
+  '2026-03-01 06:23:00+00',
+  (SELECT id FROM tickets WHERE ticket_code='CX-R01')
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.sessions s
+  WHERE s.user_id=(SELECT id FROM users WHERE email='customer1@innova.cx')
+    AND s.created_at='2026-03-01 06:20:00+00'
+);
+
+INSERT INTO public.sessions (
+  user_id, current_state, context, history,
+  created_at, updated_at, bot_model_version,
+  escalated_to_human, escalated_at, linked_ticket_id
+)
+SELECT
+  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  'resolved',
+  '{"last_intent":"inquiry","topic":"support_hours"}'::jsonb,
+  '[{"role":"user","msg":"Support hours?"},{"role":"bot","msg":"24/7 for critical"}]'::jsonb,
+  '2026-02-28 10:00:00+00',
+  '2026-02-28 10:08:00+00',
+  'chatbot-v2.1',
+  FALSE, NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.sessions s
+  WHERE s.user_id=(SELECT id FROM users WHERE email='customer1@innova.cx')
+    AND s.created_at='2026-02-28 10:00:00+00'
+);
+
+-- ---------------------------------------------------------------------------
+-- 10. USER CHAT LOGS  (flagged aggression + normal entries)
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.user_chat_logs (
+  user_id, message, intent_detected,
+  aggression_flag, aggression_score, created_at,
+  sentiment_score, category, response_time_ms, ticket_id
+)
+SELECT
+  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  v.msg, v.intent, v.agg_flag, v.agg_score, v.ts::timestamptz,
+  v.sent, v.cat, v.resp_ms,
+  CASE WHEN v.ticket_code IS NOT NULL THEN (SELECT id FROM tickets WHERE ticket_code=v.ticket_code) ELSE NULL END
+FROM (VALUES
+  ('The server room AC is completely down and temperature is rising fast!',
+   'report_issue',FALSE,0.0210,'2026-03-01 06:20:30+00',-0.75,'HVAC',NULL,NULL),
+  ('Building A, server room on ground floor. Temperature is at 30 degrees already.',
+   'provide_info',FALSE,0.0190,'2026-03-01 06:21:10+00',-0.80,'HVAC',1200,NULL),
+  ('None of the badge readers at Gate 2 are working. My whole team is stuck outside!',
+   'report_issue',FALSE,0.0450,'2026-03-01 09:25:10+00',-0.85,'Access Control',NULL,NULL),
+  ('This is completely unacceptable! I have been waiting for 3 days and nobody came!',
+   'complaint',TRUE,0.7820,'2026-02-20 14:10:00+00',-0.95,'General',NULL,'CX-3862'),
+  ('What are the support hours for facilities management?',
+   'inquiry',FALSE,0.0100,'2026-02-28 10:00:20+00',0.10,'General',800,NULL)
+) AS v(msg, intent, agg_flag, agg_score, ts, sent, cat, resp_ms, ticket_code)
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.user_chat_logs ucl
+  WHERE ucl.user_id=(SELECT id FROM users WHERE email='customer1@innova.cx')
+    AND ucl.message = v.msg
+  LIMIT 1
+);
+
+-- ---------------------------------------------------------------------------
+-- 11. BOT RESPONSE LOGS
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.bot_response_logs (
+  response, response_type, state_at_time,
+  sql_query_used, kb_match_score, created_at, ticket_id
+)
+VALUES
+  ('I understand. This sounds urgent. Can you confirm your building and floor?',
+   'clarification', 'collect_info',
+   NULL, NULL,
+   '2026-03-01 06:20:45+00', NULL),
+  ('Facilities Management is available 24/7 for critical issues and 7 AM – 10 PM for standard requests.',
+   'faq_answer', 'answer',
+   'SELECT * FROM kb WHERE topic=''support_hours''', 0.92300,
+   '2026-02-28 10:00:35+00', NULL),
+  ('I'm escalating this to an operator immediately given the severity.',
+   'escalation', 'escalate',
+   NULL, NULL,
+   '2026-03-01 09:25:25+00',
+   (SELECT id FROM tickets WHERE ticket_code='CX-R06'));
+
+-- ---------------------------------------------------------------------------
+-- 12. TICKET ATTACHMENTS  (realistic enterprise file uploads)
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.ticket_attachments (ticket_id, file_name, file_url, uploaded_by, uploaded_at)
+SELECT t.id, v.fname, v.furl,
+  (SELECT id FROM users WHERE email=v.email),
+  v.ts::timestamptz
+FROM (VALUES
+  ('CX-R01','server_room_temp_log_2026-03-01.csv',
+   'https://storage.innovacx.com/attachments/CX-R01/server_room_temp_log_2026-03-01.csv',
+   'ahmed@innova.cx','2026-03-01 07:00:00+00'),
+  ('CX-R01','hvac_inspection_photo.jpg',
+   'https://storage.innovacx.com/attachments/CX-R01/hvac_inspection_photo.jpg',
+   'ahmed@innova.cx','2026-03-01 07:15:00+00'),
+  ('CX-M25','cctv_nvr_error_screenshot.png',
+   'https://storage.innovacx.com/attachments/CX-M25/cctv_nvr_error_screenshot.png',
+   'bilal@innova.cx','2025-08-12 08:00:00+00'),
+  ('CX-M55','ups_battery_report_Q1_2026.pdf',
+   'https://storage.innovacx.com/attachments/CX-M55/ups_battery_report_Q1_2026.pdf',
+   'ahmed@innova.cx','2026-02-22 10:00:00+00'),
+  ('CX-M31','chiller_diagnostic_report.pdf',
+   'https://storage.innovacx.com/attachments/CX-M31/chiller_diagnostic_report.pdf',
+   'ahmed@innova.cx','2025-10-02 09:00:00+00')
+) AS v(ticket_code, fname, furl, email, ts)
+JOIN public.tickets t ON t.ticket_code = v.ticket_code
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.ticket_attachments ta
+  WHERE ta.ticket_id = t.id AND ta.file_name = v.fname
+);
+
+-- ---------------------------------------------------------------------------
+-- 13. TICKET UPDATES  (status transitions + internal notes)
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.ticket_updates (
+  ticket_id, author_user_id, update_type, message,
+  from_status, to_status, meta, created_at
+)
+SELECT
+  (SELECT id FROM tickets WHERE ticket_code=v.ticket_code),
+  (SELECT id FROM users WHERE email=v.email),
+  v.utype, v.msg,
+  v.from_s::ticket_status,
+  v.to_s::ticket_status,
+  v.meta::jsonb,
+  v.ts::timestamptz
+FROM (VALUES
+  -- CX-R01 lifecycle
+  ('CX-R01','operator@innova.cx','status_change',
+   'Ticket created via chat escalation. Assigned to Ahmed Hassan.',
+   'Unassigned','Assigned',
+   '{"source":"chat_escalation","chat_conv_id":"11111111-1111-1111-1111-000000000001"}',
+   '2026-03-01 06:35:00+00'),
+  ('CX-R01','ahmed@innova.cx','internal_note',
+   'On-site. Backup cooling unit activated. Primary compressor inspection in progress.',
+   'Assigned','In Progress',
+   '{"location":"Ground Floor Server Room","temp_reading":30.2}',
+   '2026-03-01 07:20:00+00'),
+  -- CX-R06 lifecycle
+  ('CX-R06','operator@innova.cx','status_change',
+   'Critical access control failure — all Gate 2 readers down. Omar dispatched.',
+   'Unassigned','In Progress',
+   '{"affected_staff":15,"gate":"Gate 2"}',
+   '2026-03-01 09:33:00+00'),
+  -- CX-M41 resolution
+  ('CX-M41','ahmed@innova.cx','status_change',
+   'Boiler heat exchanger successfully replaced. Heating restored across Building A.',
+   'In Progress','Resolved',
+   '{"parts_replaced":["heat_exchanger"],"downtime_hours":10}',
+   '2025-12-03 17:00:00+00'),
+  -- CX-4725 overdue note
+  ('CX-4725','manager@innova.cx','escalation',
+   'Ticket overdue — SLA breached. Escalating and requesting immediate re-assignment.',
+   'Overdue','Escalated',
+   '{"escalated_by":"manager","breach_hours":72}',
+   '2026-02-15 08:30:00+00')
+) AS v(ticket_code, email, utype, msg, from_s, to_s, meta, ts)
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.ticket_updates tu
+  WHERE tu.ticket_id=(SELECT id FROM tickets WHERE ticket_code=v.ticket_code)
+    AND tu.created_at=v.ts::timestamptz
+);
+
+-- ---------------------------------------------------------------------------
+-- 14. ADDITIONAL TICKET WORK STEPS  (for March 2026 tickets)
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.ticket_work_steps (ticket_id, step_no, technician_user_id, notes, occurred_at)
+SELECT
+  (SELECT id FROM tickets WHERE ticket_code=v.ticket_code),
+  v.step_no,
+  (SELECT id FROM users WHERE email=v.email),
+  v.notes,
+  v.ts::timestamptz
+FROM (VALUES
+  ('CX-R01', 1, 'ahmed@innova.cx',
+   'Arrived on-site. Backup cooling unit powered on. Server temps dropping.',
+   '2026-03-01 06:55:00+00'),
+  ('CX-R01', 2, 'ahmed@innova.cx',
+   'Primary AC compressor inspected — refrigerant leak detected. Parts ordered.',
+   '2026-03-01 08:00:00+00'),
+  ('CX-R06', 1, 'omar@innova.cx',
+   'Access control server restarted. Testing badge re-sync against user database.',
+   '2026-03-01 09:55:00+00'),
+  ('CX-R03', 1, 'bilal@innova.cx',
+   'NVR connection cables checked. Level 1 south switch found faulty.',
+   '2026-03-01 08:40:00+00'),
+  ('CX-R07', 1, 'khalid@innova.cx',
+   'Lift diagnostics run. Alarm sensor wiring loose — temporary bypass applied.',
+   '2026-03-01 10:35:00+00')
+) AS v(ticket_code, step_no, email, notes, ts)
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.ticket_work_steps tws
+  WHERE tws.ticket_id=(SELECT id FROM tickets WHERE ticket_code=v.ticket_code)
+    AND tws.step_no=v.step_no
+);
+
+-- ---------------------------------------------------------------------------
+-- 15. APPROVAL REQUEST DECISIONS  (update Approved/Rejected rows with decider)
+-- ---------------------------------------------------------------------------
+
+UPDATE public.approval_requests
+SET
+  decided_by_user_id = (SELECT id FROM users WHERE email='manager@innova.cx'),
+  decided_at         = '2026-02-13 10:00:00+00',
+  decision_notes     = 'Confirmed physical root cause — Facilities is correct owner.'
+WHERE request_code = 'REQ-3145'
+  AND decided_by_user_id IS NULL;
+
+UPDATE public.approval_requests
+SET
+  decided_by_user_id = (SELECT id FROM users WHERE email='manager@innova.cx'),
+  decided_at         = '2026-02-14 09:30:00+00',
+  decision_notes     = 'Safety risk confirmed by site inspection. Critical escalation approved.'
+WHERE request_code = 'REQ-3150'
+  AND decided_by_user_id IS NULL;
+
+UPDATE public.approval_requests
+SET
+  decided_by_user_id = (SELECT id FROM users WHERE email='manager@innova.cx'),
+  decided_at         = '2026-02-17 11:00:00+00',
+  decision_notes     = 'Parking access is a hardware + system issue — remains in Facilities.'
+WHERE request_code = 'REQ-3155'
+  AND decided_by_user_id IS NULL;
+
+UPDATE public.approval_requests
+SET
+  decided_by_user_id = (SELECT id FROM users WHERE email='manager@innova.cx'),
+  decided_at         = '2026-03-01 09:00:00+00',
+  decision_notes     = 'Cleaning-related schedule complaint does not meet threshold for High priority.'
+WHERE request_code = 'REQ-3175'
+  AND decided_by_user_id IS NULL;
+
+-- ---------------------------------------------------------------------------
+-- 16. EMPLOYEE REPORTS for remaining employees (Maria, Bilal, Yousef, Khalid)
+--     Mirrors the pattern used for Ahmed, covering Nov–Oct 2025 two months.
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.employee_reports (
+  report_code, employee_user_id, month_label, subtitle,
+  kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response,
+  model_version, generated_by, period_start, period_end
+)
+SELECT code, emp_id, label, sub, rating, resolved, sla, avg_resp, 'report-gen-v1.0', 'system', ps::date, pe::date
+FROM (
+  SELECT
+    (SELECT id FROM users WHERE email='maria@innova.cx')   AS emp_id,
+    unnest(ARRAY['nov-2025-maria','oct-2025-maria'])         AS code,
+    unnest(ARRAY['November 2025','October 2025'])            AS label,
+    unnest(ARRAY['Solid month with high resolution rate.','Consistent performance, slight SLA dip.']) AS sub,
+    unnest(ARRAY['4.4 / 5','4.2 / 5'])                      AS rating,
+    unnest(ARRAY[8, 7])                                      AS resolved,
+    unnest(ARRAY['89%','85%'])                               AS sla,
+    unnest(ARRAY['21 Mins','24 Mins'])                       AS avg_resp,
+    unnest(ARRAY['2025-11-01','2025-10-01'])                 AS ps,
+    unnest(ARRAY['2025-11-30','2025-10-31'])                 AS pe
+
+  UNION ALL
+
+  SELECT
+    (SELECT id FROM users WHERE email='bilal@innova.cx')    AS emp_id,
+    unnest(ARRAY['nov-2025-bilal','oct-2025-bilal']),
+    unnest(ARRAY['November 2025','October 2025']),
+    unnest(ARRAY['High SLA compliance across security tickets.','Above-average month — strong resolve rate.']),
+    unnest(ARRAY['4.6 / 5','4.5 / 5']),
+    unnest(ARRAY[10, 9]),
+    unnest(ARRAY['93%','90%']),
+    unnest(ARRAY['17 Mins','19 Mins']),
+    unnest(ARRAY['2025-11-01','2025-10-01']),
+    unnest(ARRAY['2025-11-30','2025-10-31'])
+
+  UNION ALL
+
+  SELECT
+    (SELECT id FROM users WHERE email='yousef@innova.cx')   AS emp_id,
+    unnest(ARRAY['nov-2025-yousef','oct-2025-yousef']),
+    unnest(ARRAY['November 2025','October 2025']),
+    unnest(ARRAY['Good resolve rate with room on response time.','Steady performance — no SLA breaches.']),
+    unnest(ARRAY['4.3 / 5','4.4 / 5']),
+    unnest(ARRAY[7, 8]),
+    unnest(ARRAY['87%','91%']),
+    unnest(ARRAY['23 Mins','20 Mins']),
+    unnest(ARRAY['2025-11-01','2025-10-01']),
+    unnest(ARRAY['2025-11-30','2025-10-31'])
+
+  UNION ALL
+
+  SELECT
+    (SELECT id FROM users WHERE email='khalid@innova.cx')   AS emp_id,
+    unnest(ARRAY['nov-2025-khalid','oct-2025-khalid']),
+    unnest(ARRAY['November 2025','October 2025']),
+    unnest(ARRAY['Strong month — all critical tickets resolved within SLA.','Handled complex electrical faults efficiently.']),
+    unnest(ARRAY['4.8 / 5','4.7 / 5']),
+    unnest(ARRAY[11, 10]),
+    unnest(ARRAY['95%','92%']),
+    unnest(ARRAY['16 Mins','18 Mins']),
+    unnest(ARRAY['2025-11-01','2025-10-01']),
+    unnest(ARRAY['2025-11-30','2025-10-31'])
+) sub
+ON CONFLICT (report_code) DO NOTHING;
+
+-- Summary items for the new employee reports
+INSERT INTO public.employee_report_summary_items (report_id, label, value_text)
+SELECT er.id, d.label, d.val
+FROM public.employee_reports er
+JOIN (VALUES
+  ('nov-2025-maria', 'Total Assigned','10'), ('nov-2025-maria','Resolved','8'),
+  ('nov-2025-maria', 'Escalated','1'),       ('nov-2025-maria','Pending','1'),
+  ('nov-2025-maria', 'Avg Priority','Medium'),('nov-2025-maria','SLA Breaches','1'),
+
+  ('nov-2025-bilal', 'Total Assigned','11'), ('nov-2025-bilal','Resolved','10'),
+  ('nov-2025-bilal', 'Escalated','0'),       ('nov-2025-bilal','Pending','1'),
+  ('nov-2025-bilal', 'Avg Priority','High'), ('nov-2025-bilal','SLA Breaches','0'),
+
+  ('nov-2025-yousef','Total Assigned','9'),  ('nov-2025-yousef','Resolved','7'),
+  ('nov-2025-yousef','Escalated','1'),       ('nov-2025-yousef','Pending','1'),
+  ('nov-2025-yousef','Avg Priority','High'), ('nov-2025-yousef','SLA Breaches','1'),
+
+  ('nov-2025-khalid','Total Assigned','12'), ('nov-2025-khalid','Resolved','11'),
+  ('nov-2025-khalid','Escalated','0'),       ('nov-2025-khalid','Pending','1'),
+  ('nov-2025-khalid','Avg Priority','Critical'),('nov-2025-khalid','SLA Breaches','0')
+) AS d(report_code, label, val) ON d.report_code = er.report_code
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.employee_report_summary_items si WHERE si.report_id = er.id
+);
+
+-- Rating components
+INSERT INTO public.employee_report_rating_components (report_id, name, score, pct)
+SELECT er.id, d.name, d.score, d.pct
+FROM public.employee_reports er
+JOIN (VALUES
+  ('nov-2025-bilal', 'Resolution Rate',4.8,96),
+  ('nov-2025-bilal', 'SLA Compliance', 4.7,94),
+  ('nov-2025-bilal', 'Response Speed', 4.6,92),
+  ('nov-2025-bilal', 'Customer Satisfaction',4.4,88),
+
+  ('nov-2025-khalid','Resolution Rate',4.9,98),
+  ('nov-2025-khalid','SLA Compliance', 4.8,96),
+  ('nov-2025-khalid','Response Speed', 4.7,94),
+  ('nov-2025-khalid','Customer Satisfaction',4.6,92)
+) AS d(report_code, name, score, pct) ON d.report_code = er.report_code
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.employee_report_rating_components rc WHERE rc.report_id = er.id
+);
+
+-- Weekly breakdowns
+INSERT INTO public.employee_report_weekly (report_id, week_label, assigned, resolved, sla, avg_response, delta_type, delta_text)
+SELECT er.id, d.wk, d.asgn, d.res, d.s, d.avg_r, d.dt, d.dtxt
+FROM public.employee_reports er
+JOIN (VALUES
+  ('nov-2025-bilal','Week 1',3,3,'100%','15 Mins','positive','+100%'),
+  ('nov-2025-bilal','Week 2',3,3,'100%','17 Mins','positive','+0%'),
+  ('nov-2025-bilal','Week 3',3,2,'67%', '18 Mins','negative','-33%'),
+  ('nov-2025-bilal','Week 4',2,2,'100%','19 Mins','positive','+33%'),
+
+  ('nov-2025-khalid','Week 1',3,3,'100%','14 Mins','positive','+100%'),
+  ('nov-2025-khalid','Week 2',3,3,'100%','16 Mins','positive','+0%'),
+  ('nov-2025-khalid','Week 3',3,3,'100%','15 Mins','positive','+0%'),
+  ('nov-2025-khalid','Week 4',3,2,'67%', '21 Mins','negative','-33%')
+) AS d(report_code, wk, asgn, res, s, avg_r, dt, dtxt) ON d.report_code = er.report_code
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.employee_report_weekly ew WHERE ew.report_id = er.id
+);
+
+-- Notes
+INSERT INTO public.employee_report_notes (report_id, note)
+SELECT er.id, d.note
+FROM public.employee_reports er
+JOIN (VALUES
+  ('nov-2025-bilal', 'Zero SLA breaches — best in team for November.'),
+  ('nov-2025-bilal', 'Security camera restorations completed ahead of schedule.'),
+  ('nov-2025-khalid','All critical electrical jobs resolved within 30-minute response SLA.'),
+  ('nov-2025-khalid','Recommended for performance recognition — November 2025.')
+) AS d(report_code, note) ON d.report_code = er.report_code
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.employee_report_notes en WHERE en.report_id = er.id
+);
+
+-- ---------------------------------------------------------------------------
+-- 17. ADDITIONAL SYSTEM EVENT FEED ENTRIES
+--     Tests the operator dashboard event log view
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.system_event_feed (severity, title, description, event_time)
+VALUES
+  ('critical','Critical ticket surge detected',
+   'Ticket volume increased 40% above baseline in the last 2 hours (March 2026).',
+   '2026-03-01 10:00:00+00'),
+  ('warning','SLA breach threshold exceeded',
+   '3 tickets have crossed SLA response deadline this morning.',
+   '2026-03-01 10:30:00+00'),
+  ('info','Model execution completed — CX-R01',
+   'All 6 AI agents ran successfully on ticket CX-R01 within 60 seconds.',
+   '2026-03-01 06:32:00+00'),
+  ('info','Chat escalation processed',
+   'Conv-1 escalated to operator; ticket CX-R01 auto-linked to chat session.',
+   '2026-03-01 06:25:00+00'),
+  ('warning','Failed model execution — CX-M55',
+   'Resolution agent failed on first attempt; retry succeeded after 15 minutes.',
+   '2026-02-22 09:06:00+00')
+ON CONFLICT DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- 18. SYSTEM CONFIG & VERSION UPDATES
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.system_config_kv (key, value)
+VALUES
+  ('ai_agent_timeout_ms',     '30000'),
+  ('sla_escalation_threshold','0.90'),
+  ('chat_bot_model',          'chatbot-v2.1'),
+  ('max_tickets_per_page',    '25'),
+  ('sentiment_threshold_neg', '-0.50')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
+INSERT INTO public.system_versions (component, version, deployed_at)
+VALUES
+  ('Sentiment Agent',  'v3.1', '2026-01-15'),
+  ('Priority Agent',   'v2.4', '2026-01-15'),
+  ('Routing Agent',    'v1.8', '2025-12-01'),
+  ('SLA Agent',        'v1.2', '2025-11-01'),
+  ('Resolution Agent', 'v2.0', '2026-02-01'),
+  ('Feature Agent',    'v1.5', '2025-12-01')
+ON CONFLICT (component) DO UPDATE
+  SET version=EXCLUDED.version, deployed_at=EXCLUDED.deployed_at;
+
+-- ---------------------------------------------------------------------------
+-- 19. PASSWORD RESET TOKEN  (for testing the auth / reset-password views)
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.password_reset_tokens (user_id, token_hash, expires_at)
+SELECT
+  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  crypt('dev-reset-token-cx1-2026', gen_salt('bf', 10)),
+  now() + interval '1 hour'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.password_reset_tokens prt
+  WHERE prt.user_id=(SELECT id FROM users WHERE email='customer1@innova.cx')
+    AND prt.used_at IS NULL
+);
+
+-- ---------------------------------------------------------------------------
+-- 20. RESOLUTION FEEDBACK for March 2026 tickets that were resolved
+--     (CX-R01 not yet resolved — only feedback for already-closed CX-M tickets
+--      not yet covered in the original seed)
+-- ---------------------------------------------------------------------------
+
+INSERT INTO public.ticket_resolution_feedback (
+  ticket_id, employee_user_id, decision,
+  suggested_resolution, employee_resolution, final_resolution,
+  model_version, confidence_at_time
+)
+SELECT t.id, u.id, fb.decision, fb.suggested, fb.custom, fb.final,
+  'resolution-v2.0', fb.conf
+FROM (VALUES
+  ('CX-M20','ahmed@innova.cx','accepted',
+   'Tighten mounting bolts and balance fan blade.',
+   NULL,
+   'Loose mounting bolts tightened and fan blade balanced.', 0.8300),
+  ('CX-M36','ahmed@innova.cx','accepted',
+   'Isolate gas supply and replace faulty valve.',
+   NULL,
+   'Gas supply isolated; faulty valve replaced and area cleared.', 0.9900),
+  ('CX-M22','omar@innova.cx','accepted',
+   'Deploy relief guard and update shift roster.',
+   NULL,
+   'Relief guard deployed; roster updated to prevent gaps.', 0.9500)
+) AS fb(ticket_code, emp_email, decision, suggested, custom, final, conf)
+JOIN tickets t ON t.ticket_code = fb.ticket_code
+JOIN users u ON u.email = fb.emp_email
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.ticket_resolution_feedback trf
+  WHERE trf.ticket_id=t.id AND trf.employee_user_id=u.id
+);
+
+-- ---------------------------------------------------------------------------
+-- FINAL: Refresh all analytics materialized views
+-- ---------------------------------------------------------------------------
+SELECT analytics.refresh_all_materialized_views();
 
 COMMIT;

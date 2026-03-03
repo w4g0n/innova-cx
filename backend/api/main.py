@@ -28,8 +28,8 @@ import io
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
-    import os as _os
     import sys
+    import os as _os
     sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..'))
     from services import analytics_service as _analytics
     _ANALYTICS_READY = True
@@ -142,61 +142,9 @@ def _ensure_runtime_schema_compatibility() -> None:
                     );
                     """
                 )
-                # Employee reports must be unique per employee+month, not globally by month code.
-                # Keep backward compatibility for existing DB volumes created with report_code UNIQUE.
-                cur.execute("ALTER TABLE employee_reports DROP CONSTRAINT IF EXISTS employee_reports_report_code_key;")
-                cur.execute(
-                    """
-                    CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_reports_user_code
-                    ON employee_reports(employee_user_id, report_code);
-                    """
-                )
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
-                # Agent execution logging tables (orchestrator writes here)
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS model_execution_log (
-                        id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-                        execution_id      UUID        NOT NULL,
-                        ticket_id         UUID,
-                        agent_name        VARCHAR(80) NOT NULL,
-                        model_version     VARCHAR(50),
-                        inference_time_ms INTEGER     NOT NULL DEFAULT 0,
-                        confidence_score  NUMERIC(5,4),
-                        error_flag        BOOLEAN     NOT NULL DEFAULT FALSE,
-                        error_message     TEXT,
-                        created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
-                    );
-                    """
-                )
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS agent_output_log (
-                        id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-                        execution_id      UUID        NOT NULL,
-                        ticket_id         UUID,
-                        agent_name        VARCHAR(80) NOT NULL,
-                        step_order        INTEGER     NOT NULL,
-                        input_state       JSONB       NOT NULL DEFAULT '{}'::jsonb,
-                        output_state      JSONB       NOT NULL DEFAULT '{}'::jsonb,
-                        state_diff        JSONB       NOT NULL DEFAULT '{}'::jsonb,
-                        inference_time_ms INTEGER     NOT NULL DEFAULT 0,
-                        error_flag        BOOLEAN     NOT NULL DEFAULT FALSE,
-                        error_message     TEXT,
-                        created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
-                    );
-                    """
-                )
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_execution_id ON model_execution_log(execution_id);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_ticket_id    ON model_execution_log(ticket_id);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_agent_name   ON model_execution_log(agent_name);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_created_at   ON model_execution_log(created_at);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_execution_id ON agent_output_log(execution_id);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_ticket_id    ON agent_output_log(ticket_id);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_agent_name   ON agent_output_log(agent_name);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_created_at   ON agent_output_log(created_at);")
     except Exception as exc:
         logger.warning("db_compat | failed to apply compatibility DDL: %s", exc)
 
@@ -526,6 +474,11 @@ def require_manager(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[st
 
 def require_customer(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     if user.get("role") != "customer":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return user
+
+def require_operator(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    if user.get("role") != "operator":
         raise HTTPException(status_code=403, detail="Forbidden")
     return user
 
@@ -1644,6 +1597,94 @@ class ManagerResolveRequest(BaseModel):
     final_resolution: str
     steps_taken: Optional[str] = None
 
+
+@api.post("/employee/tickets/{ticket_code}/rescore")
+def employee_rescore_ticket(
+    ticket_code: str,
+    body: EmployeeRescoreRequest,
+    user: Dict[str, Any] = Depends(require_employee),
+):
+    user_id = user["id"]
+    new_priority = (body.new_priority or "").strip()
+    reason = (body.reason or "").strip()
+
+    allowed = {"Low", "Medium", "High", "Critical"}
+    if new_priority not in allowed:
+        raise HTTPException(status_code=422, detail=f"Invalid priority. Must be one of: {', '.join(sorted(allowed))}")
+    if not reason:
+        raise HTTPException(status_code=422, detail="Reason is required")
+
+    row = fetch_one(
+        """
+        SELECT t.id, t.ticket_code, t.priority AS current_priority
+        FROM tickets t
+        WHERE t.ticket_code = %s AND t.assigned_to_user_id = %s
+        LIMIT 1;
+        """,
+        (ticket_code, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Ticket not found or not assigned to you")
+
+    current_priority = row.get("current_priority") or "Unknown"
+    request_code = f"REQ-{int(time.time() * 1000) % 10000000}"
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO approval_requests (
+                  request_code, ticket_id, request_type,
+                  current_value, requested_value,
+                  request_reason, submitted_by_user_id,
+                  submitted_at, status
+                )
+                VALUES (%s, %s, 'Rescoring', %s, %s, %s, %s, now(), 'Pending')
+                RETURNING request_code;
+                """,
+                (
+                    request_code,
+                    row["id"],
+                    f"Priority: {current_priority}",
+                    f"Priority: {new_priority}",
+                    reason,
+                    user_id,
+                ),
+            )
+            result = cur.fetchone()
+
+            profile = fetch_one(
+                "SELECT full_name FROM user_profiles WHERE user_id = %s", (user_id,)
+            ) or {}
+
+            manager_row = fetch_one("SELECT id FROM users WHERE role = 'manager' LIMIT 1;")
+            if manager_row and str(manager_row["id"]) != str(user_id):
+                _insert_notification(
+                    cur,
+                    user_id=str(manager_row["id"]),
+                    notif_type="ticket_assignment",
+                    title=f"Rescoring Request — {ticket_code}",
+                    message=f"{employee_name} requested a priority change for {ticket_code}: {current_priority} → {new_priority}. Reason: {reason}",
+                    ticket_id=str(row["id"]),
+                    priority=new_priority,
+                )
+
+            _insert_notification(
+                cur,
+                user_id=str(user_id),
+                notif_type="ticket_assignment",
+                title=f"Rescoring Request Submitted — {ticket_code}",
+                message=f"You requested a priority change for {ticket_code}: {current_priority} → {new_priority}. Reason: {reason}. Awaiting manager approval.",
+                ticket_id=str(row["id"]),
+                priority=new_priority,
+            )
+
+    logger.info(
+        "employee_rescore | ticket=%s from=%s to=%s request=%s by=%s",
+        ticket_code, current_priority, new_priority, result["request_code"], user_id,
+    )
+    return {"ok": True, "requestCode": result["request_code"], "status": "Pending"}
+
 @api.post("/employee/tickets/{ticket_code}/reroute")
 def employee_reroute_ticket(
     ticket_code: str,
@@ -1709,19 +1750,9 @@ def employee_reroute_ticket(
             profile = fetch_one(
                 "SELECT full_name FROM user_profiles WHERE user_id = %s", (user_id,)
             ) or {}
-            employee_name = profile.get("full_name") or user.get("email", "An employee")
-            manager_row = fetch_one("SELECT id FROM users WHERE role = 'manager' LIMIT 1;")
-            if manager_row and str(manager_row["id"]) != str(user_id):
-                _insert_notification(
-                    cur,
-                    user_id=str(manager_row["id"]),
-                    notif_type="ticket_assignment",
-                    title=f"Rerouting Request — {ticket_code}",
-                    message=f"{employee_name} requested a department change for {ticket_code}: {current_dept} → {new_dept_name}. Reason: {reason}",
-                    ticket_id=str(row["id"]),
-                    priority=None,
-                )
-            # Notify the employee themselves (confirmation)
+
+            # Only notify the employee themselves (confirmation)
+            # Manager is notified by the DB trigger notify_manager_on_approval_request
             _insert_notification(
                 cur,
                 user_id=str(user_id),
@@ -1743,343 +1774,153 @@ def employee_reroute_ticket(
 
 
 # =========================================================
-# Employee Reports (AutoGeneratedReports.jsx)
+# Employee Report Helpers
 # =========================================================
 
+_MONTH_LABEL = {
+    1: "January", 2: "February", 3: "March", 4: "April",
+    5: "May", 6: "June", 7: "July", 8: "August",
+    9: "September", 10: "October", 11: "November", 12: "December",
+}
+
+_MONTH_ABBR = {
+    1: "jan", 2: "feb", 3: "mar", 4: "apr",
+    5: "may", 6: "jun", 7: "jul", 8: "aug",
+    9: "sep", 10: "oct", 11: "nov", 12: "dec",
+}
+
+
 def _safe_report_code(code: str) -> str:
-    code = (code or "").strip().lower()
-    # Expect like "oct-2025"
-    if len(code) != 8 or code[3] != "-" or not code[:3].isalpha() or not code[4:].isdigit():
-        raise HTTPException(status_code=400, detail="Invalid report code")
-    return code
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# AUTO-REPORT GENERATION ENGINE
-# Computes a monthly performance report from live ticket data and persists it
-# to employee_reports + sub-tables.  Safe to call repeatedly (upsert style).
-# ──────────────────────────────────────────────────────────────────────────────
-
-_MONTH_ABBR = {1:"jan",2:"feb",3:"mar",4:"apr",5:"may",6:"jun",
-               7:"jul",8:"aug",9:"sep",10:"oct",11:"nov",12:"dec"}
-
-_MONTH_LABEL = {1:"January",2:"February",3:"March",4:"April",5:"May",6:"June",
-                7:"July",8:"August",9:"September",10:"October",11:"November",12:"December"}
+    """Sanitise a report_code path param - allow only [a-z0-9-]."""
+    import re
+    sanitised = re.sub(r"[^a-z0-9\-]", "", code.lower())
+    if not sanitised:
+        raise HTTPException(status_code=400, detail="Invalid report code.")
+    return sanitised
 
 
 def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[str]:
     """
-    Computes and saves a monthly performance report for `user_id` covering
-    the given calendar month.  Returns the report_code on success, None if
-    the employee had zero ticket activity that month.
-
-    Idempotent — if the report already exists it is refreshed in-place.
+    Build (or rebuild) the employee_report row for the given user/year/month.
+    Returns the report_code on success, or None if the employee had no ticket
+    activity in that month.
     """
-    import calendar as _calendar
+    from datetime import date
+    period_start = date(year, month, 1)
+    if month == 12:
+        period_end = date(year + 1, 1, 1)
+    else:
+        period_end = date(year, month + 1, 1)
 
-    month_start = datetime(year, month, 1, tzinfo=timezone.utc)
-    last_day    = _calendar.monthrange(year, month)[1]
-    month_end   = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+    activity = fetch_one(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM tickets
+        WHERE assigned_to = %s
+          AND created_at >= %s AND created_at < %s
+        """,
+        (user_id, period_start, period_end),
+    )
+    if not activity or (activity.get("cnt") or 0) == 0:
+        return None
 
     report_code = f"{_MONTH_ABBR[month]}-{year}"
     month_label = f"{_MONTH_LABEL[month]} {year}"
 
-    # ── Pull all tickets from mv_ticket_base (pre-joined, pre-computed) ─────
-    # mv_ticket_base already has: status, priority, respond_breached,
-    # resolve_breached, first_response_at, response_time_mins, is_resolved,
-    # is_escalated, any_breached, created_week — no joins needed.
-    rows = fetch_all(
+    kpi_row = fetch_one(
         """
         SELECT
-            ticket_id       AS id,
-            status,
-            priority,
-            respond_breached,
-            resolve_breached,
-            any_breached,
-            is_resolved,
-            is_escalated,
-            first_response_at,
-            response_time_mins,
-            created_at,
-            created_week    AS week_start
-        FROM mv_ticket_base
-        WHERE employee_id = %s
-          AND created_at >= %s
-          AND created_at <= %s
-        ORDER BY created_at
+          COUNT(*) AS total,
+          COUNT(*) FILTER (WHERE status = 'Resolved') AS resolved,
+          ROUND(
+            COUNT(*) FILTER (WHERE NOT (resolve_breached OR respond_breached))::numeric /
+            NULLIF(COUNT(*), 0) * 100, 1
+          ) AS sla_pct,
+          ROUND(
+            AVG(EXTRACT(EPOCH FROM (first_response_at - COALESCE(priority_assigned_at, created_at))) / 60.0)
+            FILTER (WHERE first_response_at IS NOT NULL), 1
+          ) AS avg_response_mins
+        FROM tickets
+        WHERE assigned_to = %s
+          AND created_at >= %s AND created_at < %s
         """,
-        (user_id, month_start, month_end),
-    )
+        (user_id, period_start, period_end),
+    ) or {}
 
-    # Fallback: if MV is stale/not refreshed, compute directly from base tickets table.
-    if not rows:
-        rows = fetch_all(
+    total = int(kpi_row.get("total") or 0)
+    resolved = int(kpi_row.get("resolved") or 0)
+    sla_pct = float(kpi_row.get("sla_pct") or 0)
+    avg_resp = kpi_row.get("avg_response_mins")
+
+    resolve_rate = round(resolved / total * 100, 1) if total else 0
+    kpi_rating = round((resolve_rate * 0.5) + (sla_pct * 0.5), 1)
+    subtitle = f"{resolved} of {total} tickets resolved · {sla_pct}% SLA compliance"
+
+    existing = fetch_one(
+        "SELECT id FROM employee_reports WHERE report_code = %s AND employee_user_id = %s",
+        (report_code, user_id),
+    )
+    if existing:
+        execute(
             """
-            SELECT
-                t.id,
-                t.status,
-                t.priority,
-                COALESCE(t.respond_breached, FALSE) AS respond_breached,
-                COALESCE(t.resolve_breached, FALSE) AS resolve_breached,
-                (COALESCE(t.respond_breached, FALSE) OR COALESCE(t.resolve_breached, FALSE)) AS any_breached,
-                (t.status = 'Resolved') AS is_resolved,
-                (t.status = 'Escalated') AS is_escalated,
-                t.first_response_at,
-                EXTRACT(EPOCH FROM (t.first_response_at - COALESCE(t.priority_assigned_at, t.assigned_at, t.created_at))) / 60.0
-                    AS response_time_mins,
-                t.created_at,
-                date_trunc('week', t.created_at)::date AS week_start
-            FROM tickets t
-            WHERE t.assigned_to_user_id = %s
-              AND t.created_at >= %s
-              AND t.created_at <= %s
-            ORDER BY t.created_at
+            UPDATE employee_reports SET
+              month_label = %s, subtitle = %s,
+              kpi_rating = %s, kpi_resolved = %s, kpi_sla = %s, kpi_avg_response = %s,
+              created_at = NOW()
+            WHERE id = %s
             """,
-            (user_id, month_start, month_end),
+            (month_label, subtitle, kpi_rating, resolved, sla_pct, avg_resp, existing["id"]),
+        )
+        report_id = existing["id"]
+    else:
+        row = fetch_one(
+            """
+            INSERT INTO employee_reports
+              (employee_user_id, report_code, month_label, subtitle,
+               kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (user_id, report_code, month_label, subtitle,
+             kpi_rating, resolved, sla_pct, avg_resp),
+        )
+        if not row:
+            return None
+        report_id = row["id"]
+
+    execute("DELETE FROM employee_report_summary_items WHERE report_id = %s", (report_id,))
+    summary_items = [
+        ("Tickets Assigned", str(total)),
+        ("Tickets Resolved", str(resolved)),
+        ("SLA Compliance", f"{sla_pct}%"),
+        ("Avg First Response", f"{round(avg_resp)} min" if avg_resp else "N/A"),
+    ]
+    for label, value in summary_items:
+        execute(
+            "INSERT INTO employee_report_summary_items (report_id, label, value_text) VALUES (%s, %s, %s)",
+            (report_id, label, value),
         )
 
-    if not rows:
-        return None  # no activity → no report
-
-    # ── Aggregate KPIs ────────────────────────────────────────────────────
-    # mv_ticket_base pre-computes any_breached, is_resolved, is_escalated,
-    # and response_time_mins — use them directly, no re-derivation needed.
-    total      = len(rows)
-    resolved   = sum(1 for r in rows if r["is_resolved"])
-    escalated  = sum(1 for r in rows if r["is_escalated"])
-    breached   = sum(1 for r in rows if r["any_breached"])
-    pending    = total - resolved
-
-    sla_pct    = round((total - breached) / total * 100) if total else 0
-
-    # response_time_mins is already computed in the MV (NULL if not responded)
-    # Guard: skip negative values — they mean priority_assigned_at was set after
-    # first_response_at (bad seed data or clock skew). We floor at 0.
-    respond_times = [
-        max(0.0, float(r["response_time_mins"]))
-        for r in rows
-        if r.get("response_time_mins") is not None
-        and float(r["response_time_mins"]) >= 0   # discard clearly bad values
-    ]
-    avg_respond_mins = round(sum(respond_times) / len(respond_times)) if respond_times else 0
-
-    # Priority distribution
-    priority_counts = {}
-    for r in rows:
-        p = r.get("priority") or "Unknown"
-        priority_counts[p] = priority_counts.get(p, 0) + 1
-    avg_priority = max(priority_counts, key=priority_counts.get) if priority_counts else "Medium"
-
-    # ── Rating calculation ────────────────────────────────────────────────
-    # Resolution rate score (0-5)
-    res_rate_score = round((resolved / total) * 5, 1) if total else 0.0
-
-    # SLA compliance score (0-5)
-    sla_score = round((sla_pct / 100) * 5, 1)
-
-    # Response speed score (0-5) — based on avg respond time vs 60min target
-    if avg_respond_mins <= 0:
-        resp_speed_score = 5.0
-    elif avg_respond_mins <= 30:
-        resp_speed_score = 5.0
-    elif avg_respond_mins <= 60:
-        resp_speed_score = 4.5
-    elif avg_respond_mins <= 120:
-        resp_speed_score = 4.0
-    elif avg_respond_mins <= 240:
-        resp_speed_score = 3.5
-    elif avg_respond_mins <= 480:
-        resp_speed_score = 3.0
-    else:
-        resp_speed_score = 2.5
-
-    # Customer satisfaction proxy — based on SLA + resolution
-    csat_score = round((sla_score + res_rate_score) / 2, 1)
-
-    overall_rating = round(
-        (res_rate_score * 0.35 + sla_score * 0.30 + resp_speed_score * 0.20 + csat_score * 0.15),
-        1
-    )
-    overall_rating = min(max(overall_rating, 0.0), 5.0)
-
-    rating_str = f"{overall_rating} / 5"
-    sla_str    = f"{sla_pct}%"
-    avg_resp_str = f"{avg_respond_mins} Mins" if avg_respond_mins else "N/A"
-
-    # ── Subtitle ──────────────────────────────────────────────────────────
-    if overall_rating >= 4.5:
-        subtitle = "Strong performance with high SLA compliance."
-    elif overall_rating >= 4.0:
-        subtitle = "Consistent resolution rate across all priorities."
-    elif overall_rating >= 3.5:
-        subtitle = "Good month — met most SLA targets."
-    elif overall_rating >= 3.0:
-        subtitle = "Solid performance with room for improvement."
-    else:
-        subtitle = "Challenging month — high workload or SLA breaches detected."
-
-    # ── Weekly breakdown ──────────────────────────────────────────────────
-    from collections import defaultdict as _defaultdict
-    week_map = _defaultdict(lambda: {"assigned": 0, "resolved": 0, "breached": 0, "respond_times": []})
-
-    for r in rows:
-        ws = r["week_start"]
-        week_map[ws]["assigned"] += 1
-        if r["is_resolved"]:
-            week_map[ws]["resolved"] += 1
-        if r["any_breached"]:
-            week_map[ws]["breached"] += 1
-        # response_time_mins is pre-computed in mv_ticket_base
-        if r.get("response_time_mins") is not None:
-            week_map[ws]["respond_times"].append(float(r["response_time_mins"]))
-
-    sorted_weeks = sorted(week_map.keys())
-    weekly_rows = []
-    prev_resolved = None
-    for i, ws in enumerate(sorted_weeks):
-        w = week_map[ws]
-        asgn    = w["assigned"]
-        res     = w["resolved"]
-        breach  = w["breached"]
-        sla_w   = f"{round((asgn - breach) / asgn * 100)}%" if asgn else "N/A"
-        rt      = w["respond_times"]
-        avg_w   = f"{round(sum(rt)/len(rt))} Mins" if rt else "N/A"
-
-        # Delta vs previous week
-        if prev_resolved is None:
-            delta_type = "positive"
-            delta_text = "+0%"
-        else:
-            if prev_resolved == 0:
-                delta_pct = 100 if res > 0 else 0
-            else:
-                delta_pct = round((res - prev_resolved) / prev_resolved * 100)
-            delta_type = "positive" if delta_pct >= 0 else "negative"
-            sign = "+" if delta_pct >= 0 else ""
-            delta_text = f"{sign}{delta_pct}%"
-
-        weekly_rows.append({
-            "week":       f"Week {i+1}",
-            "assigned":   asgn,
-            "resolved":   res,
-            "sla":        sla_w,
-            "avg":        avg_w,
-            "delta_type": delta_type,
-            "delta_text": delta_text,
-        })
-        prev_resolved = res
-
-    # ── Notes ─────────────────────────────────────────────────────────────
-    notes = []
-    if resolved == total:
-        notes.append("All assigned tickets resolved within the month.")
-    elif resolved >= total * 0.9:
-        notes.append(f"Excellent closure rate — {resolved} of {total} tickets resolved.")
-    else:
-        notes.append(f"Resolved {resolved} of {total} tickets. Focus on pending cases.")
-    if breached == 0:
-        notes.append("Zero SLA breaches recorded — outstanding compliance.")
-    elif breached == 1:
-        notes.append("One SLA breach this month — review response process.")
-    else:
-        notes.append(f"{breached} SLA breaches detected — consider workload review.")
-    if avg_respond_mins and avg_respond_mins > 120:
-        notes.append(f"Average response time of {avg_respond_mins} mins is above target.")
-    elif avg_respond_mins and avg_respond_mins <= 30:
-        notes.append("Response time is well within targets — keep it up.")
-
-    # ── Persist to DB ──────────────────────────────────────────────────────
-    try:
-        with db_connect() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # Upsert the report header
-                cur.execute("""
-                    INSERT INTO employee_reports
-                        (report_code, employee_user_id, month_label, subtitle,
-                         kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (employee_user_id, report_code) DO UPDATE
-                        SET month_label    = EXCLUDED.month_label,
-                            subtitle       = EXCLUDED.subtitle,
-                            kpi_rating     = EXCLUDED.kpi_rating,
-                            kpi_resolved   = EXCLUDED.kpi_resolved,
-                            kpi_sla        = EXCLUDED.kpi_sla,
-                            kpi_avg_response = EXCLUDED.kpi_avg_response
-                    RETURNING id;
-                """, (report_code, user_id, month_label, subtitle,
-                      rating_str, resolved, sla_str, avg_resp_str))
-                report_id = cur.fetchone()["id"]
-
-                # Replace sub-table rows (delete + re-insert for idempotency)
-                cur.execute("DELETE FROM employee_report_summary_items WHERE report_id = %s", (report_id,))
-                summary_data = [
-                    ("Total Assigned",  str(total)),
-                    ("Resolved",        str(resolved)),
-                    ("Escalated",       str(escalated)),
-                    ("Pending",         str(pending)),
-                    ("Avg Priority",    avg_priority),
-                    ("SLA Breaches",    str(breached)),
-                ]
-                cur.executemany(
-                    "INSERT INTO employee_report_summary_items (report_id, label, value_text) VALUES (%s, %s, %s)",
-                    [(report_id, lbl, val) for lbl, val in summary_data]
-                )
-
-                cur.execute("DELETE FROM employee_report_rating_components WHERE report_id = %s", (report_id,))
-                rating_data = [
-                    ("Resolution Rate",       res_rate_score,   round(res_rate_score / 5 * 100)),
-                    ("SLA Compliance",        sla_score,         sla_pct),
-                    ("Response Speed",        resp_speed_score,  round(resp_speed_score / 5 * 100)),
-                    ("Customer Satisfaction", csat_score,        round(csat_score / 5 * 100)),
-                ]
-                cur.executemany(
-                    "INSERT INTO employee_report_rating_components (report_id, name, score, pct) VALUES (%s, %s, %s, %s)",
-                    [(report_id, name, score, pct) for name, score, pct in rating_data]
-                )
-
-                cur.execute("DELETE FROM employee_report_weekly WHERE report_id = %s", (report_id,))
-                cur.executemany(
-                    """INSERT INTO employee_report_weekly
-                        (report_id, week_label, assigned, resolved, sla, avg_response, delta_type, delta_text)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                    [(report_id, w["week"], w["assigned"], w["resolved"],
-                      w["sla"], w["avg"], w["delta_type"], w["delta_text"])
-                     for w in weekly_rows]
-                )
-
-                cur.execute("DELETE FROM employee_report_notes WHERE report_id = %s", (report_id,))
-                cur.executemany(
-                    "INSERT INTO employee_report_notes (report_id, note) VALUES (%s, %s)",
-                    [(report_id, n) for n in notes]
-                )
-
-            conn.commit()
-        return report_code
-    except Exception as exc:
-        logger.error("report_gen | failed user=%s month=%s-%s err=%s", user_id, year, month, exc)
-        return None
+    logger.info("report_gen | generated report=%s user=%s", report_code, user_id)
+    return report_code
 
 
 def _ensure_recent_reports(user_id: str, months: int = 3) -> None:
-    """
-    Ensures the last `months` calendar months have a generated report.
-    Called on the reports list endpoint so every employee always sees data.
-    """
+    """Ensure the employee has a report for each of the last `months` calendar months."""
     today = datetime.now(tz=timezone.utc)
-    for i in range(months):
-        m = today.month - i
-        y = today.year
-        while m <= 0:
-            m += 12
-            y -= 1
-        code = f"{_MONTH_ABBR[m]}-{y}"
+    year, month = today.year, today.month
+    for _ in range(months):
         existing = fetch_one(
-            "SELECT 1 FROM employee_reports WHERE report_code = %s AND employee_user_id = %s",
-            (code, user_id),
+            "SELECT id FROM employee_reports WHERE report_code = %s AND employee_user_id = %s",
+            (f"{_MONTH_ABBR[month]}-{year}", user_id),
         )
         if not existing:
-            _generate_employee_report(user_id, y, m)
+            _generate_employee_report(user_id, year, month)
+        if month == 1:
+            month = 12
+            year -= 1
+        else:
+            month -= 1
 
 @api.get("/employee/reports")
 def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
@@ -2457,7 +2298,6 @@ def customer_ticket_details(
         SELECT
           tu.message,
           tu.update_type,
-          tu.meta,
           tu.created_at,
           up.full_name AS author_name
         FROM ticket_updates tu
@@ -2505,7 +2345,6 @@ def customer_ticket_details(
                 "message": u.get("message"),
                 "type": u.get("update_type"),
                 "author": u.get("author_name"),
-                "meta": u.get("meta") or {},
                 "date": u.get("created_at").isoformat() if u.get("created_at") else None,
             }
             for u in updates_rows
@@ -2621,20 +2460,6 @@ def create_customer_ticket(
     ticket_id = None
     with db_connect() as conn:
         with conn.cursor() as cur:
-            # Assign a default department (General or first available)
-            cur.execute(
-                """
-                SELECT id FROM departments WHERE LOWER(name) = 'general' LIMIT 1;
-                """
-            )
-            default_dept_row = cur.fetchone()
-            if not default_dept_row:
-                cur.execute(
-                    "SELECT id FROM departments ORDER BY name LIMIT 1;"
-                )
-                default_dept_row = cur.fetchone()
-            default_dept_id = default_dept_row[0] if default_dept_row else None
-
             cur.execute(
                 """
                 INSERT INTO tickets (
@@ -2646,22 +2471,20 @@ def create_customer_ticket(
                     priority,
                     status,
                     created_by_user_id,
-                    department_id,
                     model_suggestion,
                     created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING id;
                 """,
                 (
                     ticket_code,
-                    body.type,
+                    body.type,         
                     body.subject,
                     body.details,
                     body.asset_type,
                     "Low",
                     "Unassigned",
                     user["id"],
-                    default_dept_id,
                     model_suggestion,
                 ),
             )
@@ -3331,20 +3154,16 @@ SELECT
     t.ticket_code,
     t.subject AS ticket_subject,
     ar.request_type AS type,
-    ar.current_value AS stored_current,
+    ar.current_value AS current,
     ar.requested_value AS requested,
     up.full_name AS submitted_by,
     ar.submitted_at AS submitted_on,
     ar.status AS status,
     du.full_name AS decided_by,
     ar.decided_at AS decision_date,
-    ar.decision_notes,
-    -- Live ticket state (always up-to-date)
-    t.priority AS live_priority,
-    d.name AS live_department
+    ar.decision_notes
 FROM approval_requests ar
 LEFT JOIN tickets t ON ar.ticket_id = t.id
-LEFT JOIN departments d ON d.id = t.department_id
 LEFT JOIN user_profiles up ON ar.submitted_by_user_id = up.user_id
 LEFT JOIN user_profiles du ON ar.decided_by_user_id = du.user_id
 ORDER BY ar.submitted_at DESC;
@@ -3356,22 +3175,13 @@ ORDER BY ar.submitted_at DESC;
         submitted_on = a["submitted_on"].isoformat() if a.get("submitted_on") else ""
         decision_date = a["decision_date"].isoformat() if a.get("decision_date") else ""
 
-        req_type = (a.get("type") or "").lower()
-        # Use live ticket state for "current" so it's always accurate
-        if "rescor" in req_type:
-            live_current = f"Priority: {a.get('live_priority') or ''}" if a.get("live_priority") else (a.get("stored_current") or "")
-        elif "rerout" in req_type:
-            live_current = f"Dept: {a.get('live_department') or ''}" if a.get("live_department") else (a.get("stored_current") or "")
-        else:
-            live_current = a.get("stored_current") or ""
-
         result.append({
             "requestId": a["request_id"],
             "ticketId": a["ticket_id"],
             "ticketCode": a.get("ticket_code") or "",
             "ticketSubject": a.get("ticket_subject") or "No subject",
             "type": a.get("type") or "",
-            "current": live_current,
+            "current": a.get("current") or "",
             "requested": a.get("requested") or "",
             "submittedBy": a.get("submitted_by") or "—",
             "submittedOn": submitted_on,
@@ -3396,8 +3206,11 @@ class ApprovalDecisionRequest(BaseModel):
 def decide_approval(
     request_id: str,
     body: ApprovalDecisionRequest,
-    user: Dict[str, Any] = Depends(require_manager),
+    authorization: Optional[str] = Header(default=None),
 ):
+    user = get_current_user(authorization)
+    if user.get("role") != "manager":
+        raise HTTPException(status_code=403, detail="Forbidden")
     decision = (body.decision or "").strip()
     if decision not in ("Approved", "Rejected"):
         raise HTTPException(status_code=422, detail="decision must be 'Approved' or 'Rejected'")
@@ -3742,10 +3555,10 @@ def get_manager_trends(
     for r in breach_timeline_raw:
         key = r["day"].isoformat()
         if key not in bt_map:
-            bt_map[key] = {"day":key,"total":0,"Critical":0,"High":0,"Medium":0,"Low":0}
+            bt_map[key]={"day":key,"total":0,"Critical":0,"High":0,"Medium":0,"Low":0}
         bt_map[key]["total"]+=r["total"]
         if r["priority"] in ("Critical","High","Medium","Low"):
-            bt_map[key][r["priority"]] += r["breached"]
+            bt_map[key][r["priority"]]+=r["breached"]
     breach_timeline_out = sorted(bt_map.values(), key=lambda x: x["day"])
 
     escalation_by_dept_raw = fetch_all(f"SELECT COALESCE(d.name,'Unassigned') AS department, COUNT(*) AS total, COUNT(*) FILTER(WHERE t.status='Escalated') AS escalated FROM tickets t {dept_join} WHERE {where} GROUP BY 1 ORDER BY escalated DESC", params)
@@ -3761,14 +3574,14 @@ def get_manager_trends(
     rescore_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority) AS rescored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Low' AND t.priority IN('Medium','High','Critical'))OR(t.model_priority='Medium' AND t.priority IN('High','Critical'))OR(t.model_priority='High' AND t.priority='Critical'))) AS upscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Critical' AND t.priority IN('Low','Medium','High'))OR(t.model_priority='High' AND t.priority IN('Low','Medium'))OR(t.model_priority='Medium' AND t.priority='Low'))) AS downscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL) AS total_with_model FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where} GROUP BY up.full_name", params)
     rescore_map = {r["name"]:{"rescored":r["rescored"],"upscored":r["upscored"],"downscored":r["downscored"],"totalWithModel":r["total_with_model"],"rescoreRate":round(r["rescored"]/r["total_with_model"]*100,1) if r["total_with_model"] else 0} for r in rescore_rows}
 
-    co_breach = float(company_avg.get("breach_rate") or 0)
-    co_resolve = float(company_avg.get("avg_resolve") or 0)
-    co_respond = float(company_avg.get("avg_respond") or 0)
+    co_breach=float(company_avg.get("breach_rate") or 0)
+    co_resolve=float(company_avg.get("avg_resolve") or 0)
+    co_respond=float(company_avg.get("avg_respond") or 0)
     employee_out = []
     for e in employee_perf:
-        name = e["name"]
-        total = e["total"] or 0
-        brate = round(e["breached"] / total * 100, 1) if total else 0
+        name=e["name"]
+        total=e["total"] or 0
+        brate=round(e["breached"]/total*100,1) if total else 0
         acc=acceptance_map.get(name,{"rate":None,"accepted":0,"declined":0,"total":0})
         rsc=rescore_map.get(name,{"rescoreRate":0,"upscored":0,"downscored":0})
         employee_out.append({"name":name,"empId":e["emp_id"],"role":e["role"],"ticketsHandled":total,"resolved":e["resolved"] or 0,"breached":e["breached"] or 0,"breachRate":brate,"avgResolveMins":float(e["avg_resolve_mins"] or 0),"avgRespondMins":float(e["avg_respond_mins"] or 0),"companyBreachRate":round(co_breach,1),"companyResolveMins":round(co_resolve,1),"companyRespondMins":round(co_respond,1),"acceptanceRate":acc["rate"],"acceptedCount":acc["accepted"],"declinedCount":acc["declined"],"rescoreRate":rsc["rescoreRate"],"upscored":rsc["upscored"],"downscored":rsc["downscored"],"alertLowVolume":total<5,"alertHighBreach":brate>10,"alertSlowResolve":float(e["avg_resolve_mins"] or 0)>480,"alertLowAcceptance":acc["rate"] is not None and acc["rate"]<50,"alertHighRescore":rsc["rescoreRate"]>30})
@@ -3844,9 +3657,8 @@ def manager_notifications(
 
     return {"unreadCount": int(unread_row.get("unread") or 0), "notifications": notifications}
 
-
-@app.post("/manager/notifications/{notification_id}/read")
-def manager_notification_mark_read_app(
+@api.post("/manager/notifications/{notification_id}/read")
+def manager_notification_mark_read(
     notification_id: str,
     user: Dict[str, Any] = Depends(require_manager),
 ):
@@ -3865,7 +3677,7 @@ def manager_notification_mark_read_app(
     return {"ok": True}
 
 @api.post("/manager/notifications/read-all")
-def manager_notifications_mark_all_read_app(
+def manager_notifications_mark_all_read(
     user: Dict[str, Any] = Depends(require_manager),
 ):
     execute(
@@ -3890,34 +3702,6 @@ class OrchestratorComplaintRequest(BaseModel):
     label: Optional[str] = None
     status: Optional[str] = None
     classification_confidence: Optional[float] = None
-
-
-def _infer_orchestrator_stage(body: OrchestratorComplaintRequest) -> Dict[str, str]:
-    """
-    Best-effort stage inference for orchestrator activity trail.
-    This keeps customer-facing updates connected to actual orchestrator writes.
-    """
-    if body.priority is not None:
-        return {"id": "priority", "label": "Prioritization Agent"}
-    if (body.department or "").strip():
-        return {"id": "routing", "label": "Department Routing"}
-    if (body.status or "").strip() in {"Escalated", "Overdue"}:
-        return {"id": "sla", "label": "SLA Check"}
-    if body.sentiment is not None and body.audio_sentiment is not None:
-        return {"id": "combiner", "label": "Sentiment Combiner"}
-    if body.audio_sentiment is not None:
-        return {"id": "audio", "label": "Audio Analysis Agent"}
-    if body.sentiment is not None:
-        return {"id": "sentiment", "label": "Sentiment Analysis Agent"}
-    if body.classification_confidence is not None or (body.label or "").strip():
-        return {"id": "classification", "label": "Classification Agent"}
-    if body.keywords:
-        return {"id": "feature", "label": "Feature Engineering Agent"}
-    return {"id": "orchestrator", "label": "Controller / Orchestrator"}
-
-
-def _orchestrator_update_message(stage_label: str, ticket_code: str) -> str:
-    return f"[AI Stage] {stage_label} processed ticket {ticket_code}."
 
 
 class ChatbotProxyRequest(BaseModel):
@@ -4047,27 +3831,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         ),
                     )
                     updated = cur.fetchone()
-                    stage = _infer_orchestrator_stage(body)
-                    cur.execute(
-                        """
-                        INSERT INTO ticket_updates (
-                          ticket_id,
-                          author_user_id,
-                          update_type,
-                          message,
-                          from_status,
-                          to_status,
-                          meta
-                        )
-                        VALUES (%s, NULL, 'system', %s, NULL, %s, %s::jsonb);
-                        """,
-                        (
-                            existing[0],
-                            _orchestrator_update_message(stage["label"], updated[0]),
-                            updated[1],
-                            json.dumps({"source": "orchestrator", "stage_id": stage["id"], "stage_label": stage["label"]}),
-                        ),
-                    )
                     logger.info(
                         "orchestrator_ticket_update | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                         updated[0],
@@ -4152,37 +3915,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 ),
             )
             created = cur.fetchone()
-            stage = _infer_orchestrator_stage(body)
-            cur.execute(
-                """
-                INSERT INTO ticket_updates (
-                  ticket_id,
-                  author_user_id,
-                  update_type,
-                  message,
-                  from_status,
-                  to_status,
-                  meta
-                )
-                SELECT
-                  t.id,
-                  NULL,
-                  'system',
-                  %s,
-                  NULL,
-                  %s,
-                  %s::jsonb
-                FROM tickets t
-                WHERE t.ticket_code = %s
-                LIMIT 1;
-                """,
-                (
-                    _orchestrator_update_message(stage["label"], created[0]),
-                    created[1],
-                    json.dumps({"source": "orchestrator", "stage_id": stage["id"], "stage_label": stage["label"]}),
-                    created[0],
-                ),
-            )
             logger.info(
                 "orchestrator_ticket_create | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                 created[0],
@@ -4289,6 +4021,169 @@ async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
             continue
 
     raise HTTPException(status_code=503, detail=f"Transcriber service unavailable: {last_error}")
+
+
+# =========================================================
+# OPERATOR ANALYTICS ENDPOINTS
+# =========================================================
+
+@api.get("/operator/analytics/qc")
+def get_operator_qc(
+    timeRange: str = Query("last30days"),
+    department: str = Query("All Departments"),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """
+    Quality-Control analytics for QualityControl.jsx.
+    Reads from: mv_operator_qc_daily, mv_acceptance_daily, mv_ticket_base.
+    All paths are MV-only — no base table queries.
+    """
+    range_sql = {
+        "last7days":    "now() - interval '7 days'",
+        "Last 7 Days":  "now() - interval '7 days'",
+        "last30days":   "now() - interval '30 days'",
+        "Last 30 Days": "now() - interval '30 days'",
+        "quarter":      "date_trunc('quarter', now())",
+        "This Quarter": "date_trunc('quarter', now())",
+    }
+    start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
+    period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
+    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+
+    if _ANALYTICS_READY:
+        try:
+            return _analytics.get_operator_qc_data(
+                period_start=period_start,
+                period_end=period_end,
+                department=department,
+            )
+        except Exception as _svc_err:
+            logger.error(
+                "analytics_service.get_operator_qc_data failed. err=%s", _svc_err
+            )
+            raise HTTPException(status_code=500, detail=f"Analytics service error: {_svc_err}")
+
+    raise HTTPException(
+        status_code=503,
+        detail="Analytics MVs not ready. Run database/scripts/analytics_mvs.sql first."
+    )
+
+
+@api.get("/operator/analytics/model-health/chatbot")
+def get_operator_chatbot(
+    timeRange: str = Query("last30days"),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """
+    Chatbot agent analytics for ModelHealth.jsx (Chatbot Agent tab).
+    Reads from: mv_chatbot_daily (MV-only).
+    """
+    range_sql = {
+        "last7days":    "now() - interval '7 days'",
+        "Last 7 Days":  "now() - interval '7 days'",
+        "last30days":   "now() - interval '30 days'",
+        "Last 30 Days": "now() - interval '30 days'",
+        "quarter":      "date_trunc('quarter', now())",
+        "This Quarter": "date_trunc('quarter', now())",
+    }
+    start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
+    period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
+    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+
+    if _ANALYTICS_READY:
+        try:
+            return _analytics.get_operator_chatbot_data(
+                period_start=period_start,
+                period_end=period_end,
+            )
+        except Exception as _svc_err:
+            logger.error(
+                "analytics_service.get_operator_chatbot_data failed. err=%s", _svc_err
+            )
+            raise HTTPException(status_code=500, detail=f"Analytics service error: {_svc_err}")
+
+    raise HTTPException(
+        status_code=503,
+        detail="Analytics MVs not ready. Run database/scripts/analytics_mvs.sql first."
+    )
+
+
+@api.get("/operator/analytics/model-health/sentiment")
+def get_operator_sentiment(
+    timeRange: str = Query("last30days"),
+    department: str = Query("All Departments"),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """
+    Sentiment agent analytics for ModelHealth.jsx (Sentiment Agent tab).
+    Reads from: mv_sentiment_daily (MV-only).
+    """
+    range_sql = {
+        "last7days":    "now() - interval '7 days'",
+        "Last 7 Days":  "now() - interval '7 days'",
+        "last30days":   "now() - interval '30 days'",
+        "Last 30 Days": "now() - interval '30 days'",
+        "quarter":      "date_trunc('quarter', now())",
+        "This Quarter": "date_trunc('quarter', now())",
+    }
+    start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
+    period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
+    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+
+    if _ANALYTICS_READY:
+        try:
+            return _analytics.get_operator_sentiment_data(
+                period_start=period_start,
+                period_end=period_end,
+                department=department,
+            )
+        except Exception as _svc_err:
+            logger.error("analytics_service.get_operator_sentiment_data failed. err=%s", _svc_err)
+            raise HTTPException(status_code=500, detail=f"Analytics service error: {_svc_err}")
+
+    raise HTTPException(
+        status_code=503,
+        detail="Analytics MVs not ready. Run database/scripts/analytics_mvs.sql first."
+    )
+
+
+@api.get("/operator/analytics/model-health/feature")
+def get_operator_feature(
+    timeRange: str = Query("last30days"),
+    department: str = Query("All Departments"),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """
+    Feature engineering agent analytics for ModelHealth.jsx (Feature Agent tab).
+    Reads from: mv_feature_daily (MV-only).
+    """
+    range_sql = {
+        "last7days":    "now() - interval '7 days'",
+        "Last 7 Days":  "now() - interval '7 days'",
+        "last30days":   "now() - interval '30 days'",
+        "Last 30 Days": "now() - interval '30 days'",
+        "quarter":      "date_trunc('quarter', now())",
+        "This Quarter": "date_trunc('quarter', now())",
+    }
+    start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
+    period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
+    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+
+    if _ANALYTICS_READY:
+        try:
+            return _analytics.get_operator_feature_data(
+                period_start=period_start,
+                period_end=period_end,
+                department=department,
+            )
+        except Exception as _svc_err:
+            logger.error("analytics_service.get_operator_feature_data failed. err=%s", _svc_err)
+            raise HTTPException(status_code=500, detail=f"Analytics service error: {_svc_err}")
+
+    raise HTTPException(
+        status_code=503,
+        detail="Analytics MVs not ready. Run database/scripts/analytics_mvs.sql first."
+    )
 
 
 # =========================================================

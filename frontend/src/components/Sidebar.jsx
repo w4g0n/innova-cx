@@ -136,8 +136,8 @@ const menus = {
   operator: [
     { label: "Notifications",    to: "/operator/notifications",    icon: "bell" },
     { label: "Dashboard",        to: "/operator", end: true,       icon: "dashboard" },
-    { label: "Model Analysis",   to: "/operator/model-analysis",   icon: "model" },
-    { label: "Chatbot Analysis", to: "/operator/chatbot-analysis", icon: "chatbot" },
+    { label: "Model Health",   to: "/operator/model-health",   icon: "model" },
+    { label: "Quality Control", to: "/operator/quality-control", icon: "chatbot" },
     { label: "Manage Users",     to: "/operator/users",            icon: "users" },
   ],
 };
