@@ -58,7 +58,8 @@ export default function Approvals() {
       .then((data) => {
         const formatted = data.map((a) => ({
           requestId: a.requestId,
-          ticketId: a.ticketCode,
+          ticketId: a.ticketCode,        // ticket code e.g. CX-1234
+          ticketUuid: a.ticketId,        // UUID for navigation
           type: a.type,
           source: a.source || "employee",
           current: a.current,
@@ -118,9 +119,9 @@ export default function Approvals() {
     return rows.filter((r) => {
       const matchesQuery =
         !q ||
-        r.requestId.toLowerCase().includes(q) ||
-        r.ticketId.toLowerCase().includes(q) ||
-        r.submittedBy.toLowerCase().includes(q);
+        String(r.requestId).toLowerCase().includes(q) ||
+        String(r.ticketId).toLowerCase().includes(q) ||
+        String(r.submittedBy).toLowerCase().includes(q);
 
       const matchesType = requestType === "All Request Types" || r.type === requestType;
       const matchesStatus = status === "All Status" || r.status === status;
@@ -231,8 +232,15 @@ export default function Approvals() {
                 )}
                 {!loading && filtered.map((r) => (
                   <tr key={r.requestId}>
-                    <td>{r.requestId}</td>
-                    <td className="ticketLink">{r.ticketId}</td>
+                    <td>
+                      <span
+                        className="requestIdLink"
+                        onClick={() => navigate(`/manager/approvals/${r.requestId}`)}
+                      >
+                        {r.requestId}
+                      </span>
+                    </td>
+                    <td>{r.ticketId}</td>
                     <td>{r.type}</td>
                     <td>
                       {r.source === "agent" ? "AI Agent" : "Employee"}

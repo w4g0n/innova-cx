@@ -70,7 +70,6 @@ export default function CustomerHistory() {
 
   const [historyItems, setHistoryItems] = useState([]);
 
-  // Fetch tickets from backend
   useEffect(() => {
     const fetchTickets = async () => {
       const token = getToken();
@@ -85,11 +84,10 @@ export default function CustomerHistory() {
 
         const data = await res.json();
 
-        // Map backend tickets to your UI format
         const mappedTickets = (data.tickets || []).map((t) => ({
           id: t.ticketId,
           title: t.subject,
-          type: t.ticketType, // optional: if you have type in backend, replace
+          type: t.ticketType,
           source: formatTicketSource(t.ticketSource),
           status: t.status,
           date: t.issueDate,
@@ -221,93 +219,93 @@ export default function CustomerHistory() {
               <p className="historyEmptySub">Try adjusting your search or filters.</p>
             </div>
           ) : (
-            ordered.map((item) => (
-              (() => {
-                const workflow = getWorkflowState(item.status);
-                const sla = getSlaTargets(item.priority);
-                return (
-              <article
-                key={item.id}
-                className="historyCard historyCard--click"
-                onClick={() => navigate(`/customer/ticket/${item.id}`)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    navigate(`/customer/ticket/${item.id}`);
-                  }
-                }}
-              >
-                <div className="historyCardLeft">
-                  <div className="historyMeta">
-                    <span className="historyId">{item.id}</span>
-                    <span className="historyDot">•</span>
-                    <span className="historyType">{item.type}</span>
-                    <span className="historyDot">•</span>
-                    <span className="historyType">{item.source}</span>
-                    <span className="historyDot">•</span>
-                    <span className={`historyStatus status-${item.status.replace(" ", "")}`}>
-                      {item.status}
-                    </span>
-                  </div>
+            ordered.map((item) => {
+              const workflow = getWorkflowState(item.status);
+              const sla = getSlaTargets(item.priority);
 
-                  <h3 className="historyTitle">{item.title}</h3>
-
-                  <div className="historyFooter">
-                    <span className="historyDate">{item.date}</span>
-                    <span className="historyDot">•</span>
-                    <div className="historyPriorityWrap">
-                      <span className="historyPriorityLabel">Priority:</span>
-                      <PriorityPill priority={item.priority} />
-                    </div>
-                  </div>
-                  <div className="historySlaRow">
-                    <span className="historySlaItem">
-                      <b>Min response:</b> {sla.minResponse}
-                    </span>
-                    <span className="historySlaDot">•</span>
-                    <span className="historySlaItem">
-                      <b>Min resolve:</b> {sla.minResolve}
-                    </span>
-                  </div>
-
-                  <div className="historyWorkflow">
-                    <div className="historyWorkflowHeader">
-                      <span className="historyWorkflowTitle">Workflow Stage</span>
-                      <span className={`historyWorkflowOwner owner-${workflow.owner.toLowerCase()}`}>
-                        {workflow.owner}
+              return (
+                <article
+                  key={item.id}
+                  className="historyCard historyCard--click"
+                  onClick={() => navigate(`/customer/ticket/${item.id}`)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      navigate(`/customer/ticket/${item.id}`);
+                    }
+                  }}
+                >
+                  <div className="historyCardLeft">
+                    <div className="historyMeta">
+                      <span className="historyId">{item.id}</span>
+                      <span className="historyDot">•</span>
+                      <span className="historyType">{item.type}</span>
+                      <span className="historyDot">•</span>
+                      <span className="historyType">{item.source}</span>
+                      <span className="historyDot">•</span>
+                      <span className={`historyStatus status-${item.status.replace(" ", "")}`}>
+                        {item.status}
                       </span>
                     </div>
-                    <div className="historyWorkflowCurrent">{workflow.stageLabel}</div>
-                    <div className="historyWorkflowTrack" aria-label={`Workflow stage ${workflow.stageIndex + 1} of ${WORKFLOW_STAGES.length}`}>
-                      {WORKFLOW_STAGES.map((stage, index) => (
-                        <div
-                          key={stage.id}
-                          className={`historyWorkflowDot ${index <= workflow.stageIndex ? "is-done" : ""} ${index === workflow.stageIndex ? "is-current" : ""}`}
-                          title={`${stage.label} (${stage.owner})`}
-                        />
-                      ))}
-                    </div>
-                    <p className="historyWorkflowNote">{workflow.note}</p>
-                  </div>
-                </div>
 
-                <div className="historyCardRight">
-                  <button
-                    type="button"
-                    className="primaryPillBtn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/customer/ticket/${item.id}`);
-                    }}
-                  >
-                    View
-                  </button>
-                </div>
-              </article>
-                );
-              })()
-            ))
+                    <h3 className="historyTitle">{item.title}</h3>
+
+                    <div className="historyFooter">
+                      <span className="historyDate">{item.date}</span>
+                      <span className="historyDot">•</span>
+                      <div className="historyPriorityWrap">
+                        <span className="historyPriorityLabel">Priority:</span>
+                        <PriorityPill priority={item.priority} />
+                      </div>
+                    </div>
+
+                    <div className="historySlaRow">
+                      <span className="historySlaItem">
+                        <b>Min response:</b> {sla.minResponse}
+                      </span>
+                      <span className="historySlaDot">•</span>
+                      <span className="historySlaItem">
+                        <b>Min resolve:</b> {sla.minResolve}
+                      </span>
+                    </div>
+
+                    <div className="historyWorkflow">
+                      <div className="historyWorkflowHeader">
+                        <span className="historyWorkflowTitle">Workflow Stage</span>
+                        <span className={`historyWorkflowOwner owner-${workflow.owner.toLowerCase()}`}>
+                          {workflow.owner}
+                        </span>
+                      </div>
+                      <div className="historyWorkflowCurrent">{workflow.stageLabel}</div>
+                      <div className="historyWorkflowTrack" aria-label={`Workflow stage ${workflow.stageIndex + 1} of ${WORKFLOW_STAGES.length}`}>
+                        {WORKFLOW_STAGES.map((stage, index) => (
+                          <div
+                            key={stage.id}
+                            className={`historyWorkflowDot ${index <= workflow.stageIndex ? "is-done" : ""} ${index === workflow.stageIndex ? "is-current" : ""}`}
+                            title={`${stage.label} (${stage.owner})`}
+                          />
+                        ))}
+                      </div>
+                      <p className="historyWorkflowNote">{workflow.note}</p>
+                    </div>
+                  </div>
+
+                  <div className="historyCardRight">
+                    <button
+                      type="button"
+                      className="primaryPillBtn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/customer/ticket/${item.id}`);
+                      }}
+                    >
+                      View
+                    </button>
+                  </div>
+                </article>
+              );
+            })
           )}
         </section>
       </div>
