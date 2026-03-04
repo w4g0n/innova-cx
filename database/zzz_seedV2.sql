@@ -2610,3 +2610,6 @@ WHERE email IN (
 );
 
 COMMIT;
+
+-- Refresh analytics materialized views so ML seed data is included.
+SELECT refresh_analytics_mvs();
