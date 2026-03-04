@@ -2921,7 +2921,7 @@ SELECT
 FROM (VALUES
   ('customer','customer1@innova.cx','2026-03-01 09:25:10+00','None of the badge readers at Gate 2 are working. My whole team is stuck outside!',
    'report_issue','Access Control',-0.85,FALSE,NULL),
-  ('bot','bot','2026-03-01 09:25:25+00','I'm escalating this to an operator immediately given the severity.',
+  ('bot','bot','2026-03-01 09:25:25+00','I''m escalating this to an operator immediately given the severity.',
    'escalate','Access Control',0.05,TRUE,NULL),
   ('operator','operator@innova.cx','2026-03-01 09:30:00+00','Ticket CX-R06 raised as Critical. Omar Ali is on his way to Gate 2 now.',
    'resolution','Access Control',0.30,FALSE,'CX-R06')
@@ -3028,7 +3028,7 @@ VALUES
    'faq_answer', 'answer',
    'SELECT * FROM kb WHERE topic=''support_hours''', 0.92300,
    '2026-02-28 10:00:35+00', NULL),
-  ('I'm escalating this to an operator immediately given the severity.',
+  ('I''m escalating this to an operator immediately given the severity.',
    'escalation', 'escalate',
    NULL, NULL,
    '2026-03-01 09:25:25+00',
