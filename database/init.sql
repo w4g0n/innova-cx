@@ -192,6 +192,9 @@ CREATE TABLE IF NOT EXISTS tickets (
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_type TEXT;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS human_overridden BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS ticket_resolution_feedback (
     id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -679,6 +682,12 @@ CREATE TABLE IF NOT EXISTS sessions (
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE sessions
+ADD COLUMN IF NOT EXISTS bot_model_version TEXT,
+ADD COLUMN IF NOT EXISTS escalated_to_human BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS linked_ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 
@@ -701,6 +710,11 @@ CREATE TABLE IF NOT EXISTS user_chat_logs (
 
 ALTER TABLE user_chat_logs
 ADD COLUMN IF NOT EXISTS ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL;
+
+ALTER TABLE user_chat_logs
+ADD COLUMN IF NOT EXISTS sentiment_score NUMERIC(4,3),
+ADD COLUMN IF NOT EXISTS category TEXT,
+ADD COLUMN IF NOT EXISTS response_time_ms INTEGER;
 
 CREATE INDEX IF NOT EXISTS idx_user_chat_logs_session ON user_chat_logs(session_id);
 CREATE INDEX IF NOT EXISTS idx_user_chat_logs_user ON user_chat_logs(user_id);
@@ -759,6 +773,12 @@ CREATE TABLE IF NOT EXISTS employee_reports (
   kpi_avg_response TEXT NOT NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE employee_reports
+ADD COLUMN IF NOT EXISTS model_version TEXT,
+ADD COLUMN IF NOT EXISTS generated_by TEXT,
+ADD COLUMN IF NOT EXISTS period_start DATE,
+ADD COLUMN IF NOT EXISTS period_end DATE;
 
 CREATE TABLE IF NOT EXISTS employee_report_summary_items (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -874,6 +894,8 @@ ON CONFLICT (name) DO NOTHING;
 -- bearer token on login (no MFA prompt during development/testing)
 INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
   ('customer1@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
+  ('customer2@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
+  ('customer3@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
   ('manager@innova.cx',   crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
   ('operator@innova.cx',  crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  FALSE, NULL),
   ('ahmed@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
@@ -883,7 +905,12 @@ INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
   ('bilal@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
   ('fatima@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
   ('yousef@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('khalid@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL)
+  ('khalid@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('dina@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('hassan@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('lena@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('noura@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('ziad@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL)
 ON CONFLICT (email) DO UPDATE
   SET mfa_enabled = FALSE,
       totp_secret = NULL;
@@ -2921,7 +2948,7 @@ SELECT
 FROM (VALUES
   ('customer','customer1@innova.cx','2026-03-01 09:25:10+00','None of the badge readers at Gate 2 are working. My whole team is stuck outside!',
    'report_issue','Access Control',-0.85,FALSE,NULL),
-  ('bot','bot','2026-03-01 09:25:25+00','I''m escalating this to an operator immediately given the severity.',
+  ('bot','bot','2026-03-01 09:25:25+00',$msg$I'm escalating this to an operator immediately given the severity.$msg$,
    'escalate','Access Control',0.05,TRUE,NULL),
   ('operator','operator@innova.cx','2026-03-01 09:30:00+00','Ticket CX-R06 raised as Critical. Omar Ali is on his way to Gate 2 now.',
    'resolution','Access Control',0.30,FALSE,'CX-R06')
@@ -3028,7 +3055,7 @@ VALUES
    'faq_answer', 'answer',
    'SELECT * FROM kb WHERE topic=''support_hours''', 0.92300,
    '2026-02-28 10:00:35+00', NULL),
-  ('I''m escalating this to an operator immediately given the severity.',
+  ($msg$I'm escalating this to an operator immediately given the severity.$msg$,
    'escalation', 'escalate',
    NULL, NULL,
    '2026-03-01 09:25:25+00',

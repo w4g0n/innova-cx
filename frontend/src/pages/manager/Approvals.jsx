@@ -36,8 +36,19 @@ export default function Approvals() {
   const [selectedDepartments, setSelectedDepartments] = useState({});
   const [loading, setLoading] = useState(true);
 
-  const [confirm, setConfirm] = useState({ open: false, requestId: null, decision: null });
-  const closeConfirm = () => setConfirm({ open: false, requestId: null, decision: null });
+  const [confirm, setConfirm] = useState({
+    open: false,
+    requestId: null,
+    decision: null,
+    selectedDepartment: undefined,
+  });
+  const closeConfirm = () =>
+    setConfirm({
+      open: false,
+      requestId: null,
+      decision: null,
+      selectedDepartment: undefined,
+    });
 
   useEffect(() => {
     const token = getAuthToken();
@@ -79,8 +90,8 @@ export default function Approvals() {
       .catch(() => setDepartments([]));
   }, [navigate]);
 
-  const confirmDecide = (requestId, decision) => {
-    setConfirm({ open: true, requestId, decision });
+  const confirmDecide = (requestId, decision, selectedDepartment = undefined) => {
+    setConfirm({ open: true, requestId, decision, selectedDepartment });
   };
 
   const decide = async (requestId, decision, selectedDepartment = undefined) => {
@@ -288,7 +299,7 @@ export default function Approvals() {
                         className="actionBtn actionBtn--primary"
                         type="button"
                         onClick={() =>
-                          decide(
+                          confirmDecide(
                             r.requestId,
                             "Approved",
                             selectedDepartments[r.requestId] ||
@@ -337,8 +348,9 @@ export default function Approvals() {
         variant={confirm.decision === "Approved" ? "success" : "danger"}
         confirmLabel={confirm.decision === "Approved" ? "Yes, Approve" : "Yes, Reject"}
         onConfirm={() => {
+          const { requestId, decision, selectedDepartment } = confirm;
           closeConfirm();
-          decide(confirm.requestId, confirm.decision);
+          decide(requestId, decision, selectedDepartment);
         }}
         onCancel={closeConfirm}
       />
