@@ -235,15 +235,15 @@ with open(env_file, "w") as f:
 print(f"Updated .env: CHATBOT_MODEL_PATH={qwen_path}, CHATBOT_USE_MOCK=false")
 PYEOF
 
-log "Restarting chatbot with Qwen ..."
-cd "$REPO_DIR" && docker compose --profile dev restart chatbot
+log "Recreating chatbot container with Qwen (force-recreate picks up new .env) ..."
+cd "$REPO_DIR" && docker compose --profile dev up -d --force-recreate chatbot
 wait_for_health
 
-# Verify Qwen loaded
-DIAG=$(docker exec "$CHATBOT_CONTAINER" \
-    python -c "from core.llm import get_llm_diagnostics; import json; print(json.dumps(get_llm_diagnostics()))" \
-    2>/dev/null)
-log "Post-restart LLM diagnostics: $DIAG"
+# Hard assert: confirm the container now has the Qwen model path
+LIVE_PATH=$(docker exec "$CHATBOT_CONTAINER" printenv CHATBOT_MODEL_PATH 2>/dev/null || echo "")
+[[ "$LIVE_PATH" == "$QWEN_LOCAL_PATH" ]] \
+    || die "Model path mismatch after Qwen switch: expected '$QWEN_LOCAL_PATH', got '$LIVE_PATH'"
+log "Confirmed CHATBOT_MODEL_PATH=$LIVE_PATH"
 
 # =============================================================================
 # Step 5 — Run benchmarks against Qwen
@@ -301,10 +301,15 @@ with open(env_file, "w") as f:
 print(f"Restored .env: CHATBOT_MODEL_PATH={original_path}, CHATBOT_USE_MOCK={original_mock}")
 PYEOF
 
-log "Restarting chatbot with original model ..."
-cd "$REPO_DIR" && docker compose --profile dev restart chatbot
+log "Recreating chatbot container with original model (force-recreate picks up restored .env) ..."
+cd "$REPO_DIR" && docker compose --profile dev up -d --force-recreate chatbot
 wait_for_health
-log "Original model restored and chatbot healthy."
+
+# Hard assert: confirm original model path is back
+LIVE_PATH=$(docker exec "$CHATBOT_CONTAINER" printenv CHATBOT_MODEL_PATH 2>/dev/null || echo "")
+[[ "$LIVE_PATH" == "$ORIGINAL_MODEL_PATH" ]] \
+    || die "Model path mismatch after restore: expected '$ORIGINAL_MODEL_PATH', got '$LIVE_PATH'"
+log "Confirmed CHATBOT_MODEL_PATH=$LIVE_PATH (original restored)"
 
 # =============================================================================
 # Step 8 — Cleanup test DB data

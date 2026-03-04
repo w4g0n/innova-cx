@@ -658,7 +658,7 @@ export default function ComplaintTrends() {
             SECTION C — EMPLOYEE REPORTS
         ══════════════════════════════════════════════════════════════════ */}
         {tab === 2 && C && (
-          <div className="ct-section">
+          <div className="ct-section ct-sectionC">
             {/* C1 — Team summary KPIs */}
             <section className="kpiRow">
               <KpiCard label="Employees Active" value={(C.employees || []).length} />

@@ -16,6 +16,10 @@ function getAuthToken() {
   );
 }
 
+function formatTicketSource(value) {
+  return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
+}
+
 // ─── AttachmentThumb ────────────────────────────────────────────────────────
 function AttachmentThumb({ url, fileName }) {
   const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(fileName || "");
@@ -100,13 +104,12 @@ function TicketModal({
                 onChange={(e) => setRerouteDepartment(e.target.value)}
               >
                 <option value="" disabled>Select Department</option>
-                <option>Maintenance</option>
-                <option>IT Support</option>
-                <option>Cleaning</option>
-                <option>Security</option>
-                <option>Facilities</option>
+                <option>Facilities Management</option>
+                <option>Legal &amp; Compliance</option>
+                <option>Safety &amp; Security</option>
                 <option>HR</option>
-                <option>Admin</option>
+                <option>Leasing</option>
+                <option>Maintenance</option>
                 <option>IT</option>
               </select>
             </div>
@@ -172,7 +175,7 @@ function TicketModal({
       case "resolve":
         return (
           <>
-            <label>Model Suggested Resolution (Falcon)</label>
+            <label>Model Suggested Resolution (Flan-T5-Base)</label>
             <div className="model-suggestion">
               {suggestionBusy ? "Generating..." : (resolutionSuggestion || "No suggestion available.")}
             </div>
@@ -514,6 +517,7 @@ export default function ComplaintDetails() {
           <h2 className="section-title">Summary</h2>
           <div className="summary-grid">
             <div><span className="label">Issue Date:</span> {ticket.issueDate}</div>
+            <div><span className="label">Ticket Source:</span> {formatTicketSource(ticket.ticketSource)}</div>
             <div><span className="label">Mean Time To Respond:</span> {ticket.metrics?.meanTimeToRespond}</div>
             <div><span className="label">Mean Time To Resolve:</span> {ticket.metrics?.meanTimeToResolve}</div>
             <div><span className="label">Submitted By:</span> {ticket.submittedBy?.name}</div>

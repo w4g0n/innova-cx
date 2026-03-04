@@ -1,7 +1,7 @@
 """
-Step 6 — Fuzzy Prioritization Agent
-===================================
-Calls the PrioritizationAgent fuzzy logic engine and stores:
+Step 6 — Prioritization Agent
+=============================
+Calls the PrioritizationAgent runtime model and stores:
     state["priority_label"]  -> low|medium|high|critical
     state["priority_score"]  -> int mapped for backend ticket insert
 """
@@ -14,7 +14,10 @@ logger = logging.getLogger(__name__)
 
 # Prioritization agent package copied in Docker to /app/prioritization_agent
 sys.path.insert(0, "/app/prioritization_agent")
-from src.inference import prioritize as fuzzy_prioritize  # noqa: E402
+from src.inference import (  # noqa: E402
+    prioritize as model_prioritize,
+    add_manager_feedback_example,
+)
 
 
 PRIORITY_TO_SCORE = {
@@ -24,11 +27,12 @@ PRIORITY_TO_SCORE = {
     "critical": 4,
 }
 
-SENTIMENT_BUCKET_TO_VALUE = {
-    "negative": -0.5,
-    "neutral": 0.0,
-    "positive": 0.5,
-}
+def _bucket_from_numeric(score: float) -> str:
+    if score < -0.25:
+        return "negative"
+    if score > 0.25:
+        return "positive"
+    return "neutral"
 
 
 async def score_priority(state: dict) -> dict:
@@ -36,11 +40,11 @@ async def score_priority(state: dict) -> dict:
         logger.info("priority | skipped (unsupported label=%s)", state.get("label"))
         return state
 
-    sentiment_input = str(state.get("sentiment_score", "neutral")).strip().lower()
-    sentiment_score = SENTIMENT_BUCKET_TO_VALUE.get(
-        sentiment_input,
-        float(state.get("sentiment_score_numeric", 0.0) or 0.0),
-    )
+    sentiment_input = str(state.get("sentiment_score", "")).strip().lower()
+    if sentiment_input not in {"negative", "neutral", "positive"}:
+        sentiment_input = _bucket_from_numeric(
+            float(state.get("sentiment_score_numeric", 0.0) or 0.0)
+        )
 
     issue_severity = str(state.get("issue_severity", "medium")).strip().lower()
     issue_urgency = str(state.get("issue_urgency", "medium")).strip().lower()
@@ -50,8 +54,8 @@ async def score_priority(state: dict) -> dict:
     ticket_type = str(state.get("label", "complaint")).strip().lower()
 
     try:
-        result = fuzzy_prioritize(
-            sentiment_score=sentiment_score,
+        result = model_prioritize(
+            sentiment_score=sentiment_input,
             issue_severity_val=issue_severity,
             issue_urgency_val=issue_urgency,
             business_impact_val=business_impact,
@@ -71,11 +75,38 @@ async def score_priority(state: dict) -> dict:
             "; ".join(result.get("modifiers_applied", [])),
         )
     except Exception as exc:
-        logger.warning("Fuzzy prioritization failed (%s) — defaulting medium", exc)
+        logger.warning("Model prioritization failed (%s) — defaulting medium", exc)
         state["priority_label"] = "medium"
         state["priority_score"] = 3
 
     return state
+
+
+def record_manager_feedback_from_state(
+    *,
+    state: dict,
+    approved_priority: str,
+    ticket_id: str | None = None,
+    retrain_now: bool = False,
+) -> dict:
+    """Append manager-approved label and retrain periodically."""
+    sentiment_score = str(state.get("sentiment_score", "")).strip().lower()
+    if sentiment_score not in {"negative", "neutral", "positive"}:
+        sentiment_score = _bucket_from_numeric(
+            float(state.get("sentiment_score_numeric") or state.get("text_sentiment") or 0.0)
+        )
+    return add_manager_feedback_example(
+        sentiment_score=sentiment_score,
+        issue_severity_val=str(state.get("issue_severity", "medium")),
+        issue_urgency_val=str(state.get("issue_urgency", "medium")),
+        business_impact_val=str(state.get("business_impact", "medium")),
+        safety_concern=bool(state.get("safety_concern", False)),
+        is_recurring=bool(state.get("is_recurring", False)),
+        ticket_type=str(state.get("label", "complaint")),
+        approved_priority=approved_priority,
+        ticket_id=ticket_id,
+        retrain_now=retrain_now,
+    )
 
 
 priority_step = RunnableLambda(score_priority)

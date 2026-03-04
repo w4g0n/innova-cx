@@ -35,6 +35,39 @@ from db import db_connect
 logger = logging.getLogger(__name__)
 
 
+def _coerce_uuid_or_none(value: Any) -> str | None:
+    """
+    DB logging tables store ticket_id as UUID.
+    Pipeline state currently uses ticket code (e.g., CX-1234), so coerce
+    only real UUIDs and store null otherwise to avoid write failures.
+    """
+    if value is None:
+        return None
+    try:
+        return str(uuid.UUID(str(value)))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _to_model_execution_agent_name(agent_name: str) -> str:
+    """
+    model_execution_log.agent_name is enum(agent_name_type):
+      sentiment, priority, routing, sla, resolution, feature
+    Map pipeline step names into that enum while preserving original names
+    in agent_output_log.
+    """
+    n = (agent_name or "").lower()
+    if "priority" in n or "priorit" in n:
+        return "priority"
+    if "route" in n or "routing" in n:
+        return "routing"
+    if "feature" in n:
+        return "feature"
+    if "sentiment" in n or "audioanalysis" in n or "classif" in n:
+        return "sentiment"
+    return "feature"
+
+
 def _compute_diff(before: dict, after: dict) -> dict:
     """Compute keys added or changed between two state dicts."""
     diff = {}
@@ -116,23 +149,27 @@ def _write_logs(
 ) -> None:
     """Write to both model_execution_log and agent_output_log. Never raises."""
     try:
+        db_ticket_id = _coerce_uuid_or_none(ticket_id)
+        mel_agent_name = _to_model_execution_agent_name(agent_name)
         with db_connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO model_execution_log
-                        (execution_id, ticket_id, agent_name, inference_time_ms,
-                         confidence_score, error_flag, error_message)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        (execution_id, ticket_id, agent_name_old, agent_name, inference_time_ms,
+                         confidence_score, error_flag, error_message, started_at, completed_at, status, infra_metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), now(), %s, '{}'::jsonb)
                     """,
                     (
                         execution_id,
-                        ticket_id,
+                        db_ticket_id,
                         agent_name,
+                        mel_agent_name,
                         inference_time_ms,
                         confidence_score,
                         error_flag,
                         error_message,
+                        "failed" if error_flag else "success",
                     ),
                 )
                 cur.execute(
@@ -145,7 +182,7 @@ def _write_logs(
                     """,
                     (
                         execution_id,
-                        ticket_id,
+                        db_ticket_id,
                         agent_name,
                         step_order,
                         json.dumps(_safe_json(input_state)),

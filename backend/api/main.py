@@ -593,6 +593,8 @@ def predict_is_recurring(*, user_id: str, subject: str, details: str) -> bool:
 
 CHATBOT_URL = os.getenv("CHATBOT_URL", "http://chatbot:8000")
 CHATBOT_URL_LOCAL = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001")
+ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8004")
+ORCHESTRATOR_URL_LOCAL = os.getenv("ORCHESTRATOR_URL_LOCAL", "http://localhost:8004")
 
 
 def _generate_resolution_suggestion(ticket: Dict[str, Any]) -> str:
@@ -655,6 +657,36 @@ def _trigger_resolution_retraining() -> None:
         except Exception:
             continue
     logger.warning("resolution_retrain | failed to trigger retraining endpoint")
+
+
+def _trigger_priority_relearning(ticket_id: str, approved_priority: str, retrain_now: bool = False) -> None:
+    payload = {
+        "ticket_id": str(ticket_id),
+        "approved_priority": str(approved_priority).strip().lower(),
+        "retrain_now": bool(retrain_now),
+    }
+    for base in [ORCHESTRATOR_URL, ORCHESTRATOR_URL_LOCAL]:
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.post(
+                    f"{base}/priority/relearn/manager-approval",
+                    json=payload,
+                )
+                resp.raise_for_status()
+                logger.info(
+                    "priority_relearn | triggered via %s ticket=%s label=%s",
+                    base,
+                    ticket_id,
+                    approved_priority,
+                )
+                return
+        except Exception:
+            continue
+    logger.warning(
+        "priority_relearn | failed to trigger for ticket=%s label=%s",
+        ticket_id,
+        approved_priority,
+    )
 
 
 def _generate_suggestion_if_ready(ticket_code: str) -> None:
@@ -3123,6 +3155,7 @@ def manager_rescore_ticket(
         "manager_rescore | ticket=%s from=%s to=%s request=%s by=%s",
         ticket_code, current_priority, new_priority, result["request_code"], user["id"],
     )
+    _trigger_priority_relearning(ticket_id=ticket_id, approved_priority=new_priority)
     return {
         "ok": True,
         "requestCode": result["request_code"],
@@ -3318,6 +3351,9 @@ def decide_approval(
     if ar["status"] != "Pending":
         raise HTTPException(status_code=409, detail="This request has already been decided")
 
+    relearn_ticket_id = None
+    relearn_priority = None
+
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
 
@@ -3349,6 +3385,8 @@ def decide_approval(
                             "UPDATE tickets SET priority = %s WHERE id = %s;",
                             (new_priority, ticket_id),
                         )
+                        relearn_ticket_id = str(ticket_id)
+                        relearn_priority = new_priority
 
                 elif req_type == "Rerouting":
                     new_dept_name = requested.replace("Dept:", "").strip()
@@ -3427,6 +3465,11 @@ def decide_approval(
         "approval_decision | request=%s decision=%s by=%s",
         request_id, decision, user["id"],
     )
+    if decision == "Approved" and relearn_ticket_id and relearn_priority:
+        _trigger_priority_relearning(
+            ticket_id=relearn_ticket_id,
+            approved_priority=relearn_priority,
+        )
     return {"ok": True, "requestId": request_id, "decision": decision}
 
 

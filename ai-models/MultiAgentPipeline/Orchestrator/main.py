@@ -15,15 +15,20 @@ import uuid
 import httpx
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from pipeline import pipeline
 from agents.sentimentanalysis.step import get_sentiment_diagnostics
 from agents.classifier.step import get_classifier_diagnostics
 from agents.featureengineering.step import get_feature_engineering_diagnostics
+from agents.priority.step import record_manager_feedback_from_state
+from agents.router.step import get_router_diagnostics
+
 try:
-    from db import ensure_log_tables
+    from db import ensure_log_tables, db_connect
 except Exception:  # pragma: no cover - optional dependency for backward compatibility
     ensure_log_tables = None
+    db_connect = None
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,6 +50,12 @@ app.add_middleware(
 )
 
 BACKEND_URL = "http://backend:8000"
+
+
+class PriorityRelearnRequest(BaseModel):
+    ticket_id: str
+    approved_priority: str
+    retrain_now: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +80,84 @@ async def health():
         **get_sentiment_diagnostics(),
         **get_classifier_diagnostics(),
         **get_feature_engineering_diagnostics(),
+        **get_router_diagnostics(),
+    }
+
+
+def _json_to_dict(value) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            loaded = json.loads(value)
+            return loaded if isinstance(loaded, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _fetch_latest_priority_state(ticket_id: str) -> dict | None:
+    if not db_connect:
+        return None
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT input_state, output_state
+                    FROM agent_output_log
+                    WHERE ticket_id::text = %s
+                      AND agent_name = 'PrioritizationAgent'
+                      AND error_flag = FALSE
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    (ticket_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                input_state = _json_to_dict(row[0])
+                output_state = _json_to_dict(row[1])
+                merged = dict(input_state)
+                merged.update(output_state)
+                return merged
+    except Exception as exc:
+        logger.warning("priority_relearn | failed fetching state for ticket=%s err=%s", ticket_id, exc)
+        return None
+
+
+@app.post("/priority/relearn/manager-approval")
+async def priority_relearn_from_manager_approval(body: PriorityRelearnRequest):
+    allowed = {"low", "medium", "high", "critical"}
+    approved_priority = str(body.approved_priority or "").strip().lower()
+    if approved_priority not in allowed:
+        raise HTTPException(status_code=422, detail=f"approved_priority must be one of {sorted(allowed)}")
+
+    ticket_id = str(body.ticket_id or "").strip()
+    if not ticket_id:
+        raise HTTPException(status_code=422, detail="ticket_id is required")
+
+    state = _fetch_latest_priority_state(ticket_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="No prioritization state found for ticket_id")
+
+    try:
+        feedback = record_manager_feedback_from_state(
+            state=state,
+            approved_priority=approved_priority,
+            ticket_id=ticket_id,
+            retrain_now=bool(body.retrain_now),
+        )
+    except Exception as exc:
+        logger.error("priority_relearn | failed for ticket=%s err=%s", ticket_id, exc)
+        raise HTTPException(status_code=500, detail=f"Failed to apply relearning feedback: {exc}")
+
+    return {
+        "ok": True,
+        "ticket_id": ticket_id,
+        "approved_priority": approved_priority,
+        **feedback,
     }
 
 
@@ -101,8 +190,8 @@ async def process_audio(
 async def process_text(
     text: str = Form(...),
     ticket_id: str | None = Form(default=None),
+    subject: str | None = Form(default=None),
     ticket_type: str | None = Form(default=None),
-    asset_type: str | None = Form(default=None),
     has_audio: bool | None = Form(default=None),
     audio_features: str | None = Form(default=None),
 ):
@@ -126,14 +215,12 @@ async def process_text(
             raise HTTPException(status_code=422, detail="audio_features must be valid JSON object")
 
     selected_type = ticket_type.lower().strip() if ticket_type else None
-    selected_asset = asset_type.strip() if asset_type else None
 
     initial_payload = {
         "transcript": text.strip(),
         "ticket_id": ticket_id.strip() if ticket_id else None,
+        "subject": subject.strip() if subject else None,
         "label": selected_type if selected_type in {"complaint", "inquiry"} else "complaint",
-        "asset_type": selected_asset or "General",
-        "department": selected_asset or "general",
         "status": "Open",
     }
     try:
@@ -143,11 +230,10 @@ async def process_text(
             open_ticket = response.json()
             ticket_id = open_ticket.get("ticket_id")
             logger.info(
-                "ticket_status_update | ticket_id=%s status=%s asset_type=%s department=%s priority=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
+                "ticket_status_update | ticket_id=%s status=%s department=%s priority=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                 ticket_id,
                 open_ticket.get("status", "Open"),
-                open_ticket.get("asset_type") or initial_payload["asset_type"],
-                open_ticket.get("department") or initial_payload["department"],
+                open_ticket.get("department"),
                 open_ticket.get("priority"),
                 open_ticket.get("priority_assigned_at"),
                 open_ticket.get("respond_due_at"),
@@ -163,8 +249,8 @@ async def process_text(
     state = {
         "text": text.strip(),
         "ticket_id": ticket_id,
+        "subject": subject.strip() if subject else None,
         "ticket_type": selected_type,
-        "asset_type": selected_asset,
         "has_audio": bool(has_audio),
         "audio_features": parsed_audio_features,
         "_execution_id": str(uuid.uuid4()),
@@ -175,7 +261,7 @@ async def process_text(
     if result.get("label") == "inquiry":
         logger.info(
             "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f "
-            "priority=%s/%s ticket_id=%s status=%s department=%s asset_type=%s "
+            "priority=%s/%s ticket_id=%s status=%s department=%s "
             "priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
             result.get("label"),
             float(result.get("class_confidence", 0.0) or 0.0),
@@ -187,7 +273,6 @@ async def process_text(
             result.get("ticket_id"),
             result.get("status"),
             result.get("department"),
-            result.get("asset_type"),
             result.get("priority_assigned_at"),
             result.get("respond_due_at"),
             result.get("resolve_due_at"),
@@ -196,7 +281,7 @@ async def process_text(
         logger.info(
             "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f "
             "impact=%s safety=%s severity=%s urgency=%s priority=%s/%s ticket_id=%s "
-            "status=%s department=%s asset_type=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
+            "status=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
             result.get("label"),
             float(result.get("class_confidence", 0.0) or 0.0),
             float(result.get("text_sentiment", 0.0) or 0.0),
@@ -211,7 +296,6 @@ async def process_text(
             result.get("ticket_id"),
             result.get("status"),
             result.get("department"),
-            result.get("asset_type"),
             result.get("priority_assigned_at"),
             result.get("respond_due_at"),
             result.get("resolve_due_at"),
