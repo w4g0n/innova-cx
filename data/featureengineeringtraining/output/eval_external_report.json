@@ -1,5 +1,5 @@
 {
-  "rows_evaluated": 6,
+  "rows_evaluated": 11,
   "meets_all_thresholds": true,
   "metrics": {
     "safety_concern": {

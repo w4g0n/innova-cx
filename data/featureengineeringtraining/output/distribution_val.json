@@ -1,23 +1,23 @@
 {
   "name": "val",
-  "rows": 5,
+  "rows": 11,
   "safety_concern": {
-    "false": 4,
-    "true": 1
+    "false": 7,
+    "true": 4
   },
   "business_impact": {
+    "high": 6,
     "low": 3,
-    "medium": 1,
-    "high": 1
+    "medium": 2
   },
   "issue_severity": {
-    "high": 2,
-    "low": 2,
-    "medium": 1
+    "high": 5,
+    "low": 3,
+    "medium": 3
   },
   "issue_urgency": {
-    "low": 2,
-    "medium": 2,
-    "high": 1
+    "high": 5,
+    "low": 4,
+    "medium": 2
   }
 }

@@ -56,6 +56,10 @@ This executes all pipeline stages (generate, split, train, eval) with mock imple
 bash run_pipeline.sh --rows 2500 --epochs 5
 ```
 
+Generation is now resumable by default in pipeline mode:
+- if `Input/complaints_2500.csv` already exists, generation resumes from existing rows
+- progress is autosaved every 25 accepted rows
+
 ### Re-train only (skip generation + splitting)
 
 ```bash
@@ -66,6 +70,7 @@ Useful flags:
 - `--base-model <hf-model-id>` override training backbone
 - `--skip-preflight` bypass environment checks (not recommended for cloud)
 - `--skip-generate`, `--skip-split`, `--skip-train`, `--skip-eval` for stage-by-stage runs
+- generator tuning (direct script usage): `--max-new-tokens`, `--max-attempts-per-row`, `--max-combo-attempts`, `--save-every`, `--resume`
 
 ## Main scripts
 - `generate_balanced_phi4.py`: combination-first synthetic generation over 54 label combinations

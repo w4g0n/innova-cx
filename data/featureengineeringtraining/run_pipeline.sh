@@ -109,6 +109,8 @@ if [ -z "$SKIP_GENERATE" ]; then
       --rows "$ROWS" \
       --output "$INPUT_CSV" \
       --report output/balance_report.json \
+      --resume \
+      --save-every 25 \
       $DRY_RUN \
       2>&1 | tee logs/generate.log
   fi

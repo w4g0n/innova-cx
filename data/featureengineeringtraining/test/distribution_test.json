@@ -1,21 +1,23 @@
 {
   "name": "test",
-  "rows": 6,
+  "rows": 11,
   "safety_concern": {
-    "false": 3,
-    "true": 3
+    "false": 9,
+    "true": 2
   },
   "business_impact": {
-    "high": 3,
-    "medium": 3
+    "high": 5,
+    "medium": 4,
+    "low": 2
   },
   "issue_severity": {
-    "medium": 3,
-    "high": 3
+    "high": 7,
+    "low": 2,
+    "medium": 2
   },
   "issue_urgency": {
-    "low": 3,
-    "high": 2,
-    "medium": 1
+    "high": 4,
+    "low": 4,
+    "medium": 3
   }
 }

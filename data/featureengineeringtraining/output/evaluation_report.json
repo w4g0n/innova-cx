@@ -18,8 +18,8 @@
     }
   },
   "rows": {
-    "train": 43,
-    "val": 5
+    "train": 86,
+    "val": 11
   },
   "mock": true
 }
