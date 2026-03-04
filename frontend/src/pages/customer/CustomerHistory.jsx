@@ -55,6 +55,10 @@ function getPriorityContext(priority) {
   return PRIORITY_CONTEXT[String(priority || "")] || PRIORITY_CONTEXT.Medium;
 }
 
+function formatTicketSource(value) {
+  return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
+}
+
 export default function CustomerHistory() {
   const navigate = useNavigate();
 
@@ -64,7 +68,6 @@ export default function CustomerHistory() {
 
   const [historyItems, setHistoryItems] = useState([]);
 
-  // Fetch tickets from backend
   useEffect(() => {
     const fetchTickets = async () => {
       const token = getToken();
@@ -83,6 +86,7 @@ export default function CustomerHistory() {
           id: t.ticketId,
           title: t.subject,
           type: t.ticketType,
+          source: formatTicketSource(t.ticketSource),
           status: t.status,
           date: t.issueDate,
           priority: t.priority,
@@ -214,6 +218,8 @@ export default function CustomerHistory() {
             </div>
           ) : (
             ordered.map((item) => {
+              const workflow = getWorkflowState(item.status);
+              const sla = getSlaTargets(item.priority);
               const ctx = getPriorityContext(item.priority);
               return (
                 <article
@@ -234,6 +240,8 @@ export default function CustomerHistory() {
                       <span className="historyDot">•</span>
                       <span className="historyType">{item.type}</span>
                       <span className="historyDot">•</span>
+                      <span className="historyType">{item.source}</span>
+                      <span className="historyDot">•</span>
                       <span className={`historyStatus status-${item.status.replace(" ", "")}`}>
                         {item.status}
                       </span>
@@ -250,23 +258,64 @@ export default function CustomerHistory() {
                       </div>
                     </div>
 
-                    {/* ── Friendly priority context ── */}
-                    <div
-                      className="historyPriorityContext"
-                      style={{ background: ctx.bg, borderColor: ctx.border }}
-                    >
-                      <span className="historyPriorityCtxIcon">{ctx.icon}</span>
-                      <div>
-                        <div
-                          className="historyPriorityCtxHeadline"
-                          style={{ color: ctx.color }}
-                        >
-                          {ctx.headline}
-                        </div>
-                        <p className="historyPriorityCtxReason">{ctx.reason}</p>
-                      </div>
-                    </div>
+                <div className="historySlaRow">
+                  <span className="historySlaItem">
+                    <b>Min response:</b> {sla.minResponse}
+                  </span>
+
+                  <span className="historySlaDot">•</span>
+
+                  <span className="historySlaItem">
+                    <b>Min resolve:</b> {sla.minResolve}
+                  </span>
+                </div>
+
+                <div className="historyWorkflow">
+                  <div className="historyWorkflowHeader">
+                    <span className="historyWorkflowTitle">Workflow Stage</span>
+                    <span className={`historyWorkflowOwner owner-${workflow.owner.toLowerCase()}`}>
+                      {workflow.owner}
+                    </span>
                   </div>
+
+                  <div className="historyWorkflowCurrent">{workflow.stageLabel}</div>
+
+                  <div
+                    className="historyWorkflowTrack"
+                    aria-label={`Workflow stage ${workflow.stageIndex + 1} of ${WORKFLOW_STAGES.length}`}
+                  >
+                    {WORKFLOW_STAGES.map((stage, index) => (
+                      <div
+                        key={stage.id}
+                        className={`historyWorkflowDot ${
+                          index <= workflow.stageIndex ? "is-done" : ""
+                        } ${index === workflow.stageIndex ? "is-current" : ""}`}
+                        title={`${stage.label} (${stage.owner})`}
+                      />
+                    ))}
+                  </div>
+
+                  <p className="historyWorkflowNote">{workflow.note}</p>
+                </div>
+
+                {/* Friendly priority context */}
+                <div
+                  className="historyPriorityContext"
+                  style={{ background: ctx.bg, borderColor: ctx.border }}
+                >
+                  <span className="historyPriorityCtxIcon">{ctx.icon}</span>
+
+                  <div>
+                    <div
+                      className="historyPriorityCtxHeadline"
+                      style={{ color: ctx.color }}
+                    >
+                      {ctx.headline}
+                    </div>
+
+                    <p className="historyPriorityCtxReason">{ctx.reason}</p>
+                  </div>
+                </div>                  
 
                   <div className="historyCardRight">
                     <button

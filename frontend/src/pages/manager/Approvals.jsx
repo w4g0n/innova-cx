@@ -32,6 +32,8 @@ export default function Approvals() {
   const [requestType, setRequestType] = useState("All Request Types");
   const [status, setStatus] = useState("All Status");
   const [rows, setRows] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [selectedDepartments, setSelectedDepartments] = useState({});
   const [loading, setLoading] = useState(true);
 
   const [confirm, setConfirm] = useState({ open: false, requestId: null, decision: null });
@@ -58,9 +60,11 @@ export default function Approvals() {
           ticketId: a.ticketCode,        // ticket code e.g. CX-1234
           ticketUuid: a.ticketId,        // UUID for navigation
           type: a.type,
+          source: a.source || "employee",
           current: a.current,
           requested: a.requested,
           submittedBy: a.submittedBy,
+          modelConfidence: a.modelConfidence,
           submittedOn: new Date(a.submittedOn).toLocaleString(),
           status: a.status,
         }));
@@ -68,13 +72,18 @@ export default function Approvals() {
       })
       .catch((err) => console.error("Error fetching approvals:", err))
       .finally(() => setLoading(false));
+
+    fetch(apiUrl("/manager/departments"), { headers })
+      .then((res) => res.json())
+      .then((data) => setDepartments(Array.isArray(data) ? data : []))
+      .catch(() => setDepartments([]));
   }, [navigate]);
 
   const confirmDecide = (requestId, decision) => {
     setConfirm({ open: true, requestId, decision });
   };
 
-  const decide = async (requestId, decision) => {
+  const decide = async (requestId, decision, selectedDepartment = undefined) => {
     const token = getAuthToken();
     if (!token) { navigate("/login"); return; }
 
@@ -89,7 +98,7 @@ export default function Approvals() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ decision }),
+        body: JSON.stringify({ decision, selected_department: selectedDepartment }),
       });
 
       if (!res.ok) {
@@ -200,6 +209,7 @@ export default function Approvals() {
                   <th>Request ID</th>
                   <th>Ticket ID</th>
                   <th>Request Type</th>
+                  <th>Source</th>
                   <th>Current</th>
                   <th>Requested Change</th>
                   <th>Submitted By</th>
@@ -212,14 +222,13 @@ export default function Approvals() {
               <tbody>
                 {loading && (
                   <tr>
-                    <td className="emptyRow" colSpan={9} style={{ textAlign: "center", color: "rgba(17,17,17,0.45)" }}>
+                    <td className="emptyRow" colSpan={10} style={{ textAlign: "center", color: "rgba(17,17,17,0.45)" }}>
                       Loading requests…
                     </td>
                   </tr>
                 )}
                 {!loading && filtered.map((r) => (
                   <tr key={r.requestId}>
-                    {/* Request ID → clickable link to the new details page */}
                     <td>
                       <span
                         className="requestIdLink"
@@ -228,11 +237,14 @@ export default function Approvals() {
                         {r.requestId}
                       </span>
                     </td>
-
-                    {/* Ticket ID → plain text, no hyperlink */}
                     <td>{r.ticketId}</td>
-
                     <td>{r.type}</td>
+                    <td>
+                      {r.source === "agent" ? "AI Agent" : "Employee"}
+                      {r.source === "agent" && typeof r.modelConfidence === "number"
+                        ? ` (${(r.modelConfidence * 100).toFixed(1)}%)`
+                        : ""}
+                    </td>
                     <td>{r.current}</td>
                     <td>{r.requested}</td>
                     <td>{r.submittedBy}</td>
@@ -251,10 +263,39 @@ export default function Approvals() {
                       </span>
                     </td>
                     <td className="actionsCell">
+                      {r.type === "Rerouting" && r.status === "Pending" && (
+                        <div style={{ marginBottom: 8 }}>
+                          <select
+                            value={selectedDepartments[r.requestId] || ""}
+                            onChange={(e) =>
+                              setSelectedDepartments((prev) => ({
+                                ...prev,
+                                [r.requestId]: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Use requested department</option>
+                            {departments.map((dept) => (
+                              <option key={dept} value={dept}>
+                                {dept}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <button
                         className="actionBtn actionBtn--primary"
                         type="button"
-                        onClick={() => confirmDecide(r.requestId, "Approved")}
+                        onClick={() =>
+                          decide(
+                            r.requestId,
+                            "Approved",
+                            selectedDepartments[r.requestId] ||
+                              (r.type === "Rerouting"
+                                ? String(r.requested || "").replace("Dept:", "").trim()
+                                : undefined)
+                          )
+                        }
                         disabled={r.status !== "Pending"}
                       >
                         Approve
@@ -273,7 +314,7 @@ export default function Approvals() {
 
                 {!loading && filtered.length === 0 && (
                   <tr>
-                    <td className="emptyRow" colSpan={9}>
+                    <td className="emptyRow" colSpan={10}>
                       No approval requests match your filters.
                     </td>
                   </tr>
