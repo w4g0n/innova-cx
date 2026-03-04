@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { apiUrl } from "../../config/apiBase";
 import "./ApprovalRequestDetails.css";
 
@@ -65,6 +66,8 @@ export default function ApprovalRequestDetails() {
   const [flashClass, setFlashClass] = useState("");
   const [showConfetti, setShowConfetti] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+  const [confirm, setConfirm] = useState({ open: false, decision: null });
+  const closeConfirm = () => setConfirm({ open: false, decision: null });
 
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
@@ -277,10 +280,10 @@ export default function ApprovalRequestDetails() {
 
               {isPending && (
                 <div className="ard-heroActions">
-                  <button className="ard-btnReject" type="button" onClick={() => decide("Rejected")} disabled={deciding}>
+                  <button className="ard-btnReject" type="button" onClick={() => setConfirm({ open: true, decision: "Rejected" })} disabled={deciding}>
                     {deciding ? "…" : "✕  Reject"}
                   </button>
-                  <button className="ard-btnApprove" type="button" onClick={() => decide("Approved")} disabled={deciding}>
+                  <button className="ard-btnApprove" type="button" onClick={() => setConfirm({ open: true, decision: "Approved" })} disabled={deciding}>
                     {deciding ? "…" : "✓  Approve"}
                   </button>
                 </div>
@@ -291,7 +294,6 @@ export default function ApprovalRequestDetails() {
 
         {/* Main grid */}
         <div className="ard-grid">
-
           {/* LEFT */}
           <div className="ard-leftCol">
 
@@ -484,6 +486,24 @@ export default function ApprovalRequestDetails() {
           <button onClick={() => setToast((t) => ({ ...t, show: false }))}>✕</button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirm.open}
+        title={confirm.decision === "Approved" ? "Approve Request" : "Reject Request"}
+        message={
+          confirm.decision === "Approved"
+            ? "Are you sure you want to approve this request? This will apply the requested change."
+            : "Are you sure you want to reject this request? This cannot be undone."
+        }
+        variant={confirm.decision === "Approved" ? "success" : "danger"}
+        confirmLabel={confirm.decision === "Approved" ? "Yes, Approve" : "Yes, Reject"}
+        onConfirm={() => {
+          const d = confirm.decision;
+          closeConfirm();
+          decide(d);
+        }}
+        onCancel={closeConfirm}
+      />
     </Layout>
   );
 }

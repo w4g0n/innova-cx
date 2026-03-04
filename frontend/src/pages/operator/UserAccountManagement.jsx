@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
@@ -25,6 +25,16 @@ const ROLE_OPTIONS = [
   { value: "employee", label: "Employee" },
   { value: "manager", label: "Manager" },
   { value: "operator", label: "Operator" },
+];
+
+const DEPARTMENT_OPTIONS = [
+  "Facilities Management",
+  "Legal and Compliance",
+  "Safety & Security",
+  "HR",
+  "Leasing",
+  "Maintenance",
+  "IT",
 ];
 
 function isValidEmail(email) {
@@ -57,6 +67,15 @@ export default function UserAccountManagement() {
 
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState({ type: "", message: "" });
+  const [showPwd, setShowPwd] = useState(false);
+  const [showConfirmPwd, setShowConfirmPwd] = useState(false);
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!toast.message) return;
+    const t = setTimeout(() => setToast({ type: "", message: "" }), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const [confirm, setConfirm] = useState({
     open: false,
@@ -169,7 +188,7 @@ export default function UserAccountManagement() {
         />
 
         {toast.message && (
-          <div className={`umToast ${toast.type === "success" ? "success" : "error"}`}>
+          <div className={`uamToast ${toast.type === "success" ? "success" : "error"}`}>
             {toast.message}
           </div>
         )}
@@ -190,31 +209,33 @@ export default function UserAccountManagement() {
 
             <div className="uamField">
               <label>Phone *</label>
-              <PhoneInput
-                country={form.phoneCountry}
-                value={toPhoneInputValue(form.phoneE164)}
-                onChange={(digits, countryData) => {
-                let cleanDigits = digits || "";
-                const dialCode = countryData?.dialCode || "";
-                if (cleanDigits.startsWith(dialCode + "0")) {
-                  cleanDigits = dialCode + cleanDigits.slice(dialCode.length + 1);
-                }
-                const e164 = cleanDigits ? `+${cleanDigits}` : "";
-                setForm((p) => ({
-                  ...p,
-                  phoneE164: e164,
-                  phoneCountry: (countryData?.countryCode || "ae").toLowerCase(),
-                }));
-                setErrors((prev) => {
-                  const { phone: _phone, ...rest } = prev;
-                  return rest;
-                });
-              }}
-                enableSearch
-                autoFormat={false}
-                countryCodeEditable={false}
-                inputProps={{ name: "phone", required: true }}
-              />
+              <div className="uamPhoneWrap">
+                <PhoneInput
+                  country={form.phoneCountry}
+                  value={toPhoneInputValue(form.phoneE164)}
+                  onChange={(digits, countryData) => {
+                  let cleanDigits = digits || "";
+                  const dialCode = countryData?.dialCode || "";
+                  if (cleanDigits.startsWith(dialCode + "0")) {
+                    cleanDigits = dialCode + cleanDigits.slice(dialCode.length + 1);
+                  }
+                  const e164 = cleanDigits ? `+${cleanDigits}` : "";
+                  setForm((p) => ({
+                    ...p,
+                    phoneE164: e164,
+                    phoneCountry: (countryData?.countryCode || "ae").toLowerCase(),
+                  }));
+                  setErrors((prev) => {
+                    const { phone: _phone, ...rest } = prev;
+                    return rest;
+                  });
+                }}
+                  enableSearch
+                  autoFormat={false}
+                  countryCodeEditable={false}
+                  inputProps={{ name: "phone", required: true }}
+                />
+              </div>
               {errors.phone && <span className="umErr">{errors.phone}</span>}
             </div>
 
@@ -238,26 +259,47 @@ export default function UserAccountManagement() {
             {form.role !== "customer" && (
               <div className="uamField">
                 <label>Department *</label>
-                <input name="department" value={form.department} onChange={onChange} placeholder="e.g. Customer Support" />
+                <select name="department" value={form.department} onChange={onChange}>
+                  <option value="">Select department…</option>
+                  {DEPARTMENT_OPTIONS.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
                 {errors.department && <span className="umErr">{errors.department}</span>}
               </div>
             )}
 
             <div className="uamField">
               <label>Password *</label>
-              <input type="password" name="password" value={form.password} onChange={onChange} placeholder="Minimum 8 characters" />
+              <div className="uamPwdWrap">
+                <input type={showPwd ? "text" : "password"} name="password" value={form.password} onChange={onChange} placeholder="Minimum 8 characters" />
+                <button type="button" className="uamEyeBtn" onClick={() => setShowPwd(v => !v)} tabIndex={-1}>
+                  {showPwd
+                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  }
+                </button>
+              </div>
               {errors.password && <span className="umErr">{errors.password}</span>}
             </div>
 
             <div className="uamField">
               <label>Confirm Password *</label>
-              <input
-                type="password"
-                name="confirmPassword"
-                value={form.confirmPassword}
-                onChange={onChange}
-                placeholder="Re-enter password"
-              />
+              <div className="uamPwdWrap">
+                <input
+                  type={showConfirmPwd ? "text" : "password"}
+                  name="confirmPassword"
+                  value={form.confirmPassword}
+                  onChange={onChange}
+                  placeholder="Re-enter password"
+                />
+                <button type="button" className="uamEyeBtn" onClick={() => setShowConfirmPwd(v => !v)} tabIndex={-1}>
+                  {showConfirmPwd
+                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  }
+                </button>
+              </div>
               {errors.confirmPassword && <span className="umErr">{errors.confirmPassword}</span>}
             </div>
           </div>

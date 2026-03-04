@@ -6,6 +6,7 @@ import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { apiUrl } from "../../config/apiBase";
 import "./Approvals.css";
 import useScrollReveal from "../../utils/useScrollReveal";
@@ -32,6 +33,9 @@ export default function Approvals() {
   const [status, setStatus] = useState("All Status");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const [confirm, setConfirm] = useState({ open: false, requestId: null, decision: null });
+  const closeConfirm = () => setConfirm({ open: false, requestId: null, decision: null });
 
   useEffect(() => {
     const token = getAuthToken();
@@ -65,6 +69,10 @@ export default function Approvals() {
       .catch((err) => console.error("Error fetching approvals:", err))
       .finally(() => setLoading(false));
   }, [navigate]);
+
+  const confirmDecide = (requestId, decision) => {
+    setConfirm({ open: true, requestId, decision });
+  };
 
   const decide = async (requestId, decision) => {
     const token = getAuthToken();
@@ -246,7 +254,7 @@ export default function Approvals() {
                       <button
                         className="actionBtn actionBtn--primary"
                         type="button"
-                        onClick={() => decide(r.requestId, "Approved")}
+                        onClick={() => confirmDecide(r.requestId, "Approved")}
                         disabled={r.status !== "Pending"}
                       >
                         Approve
@@ -254,7 +262,7 @@ export default function Approvals() {
                       <button
                         className="actionBtn"
                         type="button"
-                        onClick={() => decide(r.requestId, "Rejected")}
+                        onClick={() => confirmDecide(r.requestId, "Rejected")}
                         disabled={r.status !== "Pending"}
                       >
                         Reject
@@ -275,6 +283,23 @@ export default function Approvals() {
           </div>
         </section>
       </div>
+
+      <ConfirmDialog
+        open={confirm.open}
+        title={confirm.decision === "Approved" ? "Approve Request" : "Reject Request"}
+        message={
+          confirm.decision === "Approved"
+            ? "Are you sure you want to approve this request? This action will apply the requested change."
+            : "Are you sure you want to reject this request? This cannot be undone."
+        }
+        variant={confirm.decision === "Approved" ? "success" : "danger"}
+        confirmLabel={confirm.decision === "Approved" ? "Yes, Approve" : "Yes, Reject"}
+        onConfirm={() => {
+          closeConfirm();
+          decide(confirm.requestId, confirm.decision);
+        }}
+        onCancel={closeConfirm}
+      />
     </Layout>
   );
 }
