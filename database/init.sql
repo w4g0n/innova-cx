@@ -161,7 +161,6 @@ CREATE TABLE IF NOT EXISTS tickets (
   ticket_type         ticket_type NOT NULL DEFAULT 'Complaint',
   status              ticket_status NOT NULL DEFAULT 'Unassigned',
   priority            ticket_priority NOT NULL DEFAULT 'Medium',
-  asset_type          TEXT NOT NULL DEFAULT 'General',
   department_id       UUID REFERENCES departments(id) ON DELETE SET NULL,
   created_by_user_id  UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   assigned_to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -182,6 +181,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   model_department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
   model_confidence    NUMERIC(5,2),
   model_suggestion    TEXT,
+  ticket_source       TEXT NOT NULL DEFAULT 'user',
   final_resolution    TEXT,
   resolved_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL
 );
@@ -192,6 +192,9 @@ CREATE TABLE IF NOT EXISTS tickets (
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_type TEXT;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS human_overridden BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS ticket_resolution_feedback (
     id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -211,7 +214,6 @@ CREATE INDEX IF NOT EXISTS idx_ticket_resolution_feedback_employee
 
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_priority    ON tickets(priority);
-CREATE INDEX IF NOT EXISTS idx_tickets_asset_type  ON tickets(asset_type);
 CREATE INDEX IF NOT EXISTS idx_tickets_created_at  ON tickets(created_at);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee    ON tickets(assigned_to_user_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_creator     ON tickets(created_by_user_id);
@@ -496,6 +498,10 @@ CREATE TABLE IF NOT EXISTS approval_requests (
   requested_value      TEXT NOT NULL,
   request_reason       TEXT,
   submitted_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  source               TEXT NOT NULL DEFAULT 'employee',
+  requested_to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  model_name           TEXT,
+  model_confidence     NUMERIC(5,4),
   submitted_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   status               approval_status NOT NULL DEFAULT 'Pending',
   decided_by_user_id   UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -505,6 +511,21 @@ CREATE TABLE IF NOT EXISTS approval_requests (
 
 CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(status);
 CREATE INDEX IF NOT EXISTS idx_approval_requests_ticket ON approval_requests(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_requested_to ON approval_requests(requested_to_user_id);
+
+CREATE TABLE IF NOT EXISTS department_routing_feedback (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  predicted_department TEXT NOT NULL,
+  approved_department  TEXT NOT NULL,
+  confidence_score     NUMERIC(5,4),
+  model_name           TEXT,
+  approved_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_routing_feedback_predicted ON department_routing_feedback(predicted_department);
+CREATE INDEX IF NOT EXISTS idx_routing_feedback_created_at ON department_routing_feedback(created_at);
 
 -- -------------------------
 -- Auto-notify manager on new approval requests
@@ -534,8 +555,13 @@ BEGIN
   SELECT full_name INTO v_submitter_name
   FROM user_profiles WHERE user_id = NEW.submitted_by_user_id;
 
+  -- Notify targeted manager if set; otherwise notify all active managers.
   FOR v_manager_id IN
-    SELECT id FROM users WHERE role = 'manager' AND is_active = TRUE
+    SELECT id
+    FROM users
+    WHERE role = 'manager'
+      AND is_active = TRUE
+      AND (NEW.requested_to_user_id IS NULL OR id = NEW.requested_to_user_id)
   LOOP
     v_title := CASE NEW.request_type
       WHEN 'Rescoring' THEN 'Rescoring Request — ' || COALESCE(v_ticket_code, 'Unknown')
@@ -656,6 +682,12 @@ CREATE TABLE IF NOT EXISTS sessions (
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE sessions
+ADD COLUMN IF NOT EXISTS bot_model_version TEXT,
+ADD COLUMN IF NOT EXISTS escalated_to_human BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS linked_ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 
@@ -678,6 +710,11 @@ CREATE TABLE IF NOT EXISTS user_chat_logs (
 
 ALTER TABLE user_chat_logs
 ADD COLUMN IF NOT EXISTS ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL;
+
+ALTER TABLE user_chat_logs
+ADD COLUMN IF NOT EXISTS sentiment_score NUMERIC(4,3),
+ADD COLUMN IF NOT EXISTS category TEXT,
+ADD COLUMN IF NOT EXISTS response_time_ms INTEGER;
 
 CREATE INDEX IF NOT EXISTS idx_user_chat_logs_session ON user_chat_logs(session_id);
 CREATE INDEX IF NOT EXISTS idx_user_chat_logs_user ON user_chat_logs(user_id);
@@ -736,6 +773,12 @@ CREATE TABLE IF NOT EXISTS employee_reports (
   kpi_avg_response TEXT NOT NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE employee_reports
+ADD COLUMN IF NOT EXISTS model_version TEXT,
+ADD COLUMN IF NOT EXISTS generated_by TEXT,
+ADD COLUMN IF NOT EXISTS period_start DATE,
+ADD COLUMN IF NOT EXISTS period_end DATE;
 
 CREATE TABLE IF NOT EXISTS employee_report_summary_items (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -838,7 +881,7 @@ WHERE NOT EXISTS (
 
 INSERT INTO departments (name) VALUES
   ('Facilities Management'),
-  ('Legal and Compliance'),
+  ('Legal & Compliance'),
   ('Safety & Security'),
   ('HR'),
   ('Leasing'),
@@ -851,6 +894,8 @@ ON CONFLICT (name) DO NOTHING;
 -- bearer token on login (no MFA prompt during development/testing)
 INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
   ('customer1@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
+  ('customer2@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
+  ('customer3@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
   ('manager@innova.cx',   crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
   ('operator@innova.cx',  crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  FALSE, NULL),
   ('ahmed@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
@@ -860,7 +905,12 @@ INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
   ('bilal@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
   ('fatima@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
   ('yousef@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('khalid@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL)
+  ('khalid@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('dina@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('hassan@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('lena@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('noura@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('ziad@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL)
 ON CONFLICT (email) DO UPDATE
   SET mfa_enabled = FALSE,
       totp_secret = NULL;
@@ -2898,7 +2948,7 @@ SELECT
 FROM (VALUES
   ('customer','customer1@innova.cx','2026-03-01 09:25:10+00','None of the badge readers at Gate 2 are working. My whole team is stuck outside!',
    'report_issue','Access Control',-0.85,FALSE,NULL),
-  ('bot','bot','2026-03-01 09:25:25+00','I'm escalating this to an operator immediately given the severity.',
+  ('bot','bot','2026-03-01 09:25:25+00',$msg$I'm escalating this to an operator immediately given the severity.$msg$,
    'escalate','Access Control',0.05,TRUE,NULL),
   ('operator','operator@innova.cx','2026-03-01 09:30:00+00','Ticket CX-R06 raised as Critical. Omar Ali is on his way to Gate 2 now.',
    'resolution','Access Control',0.30,FALSE,'CX-R06')
@@ -3005,7 +3055,7 @@ VALUES
    'faq_answer', 'answer',
    'SELECT * FROM kb WHERE topic=''support_hours''', 0.92300,
    '2026-02-28 10:00:35+00', NULL),
-  ('I'm escalating this to an operator immediately given the severity.',
+  ($msg$I'm escalating this to an operator immediately given the severity.$msg$,
    'escalation', 'escalate',
    NULL, NULL,
    '2026-03-01 09:25:25+00',

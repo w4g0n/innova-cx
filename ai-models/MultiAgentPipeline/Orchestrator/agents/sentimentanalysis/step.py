@@ -24,15 +24,11 @@ sys.path.insert(0, "/app/sentiment_pipeline")
 
 
 def _categorize_sentiment(score: float) -> str:
-    if score < -0.6:
-        return "very_negative"
-    if score < -0.2:
+    if score < -0.25:
         return "negative"
-    if score < 0.2:
+    if score <= 0.25:
         return "neutral"
-    if score < 0.6:
-        return "positive"
-    return "very_positive"
+    return "positive"
 
 
 _KEYWORD_REGEX = re.compile(
@@ -86,12 +82,8 @@ def get_sentiment_diagnostics() -> dict[str, Any]:
 
 
 async def analyze_sentiment(state: dict) -> dict:
-    if state["label"] != "complaint":
-        logger.info("sentiment | skipped (label=%s)", state.get("label"))
-        return state
-
     ticket_id = state.get("ticket_id")
-    if ticket_id:
+    if ticket_id and state.get("label") == "complaint":
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.post(

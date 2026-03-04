@@ -1,40 +1,27 @@
 """
-Step 5 — Feature Engineering Agent
+Step 6 — Feature Engineering Agent
 ==================================
 Single agent that executes:
-  1) recurrence check
-  2) feature labeling (model or mock)
-  3) feature engineering (RF artifacts or rule fallback)
+  1) feature labeling (NLI model or mock fallback)
+  2) deterministic safety/normalization rules
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-import joblib
-import numpy as np
-import torch
 from langchain_core.runnables import RunnableLambda
-from transformers import pipeline
 
 logger = logging.getLogger(__name__)
 
-FEATURE_ENGINEERING_STATE_DIR = Path(
-    os.getenv(
-        "FEATURE_ENGINEERING_STATE_DIR",
-        "/app/models/featureengineering",
-    )
-)
 FEATURE_LABELER_MODEL_PATH = os.getenv(
     "FEATURE_LABELER_MODEL_PATH",
     "/app/models/featureengineering/feature_labeler",
 ).strip()
-TARGETS = ["business_impact", "safety_concern", "issue_severity", "issue_urgency"]
 
 SAFETY_KEYWORDS = (
     "fire",
@@ -55,22 +42,6 @@ SAFETY_KEYWORDS = (
     "chemical",
     "toxic",
 )
-
-_RECURRING_PATTERNS = (
-    r"\\bagain\\b",
-    r"\\brepeatedly\\b",
-    r"\\bmultiple times\\b",
-    r"\\bstill not fixed\\b",
-    r"\\bnot the first time\\b",
-    r"\\bfor weeks\\b",
-    r"\\bfor months\\b",
-    r"\\bfifth time\\b",
-    r"\\bthird time\\b",
-    r"\\bsecond time\\b",
-    r"\\bcalled before\\b",
-    r"\\breported (this )?before\\b",
-)
-_RECURRING_REGEX = re.compile("|".join(_RECURRING_PATTERNS), re.IGNORECASE)
 
 LABEL_CONFIGS = {
     "issue_severity": {
@@ -141,20 +112,9 @@ LABEL_CONFIGS = {
 
 def _normalize_level(v: str, default: str = "medium") -> str:
     s = str(v or "").strip().lower()
-    return s if s in {"low", "medium", "high", "critical"} else default
-
-
-def _to_bool(value, default=False) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    s = str(value).strip().lower()
-    if s in {"true", "1", "yes", "y"}:
-        return True
-    if s in {"false", "0", "no", "n"}:
-        return False
-    return default
+    if s == "critical":
+        return "high"
+    return s if s in {"low", "medium", "high"} else default
 
 
 def _optional_bool(value):
@@ -204,10 +164,18 @@ def _mock_labels(text: str) -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def _load_feature_labeler():
+    try:
+        import torch  # type: ignore
+        from transformers import pipeline  # type: ignore
+    except Exception as exc:
+        logger.info("feature_engineering | torch/transformers unavailable (%s); using mock", exc)
+        return None
+
     model_name = FEATURE_LABELER_MODEL_PATH
     if not model_name:
         logger.info("feature_engineering | no FEATURE_LABELER_MODEL_PATH provided; using mock labeler")
         return None
+
     model_path = Path(model_name)
     if not (model_path / "config.json").exists():
         logger.info("feature_engineering | labeler model missing config.json at %s; using mock", model_name)
@@ -255,16 +223,6 @@ def _classify_ticket(classifier, text: str) -> dict[str, Any]:
     return output_labels
 
 
-def _apply_recurrence_step(state: dict, text: str) -> None:
-    explicit = _optional_bool(state.get("is_recurring"))
-    if explicit is not None:
-        state["is_recurring"] = explicit
-        state["is_recurring_source"] = "state"
-    else:
-        state["is_recurring"] = bool(_RECURRING_REGEX.search(text))
-        state["is_recurring_source"] = "heuristic"
-
-
 def _apply_labeling_step(state: dict, text: str) -> None:
     classifier = _load_feature_labeler()
     if classifier is None:
@@ -286,59 +244,11 @@ def _apply_labeling_step(state: dict, text: str) -> None:
     state["feature_labels_source"] = label_source
 
 
-@lru_cache(maxsize=1)
-def _load_artifacts():
-    if not str(FEATURE_ENGINEERING_STATE_DIR).strip():
-        logger.info("feature_engineering | FEATURE_ENGINEERING_STATE_DIR not set, using labels/rules")
-        return {}
-    artifacts = {}
-    for target in TARGETS:
-        target_dir = FEATURE_ENGINEERING_STATE_DIR / target
-        model_path = target_dir / "rf.pkl"
-        le_path = target_dir / "label_encoder.pkl"
-        vec_path = target_dir / "tfidf_vectorizer.pkl"
-        if not (model_path.exists() and le_path.exists() and vec_path.exists()):
-            continue
-        artifacts[target] = {
-            "model": joblib.load(model_path),
-            "label_encoder": joblib.load(le_path),
-            "vectorizer": joblib.load(vec_path),
-        }
-    return artifacts
-
-
-def _predict_target(artifacts, target: str, text: str):
-    payload = artifacts.get(target)
-    if not payload:
-        return None
-    vec = payload["vectorizer"].transform([text]).toarray().astype(np.float32)
-    pred = payload["model"].predict(vec)
-    label = payload["label_encoder"].inverse_transform(pred)[0]
-    return str(label).strip()
-
-
 def get_feature_engineering_diagnostics() -> dict[str, object]:
-    state_dir = str(FEATURE_ENGINEERING_STATE_DIR).strip()
-    state_dir_enabled = bool(state_dir)
-    target_count = 0
-    if state_dir_enabled:
-        for target in TARGETS:
-            target_dir = Path(state_dir) / target
-            if (
-                (target_dir / "rf.pkl").exists()
-                and (target_dir / "label_encoder.pkl").exists()
-                and (target_dir / "tfidf_vectorizer.pkl").exists()
-            ):
-                target_count += 1
-
     labeler_model = FEATURE_LABELER_MODEL_PATH or None
     labeler_exists = bool(labeler_model and (Path(labeler_model) / "config.json").exists())
-
     return {
-        "feature_engineering_model_dir": state_dir or None,
-        "feature_engineering_model_enabled": state_dir_enabled,
-        "feature_engineering_targets_loaded": target_count,
-        "feature_engineering_mode": "model" if target_count > 0 else "labels+rules",
+        "feature_engineering_mode": "nli+rules",
         "feature_labeler_model": labeler_model,
         "feature_labeler_model_exists": labeler_exists,
         "feature_labeler_mode": "model" if labeler_exists else "mock",
@@ -352,44 +262,24 @@ async def engineer_features(state: dict) -> dict:
 
     text = str(state.get("text") or "").strip()
 
-    # Step 1: recurrence check
-    _apply_recurrence_step(state, text)
-
-    # Step 2: labeling (model/mock)
+    # Step 1: labeling (NLI model/mock)
     _apply_labeling_step(state, text)
 
-    # Step 3: optional RF refinement / fallback rules
-    artifacts = _load_artifacts()
-    business_impact = (
-        state.get("business_impact")
-        or _predict_target(artifacts, "business_impact", text)
-        or "medium"
-    )
-    issue_severity = (
-        state.get("issue_severity")
-        or _predict_target(artifacts, "issue_severity", text)
-        or "medium"
-    )
-    issue_urgency = (
-        state.get("issue_urgency")
-        or _predict_target(artifacts, "issue_urgency", text)
-        or "medium"
-    )
-    predicted_safety = _predict_target(artifacts, "safety_concern", text)
+    # Step 2: deterministic safety/normalization rules on top of NLI labels
+    business_impact = state.get("business_impact") or "medium"
+    issue_severity = state.get("issue_severity") or "medium"
+    issue_urgency = state.get("issue_urgency") or "medium"
     explicit_safety = _optional_bool(state.get("safety_concern"))
 
     severity_norm = _normalize_level(issue_severity, default="medium")
-    safety_from_model = _to_bool(predicted_safety, default=False)
     safety_from_keywords = _has_safety_signal(text)
-    safety_from_severity = severity_norm in {"high", "critical"}
+    safety_from_severity = severity_norm == "high"
 
     state["business_impact"] = _normalize_level(business_impact, default="medium")
     if explicit_safety is not None:
         state["safety_concern"] = explicit_safety
     else:
-        state["safety_concern"] = bool(
-            safety_from_model and (safety_from_keywords or safety_from_severity)
-        )
+        state["safety_concern"] = bool(safety_from_keywords or safety_from_severity)
     state["issue_severity"] = severity_norm
     state["issue_urgency"] = _normalize_level(issue_urgency, default="medium")
 

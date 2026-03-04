@@ -61,6 +61,11 @@ const toDate = (raw) => {
   return Number.isNaN(dt.getTime()) ? null : dt;
 };
 
+const formatTicketSource = (value) => {
+  const key = String(value || "user").trim().toLowerCase();
+  return key === "chatbot" ? "Chatbot" : "User";
+};
+
 function getStoredToken() {
   return (
     localStorage.getItem("access_token") ||
@@ -173,6 +178,7 @@ export default function EmployeeViewAllComplaints() {
 
       return {
         ...t,
+        _ticketSourceRaw: formatTicketSource(t.ticketSource),
         _issueDateRaw: issueDateRaw,
         _responseTimeRaw: responseTimeRaw,
         _resolutionTimeRaw: resolutionTimeRaw,
@@ -353,6 +359,7 @@ export default function EmployeeViewAllComplaints() {
                   <th onClick={() => _handleSort("subject")}>Subject</th>
                   <th onClick={() => _handleSort("priority")}>Priority</th>
                   <th onClick={() => _handleSort("status")}>Status</th>
+                  <th>Source</th>
                   <th onClick={() => _handleSort("issueDate")}>Issue Date</th>
                   <th onClick={() => _handleSort("responseTime")}>Response Time</th>
                   <th onClick={() => _handleSort("resolutionTime")}>Resolution Time</th>
@@ -370,6 +377,7 @@ export default function EmployeeViewAllComplaints() {
                     <td>{t.subject}</td>
                     <td><PriorityPill priority={t.priority} /></td>
                     <td>{t.status}</td>
+                    <td>{t._ticketSourceRaw}</td>
                     <td>{t._issueDateRaw}</td>
                     <td>{t._responseTimeRaw || "—"}</td>
                     <td>{t._resolutionTimeRaw || "—"}</td>
@@ -377,7 +385,7 @@ export default function EmployeeViewAllComplaints() {
                 ))}
                 {filteredTickets.length === 0 ? (
                   <tr>
-                    <td colSpan={7}>No tickets match your filters.</td>
+                    <td colSpan={8}>No tickets match your filters.</td>
                   </tr>
                 ) : null}
               </tbody>

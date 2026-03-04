@@ -1210,6 +1210,25 @@ ON CONFLICT DO NOTHING;
 -- =============================================================================
 -- 14. SESSIONS
 -- =============================================================================
+-- Backfill the 2 sessions inserted by init.sql (analytics cols weren't available yet)
+UPDATE public.sessions SET
+    bot_model_version  = 'chatbot-v2.1',
+    escalated_to_human = TRUE,
+    escalated_at       = '2026-03-01 06:23:00+00',
+    linked_ticket_id   = (SELECT id FROM tickets WHERE ticket_code = 'CX-R01')
+WHERE user_id    = (SELECT id FROM users WHERE email = 'customer1@innova.cx')
+  AND created_at = '2026-03-01 06:20:00+00'
+  AND bot_model_version IS NULL;
+
+UPDATE public.sessions SET
+    bot_model_version  = 'chatbot-v2.1',
+    escalated_to_human = FALSE,
+    escalated_at       = NULL,
+    linked_ticket_id   = NULL
+WHERE user_id    = (SELECT id FROM users WHERE email = 'customer1@innova.cx')
+  AND created_at = '2026-02-28 10:00:00+00'
+  AND bot_model_version IS NULL;
+
 INSERT INTO sessions (user_id, current_state, context, history, created_at, updated_at, bot_model_version, escalated_to_human, escalated_at, linked_ticket_id)
 VALUES
   ((SELECT id FROM users WHERE email='customer1@innova.cx'),
@@ -2206,8 +2225,52 @@ COMMIT;
 -- PASSWORD RESET TOKENS (a few for testing)
 -- =============================================================================
 BEGIN;
-INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, used_at) VALUES
-  ('b1000000-0000-0000-0000-000000000001', 'abc123tokenhashalice',  now()+interval'1 hour',  NULL),
-  ('b1000000-0000-0000-0000-000000000007', 'def456tokenhashgrace',  now()-interval'2 hours', now()-interval'1 hour')
-ON CONFLICT DO NOTHING;
+INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, used_at)
+SELECT
+  (SELECT id FROM users WHERE email = 'customer1@innova.cx'),
+  'abc123tokenhashalice',
+  now() + interval '1 hour',
+  NULL
+WHERE EXISTS (SELECT 1 FROM users WHERE email = 'customer1@innova.cx')
+  AND NOT EXISTS (
+    SELECT 1 FROM password_reset_tokens
+    WHERE user_id = (SELECT id FROM users WHERE email = 'customer1@innova.cx')
+      AND token_hash = 'abc123tokenhashalice'
+  );
+
+INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, used_at)
+SELECT
+  (SELECT id FROM users WHERE email = 'sara@innova.cx'),
+  'def456tokenhashgrace',
+  now() - interval '2 hours',
+  now() - interval '1 hour'
+WHERE EXISTS (SELECT 1 FROM users WHERE email = 'sara@innova.cx')
+  AND NOT EXISTS (
+    SELECT 1 FROM password_reset_tokens
+    WHERE user_id = (SELECT id FROM users WHERE email = 'sara@innova.cx')
+      AND token_hash = 'def456tokenhashgrace'
+  );
+COMMIT;
+
+-- =============================================================================
+-- BACKFILL: Ensure all ticket priority_assigned_at is set (for SLA computation)
+-- =============================================================================
+BEGIN;
+UPDATE tickets
+SET priority_assigned_at = created_at
+WHERE priority_assigned_at IS NULL;
+
+-- =============================================================================
+-- BACKFILL: Disable MFA for all seed users so they can log in without TOTP
+-- =============================================================================
+UPDATE users
+SET mfa_enabled = FALSE, totp_secret = NULL
+WHERE email IN (
+  'customer1@innova.cx','customer2@innova.cx','customer3@innova.cx',
+  'manager@innova.cx','operator@innova.cx',
+  'ahmed@innova.cx','maria@innova.cx','omar@innova.cx','sara@innova.cx',
+  'bilal@innova.cx','fatima@innova.cx','yousef@innova.cx','khalid@innova.cx',
+  'rania@innova.cx','tariq@innova.cx','lena@innova.cx','hassan@innova.cx',
+  'noura@innova.cx','ziad@innova.cx','dina@innova.cx'
+);
 COMMIT;
