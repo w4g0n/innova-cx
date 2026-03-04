@@ -14,3 +14,4 @@ joblib
 scikit-learn
 torch
 transformers
+psycopg2-binary==2.9.9

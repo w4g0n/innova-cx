@@ -1,103 +1,119 @@
-.settingsPage {
-  padding: 26px 26px 40px;
+/* Employee Settings — matches ManagerSettings spacing + theme vars */
+
+.empSettingsPage {
+  padding: 24px 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: empPageFade 400ms ease-out both;
+}
+
+.empSettingsContent {
+  width: 100%;
   max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-.settingsHeader h1 {
-  margin: 0;
-  font-size: 34px;
-  letter-spacing: 0.2px;
+.empCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.settingsHeader p {
-  margin: 8px 0 22px;
-  opacity: 0.75;
-}
-
-.settingsGrid {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 16px;
-}
-
-.settingsCard {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(168,107,255,0.18);
-  border-radius: 18px;
-  padding: 18px;
-  backdrop-filter: blur(10px);
-}
-
-.settingsCard h2 {
-  margin: 0 0 12px;
-  font-size: 16px;
-  letter-spacing: 0.2px;
-}
-
-.settingsRow {
+/* Password section */
+.empPasswordRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 10px 0;
-  border-top: 1px solid rgba(255,255,255,0.08);
+
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--purple-50) 100%);
+  box-shadow: 0 1px 14px rgba(100, 71, 217, 0.06);
+  transition: transform 180ms ease, box-shadow 220ms ease, border-color 220ms ease;
 }
 
-.settingsRow:first-of-type {
-  border-top: none;
-  padding-top: 0;
+.empPasswordRow:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(100, 71, 217, 0.12);
+  border-color: var(--border-strong);
 }
 
-.settingsLabel {
-  font-size: 12px;
-  opacity: 0.7;
-}
-
-.settingsValue {
-  margin-top: 2px;
-  font-weight: 600;
-}
-
-.settingsHint {
-  margin: 0 0 12px;
-  opacity: 0.75;
-  font-size: 13px;
-}
-
-.toggleRow {
+.empPasswordText {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  flex-direction: column;
+  gap: 4px;
 }
 
-.toggleRow:first-of-type {
-  border-top: none;
-  padding-top: 0;
+.empPasswordLabel {
+  margin: 0;
+  font-family: "DM Sans", "Segoe UI", system-ui;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text-primary);
 }
 
-.settingsBtn {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: white;
-  padding: 9px 12px;
-  border-radius: 12px;
-  cursor: pointer;
-}
-
-.settingsBtnPrimary {
-  background: rgba(168,107,255,0.95);
-  border: none;
-  color: #140b22;
-  padding: 10px 14px;
-  border-radius: 12px;
+.empPasswordSub {
+  margin: 0;
+  font-family: "DM Sans", "Segoe UI", system-ui;
+  font-size: 12.5px;
   font-weight: 700;
-  cursor: pointer;
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
-@media (max-width: 900px) {
-  .settingsGrid {
-    grid-template-columns: 1fr;
+/* Animation */
+.empFadeIn {
+  animation: empCardFade 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes empPageFade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes empCardFade {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .empSettingsPage {
+    padding: 16px;
+  }
+
+  .empPasswordRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Fix modal overlay (no muddy background) */
+:is(.cpw-overlay, .cpw-backdrop, .cpwBackdrop, .changePasswordOverlay, .changePasswordBackdrop) {
+  background: rgba(45, 27, 105, 0.35) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+
+:is(.cpw-modal, .cpwModal, .changePasswordModal) {
+  box-shadow: 0 25px 80px rgba(45, 27, 105, 0.25) !important;
+  border: 1px solid var(--border) !important;
 }

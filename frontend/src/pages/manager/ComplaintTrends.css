@@ -694,3 +694,8 @@
   .ct-gaugeRow { grid-template-columns: 1fr; }
   .pillSelectHolder { flex-wrap: wrap; }
 }
+
+/* ── Section C only — 4 KPI cards fill full width ───────────────────────── */
+.ct-sectionC .kpiRow {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}

@@ -3,35 +3,51 @@ LangChain Pipeline
 ==================
 Defines the full RunnableSequence that chains all agents in order.
 Each step receives the full state dict and returns an updated state dict.
+Execution logging is enabled when `execution_logger.logged_step` is available;
+otherwise the pipeline falls back to the standard runnable wrappers.
 
 Flow:
     submitted ticket details (text + optional audio features)
-        → [1] classifier_step    (in-process heuristic; skip if type provided)
-        → (complaint + audio ticket) [2] audio_analysis_step (audioanalysis module)
-        → (complaint) [3] sentiment_step  (sentimentanalysis module)
-        → (complaint) [4] sentiment_combiner_step (sentimentcombiner module)
-        → (complaint) [5] feature_engineering_step
-            : recurrence check then feature labeling/modeling inside one agent
-        → (complaint) [6] priority_step   (Fuzzy Logic)
-        → [7] router_step        (Backend/Chatbot)
+        -> [1] ClassificationAgent / classifier_step
+            : in-process heuristic; skip if type provided
+        -> [2] AudioAnalysisAgent / audio_analysis_step
+            : complaint + audio ticket path
+        -> [3] SentimentAgent / sentiment_step
+        -> [4] SentimentCombinerAgent / sentiment_combiner_step
+        -> [5] FeatureEngineeringAgent / feature_engineering_step
+            : recurrence check then feature labeling/modeling
+        -> [6] PrioritizationAgent / priority_step (Fuzzy Logic)
+        -> [7] DepartmentRoutingAgent / router_step (Backend/Chatbot)
 """
 
-from langchain_core.runnables import RunnableSequence
+from langchain_core.runnables import RunnableLambda, RunnableSequence
 
-from agents.classifier.step import classifier_step
-from agents.audioanalysis.step import audio_analysis_step
-from agents.sentimentanalysis.step import sentiment_step
-from agents.sentimentcombiner.step import sentiment_combiner_step
-from agents.featureengineering.step import feature_engineering_step
-from agents.priority.step import priority_step
-from agents.router.step import router_step
+from agents.classifier.step import classify
+from agents.audioanalysis.step import analyze_audio
+from agents.sentimentanalysis.step import analyze_sentiment
+from agents.sentimentcombiner.step import combine_sentiment
+from agents.featureengineering.step import engineer_features
+from agents.priority.step import score_priority
+from agents.router.step import route_and_store
+
+try:
+    from execution_logger import logged_step
+except Exception:  # pragma: no cover - optional dependency for backward compatibility
+    logged_step = None
+
+
+def _step(name: str, fn, order: int):
+    if logged_step:
+        return logged_step(name, fn, order)
+    return RunnableLambda(fn)
+
 
 pipeline: RunnableSequence = (
-    classifier_step
-    | audio_analysis_step
-    | sentiment_step
-    | sentiment_combiner_step
-    | feature_engineering_step
-    | priority_step
-    | router_step
+    _step("ClassificationAgent", classify, 1)
+    | _step("AudioAnalysisAgent", analyze_audio, 2)
+    | _step("SentimentAgent", analyze_sentiment, 3)
+    | _step("SentimentCombinerAgent", combine_sentiment, 4)
+    | _step("FeatureEngineeringAgent", engineer_features, 5)
+    | _step("PrioritizationAgent", score_priority, 6)
+    | _step("DepartmentRoutingAgent", route_and_store, 7)
 )
