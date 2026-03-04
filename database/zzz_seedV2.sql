@@ -2425,7 +2425,7 @@ WHERE NOT EXISTS (
 -- =============================================================================
 INSERT INTO public.priority_outputs (
   execution_id, ticket_id, model_version,
-  suggested_priority, confidence_score, reasoning, is_current
+  model_priority, confidence_score, reasoning, is_current
 )
 SELECT DISTINCT ON (mel.ticket_id)
   mel.id, mel.ticket_id, mel.model_version,
@@ -2456,11 +2456,11 @@ WHERE NOT EXISTS (
 -- =============================================================================
 INSERT INTO public.routing_outputs (
   execution_id, ticket_id, model_version,
-  suggested_department_id, confidence_score, reasoning, is_current
+  suggested_dept_id, suggested_dept_name, confidence_score, routing_reason, is_current
 )
 SELECT DISTINCT ON (mel.ticket_id)
   mel.id, mel.ticket_id, mel.model_version,
-  d.id, rv.conf, rv.reason, TRUE
+  d.id, d.name, rv.conf, rv.reason, TRUE
 FROM (VALUES
   ('CX-A001','Facilities Management',0.9700,
    'HVAC asset type + building code → Facilities Management owner.'),
@@ -2516,11 +2516,11 @@ WHERE NOT EXISTS (
 -- =============================================================================
 INSERT INTO public.resolution_outputs (
   execution_id, ticket_id, model_version,
-  suggested_text, kb_references, confidence_score, is_current
+  suggested_resolution, suggested_text, kb_references, confidence_score, is_current
 )
 SELECT DISTINCT ON (mel.ticket_id)
   mel.id, mel.ticket_id, mel.model_version,
-  rv.suggestion, rv.kb, rv.conf, TRUE
+  rv.suggestion, rv.suggestion, to_jsonb(rv.kb), rv.conf, TRUE
 FROM (VALUES
   ('CX-A001', 0.9600,
    'Activate backup cooling unit immediately. Dispatch HVAC technician to inspect compressor and thermostat. Check coolant pressure and replace failed components.',

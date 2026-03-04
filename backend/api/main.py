@@ -1,6 +1,7 @@
 # backend/api/main.py
 
 import os
+import subprocess
 import time
 import json
 import logging
@@ -148,6 +149,60 @@ def _ensure_runtime_schema_compatibility() -> None:
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
     except Exception as exc:
         logger.warning("db_compat | failed to apply compatibility DDL: %s", exc)
+
+
+def _ensure_analytics_mvs() -> None:
+    """
+    Installs analytics materialized views if they don't exist yet.
+    Runs database/scripts/analytics_mvs.sql via psql using the DATABASE_URL.
+    Called from startup with retry logic so it safely handles the case where
+    the DB is still running its own init.sql.
+    """
+    MV_SQL = "/app/database/scripts/analytics_mvs.sql"
+    if not os.path.exists(MV_SQL):
+        logger.warning("_ensure_analytics_mvs | %s not found — skipping", MV_SQL)
+        return
+
+    # Check if MVs already exist
+    try:
+        row = fetch_one(
+            "SELECT COUNT(*) AS cnt FROM pg_matviews WHERE matviewname = 'mv_ticket_base'", ()
+        )
+        if row and (row.get("cnt") or 0) > 0:
+            logger.info("_ensure_analytics_mvs | MVs already exist — skipping install")
+            return
+    except Exception as _check_err:
+        logger.info("_ensure_analytics_mvs | cannot check pg_matviews — attempting MV install anyway")
+
+    # Parse DATABASE_URL → psql connection args
+    db_url = os.getenv("DATABASE_URL", "")
+    # Format: postgresql://user:pass@host:port/dbname
+    try:
+        import urllib.parse as _urlparse
+        p = _urlparse.urlparse(db_url)
+        psql_env = {
+            **os.environ,
+            "PGPASSWORD": p.password or "",
+        }
+        psql_cmd = [
+            "psql",
+            "-h", p.hostname or "postgres",
+            "-p", str(p.port or 5432),
+            "-U", p.username or "postgres",
+            "-d", (p.path or "/postgres").lstrip("/"),
+            "-v", "ON_ERROR_STOP=1",
+            "-f", MV_SQL,
+        ]
+        result = subprocess.run(
+            psql_cmd, env=psql_env,
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            logger.info("_ensure_analytics_mvs | MVs installed successfully")
+        else:
+            logger.error("_ensure_analytics_mvs | install failed: %s", result.stderr[-500:])
+    except Exception as _install_err:
+        logger.error("_ensure_analytics_mvs | install failed: %s", _install_err)
 
 
 def _detect_sla_policy_function() -> bool:
@@ -384,6 +439,23 @@ async def _start_sla_heartbeat() -> None:
     if _ANALYTICS_READY:
         try:
             _analytics.init(fetch_one, fetch_all, db_connect)
+            # ── Self-healing: install MVs if zzz_analytics_mvs.sh was skipped ──
+            # Retry up to 10x (30s) in case DB is still finishing init.sql
+            for _mv_attempt in range(10):
+                try:
+                    row = fetch_one(
+                        "SELECT COUNT(*) AS cnt FROM pg_matviews WHERE matviewname = 'mv_ticket_base'", ()
+                    )
+                    if row and (row.get("cnt") or 0) > 0:
+                        break  # MVs already exist
+                    logger.info("_ensure_analytics_mvs | MVs missing — installing (attempt %d/10)...", _mv_attempt + 1)
+                    _ensure_analytics_mvs()
+                    break
+                except Exception as _mv_err:
+                    if _mv_attempt < 9:
+                        await asyncio.sleep(3)
+                    else:
+                        logger.error("_ensure_analytics_mvs | gave up after 10 attempts: %s", _mv_err)
             _analytics.refresh_mvs()
             logger.info("analytics_service | MVs refreshed and ready")
         except Exception as _e:
@@ -1832,22 +1904,20 @@ def _safe_report_code(code: str) -> str:
 def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[str]:
     """
     Build (or rebuild) the employee_report row for the given user/year/month.
-    Returns the report_code on success, or None if the employee had no ticket
-    activity in that month.
+    Uses mv_employee_daily and mv_acceptance_daily for fast pre-aggregated data.
+    Returns the report_code on success, or None if the employee had no activity.
     """
     from datetime import date
     period_start = date(year, month, 1)
-    if month == 12:
-        period_end = date(year + 1, 1, 1)
-    else:
-        period_end = date(year, month + 1, 1)
+    period_end   = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
 
+    # ── activity check via MV ─────────────────────────────────────────────────
     activity = fetch_one(
         """
-        SELECT COUNT(*) AS cnt
-        FROM tickets
-        WHERE assigned_to = %s
-          AND created_at >= %s AND created_at < %s
+        SELECT SUM(total) AS cnt
+        FROM mv_employee_daily
+        WHERE employee_id = %s
+          AND created_day >= %s AND created_day < %s
         """,
         (user_id, period_start, period_end),
     )
@@ -1857,35 +1927,35 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
     report_code = f"{_MONTH_ABBR[month]}-{year}"
     month_label = f"{_MONTH_LABEL[month]} {year}"
 
+    # ── aggregate KPIs from mv_employee_daily ─────────────────────────────────
     kpi_row = fetch_one(
         """
         SELECT
-          COUNT(*) AS total,
-          COUNT(*) FILTER (WHERE status = 'Resolved') AS resolved,
-          ROUND(
-            COUNT(*) FILTER (WHERE NOT (resolve_breached OR respond_breached))::numeric /
-            NULLIF(COUNT(*), 0) * 100, 1
-          ) AS sla_pct,
-          ROUND(
-            AVG(EXTRACT(EPOCH FROM (first_response_at - COALESCE(priority_assigned_at, created_at))) / 60.0)
-            FILTER (WHERE first_response_at IS NOT NULL), 1
-          ) AS avg_response_mins
-        FROM tickets
-        WHERE assigned_to = %s
-          AND created_at >= %s AND created_at < %s
+            SUM(total)    AS total,
+            SUM(resolved) AS resolved,
+            ROUND(
+                SUM(total - breached)::numeric / NULLIF(SUM(total), 0) * 100, 1
+            ) AS sla_pct,
+            ROUND(
+                SUM(avg_respond_mins * total) / NULLIF(SUM(total), 0), 1
+            ) AS avg_response_mins
+        FROM mv_employee_daily
+        WHERE employee_id = %s
+          AND created_day >= %s AND created_day < %s
         """,
         (user_id, period_start, period_end),
     ) or {}
 
-    total = int(kpi_row.get("total") or 0)
+    total    = int(kpi_row.get("total")    or 0)
     resolved = int(kpi_row.get("resolved") or 0)
-    sla_pct = float(kpi_row.get("sla_pct") or 0)
+    sla_pct  = float(kpi_row.get("sla_pct") or 0)
     avg_resp = kpi_row.get("avg_response_mins")
 
     resolve_rate = round(resolved / total * 100, 1) if total else 0
-    kpi_rating = round((resolve_rate * 0.5) + (sla_pct * 0.5), 1)
-    subtitle = f"{resolved} of {total} tickets resolved · {sla_pct}% SLA compliance"
+    kpi_rating   = round((resolve_rate * 0.5) + (sla_pct * 0.5), 1)
+    subtitle     = f"{resolved} of {total} tickets resolved · {sla_pct}% SLA compliance"
 
+    # ── upsert employee_reports row ───────────────────────────────────────────
     existing = fetch_one(
         "SELECT id FROM employee_reports WHERE report_code = %s AND employee_user_id = %s",
         (report_code, user_id),
@@ -1894,9 +1964,9 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
         execute(
             """
             UPDATE employee_reports SET
-              month_label = %s, subtitle = %s,
-              kpi_rating = %s, kpi_resolved = %s, kpi_sla = %s, kpi_avg_response = %s,
-              created_at = NOW()
+                month_label = %s, subtitle = %s,
+                kpi_rating = %s, kpi_resolved = %s, kpi_sla = %s, kpi_avg_response = %s,
+                created_at = NOW()
             WHERE id = %s
             """,
             (month_label, subtitle, kpi_rating, resolved, sla_pct, avg_resp, existing["id"]),
@@ -1906,8 +1976,8 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
         row = fetch_one(
             """
             INSERT INTO employee_reports
-              (employee_user_id, report_code, month_label, subtitle,
-               kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
+                (employee_user_id, report_code, month_label, subtitle,
+                 kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
@@ -1918,12 +1988,32 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
             return None
         report_id = row["id"]
 
+    # ── summary items (includes AI Acceptance Rate from mv_acceptance_daily) ──
     execute("DELETE FROM employee_report_summary_items WHERE report_id = %s", (report_id,))
+
+    acceptance_data = fetch_one(
+        """
+        SELECT
+            SUM(total)    AS total_resolutions,
+            SUM(accepted) AS accepted_count
+        FROM mv_acceptance_daily
+        WHERE employee_id = %s
+          AND created_day >= %s AND created_day < %s
+        """,
+        (user_id, period_start, period_end),
+    )
+    acceptance_rate = None
+    if acceptance_data and acceptance_data.get("total_resolutions"):
+        acceptance_rate = round(
+            (acceptance_data["accepted_count"] / acceptance_data["total_resolutions"]) * 100, 1
+        )
+
     summary_items = [
-        ("Tickets Assigned", str(total)),
-        ("Tickets Resolved", str(resolved)),
-        ("SLA Compliance", f"{sla_pct}%"),
+        ("Tickets Assigned",   str(total)),
+        ("Tickets Resolved",   str(resolved)),
+        ("SLA Compliance",     f"{sla_pct}%"),
         ("Avg First Response", f"{round(avg_resp)} min" if avg_resp else "N/A"),
+        ("AI Acceptance Rate", f"{acceptance_rate}%" if acceptance_rate is not None else "N/A"),
     ]
     for label, value in summary_items:
         execute(
@@ -1931,7 +2021,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
             (report_id, label, value),
         )
 
-    logger.info("report_gen | generated report=%s user=%s", report_code, user_id)
+    logger.info("report_gen | generated report=%s user=%s (MV-based)", report_code, user_id)
     return report_code
 
 
@@ -3468,7 +3558,7 @@ def get_manager_trends(
     }
     start_expr   = range_sql.get(timeRange, "date_trunc('month', now())")
     period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
-    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    period_end   = fetch_one("SELECT (now() + interval '1 day')::timestamptz AS ts")["ts"]
     window_secs  = (period_end - period_start).total_seconds()
     prev_start   = fetch_one(
         "SELECT (%s::timestamptz - make_interval(secs => %s)) AS start",
@@ -4092,7 +4182,8 @@ def _parse_time_range(
     }
     start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
     period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
-    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    # Add 1 day so today's rows are included by the standard "created_day < period_end" filter
+    period_end   = fetch_one("SELECT (now() + interval '1 day')::timestamptz AS ts")["ts"]
     return period_start, period_end
 
 @api.get("/operator/analytics/qc/acceptance")
@@ -4234,6 +4325,266 @@ def get_operator_feature(
         status_code=503,
         detail="Analytics MVs not ready. Run database/scripts/analytics_mvs.sql first."
     )
+
+# =========================================================
+# Operator – Quality Control / Ticket Review Detail
+# =========================================================
+
+@api.get("/operator/complaints/{ticket_id}")
+def get_operator_complaint_detail(
+    ticket_id: str,
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """
+    Full ticket detail for the QC TicketReviewDetail page.
+    Accepts either a ticket_code (e.g. CX-0042) or a raw UUID.
+    """
+    ticket = fetch_one(
+        """
+        SELECT
+            t.id                                    AS ticket_id,
+            t.ticket_code,
+            t.subject,
+            t.details,
+            t.status,
+            t.priority,
+            t.model_priority,
+            t.model_confidence                      AS priority_confidence,
+            t.sentiment_label,
+            t.sentiment_score,
+            t.created_at,
+            t.first_response_at,
+            t.resolved_at,
+            t.respond_due_at,
+            t.resolve_due_at,
+            t.respond_breached,
+            t.resolve_breached,
+            t.human_overridden,
+            t.override_reason,
+            t.is_recurring,
+            t.asset_type,
+            d.name                                  AS department_name,
+            md.name                                 AS model_dept,
+            up_assigned.full_name                   AS assigned_to_name,
+            up_assigned.job_title                   AS assigned_to_title,
+            up_created.full_name                    AS created_by_name,
+            u_created.role                          AS created_by_role
+        FROM tickets t
+        LEFT JOIN departments   d            ON d.id  = t.department_id
+        LEFT JOIN departments   md           ON md.id = t.model_department_id
+        LEFT JOIN user_profiles up_assigned  ON up_assigned.user_id = t.assigned_to_user_id
+        LEFT JOIN user_profiles up_created   ON up_created.user_id  = t.created_by_user_id
+        LEFT JOIN users         u_created    ON u_created.id         = t.created_by_user_id
+        WHERE t.ticket_code = %s OR t.id::text = %s
+        LIMIT 1
+        """,
+        (ticket_id, ticket_id),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    tid = ticket["ticket_id"]
+
+    # ── approval requests ─────────────────────────────────────────────────────
+    approval_requests = fetch_all(
+        """
+        SELECT
+            request_code,
+            request_type,
+            current_value,
+            requested_value,
+            request_reason,
+            status,
+            submitted_at,
+            decided_at,
+            decision_notes
+        FROM approval_requests
+        WHERE ticket_id = %s
+        ORDER BY submitted_at DESC
+        """,
+        (tid,),
+    ) or []
+
+    # ── model execution log ───────────────────────────────────────────────────
+    execution_log = fetch_all(
+        """
+        SELECT
+            agent_name,
+            model_version,
+            started_at,
+            ROUND(
+                EXTRACT(EPOCH FROM (completed_at - started_at)) * 1000
+            )::int                              AS duration_ms,
+            status
+        FROM model_execution_log
+        WHERE ticket_id = %s
+        ORDER BY started_at ASC
+        """,
+        (tid,),
+    ) or []
+
+    # ── ticket updates ────────────────────────────────────────────────────────
+    ticket_updates = fetch_all(
+        """
+        SELECT
+            update_type,
+            from_status,
+            to_status,
+            message,
+            created_at
+        FROM ticket_updates
+        WHERE ticket_id = %s
+        ORDER BY created_at ASC
+        """,
+        (tid,),
+    ) or []
+
+    # ── current-run AI outputs ────────────────────────────────────────────────
+    sentiment = fetch_one(
+        """
+        SELECT sentiment_label, sentiment_score,
+               confidence_score AS sentiment_confidence
+        FROM sentiment_outputs
+        WHERE ticket_id = %s AND is_current = TRUE
+        LIMIT 1
+        """,
+        (tid,),
+    )
+    feature = fetch_one(
+        """
+        SELECT asset_category, topic_labels,
+               confidence_score AS feature_confidence
+        FROM feature_outputs
+        WHERE ticket_id = %s AND is_current = TRUE
+        LIMIT 1
+        """,
+        (tid,),
+    )
+    resolution = fetch_one(
+        """
+        SELECT suggested_text   AS suggested_resolution,
+               model_version    AS suggested_resolution_model
+        FROM resolution_outputs
+        WHERE ticket_id = %s AND is_current = TRUE
+        LIMIT 1
+        """,
+        (tid,),
+    )
+    routing = fetch_one(
+        """
+        SELECT confidence_score AS routing_confidence,
+               reasoning        AS routing_reason
+        FROM routing_outputs
+        WHERE ticket_id = %s AND is_current = TRUE
+        LIMIT 1
+        """,
+        (tid,),
+    )
+    feedback = fetch_one(
+        """
+        SELECT decision AS feedback_decision, final_resolution
+        FROM ticket_resolution_feedback
+        WHERE ticket_id = %s
+        LIMIT 1
+        """,
+        (tid,),
+    )
+
+    # ── chat sentiment series (for escalated tickets) ─────────────────────────
+    chat_sentiment = fetch_all(
+        """
+        SELECT sentiment_score, created_at
+        FROM user_chat_logs
+        WHERE ticket_id = %s
+        ORDER BY created_at ASC
+        """,
+        (tid,),
+    ) or []
+
+    # ── helpers ───────────────────────────────────────────────────────────────
+    def _iso(val):
+        return val.isoformat() if val else None
+
+    def _flt(val):
+        return float(val) if val is not None else None
+
+    return {
+        "ticketCode":          ticket["ticket_code"],
+        "subject":             ticket["subject"],
+        "details":             ticket["details"],
+        "status":              ticket["status"],
+        "priority":            ticket["priority"],
+        "modelPriority":       ticket["model_priority"],
+        "priorityConfidence":  _flt(ticket.get("priority_confidence")),
+        "sentimentLabel":      (sentiment or {}).get("sentiment_label")  or ticket.get("sentiment_label"),
+        "sentimentScore":      _flt((sentiment or {}).get("sentiment_score") or ticket.get("sentiment_score")) or 0.0,
+        "sentimentConfidence": _flt((sentiment or {}).get("sentiment_confidence")),
+        "modelDept":           ticket.get("model_dept"),
+        "finalDept":           ticket.get("department_name"),
+        "routingConfidence":   _flt((routing or {}).get("routing_confidence")),
+        "routingReason":       (routing or {}).get("routing_reason") or "",
+        "humanOverridden":     ticket.get("human_overridden"),
+        "overrideReason":      ticket.get("override_reason"),
+        "isRecurring":         ticket.get("is_recurring"),
+        "respondBreached":     ticket.get("respond_breached"),
+        "resolveBreached":     ticket.get("resolve_breached"),
+        "createdAt":           _iso(ticket.get("created_at")),
+        "resolvedAt":          _iso(ticket.get("resolved_at")),
+        "firstResponseAt":     _iso(ticket.get("first_response_at")),
+        "respondDueAt":        _iso(ticket.get("respond_due_at")),
+        "resolveDueAt":        _iso(ticket.get("resolve_due_at")),
+        "assetCategory":       (feature or {}).get("asset_category") or ticket.get("asset_type"),
+        "topicLabels":         (feature or {}).get("topic_labels") or [],
+        "featureConfidence":   _flt((feature or {}).get("feature_confidence")),
+        "assignedToName":      ticket.get("assigned_to_name") or "Unassigned",
+        "assignedToTitle":     ticket.get("assigned_to_title") or "",
+        "createdByName":       ticket.get("created_by_name") or "Unknown",
+        "createdByRole":       ticket.get("created_by_role") or "",
+        "suggestedResolution": (resolution or {}).get("suggested_resolution") or "",
+        "resolutionModel":     (resolution or {}).get("suggested_resolution_model") or "",
+        "finalResolution":     (feedback or {}).get("final_resolution"),
+        "feedbackDecision":    (feedback or {}).get("feedback_decision"),
+        "approvalRequests": [
+            {
+                "requestCode":    r.get("request_code"),
+                "requestType":    r.get("request_type"),
+                "currentValue":   r.get("current_value"),
+                "requestedValue": r.get("requested_value"),
+                "requestReason":  r.get("request_reason"),
+                "status":         r.get("status"),
+                "submittedAt":    _iso(r.get("submitted_at")),
+                "decidedAt":      _iso(r.get("decided_at")),
+                "decisionNotes":  r.get("decision_notes"),
+            }
+            for r in approval_requests
+        ],
+        "executionLog": [
+            {
+                "agentName":    e.get("agent_name"),
+                "modelVersion": e.get("model_version"),
+                "startedAt":    _iso(e.get("started_at")),
+                "durationMs":   e.get("duration_ms"),
+                "status":       e.get("status"),
+            }
+            for e in execution_log
+        ],
+        "ticketUpdates": [
+            {
+                "updateType": u.get("update_type"),
+                "fromStatus": u.get("from_status"),
+                "toStatus":   u.get("to_status"),
+                "message":    u.get("message"),
+                "createdAt":  _iso(u.get("created_at")),
+            }
+            for u in ticket_updates
+        ],
+        "chatSentimentSeries": [
+            {"score": _flt(c["sentiment_score"])}
+            for c in chat_sentiment
+            if c.get("sentiment_score") is not None
+        ],
+    }
+
 
 # =========================================================
 # Operator – User Management

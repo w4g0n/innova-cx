@@ -59,6 +59,35 @@ function formatTicketSource(value) {
   return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
 }
 
+const WORKFLOW_STAGES = [
+  { id: "open", label: "Open", owner: "System" },
+  { id: "assigned", label: "Assigned", owner: "Operator" },
+  { id: "in_progress", label: "In Progress", owner: "Employee" },
+  { id: "resolved", label: "Resolved", owner: "Employee" },
+];
+
+function getWorkflowState(status) {
+  const value = String(status || "").trim().toLowerCase();
+  if (value === "resolved") {
+    return { stageIndex: 3, stageLabel: "Resolved", owner: "Employee", note: "Work is complete." };
+  }
+  if (value === "in progress") {
+    return { stageIndex: 2, stageLabel: "In Progress", owner: "Employee", note: "A team member is working on this." };
+  }
+  if (value === "assigned" || value === "escalated") {
+    return { stageIndex: 1, stageLabel: "Assigned", owner: "Operator", note: "Ticket is assigned and queued for action." };
+  }
+  return { stageIndex: 0, stageLabel: "Open", owner: "System", note: "Ticket was received and is pending assignment." };
+}
+
+function getSlaTargets(priority) {
+  const value = String(priority || "").trim().toLowerCase();
+  if (value === "critical") return { minResponse: "15 min", minResolve: "4 hrs" };
+  if (value === "high") return { minResponse: "1 hr", minResolve: "8 hrs" };
+  if (value === "low") return { minResponse: "8 hrs", minResolve: "72 hrs" };
+  return { minResponse: "4 hrs", minResolve: "24 hrs" };
+}
+
 export default function CustomerHistory() {
   const navigate = useNavigate();
 
@@ -316,6 +345,7 @@ export default function CustomerHistory() {
                     <p className="historyPriorityCtxReason">{ctx.reason}</p>
                   </div>
                 </div>                  
+                  </div>
 
                   <div className="historyCardRight">
                     <button
