@@ -2094,18 +2094,16 @@ def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
           created_at  AS "createdAt"
         FROM employee_reports
         WHERE employee_user_id = %s
+        AND report_code ~ '^[a-z]{3}-[0-9]{4}$'
         ORDER BY
-          -- Sort by the actual month the report covers, not when it was generated.
-          -- report_code format is "mon-yyyy" (e.g. "feb-2026", "nov-2025").
-          -- Extract year then map the 3-letter month abbreviation to a number.
-          split_part(report_code, '-', 2)::int DESC,
-          CASE split_part(report_code, '-', 1)
+        split_part(report_code, '-', 2)::int DESC,
+        CASE split_part(report_code, '-', 1)
             WHEN 'jan' THEN 1  WHEN 'feb' THEN 2  WHEN 'mar' THEN 3
             WHEN 'apr' THEN 4  WHEN 'may' THEN 5  WHEN 'jun' THEN 6
             WHEN 'jul' THEN 7  WHEN 'aug' THEN 8  WHEN 'sep' THEN 9
             WHEN 'oct' THEN 10 WHEN 'nov' THEN 11 WHEN 'dec' THEN 12
             ELSE 0
-          END DESC
+        END DESC
         LIMIT 24;
         """,
         (user_id,),
