@@ -245,6 +245,13 @@ LIVE_PATH=$(docker exec "$CHATBOT_CONTAINER" printenv CHATBOT_MODEL_PATH 2>/dev/
     || die "Model path mismatch after Qwen switch: expected '$QWEN_LOCAL_PATH', got '$LIVE_PATH'"
 log "Confirmed CHATBOT_MODEL_PATH=$LIVE_PATH"
 
+# Re-copy benchmark scripts — force-recreate created a fresh container, /tmp is empty
+log "Re-copying benchmark scripts into recreated container ..."
+docker exec "$CHATBOT_CONTAINER" mkdir -p "$CONTAINER_BENCH"
+docker cp "$BENCH_DIR/benchmark_llm.py" "${CHATBOT_CONTAINER}:${CONTAINER_BENCH}/benchmark_llm.py"
+docker cp "$BENCH_DIR/test_cases.json"  "${CHATBOT_CONTAINER}:${CONTAINER_BENCH}/test_cases.json"
+log "Scripts ready at ${CHATBOT_CONTAINER}:${CONTAINER_BENCH}"
+
 # =============================================================================
 # Step 5 — Run benchmarks against Qwen
 # =============================================================================
