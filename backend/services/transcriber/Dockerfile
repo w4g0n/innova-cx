@@ -6,15 +6,25 @@ FROM node:18-bullseye-slim
 # - ffmpeg + libsndfile1: audio decoding
 # - python3 + pip: Whisper + analysis
 # -------------------------------
-RUN apt-get update && apt-get install -y \
-    --no-install-recommends \
-    python3 \
-    python3-dev \
-    python3-pip \
-    build-essential \
-    ffmpeg \
-    libsndfile1 \
- && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    for i in 1 2 3; do \
+      apt-get -o Acquire::Retries=5 update && \
+      apt-get install -y --fix-missing --no-install-recommends \
+        python3 \
+        python3-dev \
+        python3-pip \
+        build-essential \
+        ffmpeg \
+        libsndfile1 && \
+      break; \
+      if [ "$i" = "3" ]; then \
+        echo "apt install failed after 3 attempts"; \
+        exit 1; \
+      fi; \
+      echo "apt install attempt ${i} failed; retrying in 5s..."; \
+      sleep 5; \
+    done; \
+    rm -rf /var/lib/apt/lists/*
 
 # -------------------------------
 # App workspace

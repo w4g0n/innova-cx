@@ -17,12 +17,8 @@ const CustomerTicketDetails = lazy(() =>
   import("./pages/customer/CustomerTicketDetails")
 );
 const CustomerSettings = lazy(() => import("./pages/customer/CustomerSettings"));
-const CustomerAuthPage = lazy(() =>
-  import("./pages/customer/CustomerAuthPage")
-);
+const CustomerAuthPage = lazy(() => import("./pages/customer/CustomerAuthPage"));
 const AboutUs = lazy(() => import("./pages/customer/AboutUs"));
-
-
 
 const EmployeeNotifications = lazy(() =>
   import("./pages/employee/EmployeeNotifications")
@@ -49,17 +45,34 @@ const ManagerViewAllComplaints = lazy(() =>
 const ManagerComplaintDetails = lazy(() =>
   import("./pages/manager/ManagerComplaintDetails")
 );
+const ApprovalRequestDetails = lazy(() =>
+  import("./pages/manager/ApprovalRequestDetails")
+);
 const ViewEmployees = lazy(() => import("./pages/manager/ManagerViewEmployees"));
 const ManagerSettings = lazy(() => import("./pages/manager/ManagerSettings"));
 
 const OperatorNotifications = lazy(() =>
   import("./pages/operator/OperatorNotifications")
 );
-const ChatbotAnalysis = lazy(() => import("./pages/operator/ChatbotAnalysis"));
-const ModelAnalysis = lazy(() => import("./pages/operator/ModelAnalysis"));
+const QualityControl = lazy(() => import("./pages/operator/QualityControl"));
+const ModelHealth = lazy(() => import("./pages/operator/ModelHealth"));
 const OperatorDashboard = lazy(() => import("./pages/operator/OperatorDashboard"));
 const UsersManagement = lazy(() => import("./pages/operator/UsersManagement"));
 const OperatorSettings = lazy(() => import("./pages/operator/OperatorSettings"));
+const TicketReviewDetail = lazy(() => import("./pages/operator/TicketReviewDetail"));
+
+const isStaffHost = () => window.location.hostname.startsWith("staff.");
+
+function RootGate() {
+  // "/" entry behavior differs by host
+  return isStaffHost() ? <Navigate to="/login" replace /> : <PublicLanding />;
+}
+
+function PublicOnly({ children }) {
+  // block customer public pages on staff subdomain
+  if (isStaffHost()) return <Navigate to="/login" replace />;
+  return children;
+}
 
 export default function App() {
   useEffect(() => {
@@ -88,14 +101,32 @@ export default function App() {
         }
       >
         <Routes>
-          {/* Public routes — no auth required */}
-          <Route path="/" element={<PublicLanding />} />
+          {/* Root split */}
+          <Route path="/" element={<RootGate />} />
+
+          {/* Public customer-only pages */}
+          <Route
+            path="/about"
+            element={
+              <PublicOnly>
+                <AboutUs />
+              </PublicOnly>
+            }
+          />
+          <Route
+            path="/verify"
+            element={
+              <PublicOnly>
+                <CustomerAuthPage />
+              </PublicOnly>
+            }
+          />
+
+          {/* Login should work on staff; you can still allow it on customer if you want */}
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/verify" element={<CustomerAuthPage />} />
-          <Route path="/about" element={<AboutUs />} />
 
-          
+          {/* Customer protected routes */}
           <Route
             path="/customer"
             element={
@@ -104,14 +135,10 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          
           <Route
             path="/customer/dashboard"
             element={<Navigate to="/customer" replace />}
           />
-
-          
           <Route
             path="/customer/notifications"
             element={
@@ -144,7 +171,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/customer/settings"
             element={
@@ -153,7 +179,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/customer/about"
             element={
@@ -163,7 +188,7 @@ export default function App() {
             }
           />
 
-          
+          {/* Employee */}
           <Route
             path="/employee"
             element={
@@ -213,7 +238,7 @@ export default function App() {
             }
           />
 
-          
+          {/* Manager */}
           <Route
             path="/manager"
             element={
@@ -255,6 +280,14 @@ export default function App() {
             }
           />
           <Route
+            path="/manager/approvals/:requestId"
+            element={
+              <ProtectedRoute role="manager">
+                <ApprovalRequestDetails />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/manager/trends"
             element={
               <ProtectedRoute role="manager">
@@ -278,7 +311,8 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          
+
+          {/* Operator */}
           <Route
             path="/operator"
             element={
@@ -288,18 +322,26 @@ export default function App() {
             }
           />
           <Route
-            path="/operator/model-analysis"
+            path="/operator/model-health"
             element={
               <ProtectedRoute role="operator">
-                <ModelAnalysis />
+                <ModelHealth />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/operator/chatbot-analysis"
+            path="/operator/quality-control"
             element={
               <ProtectedRoute role="operator">
-                <ChatbotAnalysis />
+                <QualityControl />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operator/quality-control/review/:ticketId"
+            element={
+              <ProtectedRoute role="operator">
+                <TicketReviewDetail />
               </ProtectedRoute>
             }
           />
@@ -327,6 +369,9 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

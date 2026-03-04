@@ -1,1 +1,117 @@
-@import "../employee/EmployeeSettings.css";
+.opSettingsPage {
+  padding: 24px 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: opPageFade 400ms ease-out both;
+}
+
+.opSettingsContent {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.opCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Password section */
+.opPasswordRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--purple-50) 100%);
+  box-shadow: 0 1px 14px rgba(100, 71, 217, 0.06);
+  transition: transform 180ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.opPasswordRow:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(100, 71, 217, 0.12);
+  border-color: var(--border-strong);
+}
+
+.opPasswordText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.opPasswordLabel {
+  margin: 0;
+  font-family: "DM Sans", "Segoe UI", system-ui;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text-primary);
+}
+
+.opPasswordSub {
+  margin: 0;
+  font-family: "DM Sans", "Segoe UI", system-ui;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Animation */
+.opFadeIn {
+  animation: opCardFade 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes opPageFade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes opCardFade {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .opSettingsPage {
+    padding: 16px;
+  }
+
+  .opPasswordRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Fix modal overlay (no muddy background) */
+:is(.cpw-overlay, .cpw-backdrop, .cpwBackdrop, .changePasswordOverlay, .changePasswordBackdrop) {
+  background: rgba(45, 27, 105, 0.35) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+
+:is(.cpw-modal, .cpwModal, .changePasswordModal) {
+  box-shadow: 0 25px 80px rgba(45, 27, 105, 0.25) !important;
+  border: 1px solid var(--border) !important;
+}

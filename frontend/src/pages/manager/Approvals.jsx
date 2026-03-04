@@ -6,6 +6,7 @@ import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { apiUrl } from "../../config/apiBase";
 import "./Approvals.css";
 import useScrollReveal from "../../utils/useScrollReveal";
@@ -27,7 +28,6 @@ export default function Approvals() {
   const revealRef = useScrollReveal();
   const navigate = useNavigate();
 
-  // ------------------- State -------------------
   const [query, setQuery] = useState("");
   const [requestType, setRequestType] = useState("All Request Types");
   const [status, setStatus] = useState("All Status");
@@ -36,13 +36,12 @@ export default function Approvals() {
   const [selectedDepartments, setSelectedDepartments] = useState({});
   const [loading, setLoading] = useState(true);
 
-  // ------------------- Fetch Approvals with Session -------------------
+  const [confirm, setConfirm] = useState({ open: false, requestId: null, decision: null });
+  const closeConfirm = () => setConfirm({ open: false, requestId: null, decision: null });
+
   useEffect(() => {
     const token = getAuthToken();
-    if (!token) {
-      navigate("/login");
-      return;
-    }
+    if (!token) { navigate("/login"); return; }
 
     const headers = {
       "Content-Type": "application/json",
@@ -80,12 +79,14 @@ export default function Approvals() {
       .catch(() => setDepartments([]));
   }, [navigate]);
 
-  // ------------------- Actions -------------------
+  const confirmDecide = (requestId, decision) => {
+    setConfirm({ open: true, requestId, decision });
+  };
+
   const decide = async (requestId, decision, selectedDepartment = undefined) => {
     const token = getAuthToken();
     if (!token) { navigate("/login"); return; }
 
-    // Optimistic update
     setRows((prev) =>
       prev.map((r) => (r.requestId === requestId ? { ...r, status: decision } : r))
     );
@@ -105,7 +106,6 @@ export default function Approvals() {
         throw new Error(err.detail || `Failed (${res.status})`);
       }
     } catch (e) {
-      // Rollback optimistic update on failure
       setRows((prev) =>
         prev.map((r) => (r.requestId === requestId ? { ...r, status: "Pending" } : r))
       );
@@ -113,7 +113,6 @@ export default function Approvals() {
     }
   };
 
-  // ------------------- Filtering -------------------
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
@@ -130,7 +129,6 @@ export default function Approvals() {
     });
   }, [rows, query, requestType, status]);
 
-  // ------------------- KPIs -------------------
   const totals = useMemo(() => {
     const total = rows.length;
     const pending = rows.filter((r) => r.status === "Pending").length;
@@ -145,7 +143,6 @@ export default function Approvals() {
     setStatus("All Status");
   };
 
-  // ------------------- JSX -------------------
   return (
     <Layout role="manager">
       <div className="mgrApprovals" ref={revealRef}>
@@ -306,7 +303,7 @@ export default function Approvals() {
                       <button
                         className="actionBtn"
                         type="button"
-                        onClick={() => decide(r.requestId, "Rejected")}
+                        onClick={() => confirmDecide(r.requestId, "Rejected")}
                         disabled={r.status !== "Pending"}
                       >
                         Reject
@@ -327,6 +324,23 @@ export default function Approvals() {
           </div>
         </section>
       </div>
+
+      <ConfirmDialog
+        open={confirm.open}
+        title={confirm.decision === "Approved" ? "Approve Request" : "Reject Request"}
+        message={
+          confirm.decision === "Approved"
+            ? "Are you sure you want to approve this request? This action will apply the requested change."
+            : "Are you sure you want to reject this request? This cannot be undone."
+        }
+        variant={confirm.decision === "Approved" ? "success" : "danger"}
+        confirmLabel={confirm.decision === "Approved" ? "Yes, Approve" : "Yes, Reject"}
+        onConfirm={() => {
+          closeConfirm();
+          decide(confirm.requestId, confirm.decision);
+        }}
+        onCancel={closeConfirm}
+      />
     </Layout>
   );
 }

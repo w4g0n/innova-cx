@@ -529,7 +529,7 @@ export default function ComplaintDetails() {
 
         <section className="details-grid">
           <div className="card-section">
-            <h2 className="section-title">Complaint Details</h2>
+            <h2 className="section-title">Ticket Details</h2>
             <div className="subject">{ticket.description?.subject}</div>
             <p className="description">{ticket.description?.details}</p>
 

@@ -52,8 +52,9 @@ function StatCard({ value, suffix, label, delay, inView }) {
 }
 
 /* ─── Feature card ─── */
-function FeatureCard({ icon, title, desc, delay }) {
+function FeatureCard({ icon, title, desc, detail, delay }) {
   const [ref, inView] = useInView();
+  const [expanded, setExpanded] = useState(false);
   return (
     <div
       ref={ref}
@@ -63,6 +64,22 @@ function FeatureCard({ icon, title, desc, delay }) {
       <div className="au-feature-icon">{icon}</div>
       <h3 className="au-feature-title">{title}</h3>
       <p className="au-feature-desc">{desc}</p>
+      {detail && (
+        <>
+          <button
+            type="button"
+            className="au-feature-toggle"
+            onClick={() => setExpanded((p) => !p)}
+          >
+            {expanded ? "Show less ↑" : "How we do it ↓"}
+          </button>
+          {expanded && (
+            <div className="au-feature-detail">
+              <p>{detail}</p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -397,31 +414,37 @@ export default function AboutUs() {
       icon: "🧠",
       title: "AI-Powered Prioritization",
       desc: "Our system analyzes every ticket using natural language processing and sentiment detection to identify urgent cases and bring the most critical issues to the top automatically.",
+      detail: "We use a Fuzzy Logic Prioritization Agent that combines signals from a Feature Engineering Agent — detecting urgency, severity, business impact, safety concerns, and recurrence — alongside a RoBERTa-based Sentiment Analysis Agent. Together, these produce a nuanced priority score (Critical, High, Medium, or Low) assigned automatically the moment a ticket is created.",
     },
     {
       icon: "🎙️",
       title: "Audio & Sentiment Analysis",
       desc: "Customer voice calls can be transcribed and analyzed for sentiment, giving support agents useful context before they begin handling the case.",
+      detail: "Voice submissions are processed by a Whisper-powered Transcriber Agent that converts audio to text. In parallel, a Librosa-based Audio Analysis Agent extracts emotional cues directly from the audio waveform. A Sentiment Combiner then fuses text and audio signals into a unified sentiment score, feeding directly into prioritization.",
     },
     {
       icon: "⚡",
       title: "Instant Escalation",
       desc: "High-priority tickets are automatically flagged and routed to the appropriate team, helping reduce delays and improve response times.",
+      detail: "Once priority is assigned, an SLA Policy Engine maps it to deadline targets and a Department Routing Agent automatically assigns the ticket to the correct team and employee. Critical and High priority tickets bypass the standard queue, triggering immediate notifications so urgent cases are never left waiting.",
     },
     {
       icon: "📊",
       title: "Live Analytics Dashboard",
       desc: "Managers can view real-time insights into ticket volume, team performance, and customer sentiment through a centralized dashboard.",
+      detail: "Managers access a dedicated analytics view with real-time ticket volume, team performance metrics, and sentiment trends. Employees see their personal queue with AI-generated resolution suggestions powered by a Suggested Resolution Agent that applies LLM reasoning and reinforcement learning from past outcomes.",
     },
     {
       icon: "🔗",
       title: "Seamless Integration",
       desc: "InnovaCX can integrate with existing CRM, helpdesk, or e-commerce platforms, allowing businesses to incorporate the system into their current workflows.",
+      detail: "InnovaCX exposes a RESTful API secured with JWT authentication, enabling connection to existing CRM, helpdesk, and e-commerce systems. Webhook support allows external platforms to receive ticket events in real time, and the modular architecture ensures new integrations can be added without disrupting existing workflows.",
     },
     {
       icon: "🔒",
       title: "Enterprise-Grade Security",
       desc: "Customer data is protected through encryption, role-based access control, and detailed audit logs to support secure and responsible data handling.",
+      detail: "Access is governed by role-based JWT tokens enforcing separate permissions for Customers, Employees, and Managers. All traffic is encrypted in transit via HTTPS, and every ticket action is recorded in a tamper-evident audit log. Sensitive data handling aligns with standard enterprise data protection practices.",
     },
   ];
 
@@ -517,6 +540,19 @@ export default function AboutUs() {
             >
               {label}
             </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Features ── */}
+      <section className="au-section au-features-section" id="why" ref={whyRef}>
+        <div className={`au-features-header ${whyInView ? "au-fade-up" : ""}`}>
+          <div className="au-section-tag">What We Do</div>
+          <h2 className="au-section-title">Everything Your Support Team Needs</h2>
+        </div>
+        <div className="au-features-grid">
+          {features.map((f, i) => (
+            <FeatureCard key={i} {...f} delay={i * 80} />
           ))}
         </div>
       </section>
@@ -719,19 +755,6 @@ export default function AboutUs() {
         <p className="au-stats-note">
           * Figures based on internal pilot deployments and comparable AI-driven support platforms.
         </p>
-      </section>
-
-      {/* ── Features ── */}
-      <section className="au-section au-features-section" id="why" ref={whyRef}>
-        <div className={`au-features-header ${whyInView ? "au-fade-up" : ""}`}>
-          <div className="au-section-tag">What We Do</div>
-          <h2 className="au-section-title">Everything Your Support Team Needs</h2>
-        </div>
-        <div className="au-features-grid">
-          {features.map((f, i) => (
-            <FeatureCard key={i} {...f} delay={i * 80} />
-          ))}
-        </div>
       </section>
 
       {/* ── Why choose / ROI ── */}

@@ -129,3 +129,64 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Phone input ── */
+.uamPhoneWrap .react-tel-input {
+  width: 100%;
+}
+.uamPhoneWrap .react-tel-input .form-control {
+  width: 100% !important;
+  height: auto !important;
+  border-radius: 10px !important;
+  padding: 10px 12px 10px 52px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(0, 0, 0, 0.18) !important;
+  color: inherit !important;
+  font-size: 14px !important;
+  font-family: inherit !important;
+  box-shadow: none !important;
+}
+.uamPhoneWrap .react-tel-input .form-control:focus {
+  border-color: rgba(168, 107, 255, 0.65) !important;
+  box-shadow: 0 0 0 3px rgba(168, 107, 255, 0.18) !important;
+  outline: none !important;
+}
+.uamPhoneWrap .react-tel-input .flag-dropdown {
+  border-radius: 10px 0 0 10px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-right: none !important;
+  background: rgba(0, 0, 0, 0.25) !important;
+}
+.uamPhoneWrap .react-tel-input .selected-flag {
+  border-radius: 10px 0 0 10px !important;
+  padding: 0 8px 0 10px !important;
+}
+.uamPhoneWrap .react-tel-input .country-list {
+  border-radius: 10px !important;
+  background: #1a1025 !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+}
+
+/* ── Password eye ── */
+.uamPwdWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.uamPwdWrap input {
+  width: 100%;
+  padding-right: 40px !important;
+}
+.uamEyeBtn {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.45);
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  transition: color 0.15s;
+}
+.uamEyeBtn:hover { color: inherit; }

@@ -1,142 +1,83 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Layout from "../../components/Layout";
+import PageHeader from "../../components/common/PageHeader";
 
-import SettingsLayout, {
+import {
   SettingsCard,
   SettingsField,
-  SettingsToggle,
-  SettingsSelect,
   SettingsSaveButton,
+  ChangePasswordModal,
 } from "../../components/common/SettingsLayout";
 
 import "../../components/common/SettingsLayout.css";
 import "./OperatorSettings.css";
-
-const TABS = [
-  { id: "profile",  icon: "👤", label: "Profile" },
-  { id: "system",   icon: "⚙️", label: "System" },
-  { id: "prefs",    icon: "🎨", label: "Preferences" },
-  { id: "security", icon: "🔒", label: "Security" },
-];
+import { getUser } from "../../utils/auth";
 
 export default function OperatorSettings() {
-  const [tab, setTab] = useState("profile");
+  const [showPwModal, setShowPwModal] = useState(false);
 
-  const handleSave = () => {
-    alert("Settings saved (demo).");
-  };
+  const user = useMemo(() => getUser() || {}, []);
+  const displayName =
+    user.name || user.full_name || user.fullName || user.username || "Operator";
+  const displayEmail = user.email || "operator@innova.cx";
 
   return (
     <Layout role="operator">
       <div className="opSettingsPage">
-        <SettingsLayout
-          title="Operator Settings"
-          subtitle="Manage your profile, system preferences, and security."
-          avatarLabel="O"
-          tabs={TABS}
-          activeTab={tab}
-          onTabChange={setTab}
-        >
-          {tab === "profile" && (
-            <>
-              <SettingsCard icon="👤" title="Account Information">
-                <SettingsField
-                  label="Full Name"
-                  placeholder="Enter your name"
-                />
+        <PageHeader
+          title="Settings"
+          subtitle="Manage your account preferences and basic configuration."
+        />
+
+        <div className="opSettingsContent">
+          {/* Profile */}
+          <div className="opFadeIn" style={{ animationDelay: "40ms" }}>
+            <SettingsCard
+              icon="👤"
+              title="Profile"
+              description="Your name and email are part of your account details."
+            >
+              <div className="opCardBody">
+                <SettingsField label="Name" value={displayName} readOnly />
                 <SettingsField
                   label="Email"
                   type="email"
-                  placeholder="name@innovacx.com"
+                  value={displayEmail}
+                  readOnly
                 />
-                <SettingsField
-                  label="Role"
-                  defaultValue="Operator"
-                />
-              </SettingsCard>
-
-              <div className="settingsFooterRow">
-                <SettingsSaveButton onClick={handleSave} label="Save Changes" />
               </div>
-            </>
-          )}
+            </SettingsCard>
+          </div>
 
-          {tab === "system" && (
-            <>
-              <SettingsCard icon="⚙️" title="System Preferences">
-                <SettingsToggle
-                  label="Show advanced diagnostics"
-                  description="Display detailed system metrics on the dashboard."
-                  defaultChecked={true}
-                />
-                <SettingsToggle
-                  label="Enable audit logging"
-                  description="Record all operator actions for compliance review."
-                  defaultChecked={true}
-                />
-                <SettingsToggle
-                  label="Auto-refresh dashboard"
-                  description="Automatically refresh dashboard data every 30 seconds."
-                  defaultChecked={false}
-                />
-              </SettingsCard>
+          {/* Security */}
+          <div className="opFadeIn" style={{ animationDelay: "90ms" }}>
+            <SettingsCard
+              icon="🔒"
+              title="Security"
+              description="Keep your account protected with a strong password."
+            >
+              <div className="opCardBody">
+                <div className="opPasswordRow">
+                  <div className="opPasswordText">
+                    <p className="opPasswordLabel">Password</p>
+                    <p className="opPasswordSub">
+                      Change your password anytime to keep your account secure.
+                    </p>
+                  </div>
 
-              <div className="settingsFooterRow">
-                <SettingsSaveButton onClick={handleSave} label="Save Changes" />
+                  <SettingsSaveButton
+                    label="Change Password"
+                    onClick={() => setShowPwModal(true)}
+                  />
+                </div>
               </div>
-            </>
-          )}
+            </SettingsCard>
+          </div>
+        </div>
 
-          {tab === "prefs" && (
-            <>
-              <SettingsCard icon="🎨" title="Preferences">
-                <SettingsSelect
-                  label="Language"
-                  defaultValue="English"
-                  options={[
-                    { label: "English", value: "English" },
-                    { label: "Arabic",  value: "Arabic" },
-                  ]}
-                />
-                <SettingsSelect
-                  label="Data export format"
-                  defaultValue="CSV"
-                  options={[
-                    { label: "CSV",  value: "CSV" },
-                    { label: "JSON", value: "JSON" },
-                    { label: "PDF",  value: "PDF" },
-                  ]}
-                />
-              </SettingsCard>
-
-              <div className="settingsFooterRow">
-                <SettingsSaveButton onClick={handleSave} label="Save Changes" />
-              </div>
-            </>
-          )}
-
-          {tab === "security" && (
-            <>
-              <SettingsCard icon="🔒" title="Security">
-                <SettingsField
-                  label="New Password"
-                  type="password"
-                  placeholder="Enter new password"
-                  hint="At least 8 characters."
-                />
-                <SettingsField
-                  label="Confirm Password"
-                  type="password"
-                  placeholder="Re-enter new password"
-                />
-              </SettingsCard>
-
-              <div className="settingsFooterRow">
-                <SettingsSaveButton onClick={handleSave} label="Update Password" />
-              </div>
-            </>
-          )}
-        </SettingsLayout>
+        {showPwModal && (
+          <ChangePasswordModal onClose={() => setShowPwModal(false)} />
+        )}
       </div>
     </Layout>
   );
