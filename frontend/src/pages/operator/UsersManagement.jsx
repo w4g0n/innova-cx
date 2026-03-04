@@ -26,6 +26,16 @@ function authHeaders() {
 
 const ROLE_OPTIONS = ["Customer", "Employee", "Manager", "Operator"];
 
+const DEPARTMENT_OPTIONS = [
+  "Facilities Management",
+  "Legal and Compliance",
+  "Safety & Security",
+  "HR",
+  "Leasing",
+  "Maintenance",
+  "IT",
+];
+
 function matchesQuery(user, q) {
   const s = q.trim().toLowerCase();
   if (!s) return true;
@@ -112,6 +122,12 @@ export default function UsersManagement() {
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState({ type: "", message: "" });
 
+  // Password visibility toggles
+  const [showEditPwd, setShowEditPwd] = useState(false);
+  const [showEditConfirmPwd, setShowEditConfirmPwd] = useState(false);
+  const [showCreatePwd, setShowCreatePwd] = useState(false);
+  const [showCreateConfirmPwd, setShowCreateConfirmPwd] = useState(false);
+
   // CONFIRM DIALOG state
   const [confirm, setConfirm] = useState({
     open: false,
@@ -122,6 +138,13 @@ export default function UsersManagement() {
     onConfirm: null,
   });
   const closeConfirm = () => setConfirm((c) => ({ ...c, open: false }));
+
+  // Auto-dismiss toast after 4 seconds
+  useEffect(() => {
+    if (!toast.message) return;
+    const t = setTimeout(() => setToast({ type: "", message: "" }), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   // Close 3-dot menu on outside click
   useEffect(() => {
@@ -661,7 +684,8 @@ export default function UsersManagement() {
                                   openManage(u);
                                 }}
                               >
-                                ✏️ Manage
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                Manage
                               </button>
 
                               <button
@@ -671,7 +695,11 @@ export default function UsersManagement() {
                                   toggleActive(u.id);
                                 }}
                               >
-                                {u.status === "active" ? "⚠️ Deactivate" : "✅ Activate"}
+                                {u.status === "active"
+                                  ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                }
+                                {u.status === "active" ? "Deactivate" : "Activate"}
                               </button>
 
                               <button
@@ -681,7 +709,8 @@ export default function UsersManagement() {
                                   deleteUser(u.id);
                                 }}
                               >
-                                🗑️ Delete
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                                Delete
                               </button>
                             </div>
                           )}
@@ -724,36 +753,33 @@ export default function UsersManagement() {
 
                 <div className="umField">
                   <label>Phone *</label>
-                  <PhoneInput
-                    country={create.phoneCountry}
-                    value={toPhoneInputValue(create.phoneE164)}
-                    onChange={(digits, countryData) => {
-                    let cleanDigits = digits || "";
-
-                    // Remove leading 0 after country code (UAE case etc.)
-                    const dialCode = countryData?.dialCode || "";
-                    if (cleanDigits.startsWith(dialCode + "0")) {
-                      cleanDigits = dialCode + cleanDigits.slice(dialCode.length + 1);
-                    }
-
-                    const e164 = cleanDigits ? `+${cleanDigits}` : "";
-
-                    setCreate((p) => ({
-                      ...p,
-                      phoneE164: e164,
-                      phoneCountry: (countryData?.countryCode || "ae").toLowerCase(),
-                    }));
-
-                    setErrors((prev) => {
-                      const { phone: _phone, ...rest } = prev;
-                      return rest;
-                    });
-                  }}
-                    enableSearch
-                    autoFormat={false}           // <-- no spacing/formatting
-                    countryCodeEditable={false}
-                    inputProps={{ name: "phone", required: true }}
-                  />
+                  <div className="umPhoneWrap">
+                    <PhoneInput
+                      country={create.phoneCountry}
+                      value={toPhoneInputValue(create.phoneE164)}
+                      onChange={(digits, countryData) => {
+                      let cleanDigits = digits || "";
+                      const dialCode = countryData?.dialCode || "";
+                      if (cleanDigits.startsWith(dialCode + "0")) {
+                        cleanDigits = dialCode + cleanDigits.slice(dialCode.length + 1);
+                      }
+                      const e164 = cleanDigits ? `+${cleanDigits}` : "";
+                      setCreate((p) => ({
+                        ...p,
+                        phoneE164: e164,
+                        phoneCountry: (countryData?.countryCode || "ae").toLowerCase(),
+                      }));
+                      setErrors((prev) => {
+                        const { phone: _phone, ...rest } = prev;
+                        return rest;
+                      });
+                    }}
+                      enableSearch
+                      autoFormat={false}
+                      countryCodeEditable={false}
+                      inputProps={{ name: "phone", required: true }}
+                    />
+                  </div>
                   {errors.phone && <span className="umErr">{errors.phone}</span>}
                 </div>
 
@@ -762,20 +788,6 @@ export default function UsersManagement() {
                   <input name="location" value={create.location} onChange={onCreateChange} placeholder="e.g. Dubai, UAE" />
                   {errors.location && <span className="umErr">{errors.location}</span>}
                 </div>
-
-                {/* Department only for non-customer */}
-                {create.role !== "customer" && (
-                  <div className="umField">
-                    <label>Department *</label>
-                    <input
-                      name="department"
-                      value={create.department}
-                      onChange={onCreateChange}
-                      placeholder="e.g. Customer Support"
-                    />
-                    {errors.department && <span className="umErr">{errors.department}</span>}
-                  </div>
-                )}
 
                 <div className="umField">
                   <label>Role *</label>
@@ -796,17 +808,47 @@ export default function UsersManagement() {
                   </select>
                 </div>
 
+                {/* Department only for non-customer */}
+                {create.role !== "customer" && (
+                  <div className="umField">
+                    <label>Department *</label>
+                    <select name="department" value={create.department} onChange={onCreateChange}>
+                      <option value="">Select department…</option>
+                      {DEPARTMENT_OPTIONS.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                    {errors.department && <span className="umErr">{errors.department}</span>}
+                  </div>
+                )}
+
                 <div className="umDivider" />
 
                 <div className="umField">
                   <label>Password *</label>
-                  <input type="password" name="password" value={create.password} onChange={onCreateChange} placeholder="Minimum 8 characters" />
+                  <div className="umPwdWrap">
+                    <input type={showCreatePwd ? "text" : "password"} name="password" value={create.password} onChange={onCreateChange} placeholder="Minimum 8 characters" />
+                    <button type="button" className="umEyeBtn" onClick={() => setShowCreatePwd(v => !v)} tabIndex={-1}>
+                      {showCreatePwd
+                        ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      }
+                    </button>
+                  </div>
                   {errors.password && <span className="umErr">{errors.password}</span>}
                 </div>
 
                 <div className="umField">
                   <label>Confirm Password *</label>
-                  <input type="password" name="confirmPassword" value={create.confirmPassword} onChange={onCreateChange} placeholder="Re-enter password" />
+                  <div className="umPwdWrap">
+                    <input type={showCreateConfirmPwd ? "text" : "password"} name="confirmPassword" value={create.confirmPassword} onChange={onCreateChange} placeholder="Re-enter password" />
+                    <button type="button" className="umEyeBtn" onClick={() => setShowCreateConfirmPwd(v => !v)} tabIndex={-1}>
+                      {showCreateConfirmPwd
+                        ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      }
+                    </button>
+                  </div>
                   {errors.confirmPassword && <span className="umErr">{errors.confirmPassword}</span>}
                 </div>
               </div>
@@ -852,26 +894,28 @@ export default function UsersManagement() {
 
                 <div className="umField">
                   <label>Phone *</label>
-                  <PhoneInput
-                    country={edit.phoneCountry}
-                    value={toPhoneInputValue(edit.phoneE164)}
-                    onChange={(digits, countryData) => {
-                      const e164 = fromPhoneInputValue(digits);
-                      setEdit((p) => ({
-                        ...p,
-                        phoneE164: e164,
-                        phoneCountry: (countryData?.countryCode || "ae").toLowerCase(),
-                      }));
-                      setErrors((prev) => {
-                        const { phone: _phone, ...rest } = prev;
-                        return rest;
-                      });
-                    }}
-                    enableSearch
-                    autoFormat={false}           // <-- no spacing/formatting
-                    countryCodeEditable={false}
-                    inputProps={{ name: "phone", required: true }}
-                  />
+                  <div className="umPhoneWrap">
+                    <PhoneInput
+                      country={edit.phoneCountry}
+                      value={toPhoneInputValue(edit.phoneE164)}
+                      onChange={(digits, countryData) => {
+                        const e164 = fromPhoneInputValue(digits);
+                        setEdit((p) => ({
+                          ...p,
+                          phoneE164: e164,
+                          phoneCountry: (countryData?.countryCode || "ae").toLowerCase(),
+                        }));
+                        setErrors((prev) => {
+                          const { phone: _phone, ...rest } = prev;
+                          return rest;
+                        });
+                      }}
+                      enableSearch
+                      autoFormat={false}
+                      countryCodeEditable={false}
+                      inputProps={{ name: "phone", required: true }}
+                    />
+                  </div>
                   {errors.phone && <span className="umErr">{errors.phone}</span>}
                 </div>
 
@@ -880,20 +924,6 @@ export default function UsersManagement() {
                   <input name="location" value={edit.location} onChange={onEditChange} />
                   {errors.location && <span className="umErr">{errors.location}</span>}
                 </div>
-
-                {/* Department only for non-customer */}
-                {edit.role !== "customer" && (
-                  <div className="umField">
-                    <label>Department *</label>
-                    <input
-                      name="department"
-                      value={edit.department}
-                      onChange={onEditChange}
-                      placeholder="e.g. Customer Support"
-                    />
-                    {errors.department && <span className="umErr">{errors.department}</span>}
-                  </div>
-                )}
 
                 <div className="umField">
                   <label>Role *</label>
@@ -914,23 +944,53 @@ export default function UsersManagement() {
                   </select>
                 </div>
 
+                {/* Department only for non-customer */}
+                {edit.role !== "customer" && (
+                  <div className="umField">
+                    <label>Department *</label>
+                    <select name="department" value={edit.department} onChange={onEditChange}>
+                      <option value="">Select department…</option>
+                      {DEPARTMENT_OPTIONS.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                    {errors.department && <span className="umErr">{errors.department}</span>}
+                  </div>
+                )}
+
                 <div className="umDivider" />
 
                 <div className="umField">
                   <label>New Password (optional)</label>
-                  <input type="password" name="password" value={edit.password} onChange={onEditChange} placeholder="Leave empty to keep current" />
+                  <div className="umPwdWrap">
+                    <input type={showEditPwd ? "text" : "password"} name="password" value={edit.password} onChange={onEditChange} placeholder="Leave empty to keep current" />
+                    <button type="button" className="umEyeBtn" onClick={() => setShowEditPwd(v => !v)} tabIndex={-1}>
+                      {showEditPwd
+                        ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      }
+                    </button>
+                  </div>
                   {errors.password && <span className="umErr">{errors.password}</span>}
                 </div>
 
                 <div className="umField">
                   <label>Confirm New Password</label>
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    value={edit.confirmPassword}
-                    onChange={onEditChange}
-                    placeholder="Re-enter new password"
-                  />
+                  <div className="umPwdWrap">
+                    <input
+                      type={showEditConfirmPwd ? "text" : "password"}
+                      name="confirmPassword"
+                      value={edit.confirmPassword}
+                      onChange={onEditChange}
+                      placeholder="Re-enter new password"
+                    />
+                    <button type="button" className="umEyeBtn" onClick={() => setShowEditConfirmPwd(v => !v)} tabIndex={-1}>
+                      {showEditConfirmPwd
+                        ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      }
+                    </button>
+                  </div>
                   {errors.confirmPassword && <span className="umErr">{errors.confirmPassword}</span>}
                 </div>
               </div>

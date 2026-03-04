@@ -266,6 +266,11 @@ EXECUTE FUNCTION sync_ticket_status_timestamps();
 ALTER TABLE tickets
 ADD COLUMN IF NOT EXISTS priority_assigned_at TIMESTAMPTZ;
 
+-- Analytics columns added here so seedV2.sql can use them
+ALTER TABLE tickets
+    ADD COLUMN IF NOT EXISTS human_overridden BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS is_recurring     BOOLEAN NOT NULL DEFAULT FALSE;
+
 ALTER TABLE tickets
 ADD COLUMN IF NOT EXISTS respond_time_left_seconds INTEGER;
 
@@ -656,6 +661,13 @@ CREATE TABLE IF NOT EXISTS sessions (
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Analytics columns added here so seedV2.sql can use them (runs before zzz_analytics_mvs.sh)
+ALTER TABLE sessions
+    ADD COLUMN IF NOT EXISTS bot_model_version  TEXT,
+    ADD COLUMN IF NOT EXISTS escalated_to_human BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS escalated_at       TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS linked_ticket_id   UUID REFERENCES tickets(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 
@@ -677,7 +689,10 @@ CREATE TABLE IF NOT EXISTS user_chat_logs (
 );
 
 ALTER TABLE user_chat_logs
-ADD COLUMN IF NOT EXISTS ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL;
+ADD COLUMN IF NOT EXISTS ticket_id        UUID REFERENCES tickets(id) ON DELETE SET NULL,
+ADD COLUMN IF NOT EXISTS sentiment_score  NUMERIC(4,3),
+ADD COLUMN IF NOT EXISTS category         TEXT,
+ADD COLUMN IF NOT EXISTS response_time_ms INTEGER;
 
 CREATE INDEX IF NOT EXISTS idx_user_chat_logs_session ON user_chat_logs(session_id);
 CREATE INDEX IF NOT EXISTS idx_user_chat_logs_user ON user_chat_logs(user_id);
@@ -725,7 +740,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
 -- Employee Monthly Reports
 -- -------------------------
 CREATE TABLE IF NOT EXISTS employee_reports (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   report_code      TEXT NOT NULL UNIQUE,
   employee_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   month_label      TEXT NOT NULL,
@@ -736,6 +751,13 @@ CREATE TABLE IF NOT EXISTS employee_reports (
   kpi_avg_response TEXT NOT NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Analytics columns added here so seedV2.sql can use them
+ALTER TABLE employee_reports
+    ADD COLUMN IF NOT EXISTS model_version TEXT NOT NULL DEFAULT 'report-gen-v1.0',
+    ADD COLUMN IF NOT EXISTS generated_by  TEXT NOT NULL DEFAULT 'system',
+    ADD COLUMN IF NOT EXISTS period_start  DATE,
+    ADD COLUMN IF NOT EXISTS period_end    DATE;
 
 CREATE TABLE IF NOT EXISTS employee_report_summary_items (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2780,6 +2802,137 @@ WHERE priority_assigned_at IS NOT NULL
 COMMIT;
 
 -- =============================================================================
+-- PREREQUISITE TABLES FOR EXTENDED SEED
+-- Created here (idempotent) so the agent output inserts below always succeed,
+-- regardless of whether 001_agent_execution_logs.sql has been updated.
+-- =============================================================================
+
+ALTER TABLE public.ticket_resolution_feedback
+    ADD COLUMN IF NOT EXISTS model_version      TEXT         NOT NULL DEFAULT 'resolution-v1.0',
+    ADD COLUMN IF NOT EXISTS confidence_at_time NUMERIC(5,4);
+
+CREATE TABLE IF NOT EXISTS public.sentiment_outputs (
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id     UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id        UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version    TEXT         NOT NULL,
+    sentiment_label  TEXT         NOT NULL,
+    sentiment_score  NUMERIC(6,4) NOT NULL,
+    confidence_score NUMERIC(5,4) NOT NULL,
+    emotion_tags     TEXT[]       NOT NULL DEFAULT '{}',
+    raw_scores       JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    is_current       BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_so_ticket_id_pre  ON public.sentiment_outputs (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_so_is_current_pre ON public.sentiment_outputs (ticket_id, is_current) WHERE is_current = TRUE;
+
+CREATE TABLE IF NOT EXISTS public.priority_outputs (
+    id               UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id     UUID            NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id        UUID            NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version    TEXT            NOT NULL,
+    model_priority   ticket_priority NOT NULL,
+    confidence_score NUMERIC(5,4)    NOT NULL,
+    urgency_score    NUMERIC(5,4),
+    impact_score     NUMERIC(5,4),
+    feature_vector   JSONB           NOT NULL DEFAULT '{}'::jsonb,
+    reasoning        TEXT,
+    is_current       BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMPTZ     NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_po_ticket_id_pre  ON public.priority_outputs (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_po_is_current_pre ON public.priority_outputs (ticket_id, is_current) WHERE is_current = TRUE;
+
+CREATE TABLE IF NOT EXISTS public.routing_outputs (
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id        UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id           UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version       TEXT         NOT NULL,
+    suggested_dept_id   UUID         REFERENCES public.departments(id) ON DELETE SET NULL,
+    suggested_dept_name TEXT,
+    confidence_score    NUMERIC(5,4) NOT NULL,
+    routing_reason      TEXT,
+    reasoning           TEXT,
+    is_current          BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ro_ticket_id_pre  ON public.routing_outputs (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ro_is_current_pre ON public.routing_outputs (ticket_id, is_current) WHERE is_current = TRUE;
+
+CREATE TABLE IF NOT EXISTS public.sla_outputs (
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id        UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id           UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version       TEXT         NOT NULL,
+    sla_tier            TEXT,
+    breach_risk_score   NUMERIC(5,4),
+    response_deadline   TIMESTAMPTZ,
+    resolution_deadline TIMESTAMPTZ,
+    predicted_respond_mins INTEGER,
+    predicted_resolve_mins INTEGER,
+    breach_risk         NUMERIC(5,4),
+    confidence_score    NUMERIC(5,4) NOT NULL DEFAULT 0,
+    is_current          BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_slao_ticket_id_pre  ON public.sla_outputs (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_slao_is_current_pre ON public.sla_outputs (ticket_id, is_current) WHERE is_current = TRUE;
+
+CREATE TABLE IF NOT EXISTS public.resolution_outputs (
+    id                   UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id         UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id            UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version        TEXT         NOT NULL,
+    suggested_resolution TEXT,
+    suggested_text       TEXT,
+    kb_references        JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    confidence_score     NUMERIC(5,4) NOT NULL,
+    is_current           BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at           TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_reso_ticket_id_pre  ON public.resolution_outputs (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_reso_is_current_pre ON public.resolution_outputs (ticket_id, is_current) WHERE is_current = TRUE;
+
+CREATE TABLE IF NOT EXISTS public.feature_outputs (
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id     UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id        UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version    TEXT         NOT NULL,
+    asset_category   TEXT,
+    topic_labels     TEXT[]       NOT NULL DEFAULT '{}',
+    confidence_score NUMERIC(5,4) NOT NULL,
+    raw_features     JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    is_current       BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_fo_ticket_id_pre  ON public.feature_outputs (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_fo_is_current_pre ON public.feature_outputs (ticket_id, is_current) WHERE is_current = TRUE;
+
+CREATE OR REPLACE FUNCTION enforce_single_current_output() RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.is_current = TRUE THEN
+        EXECUTE format('UPDATE %I SET is_current = FALSE WHERE ticket_id = $1 AND id <> $2', TG_TABLE_NAME)
+        USING NEW.ticket_id, NEW.id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_single_current_sentiment  ON public.sentiment_outputs;
+CREATE TRIGGER trg_single_current_sentiment  AFTER INSERT OR UPDATE OF is_current ON public.sentiment_outputs  FOR EACH ROW WHEN (NEW.is_current = TRUE) EXECUTE FUNCTION enforce_single_current_output();
+DROP TRIGGER IF EXISTS trg_single_current_priority   ON public.priority_outputs;
+CREATE TRIGGER trg_single_current_priority   AFTER INSERT OR UPDATE OF is_current ON public.priority_outputs   FOR EACH ROW WHEN (NEW.is_current = TRUE) EXECUTE FUNCTION enforce_single_current_output();
+DROP TRIGGER IF EXISTS trg_single_current_routing    ON public.routing_outputs;
+CREATE TRIGGER trg_single_current_routing    AFTER INSERT OR UPDATE OF is_current ON public.routing_outputs    FOR EACH ROW WHEN (NEW.is_current = TRUE) EXECUTE FUNCTION enforce_single_current_output();
+DROP TRIGGER IF EXISTS trg_single_current_sla        ON public.sla_outputs;
+CREATE TRIGGER trg_single_current_sla        AFTER INSERT OR UPDATE OF is_current ON public.sla_outputs        FOR EACH ROW WHEN (NEW.is_current = TRUE) EXECUTE FUNCTION enforce_single_current_output();
+DROP TRIGGER IF EXISTS trg_single_current_resolution ON public.resolution_outputs;
+CREATE TRIGGER trg_single_current_resolution AFTER INSERT OR UPDATE OF is_current ON public.resolution_outputs FOR EACH ROW WHEN (NEW.is_current = TRUE) EXECUTE FUNCTION enforce_single_current_output();
+DROP TRIGGER IF EXISTS trg_single_current_feature    ON public.feature_outputs;
+CREATE TRIGGER trg_single_current_feature    AFTER INSERT OR UPDATE OF is_current ON public.feature_outputs    FOR EACH ROW WHEN (NEW.is_current = TRUE) EXECUTE FUNCTION enforce_single_current_output();
+
+-- =============================================================================
 -- InnovaCX — Extended Seed Inserts
 -- Covers: model_execution_log, all agent output tables, sentiment/priority/
 --         routing/sla/resolution/feature outputs, chat_conversations,
@@ -2820,63 +2973,63 @@ SELECT gen_random_uuid(), t.id,
 FROM (VALUES
   -- CX-R01 — sentiment (success)
   ('CX-R01','sentiment','sentiment-v3.1','ingest',
-   '2026-03-01 06:31:00+00','2026-03-01 06:31:04+00','success',412,28,
+   '2026-03-01 06:31:00+00'::timestamptz,'2026-03-01 06:31:04+00'::timestamptz,'success',412,28,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
   -- CX-R01 — priority (success)
   ('CX-R01','priority','priority-v2.4','ingest',
-   '2026-03-01 06:31:05+00','2026-03-01 06:31:09+00','success',418,31,
+   '2026-03-01 06:31:05+00'::timestamptz,'2026-03-01 06:31:09+00'::timestamptz,'success',418,31,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
   -- CX-R01 — routing (success)
   ('CX-R01','routing','routing-v1.8','ingest',
-   '2026-03-01 06:31:10+00','2026-03-01 06:31:14+00','success',422,25,
+   '2026-03-01 06:31:10+00'::timestamptz,'2026-03-01 06:31:14+00'::timestamptz,'success',422,25,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
   -- CX-R01 — sla (success)
   ('CX-R01','sla','sla-v1.2','ingest',
-   '2026-03-01 06:31:15+00','2026-03-01 06:31:17+00','success',190,18,
+   '2026-03-01 06:31:15+00'::timestamptz,'2026-03-01 06:31:17+00'::timestamptz,'success',190,18,
    '{"region":"me-south-1","instance":"ml-c5.large"}'::jsonb),
   -- CX-R01 — resolution (success)
   ('CX-R01','resolution','resolution-v2.0','ingest',
-   '2026-03-01 06:31:18+00','2026-03-01 06:31:26+00','success',610,142,
+   '2026-03-01 06:31:18+00'::timestamptz,'2026-03-01 06:31:26+00'::timestamptz,'success',610,142,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
   -- CX-R01 — feature (success)
   ('CX-R01','feature','feature-v1.5','ingest',
-   '2026-03-01 06:31:27+00','2026-03-01 06:31:30+00','success',380,44,
+   '2026-03-01 06:31:27+00'::timestamptz,'2026-03-01 06:31:30+00'::timestamptz,'success',380,44,
    '{"region":"me-south-1","instance":"ml-c5.large"}'::jsonb),
   -- CX-R06 — sentiment (success)
   ('CX-R06','sentiment','sentiment-v3.1','ingest',
-   '2026-03-01 09:31:00+00','2026-03-01 09:31:05+00','success',388,26,
+   '2026-03-01 09:31:00+00'::timestamptz,'2026-03-01 09:31:05+00'::timestamptz,'success',388,26,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
   -- CX-R06 — priority (success)
   ('CX-R06','priority','priority-v2.4','ingest',
-   '2026-03-01 09:31:06+00','2026-03-01 09:31:10+00','success',395,30,
+   '2026-03-01 09:31:06+00'::timestamptz,'2026-03-01 09:31:10+00'::timestamptz,'success',395,30,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
   -- CX-R06 — resolution (success)
   ('CX-R06','resolution','resolution-v2.0','ingest',
-   '2026-03-01 09:31:11+00','2026-03-01 09:31:21+00','success',588,138,
+   '2026-03-01 09:31:11+00'::timestamptz,'2026-03-01 09:31:21+00'::timestamptz,'success',588,138,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
   -- CX-M55 — resolution (failed — tests error_rate view)
   ('CX-M55','resolution','resolution-v2.0','reprocess',
-   '2026-02-22 08:50:00+00','2026-02-22 08:50:12+00','failed',601,0,
+   '2026-02-22 08:50:00+00'::timestamptz,'2026-02-22 08:50:12+00'::timestamptz,'failed',601,0,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
   -- CX-M55 — resolution (success — retry after failure)
   ('CX-M55','resolution','resolution-v2.0','reprocess',
-   '2026-02-22 09:05:00+00','2026-02-22 09:05:08+00','success',601,144,
+   '2026-02-22 09:05:00+00'::timestamptz,'2026-02-22 09:05:08+00'::timestamptz,'success',601,144,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
   -- CX-M41 — sentiment (success, manual trigger)
   ('CX-M41','sentiment','sentiment-v3.1','manual',
-   '2025-12-03 07:02:00+00','2025-12-03 07:02:04+00','success',401,27,
+   '2025-12-03 07:02:00+00'::timestamptz,'2025-12-03 07:02:04+00'::timestamptz,'success',401,27,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
   -- CX-M41 — routing (skipped — dept already set)
   ('CX-M41','routing','routing-v1.8','manual',
-   '2025-12-03 07:02:05+00','2025-12-03 07:02:06+00','skipped',0,0,
+   '2025-12-03 07:02:05+00'::timestamptz,'2025-12-03 07:02:06+00'::timestamptz,'skipped',0,0,
    '{"skip_reason":"department_already_assigned"}'::jsonb),
   -- CX-R04 — priority (success)
   ('CX-R04','priority','priority-v2.4','ingest',
-   '2026-03-01 08:31:00+00','2026-03-01 08:31:04+00','success',376,29,
+   '2026-03-01 08:31:00+00'::timestamptz,'2026-03-01 08:31:04+00'::timestamptz,'success',376,29,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
   -- CX-R10 — sentiment (running — tests in-flight view row)
   ('CX-R10','sentiment','sentiment-v3.1','ingest',
-   '2026-03-01 11:30:30+00', NULL,'running',0,0,
+   '2026-03-01 11:30:30+00'::timestamptz, NULL,'running',0,0,
    '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb)
 ) AS v(ticket_code, agent_name, model_version, triggered_by,
        started_at, completed_at, status, in_tok, out_tok, infra)
@@ -2892,7 +3045,7 @@ INSERT INTO public.sentiment_outputs (
   emotion_tags, raw_scores, is_current
 )
 SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
+  mel.id, mel.ticket_id, mel.model_version,
   sv.label, sv.score, sv.conf,
   sv.emotions, sv.raw, TRUE
 FROM (VALUES
@@ -2922,7 +3075,7 @@ INSERT INTO public.priority_outputs (
   feature_vector, is_current
 )
 SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
+  mel.id, mel.ticket_id, mel.model_version,
   pv.priority::ticket_priority, pv.conf, pv.urgency, pv.impact,
   pv.features, TRUE
 FROM (VALUES
@@ -2952,7 +3105,7 @@ INSERT INTO public.routing_outputs (
   confidence_score, routing_reason, is_current
 )
 SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
+  mel.id, mel.ticket_id, mel.model_version,
   d.id, d.name, rv.conf, rv.reason, TRUE
 FROM (VALUES
   ('CX-R01','Facilities',    0.9700,'HVAC failure classified as Facilities — mechanical asset type.'),
@@ -2978,7 +3131,7 @@ INSERT INTO public.sla_outputs (
   response_deadline, resolution_deadline, is_current
 )
 SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
+  mel.id, mel.ticket_id, mel.model_version,
   sv.tier, sv.risk, sv.resp_dl, sv.res_dl, TRUE
 FROM (VALUES
   ('CX-R01','Critical-P1', 0.9800,
@@ -3007,7 +3160,7 @@ INSERT INTO public.resolution_outputs (
   kb_references, is_current
 )
 SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
+  mel.id, mel.ticket_id, mel.model_version,
   rv.suggestion, rv.conf, rv.kb, TRUE
 FROM (VALUES
   ('CX-R01', 0.9600,
@@ -3038,7 +3191,7 @@ INSERT INTO public.feature_outputs (
   asset_category, topic_labels, confidence_score, raw_features, is_current
 )
 SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
+  mel.id, mel.ticket_id, mel.model_version,
   fv.asset_cat, fv.topics, fv.conf, fv.raw, TRUE
 FROM (VALUES
   ('CX-R01','HVAC',
@@ -3154,7 +3307,7 @@ SELECT
 FROM (VALUES
   ('customer','customer1@innova.cx','2026-03-01 09:25:10+00','None of the badge readers at Gate 2 are working. My whole team is stuck outside!',
    'report_issue','Access Control',-0.85,FALSE,NULL),
-  ('bot','bot','2026-03-01 09:25:25+00','I'm escalating this to an operator immediately given the severity.',
+  ('bot','bot','2026-03-01 09:25:25+00','I''m escalating this to an operator immediately given the severity.',
    'escalate','Access Control',0.05,TRUE,NULL),
   ('operator','operator@innova.cx','2026-03-01 09:30:00+00','Ticket CX-R06 raised as Critical. Omar Ali is on his way to Gate 2 now.',
    'resolution','Access Control',0.30,FALSE,'CX-R06')
@@ -3171,8 +3324,8 @@ WHERE NOT EXISTS (
 
 INSERT INTO public.sessions (
   user_id, current_state, context, history,
-  created_at, updated_at, bot_model_version,
-  escalated_to_human, escalated_at, linked_ticket_id
+  created_at, updated_at,
+  bot_model_version, escalated_to_human, escalated_at, linked_ticket_id
 )
 SELECT
   (SELECT id FROM users WHERE email='customer1@innova.cx'),
@@ -3181,9 +3334,7 @@ SELECT
   '[{"role":"user","msg":"AC down in server room"},{"role":"bot","msg":"Ticket raised"},{"role":"operator","msg":"Team dispatched"}]'::jsonb,
   '2026-03-01 06:20:00+00',
   '2026-03-01 06:35:00+00',
-  'chatbot-v2.1',
-  TRUE,
-  '2026-03-01 06:23:00+00',
+  'chatbot-v2.1', TRUE, '2026-03-01 06:23:00+00',
   (SELECT id FROM tickets WHERE ticket_code='CX-R01')
 WHERE NOT EXISTS (
   SELECT 1 FROM public.sessions s
@@ -3193,8 +3344,8 @@ WHERE NOT EXISTS (
 
 INSERT INTO public.sessions (
   user_id, current_state, context, history,
-  created_at, updated_at, bot_model_version,
-  escalated_to_human, escalated_at, linked_ticket_id
+  created_at, updated_at,
+  bot_model_version, escalated_to_human, escalated_at, linked_ticket_id
 )
 SELECT
   (SELECT id FROM users WHERE email='customer1@innova.cx'),
@@ -3203,8 +3354,7 @@ SELECT
   '[{"role":"user","msg":"Support hours?"},{"role":"bot","msg":"24/7 for critical"}]'::jsonb,
   '2026-02-28 10:00:00+00',
   '2026-02-28 10:08:00+00',
-  'chatbot-v2.1',
-  FALSE, NULL, NULL
+  'chatbot-v2.1', FALSE, NULL, NULL
 WHERE NOT EXISTS (
   SELECT 1 FROM public.sessions s
   WHERE s.user_id=(SELECT id FROM users WHERE email='customer1@innova.cx')
@@ -3261,7 +3411,7 @@ VALUES
    'faq_answer', 'answer',
    'SELECT * FROM kb WHERE topic=''support_hours''', 0.92300,
    '2026-02-28 10:00:35+00', NULL),
-  ('I'm escalating this to an operator immediately given the severity.',
+  ('I''m escalating this to an operator immediately given the severity.',
    'escalation', 'escalate',
    NULL, NULL,
    '2026-03-01 09:25:25+00',
