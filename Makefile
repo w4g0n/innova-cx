@@ -1,8 +1,11 @@
 # Make sure command-style targets always run (even when files/folders share names)
 .PHONY: \
 	frontend frontend-build \
+	frontend-logs \
 	pipeline pipeline-build \
+	pipeline-logs \
 	dev dev-build \
+	dev-logs \
 	down
 
 # =========================
@@ -11,10 +14,13 @@
 # =========================
 
 frontend:
-	docker compose --profile frontend up
+	docker compose --profile frontend up -d
 
 frontend-build:
-	docker compose --profile frontend up --build
+	docker compose --profile frontend up --build -d
+
+frontend-logs:
+	docker compose --profile frontend logs -f
 
 
 # =========================
@@ -23,10 +29,13 @@ frontend-build:
 # =========================
 
 pipeline:
-	docker compose --profile pipeline up
+	docker compose --profile pipeline up -d
 
 pipeline-build:
-	docker compose --profile pipeline up --build
+	docker compose --profile pipeline up --build -d
+
+pipeline-logs:
+	docker compose --profile pipeline logs -f
 
 # =========================
 # PROFILE 3: DEV
@@ -34,10 +43,13 @@ pipeline-build:
 # =========================
 
 dev:
-	docker compose --profile dev up
+	docker compose --profile dev up -d
 
 dev-build:
-	docker compose --profile dev up --build
+	docker compose --profile dev up --build -d
+
+dev-logs:
+	docker compose --profile dev logs -f
 
 
 # =========================
