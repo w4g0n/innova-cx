@@ -1,45 +1,19 @@
 #!/bin/bash
-# zzz_analytics_mvs.sh
-# Runs AFTER init.sql (files execute alphabetically — "zzz" ensures last).
-# Step 1: applies prerequisite columns/tables/ENUMs that init.sql seeds depend on
-#         but that 001_agent_execution_logs.sql did not create in its original form.
-# Step 2: applies the materialized views and refresh function.
-#
-# IMPORTANT: init.sql already adds the sessions/user_chat_logs analytics columns
-# inline (via ALTER TABLE IF NOT EXISTS). This script is therefore safe to re-run
-# on existing volumes — every statement is idempotent.
+# Runs LAST (zzz > seed > init alphabetically in docker-entrypoint-initdb.d/)
+# By this point these have already run:
+#   init.sql, seedV2.sql, seed_analytics_extra.sql, seed_extra.sql
 set -e
 
-# ---------------------------------------------------------------------------
-# Helper: run psql and exit with a clear error on failure.
-# ---------------------------------------------------------------------------
 run_sql() {
-    local label="$1"
-    local file="$2"
-    echo "==> [$(date -u '+%H:%M:%S')] Applying: ${label} ..."
-    if ! psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$file"; then
-        echo "ERROR: Failed to apply ${label}. Aborting." >&2
-        exit 1
-    fi
-    echo "==> [$(date -u '+%H:%M:%S')] Done: ${label}"
+    echo "==> [$(date -u '+%H:%M:%S')] $1"
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$2" \
+      || { echo "ERROR: $1 failed"; exit 1; }
 }
 
-# ---------------------------------------------------------------------------
-# Retry loop: postgres may still be initialising when this script starts on
-# the very first boot.  Give it up to 60 s before giving up.
-# ---------------------------------------------------------------------------
-MAX_RETRIES=20
-RETRY_DELAY=3
 attempt=0
-
 until psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1" >/dev/null 2>&1; do
-    attempt=$((attempt + 1))
-    if [ "$attempt" -ge "$MAX_RETRIES" ]; then
-        echo "ERROR: Postgres not ready after $((MAX_RETRIES * RETRY_DELAY))s. Aborting." >&2
-        exit 1
-    fi
-    echo "==> Waiting for Postgres to be ready (attempt ${attempt}/${MAX_RETRIES})..."
-    sleep "$RETRY_DELAY"
+    attempt=$((attempt+1)); [ $attempt -ge 20 ] && { echo "Postgres not ready"; exit 1; }
+    echo "Waiting for Postgres ($attempt/20)..."; sleep 3
 done
 
 echo "==> Postgres is ready."
@@ -68,5 +42,12 @@ run_sql \
 run_sql \
     "analytics materialized views" \
     "/docker-entrypoint-initdb.d/scripts/analytics_mvs.sql"
+
+# ---------------------------------------------------------------------------
+# Step 3: Refresh all materialized views with the full seed data.
+# ---------------------------------------------------------------------------
+echo "==> Refreshing analytics materialized views..."
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT refresh_analytics_mvs();" \
+  || { echo "ERROR: MV refresh failed"; exit 1; }
 
 echo "==> Analytics setup complete."

@@ -137,16 +137,21 @@ export default function ManagerNotifications() {
 
   const onNotificationClick = async (n) => {
     const token = getAuthToken();
-    if (!token) return;
-    setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
-    try {
-      await fetch(`${API_BASE}/manager/notifications/${n.id}/read`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } catch (e) {
-      console.error("Failed to mark notification as read:", e);
+
+    // Always mark as read, regardless of whether there's a ticketId
+    if (!n.read) {
+      setNotifications((prev) =>
+        prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
+      );
+      try {
+        await fetch(`${API_BASE}/manager/notifications/${n.id}/read`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch { /* silently ignore */ }
     }
+
+    // Navigate AFTER state update and API call
     if (n.ticketId) navigate(`/manager/complaints/${n.ticketId}`);
   };
 
@@ -208,7 +213,7 @@ export default function ManagerNotifications() {
               <div
                 key={n.id}
                 className={`empNotifs__item ${n.read ? "read" : "unread"} ${n.ticketId ? "clickable" : ""}`}
-                onClick={() => n.ticketId ? onNotificationClick(n) : null}
+                onClick={() => onNotificationClick(n)} 
               >
                 <div className="empNotifs__left">
                   <div className="empNotifs__icon">{iconForType(n.type)}</div>

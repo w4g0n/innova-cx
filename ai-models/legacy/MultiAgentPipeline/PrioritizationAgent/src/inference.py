@@ -1,528 +1,407 @@
 """
-Prioritization Agent - Fuzzy Logic Engine
-==========================================
-Part of the Adaptable MultiAgentic System (V7)
+Prioritization Agent Runtime (Model-Only)
+========================================
 
-Inputs (from upstream agents):
-    - sentiment_score  : float, range [-1, 1]
-    - issue_severity   : str, one of ['low', 'medium', 'high', 'critical']
-    - issue_urgency    : str, one of ['low', 'medium', 'high', 'critical']
-    - business_impact  : str, one of ['low', 'medium', 'high']
-    - safety_concern   : bool
-    - is_recurring     : bool
-    - ticket_type      : str, one of ['complaint', 'inquiry']
-
-Output:
-    - priority         : str, one of ['low', 'medium', 'high', 'critical']
-
-Install dependencies:
-    pip install scikit-fuzzy numpy
+This module is used by the orchestrator at runtime.
+- No fuzzy logic here.
+- Loads a pre-trained model state produced offline by PrioritzationAgentTraining.
+- Supports live relearning using manager-approved rescoring labels.
 """
 
+from __future__ import annotations
+
+import csv
+import json
+import logging
+import os
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
 import numpy as np
-import skfuzzy as fuzz
-from skfuzzy import control as ctrl
+
+try:
+    from xgboost import XGBClassifier
+except Exception:  # pragma: no cover
+    XGBClassifier = None
 
 
-# =============================================================================
-# STEP 1: Define Universes of Discourse
-# =============================================================================
+logger = logging.getLogger(__name__)
 
-# Sentiment: -1 (very negative) to 1 (very positive)
-sentiment_universe = np.arange(-1, 1.05, 0.05)
-
-# Severity, Urgency, Business Impact: 0=low, 1=medium, 2=high, 3=critical
-severity_universe = np.arange(0, 4, 1)
-urgency_universe = np.arange(0, 4, 1)
-impact_universe = np.arange(0, 3, 1)  # no 'critical' for business impact
-
-# Priority output: 0=low, 1=medium, 2=high, 3=critical
-priority_universe = np.arange(0, 4, 1)
-
-
-# =============================================================================
-# STEP 2: Define Antecedents (Inputs) and Consequent (Output)
-# =============================================================================
-
-sentiment = ctrl.Antecedent(sentiment_universe, "sentiment")
-issue_severity = ctrl.Antecedent(severity_universe, "issue_severity")
-issue_urgency = ctrl.Antecedent(urgency_universe, "issue_urgency")
-business_impact = ctrl.Antecedent(impact_universe, "business_impact")
-priority = ctrl.Consequent(priority_universe, "priority", defuzzify_method="centroid")
-
-
-# =============================================================================
-# STEP 3: Define Membership Functions
-# =============================================================================
-
-# --- Sentiment ---
-sentiment["negative"] = fuzz.trapmf(sentiment_universe, [-1, -1, -0.25, 0.0])
-sentiment["neutral"] = fuzz.trimf(sentiment_universe, [-0.25, 0.0, 0.25])
-sentiment["positive"] = fuzz.trapmf(sentiment_universe, [0.0, 0.25, 1.0, 1.0])
-
-# --- Issue Severity (0=low, 1=medium, 2=high, 3=critical) ---
-issue_severity["low"] = fuzz.trimf(severity_universe, [0, 0, 1])
-issue_severity["medium"] = fuzz.trimf(severity_universe, [0, 1, 2])
-issue_severity["high"] = fuzz.trimf(severity_universe, [1, 2, 3])
-issue_severity["critical"] = fuzz.trimf(severity_universe, [2, 3, 3])
-
-# --- Issue Urgency (same scale) ---
-issue_urgency["low"] = fuzz.trimf(urgency_universe, [0, 0, 1])
-issue_urgency["medium"] = fuzz.trimf(urgency_universe, [0, 1, 2])
-issue_urgency["high"] = fuzz.trimf(urgency_universe, [1, 2, 3])
-issue_urgency["critical"] = fuzz.trimf(urgency_universe, [2, 3, 3])
-
-# --- Business Impact (0=low, 1=medium, 2=high) ---
-business_impact["low"] = fuzz.trimf(impact_universe, [0, 0, 1])
-business_impact["medium"] = fuzz.trimf(impact_universe, [0, 1, 2])
-business_impact["high"] = fuzz.trimf(impact_universe, [1, 2, 2])
-
-# --- Priority Output (0=low, 1=medium, 2=high, 3=critical) ---
-priority["low"] = fuzz.trimf(priority_universe, [0, 0, 1])
-priority["medium"] = fuzz.trimf(priority_universe, [0, 1, 2])
-priority["high"] = fuzz.trimf(priority_universe, [1, 2, 3])
-priority["critical"] = fuzz.trimf(priority_universe, [2, 3, 3])
-
-
-# =============================================================================
-# STEP 4: Define Fuzzy Rules
-# =============================================================================
-
-rules = [
-    # -------------------------------------------------------------------------
-    # GROUP 1: Base rules — severity + urgency fully aligned
-    # -------------------------------------------------------------------------
-    ctrl.Rule(issue_severity["critical"] & issue_urgency["critical"], priority["critical"]),
-    ctrl.Rule(issue_severity["high"] & issue_urgency["high"], priority["high"]),
-    ctrl.Rule(issue_severity["medium"] & issue_urgency["medium"], priority["medium"]),
-    ctrl.Rule(issue_severity["low"] & issue_urgency["low"], priority["low"]),
-    # -------------------------------------------------------------------------
-    # GROUP 2: Mismatch rules — severity + urgency disagree (1/2)
-    # critical + high → critical
-    # -------------------------------------------------------------------------
-    ctrl.Rule(issue_severity["critical"] & issue_urgency["high"], priority["critical"]),
-    ctrl.Rule(issue_severity["high"] & issue_urgency["critical"], priority["critical"]),
-    # critical + anything else (medium/low) → high
-    ctrl.Rule(issue_severity["critical"] & issue_urgency["medium"], priority["high"]),
-    ctrl.Rule(issue_severity["medium"] & issue_urgency["critical"], priority["high"]),
-    ctrl.Rule(issue_severity["critical"] & issue_urgency["low"], priority["high"]),
-    ctrl.Rule(issue_severity["low"] & issue_urgency["critical"], priority["high"]),
-    # high + medium → high
-    ctrl.Rule(issue_severity["high"] & issue_urgency["medium"], priority["high"]),
-    ctrl.Rule(issue_severity["medium"] & issue_urgency["high"], priority["high"]),
-    # high + anything else (low) → medium
-    ctrl.Rule(issue_severity["high"] & issue_urgency["low"], priority["medium"]),
-    ctrl.Rule(issue_severity["low"] & issue_urgency["high"], priority["medium"]),
-    # medium + low → medium
-    ctrl.Rule(issue_severity["medium"] & issue_urgency["low"], priority["medium"]),
-    ctrl.Rule(issue_severity["low"] & issue_urgency["medium"], priority["medium"]),
-    # -------------------------------------------------------------------------
-    # GROUP 3: Business impact rules (3-way combination)
-    # -------------------------------------------------------------------------
-    # 3/3 high → critical
-    ctrl.Rule(
-        business_impact["high"] & issue_severity["high"] & issue_urgency["high"],
-        priority["critical"],
-    ),
-    # 2/3 high + 1/3 medium → high
-    ctrl.Rule(
-        business_impact["high"] & issue_severity["high"] & issue_urgency["medium"],
-        priority["high"],
-    ),
-    ctrl.Rule(
-        business_impact["high"] & issue_severity["medium"] & issue_urgency["high"],
-        priority["high"],
-    ),
-    ctrl.Rule(
-        business_impact["medium"] & issue_severity["high"] & issue_urgency["high"],
-        priority["high"],
-    ),
-    # 2/3 high + 1/3 low → high
-    ctrl.Rule(
-        business_impact["high"] & issue_severity["high"] & issue_urgency["low"],
-        priority["high"],
-    ),
-    ctrl.Rule(
-        business_impact["high"] & issue_severity["low"] & issue_urgency["high"],
-        priority["high"],
-    ),
-    ctrl.Rule(
-        business_impact["low"] & issue_severity["high"] & issue_urgency["high"],
-        priority["high"],
-    ),
-    # 1/3 high + 2/3 medium → medium
-    ctrl.Rule(
-        business_impact["high"] & issue_severity["medium"] & issue_urgency["medium"],
-        priority["medium"],
-    ),
-    ctrl.Rule(
-        business_impact["medium"] & issue_severity["high"] & issue_urgency["medium"],
-        priority["medium"],
-    ),
-    ctrl.Rule(
-        business_impact["medium"] & issue_severity["medium"] & issue_urgency["high"],
-        priority["medium"],
-    ),
-    # 1/3 high + 2/3 low → medium
-    ctrl.Rule(
-        business_impact["high"] & issue_severity["low"] & issue_urgency["low"],
-        priority["medium"],
-    ),
-    ctrl.Rule(
-        business_impact["low"] & issue_severity["high"] & issue_urgency["low"],
-        priority["medium"],
-    ),
-    ctrl.Rule(
-        business_impact["low"] & issue_severity["low"] & issue_urgency["high"],
-        priority["medium"],
-    ),
-    # 3/3 medium → high
-    ctrl.Rule(
-        business_impact["medium"] & issue_severity["medium"] & issue_urgency["medium"],
-        priority["high"],
-    ),
-    # 2/3 medium + 1/3 low → medium
-    ctrl.Rule(
-        business_impact["medium"] & issue_severity["medium"] & issue_urgency["low"],
-        priority["medium"],
-    ),
-    ctrl.Rule(
-        business_impact["medium"] & issue_severity["low"] & issue_urgency["medium"],
-        priority["medium"],
-    ),
-    ctrl.Rule(
-        business_impact["low"] & issue_severity["medium"] & issue_urgency["medium"],
-        priority["medium"],
-    ),
-    # 1/3 medium + 2/3 low → low
-    ctrl.Rule(
-        business_impact["medium"] & issue_severity["low"] & issue_urgency["low"],
-        priority["low"],
-    ),
-    ctrl.Rule(
-        business_impact["low"] & issue_severity["medium"] & issue_urgency["low"],
-        priority["low"],
-    ),
-    ctrl.Rule(
-        business_impact["low"] & issue_severity["low"] & issue_urgency["medium"],
-        priority["low"],
-    ),
-    # 3/3 low → low
-    ctrl.Rule(
-        business_impact["low"] & issue_severity["low"] & issue_urgency["low"],
-        priority["low"],
-    ),
-    # -------------------------------------------------------------------------
-    # GROUP 4: Sentiment — influences output direction
-    # -------------------------------------------------------------------------
-    ctrl.Rule(sentiment["negative"], priority["high"]),  # negative → boosts toward high
-    ctrl.Rule(sentiment["positive"], priority["low"]),  # positive → pulls toward low
-    # neutral → no rule fired, no effect
-]
-
-
-# =============================================================================
-# STEP 5: Build Control System
-# =============================================================================
-
-priority_ctrl = ctrl.ControlSystem(rules)
-
-
-# =============================================================================
-# STEP 6: Helper - Convert categorical inputs to numeric
-# =============================================================================
-
-SEVERITY_MAP = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-IMPACT_MAP = {"low": 0, "medium": 1, "high": 2}
+SENTIMENT_LEVELS = ["negative", "neutral", "positive"]
+SEVERITY_LEVELS = ["low", "medium", "high"]
+URGENCY_LEVELS = ["low", "medium", "high"]
+IMPACT_LEVELS = ["low", "medium", "high"]
+TICKET_TYPES = ["complaint", "inquiry"]
 PRIORITY_LEVELS = ["low", "medium", "high", "critical"]
 
-
-def _level_to_int(priority_label: str) -> int:
-    return PRIORITY_LEVELS.index(priority_label)
-
-
-def _int_to_level(n: int) -> str:
-    n = max(0, min(3, n))  # hard cap between low and critical
-    return PRIORITY_LEVELS[n]
+SENTIMENT_MAP = {"negative": 0, "neutral": 1, "positive": 2}
+SEVERITY_MAP = {"low": 0, "medium": 1, "high": 2}
+URGENCY_MAP = {"low": 0, "medium": 1, "high": 2}
+IMPACT_MAP = {"low": 0, "medium": 1, "high": 2}
+TICKET_TYPE_MAP = {"complaint": 0, "inquiry": 1}
+PRIORITY_MAP = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 
-# =============================================================================
-# STEP 7: Main Prioritization Function
-# =============================================================================
+@dataclass
+class ModelPaths:
+    base_dir: Path
+    model_file: Path
+    metadata_file: Path
+    base_dataset_csv: Path
+    feedback_dataset_csv: Path
+    merged_dataset_csv: Path
 
-def prioritize(
-    sentiment_score: float,
+
+def _resolve_paths() -> ModelPaths:
+    default_dir = "/app/models/prioritization"
+    requested_dir = Path(os.getenv("PRIORITY_MODEL_DIR", default_dir)).resolve()
+    fallback_dir = (Path(__file__).resolve().parents[1] / "runtime").resolve()
+    try:
+        requested_dir.mkdir(parents=True, exist_ok=True)
+        base_dir = requested_dir
+    except Exception:
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        base_dir = fallback_dir
+        logger.warning(
+            "priority | unable to use PRIORITY_MODEL_DIR=%s, falling back to %s",
+            requested_dir,
+            fallback_dir,
+        )
+
+    base_dataset_override = os.getenv("PRIORITY_BASE_DATASET_PATH", "").strip()
+    if base_dataset_override:
+        base_dataset_csv = Path(base_dataset_override).resolve()
+    else:
+        base_dataset_csv = base_dir / "synthetic_training_data.csv"
+
+    return ModelPaths(
+        base_dir=base_dir,
+        model_file=base_dir / "priority_xgb_model.json",
+        metadata_file=base_dir / "priority_xgb_metadata.json",
+        base_dataset_csv=base_dataset_csv,
+        feedback_dataset_csv=base_dir / "manager_feedback_data.csv",
+        merged_dataset_csv=base_dir / "runtime_training_data.csv",
+    )
+
+
+PATHS = _resolve_paths()
+RETRAIN_EVERY_N_FEEDBACK = max(1, int(os.getenv("PRIORITY_RETRAIN_EVERY_N_FEEDBACK", "5")))
+PRIORITY_USE_MOCK = os.getenv("PRIORITY_USE_MOCK", "false").lower() in {"1", "true", "yes"}
+
+_model: XGBClassifier | None = None
+_model_ready = False
+_xgb_unavailable_warned = False
+
+
+def _normalize_choice(value: str, allowed: set[str], default: str) -> str:
+    v = str(value or "").strip().lower()
+    return v if v in allowed else default
+
+
+def _normalize_3level(value: str) -> str:
+    v = str(value or "").strip().lower()
+    if v == "critical":
+        return "high"
+    return _normalize_choice(v, {"low", "medium", "high"}, "medium")
+
+
+def _normalize_sentiment(value: str | float) -> str:
+    if isinstance(value, (int, float)):
+        score = float(value)
+        if score < -0.25:
+            return "negative"
+        if score > 0.25:
+            return "positive"
+        return "neutral"
+    return _normalize_choice(str(value), set(SENTIMENT_LEVELS), "neutral")
+
+
+def _encode_row(
+    *,
+    sentiment_score: str | float,
     issue_severity_val: str,
     issue_urgency_val: str,
     business_impact_val: str,
     safety_concern: bool,
     is_recurring: bool,
     ticket_type: str,
-) -> dict:
-    """
-    Run the fuzzy prioritization engine.
+) -> list[float]:
+    sentiment = _normalize_sentiment(sentiment_score)
+    severity = _normalize_3level(issue_severity_val)
+    urgency = _normalize_3level(issue_urgency_val)
+    impact = _normalize_choice(business_impact_val, set(IMPACT_LEVELS), "medium")
+    ticket = _normalize_choice(ticket_type, set(TICKET_TYPES), "complaint")
 
-    Returns a dict with:
-        - raw_score    : float (0-3), the raw fuzzy output before modifiers
-        - base_priority: str, priority before boolean/type modifiers
-        - final_priority: str, priority after all modifiers applied
-        - modifiers_applied: list of strings explaining what changed
-    """
-    sim = ctrl.ControlSystemSimulation(priority_ctrl)
+    return [
+        float(SENTIMENT_MAP[sentiment]),
+        float(SEVERITY_MAP[severity]),
+        float(URGENCY_MAP[urgency]),
+        float(IMPACT_MAP[impact]),
+        1.0 if bool(safety_concern) else 0.0,
+        1.0 if bool(is_recurring) else 0.0,
+        float(TICKET_TYPE_MAP[ticket]),
+    ]
 
-    # --- Feed fuzzy inputs ---
-    sim.input["sentiment"] = float(sentiment_score)
-    sim.input["issue_severity"] = SEVERITY_MAP[issue_severity_val.lower()]
-    sim.input["issue_urgency"] = SEVERITY_MAP[issue_urgency_val.lower()]
-    sim.input["business_impact"] = IMPACT_MAP[business_impact_val.lower()]
 
-    sim.compute()
-    raw_score = sim.output["priority"]
+def _read_rows(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open("r", newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
 
-    # --- Convert raw score to base priority label ---
-    base_level = int(round(raw_score))
-    base_priority = _int_to_level(base_level)
 
-    # --- Apply modifiers ---
-    modifier = 0
-    modifiers_applied = []
+def _write_rows(path: Path, rows: list[dict[str, Any]], append: bool = False) -> None:
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = list(rows[0].keys())
+    mode = "a" if append and path.exists() else "w"
+    with path.open(mode, newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if mode == "w":
+            writer.writeheader()
+        writer.writerows(rows)
 
-    if is_recurring:
-        modifier += 1
-        modifiers_applied.append("is_recurring=True -> +1")
 
-    if ticket_type.lower() == "inquiry":
-        modifier -= 1
-        modifiers_applied.append("ticket_type=Inquiry -> -1")
+def _prepare_training_arrays(rows: list[dict[str, Any]]) -> tuple[np.ndarray, np.ndarray]:
+    x_rows: list[list[float]] = []
+    y_rows: list[int] = []
 
-    # Sentiment discrete modifier (as requested)
-    if sentiment_score < -0.25:
-        modifier += 1
-        modifiers_applied.append("sentiment=Negative -> +1")
-    elif sentiment_score > 0.25:
-        modifier -= 1
-        modifiers_applied.append("sentiment=Positive -> -1")
-    else:
-        modifiers_applied.append("sentiment=Neutral -> 0")
+    for row in rows:
+        label = _normalize_choice(str(row.get("label_priority", "")), set(PRIORITY_LEVELS), "")
+        if label not in PRIORITY_MAP:
+            continue
 
-    final_level = base_level + modifier
-    final_priority = _int_to_level(final_level)
+        x_rows.append(
+            _encode_row(
+                sentiment_score=row.get("sentiment_score", "neutral"),
+                issue_severity_val=str(row.get("issue_severity_val", "medium")),
+                issue_urgency_val=str(row.get("issue_urgency_val", "medium")),
+                business_impact_val=str(row.get("business_impact_val", "medium")),
+                safety_concern=str(row.get("safety_concern", "false")).strip().lower() in {"1", "true", "yes", "y"},
+                is_recurring=str(row.get("is_recurring", "false")).strip().lower() in {"1", "true", "yes", "y"},
+                ticket_type=str(row.get("ticket_type", "complaint")),
+            )
+        )
+        y_rows.append(PRIORITY_MAP[label])
 
-    # safety_concern: enforce minimum of 'high'
-    if safety_concern:
-        modifiers_applied.append("safety_concern=True -> minimum High")
-        if _level_to_int(final_priority) < _level_to_int("high"):
-            final_priority = "high"
+    if not x_rows:
+        return np.zeros((0, 7), dtype=np.float32), np.zeros((0,), dtype=np.int32)
 
-    # Hard caps
-    final_priority = _int_to_level(max(0, min(3, _level_to_int(final_priority))))
+    return np.asarray(x_rows, dtype=np.float32), np.asarray(y_rows, dtype=np.int32)
+
+
+def _train_from_rows(rows: list[dict[str, Any]], force: bool = False) -> dict[str, Any]:
+    global _model, _model_ready
+
+    if XGBClassifier is None:
+        return {"trained": False, "reason": "xgboost_not_installed"}
+
+    X, y = _prepare_training_arrays(rows)
+    if len(X) == 0:
+        return {"trained": False, "reason": "no_training_rows"}
+
+    model = XGBClassifier(
+        objective="multi:softprob",
+        num_class=4,
+        n_estimators=260,
+        max_depth=5,
+        learning_rate=0.06,
+        subsample=0.9,
+        colsample_bytree=0.9,
+        reg_lambda=1.0,
+        random_state=42,
+        eval_metric="mlogloss",
+        n_jobs=1,
+    )
+    model.fit(X, y)
+    model.save_model(str(PATHS.model_file))
+
+    metadata = {
+        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "training_rows": int(len(X)),
+        "base_dataset_rows": int(len(_read_rows(PATHS.base_dataset_csv))),
+        "feedback_rows": int(len(_read_rows(PATHS.feedback_dataset_csv))),
+        "forced_retrain": bool(force),
+        "feature_order": [
+            "sentiment_score",
+            "issue_severity",
+            "issue_urgency",
+            "business_impact",
+            "safety_concern",
+            "is_recurring",
+            "ticket_type",
+        ],
+    }
+    PATHS.metadata_file.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+
+    _model = model
+    _model_ready = True
+    return {"trained": True, **metadata}
+
+
+def _load_model_if_exists() -> bool:
+    global _model, _model_ready
+    if _model_ready and _model is not None:
+        return True
+    if XGBClassifier is None:
+        return False
+    if not PATHS.model_file.exists():
+        return False
+    try:
+        model = XGBClassifier()
+        model.load_model(str(PATHS.model_file))
+        _model = model
+        _model_ready = True
+        return True
+    except Exception as exc:
+        logger.warning("priority | failed to load model: %s", exc)
+        return False
+
+
+def _ensure_model_ready() -> bool:
+    global _xgb_unavailable_warned
+    if XGBClassifier is None:
+        if not _xgb_unavailable_warned:
+            logger.warning("priority | xgboost unavailable; model inference disabled")
+            _xgb_unavailable_warned = True
+        return False
+    return _load_model_if_exists()
+
+
+def _merge_training_rows() -> list[dict[str, Any]]:
+    base_rows = _read_rows(PATHS.base_dataset_csv)
+    feedback_rows = _read_rows(PATHS.feedback_dataset_csv)
+    merged = [dict(r) for r in base_rows] + [dict(r) for r in feedback_rows]
+
+    canonical_fields = [
+        "sentiment_score",
+        "issue_severity_val",
+        "issue_urgency_val",
+        "business_impact_val",
+        "safety_concern",
+        "is_recurring",
+        "ticket_type",
+        "label_priority",
+        "label_source",
+        "ticket_id",
+        "created_at",
+    ]
+    normalized = []
+    for row in merged:
+        normalized.append({field: row.get(field, "") for field in canonical_fields})
+
+    merged = normalized
+    if merged:
+        _write_rows(PATHS.merged_dataset_csv, merged, append=False)
+    return merged
+
+
+def add_manager_feedback_example(
+    *,
+    sentiment_score: str,
+    issue_severity_val: str,
+    issue_urgency_val: str,
+    business_impact_val: str,
+    safety_concern: bool,
+    is_recurring: bool,
+    ticket_type: str,
+    approved_priority: str,
+    ticket_id: str | None = None,
+    retrain_now: bool = False,
+) -> dict[str, Any]:
+    label = _normalize_choice(approved_priority, set(PRIORITY_LEVELS), "")
+    if label not in PRIORITY_MAP:
+        raise ValueError(f"invalid approved_priority: {approved_priority}")
+
+    feedback_row = {
+        "sentiment_score": _normalize_sentiment(sentiment_score),
+        "issue_severity_val": _normalize_3level(issue_severity_val),
+        "issue_urgency_val": _normalize_3level(issue_urgency_val),
+        "business_impact_val": _normalize_choice(business_impact_val, set(IMPACT_LEVELS), "medium"),
+        "safety_concern": bool(safety_concern),
+        "is_recurring": bool(is_recurring),
+        "ticket_type": _normalize_choice(ticket_type, set(TICKET_TYPES), "complaint"),
+        "label_priority": label,
+        "label_source": "manager_approved_rescore",
+        "ticket_id": ticket_id or "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _write_rows(PATHS.feedback_dataset_csv, [feedback_row], append=True)
+
+    feedback_count = len(_read_rows(PATHS.feedback_dataset_csv))
+    should_retrain = bool(retrain_now or feedback_count % RETRAIN_EVERY_N_FEEDBACK == 0)
+    retrain_result = None
+
+    if should_retrain:
+        merged = _merge_training_rows()
+        retrain_result = _train_from_rows(merged, force=True)
 
     return {
-        "raw_score": round(raw_score, 3),
-        "base_priority": base_priority,
-        "final_priority": final_priority,
-        "modifiers_applied": modifiers_applied if modifiers_applied else ["none"],
+        "feedback_written": True,
+        "feedback_rows": feedback_count,
+        "retrained": should_retrain,
+        "retrain_every_n_feedback": RETRAIN_EVERY_N_FEEDBACK,
+        "retrain_result": retrain_result,
     }
 
 
-# =============================================================================
-# STEP 8: Example Usage
-# =============================================================================
+def prioritize(
+    sentiment_score: str,
+    issue_severity_val: str,
+    issue_urgency_val: str,
+    business_impact_val: str,
+    safety_concern: bool,
+    is_recurring: bool,
+    ticket_type: str,
+) -> dict[str, Any]:
+    """Runtime inference from pre-trained model state."""
+    if PRIORITY_USE_MOCK:
+        return {
+            "raw_score": 1.0,
+            "base_priority": "medium",
+            "final_priority": "medium",
+            "modifiers_applied": ["mock=enabled"],
+            "confidence": 0.0,
+            "engine": "mock",
+        }
 
-if __name__ == "__main__":
-    test_cases = [
-        # --- Base alignment rules ---
-        {
-            "label": "[Base] Critical severity + urgency -> Critical",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="critical",
-                issue_urgency_val="critical",
-                business_impact_val="medium",
-                safety_concern=False,
-                is_recurring=False,
-                ticket_type="complaint",
-            ),
-        },
-        {
-            "label": "[Base] High severity + urgency -> High",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="high",
-                issue_urgency_val="high",
-                business_impact_val="low",
-                safety_concern=False,
-                is_recurring=False,
-                ticket_type="complaint",
-            ),
-        },
-        {
-            "label": "[Base] Low severity + urgency -> Low",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="low",
-                issue_urgency_val="low",
-                business_impact_val="low",
-                safety_concern=False,
-                is_recurring=False,
-                ticket_type="complaint",
-            ),
-        },
-        # --- Mismatch rules ---
-        {
-            "label": "[Mismatch] Critical severity + High urgency -> Critical",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="critical",
-                issue_urgency_val="high",
-                business_impact_val="low",
-                safety_concern=False,
-                is_recurring=False,
-                ticket_type="complaint",
-            ),
-        },
-        {
-            "label": "[Mismatch] Critical severity + Low urgency -> High",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="critical",
-                issue_urgency_val="low",
-                business_impact_val="low",
-                safety_concern=False,
-                is_recurring=False,
-                ticket_type="complaint",
-            ),
-        },
-        {
-            "label": "[Mismatch] High severity + Medium urgency -> High",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="high",
-                issue_urgency_val="medium",
-                business_impact_val="low",
-                safety_concern=False,
-                is_recurring=False,
-                ticket_type="complaint",
-            ),
-        },
-        {
-            "label": "[Mismatch] Medium severity + Low urgency -> Medium",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="medium",
-                issue_urgency_val="low",
-                business_impact_val="low",
-                safety_concern=False,
-                is_recurring=False,
-                ticket_type="complaint",
-            ),
-        },
-        # --- Business impact rules ---
-        {
-            "label": "[BIZ] 3/3 High -> Critical",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="high",
-                issue_urgency_val="high",
-                business_impact_val="high",
-                safety_concern=False,
-                is_recurring=False,
-                ticket_type="complaint",
-            ),
-        },
-        {
-            "label": "[BIZ] 3/3 Medium -> High",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="medium",
-                issue_urgency_val="medium",
-                business_impact_val="medium",
-                safety_concern=False,
-                is_recurring=False,
-                ticket_type="complaint",
-            ),
-        },
-        {
-            "label": "[BIZ] 1/3 High + 2/3 Low -> Medium",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="high",
-                issue_urgency_val="low",
-                business_impact_val="low",
-                safety_concern=False,
-                is_recurring=False,
-                ticket_type="complaint",
-            ),
-        },
-        # --- Modifiers ---
-        {
-            "label": "[MOD] Safety concern floors at High (was Low)",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="low",
-                issue_urgency_val="low",
-                business_impact_val="low",
-                safety_concern=True,
-                is_recurring=False,
-                ticket_type="complaint",
-            ),
-        },
-        {
-            "label": "[MOD] Recurring +1: Medium -> High",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="medium",
-                issue_urgency_val="medium",
-                business_impact_val="low",
-                safety_concern=False,
-                is_recurring=True,
-                ticket_type="complaint",
-            ),
-        },
-        {
-            "label": "[MOD] Inquiry -1: High -> Medium",
-            "inputs": dict(
-                sentiment_score=0.0,
-                issue_severity_val="high",
-                issue_urgency_val="high",
-                business_impact_val="low",
-                safety_concern=False,
-                is_recurring=False,
-                ticket_type="inquiry",
-            ),
-        },
-        {
-            "label": "[MOD] Negative sentiment +1, recurring +1, inquiry -1 -> net +1",
-            "inputs": dict(
-                sentiment_score=-0.7,
-                issue_severity_val="medium",
-                issue_urgency_val="medium",
-                business_impact_val="low",
-                safety_concern=False,
-                is_recurring=True,
-                ticket_type="inquiry",
-            ),
-        },
-        {
-            "label": "[MOD] Critical already — recurring cannot exceed Critical",
-            "inputs": dict(
-                sentiment_score=-0.9,
-                issue_severity_val="critical",
-                issue_urgency_val="critical",
-                business_impact_val="high",
-                safety_concern=False,
-                is_recurring=True,
-                ticket_type="complaint",
-            ),
-        },
-    ]
+    if not _ensure_model_ready() or _model is None:
+        return {
+            "raw_score": 1.0,
+            "base_priority": "medium",
+            "final_priority": "medium",
+            "modifiers_applied": ["fallback=no_model_loaded"],
+            "confidence": 0.0,
+            "engine": "fallback",
+        }
 
-    for case in test_cases:
-        print(f"\n{'=' * 60}")
-        print(f"  {case['label']}")
-        print(f"{'=' * 60}")
-        result = prioritize(**case["inputs"])
-        print(f"  Raw fuzzy score  : {result['raw_score']}")
-        print(f"  Base priority    : {result['base_priority']}")
-        print(f"  Modifiers        : {', '.join(result['modifiers_applied'])}")
-        print(f"  FINAL PRIORITY   : {result['final_priority'].upper()}")
+    x = np.asarray(
+        [
+            _encode_row(
+                sentiment_score=sentiment_score,
+                issue_severity_val=issue_severity_val,
+                issue_urgency_val=issue_urgency_val,
+                business_impact_val=business_impact_val,
+                safety_concern=safety_concern,
+                is_recurring=is_recurring,
+                ticket_type=ticket_type,
+            )
+        ],
+        dtype=np.float32,
+    )
+
+    pred_idx = int(_model.predict(x)[0])
+    pred_proba = _model.predict_proba(x)[0].tolist()
+    priority = PRIORITY_LEVELS[pred_idx]
+
+    return {
+        "raw_score": float(pred_idx),
+        "base_priority": priority,
+        "final_priority": priority,
+        "modifiers_applied": ["model=xgboost"],
+        "confidence": round(float(max(pred_proba)), 4),
+        "engine": "xgboost",
+    }

@@ -37,10 +37,12 @@ async def combine_sentiment(state: dict) -> dict:
     """
     text = float(state.get("text_sentiment", 0.0) or 0.0)
     audio_features = state.get("audio_features") or {}
+    has_audio = bool(state.get("has_audio")) or bool(audio_features)
 
     combined = text
     audio_sentiment = state.get("audio_sentiment")
-    if audio_features:
+    mode = "text_only"
+    if has_audio and audio_features:
         features = {
             "mean_energy": float(audio_features.get("mean_energy", 0.05) or 0.05),
             "std_energy": float(audio_features.get("std_energy", 0.01) or 0.01),
@@ -52,14 +54,18 @@ async def combine_sentiment(state: dict) -> dict:
         result = _analyzer.combine_text_audio_sentiment(text, signals, text_weight=0.7, audio_weight=0.3)
         combined = float(result["combined_sentiment"])
         audio_sentiment = float(result["audio_sentiment"])
-    elif audio_sentiment is not None:
+        mode = "text_audio_combined"
+    elif has_audio and audio_sentiment is not None:
         combined = (0.7 * text) + (0.3 * float(audio_sentiment))
+        mode = "text_audio_weighted"
 
-    state["audio_sentiment"] = float(audio_sentiment or 0.0)
+    state["audio_sentiment"] = float(audio_sentiment) if audio_sentiment is not None else None
     state["sentiment_score_numeric"] = combined
     state["sentiment_score"] = _bucket(combined)
+    state["sentiment_combiner_mode"] = mode
     logger.info(
-        "sentiment_combiner | text=%.3f audio=%.3f combined=%.3f bucket=%s",
+        "sentiment_combiner | mode=%s text=%.3f audio=%.3f combined=%.3f bucket=%s",
+        mode,
         text,
         float(state.get("audio_sentiment", 0.0) or 0.0),
         float(state.get("sentiment_score_numeric", 0.0) or 0.0),

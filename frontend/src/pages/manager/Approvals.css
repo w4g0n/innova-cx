@@ -98,6 +98,46 @@
   text-decoration: underline;
 }
 
+/* ── Request ID hyperlink ─────────────────────────────────── */
+.requestIdLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #7c3aed;
+  font-weight: 650;
+  font-size: 12px;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  text-decoration: underline;
+  text-decoration-color: rgba(124, 58, 237, 0.3);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 0.15s, text-decoration-color 0.15s;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.requestIdLink::after {
+  content: "↗";
+  font-size: 10px;
+  font-family: system-ui, sans-serif;
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity 0.15s, transform 0.15s;
+  flex-shrink: 0;
+}
+
+.requestIdLink:hover {
+  color: #5b21b6;
+  text-decoration-color: rgba(91, 33, 182, 0.75);
+}
+
+.requestIdLink:hover::after {
+  opacity: 1;
+  transform: translateX(0);
+}
+
 .statusPill {
   display: inline-flex;
   align-items: center;

@@ -1,292 +1,200 @@
-.customerSettingsPage {
+.cs-page {
   width: 100%;
+  padding: 22px 22px 34px;
+  animation: csFadeUp 420ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+/* --- Use same PageHeader alignment behavior as My Tickets --- */
+.custSettings {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  animation: fadeUp 0.4s var(--ease-out) both;
+  gap: 18px;
 }
 
-.customerSettingsTopRow {
-  display: flex;
-  align-items: center;      
-  justify-content: space-between; 
-  width: 100%;                 
+.custSettings .pageHeader {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
 }
 
-.customerSettingsBackBtn {
+.custSettings .pageHeader__actions {
+  order: -1;
+  margin-right: 6px;
+}
+
+.custSettings .pageHeader__text {
+  text-align: left;
+}
+
+/* Back button styled like My Tickets but using theme vars */
+.csBackBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  border: none;
-  background: rgba(64, 28, 81, 0.12);
-  color: #401c51;
-  padding: 10px 14px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 900;
+  justify-content: center;
   cursor: pointer;
-  transition: background 0.25s ease, transform 0.25s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease,
+    box-shadow 0.2s ease;
+  box-shadow: 0 1px 10px rgba(100, 71, 217, 0.08);
 }
 
-.customerSettingsBackBtn:hover {
-  background: rgba(64, 28, 81, 0.16);
+.csBackBtn:hover {
+  background: var(--purple-50);
+  border-color: var(--border-strong);
   transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(100, 71, 217, 0.14);
 }
 
-.customerSettingsGrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
-}
-
-.customerSettingsCard {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-radius: 18px;
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  padding: 18px;
-}
-
-.customerSettingsCardHeader {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.customerSettingsCardTitle {
-  font-size: 16px;
-  font-weight: 900;
-  font-family: var(--font-heading);
-  color: var(--btn-primary);
-}
-
-.customerSettingsCardSub {
-  font-size: 13px;
-  font-weight: 700;
-  color: rgba(17, 17, 17, 0.6);
-  line-height: 1.5;
-}
-
-.customerSettingsRows {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.customerSettingsRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 10px;
-  border-radius: 14px;
-}
-
-.customerSettingsRow:hover {
-  background: rgba(64, 28, 81, 0.05);
-}
-
-.customerSettingsLabel {
-  font-size: 13px;
-  font-weight: 800;
-  color: rgba(17, 17, 17, 0.75);
-}
-
-.customerSettingsValue {
-  font-size: 13px;
-  font-weight: 900;
-  color: #111;
-}
-
-.customerSettingsForm {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
-  margin-top: 6px;
-}
-
-.customerSettingsField {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.customerSettingsFieldLabel {
-  font-size: 12px;
-  font-weight: 900;
-  color: rgba(17, 17, 17, 0.72);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.customerSettingsPillWrap {
-  display: inline-flex;
-  align-items: center;
-  max-width: 280px;
-}
-
-.customerSettingsNote {
-  margin-top: 12px;
-  font-size: 13px;
-  color: rgba(17, 17, 17, 0.6);
-  line-height: 1.6;
-}
-
-@media (max-width: 720px) {
-  .customerSettingsPillWrap {
-    max-width: 100%;
-  }
-}
-
-
-.customerSettingsMuted {
-  margin-top: 4px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: rgba(17, 17, 17, 0.58);
-  line-height: 1.45;
-}
-
-.customerSettingsRow--actions {
-  align-items: flex-start;
-}
-
-.customerSettingsActionBtn {
-  border: none;
-  border-radius: 999px;
-  padding: 10px 20px;
-  background: var(--btn-primary);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
-  white-space: nowrap;
-  box-shadow: 0 2px 10px rgba(89, 36, 180, 0.30);
-  transition: filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.customerSettingsActionBtn:hover {
-  filter: brightness(1.08);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(89, 36, 180, 0.40);
-}
-
-.customerSettingsDangerBtn {
-  border: none;
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: rgba(211, 47, 47, 0.12);
-  color: rgb(211, 47, 47);
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.25s ease, transform 0.25s ease;
-}
-
-.customerSettingsDangerBtn:hover {
-  background: rgba(211, 47, 47, 0.16);
-  transform: translateY(-1px);
-}
-
-.customerSettingsToggleList {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 6px;
-}
-
-.customerSettingsToggleRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px 10px;
-  border-radius: 14px;
-}
-
-.customerSettingsToggleRow:hover {
-  background: rgba(64, 28, 81, 0.05);
-}
-
-.customerSettingsToggleText {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.customerSettingsToggleTitle {
-  font-size: 13px;
-  font-weight: 900;
-  color: rgba(17, 17, 17, 0.82);
-}
-
-.customerSettingsInlineToggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px 10px;
-  border-radius: 14px;
-}
-
-.customerSettingsInlineToggle:hover {
-  background: rgba(64, 28, 81, 0.05);
-}
-
-.customerSettingsInlineToggleText {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.customerToggle {
-  position: relative;
-  width: 44px;
-  height: 26px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  background: rgba(0, 0, 0, 0.06);
-  cursor: pointer;
-  flex: 0 0 auto;
-  padding: 0;
-}
-
-.customerToggleKnob {
-  position: absolute;
-  top: 50%;
-  left: 3px;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  background: #ffffff;
-  transform: translateY(-50%);
-  transition: left 0.22s ease, background 0.22s ease;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.14);
-}
-
-.customerToggle--on {
-  background: rgba(89, 36, 180, 0.18);
-  border-color: rgba(89, 36, 180, 0.26);
-}
-
-.customerToggle--on .customerToggleKnob {
-  left: 21px;
-}
-
-.customerSettingsPrivacyActions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-}
-
-@media (max-width: 720px) {
-  .customerSettingsRow--actions {
-    flex-direction: column;
+@media (max-width: 768px) {
+  .custSettings .pageHeader {
     align-items: flex-start;
   }
+}
+
+.cs-grid {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+/* Tighten the inside of SettingsCard without changing the shared component */
+.cs-cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Password section row */
+.cs-passwordRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+
+  padding: 14px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--purple-50) 100%);
+  box-shadow: 0 1px 14px rgba(100, 71, 217, 0.06);
+  transition: transform 180ms ease, box-shadow 240ms ease, border-color 240ms ease;
+}
+
+.cs-passwordRow:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(100, 71, 217, 0.12);
+  border-color: var(--border-strong);
+}
+
+.cs-passwordText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cs-passwordLabel {
+  margin: 0;
+  font-family: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text-primary);
+}
+
+.cs-passwordSub {
+  margin: 0;
+  font-family: "DM Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.cs-passwordAction {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Stagger animation wrappers */
+.cs-animateIn {
+  animation: csCardIn 520ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+@keyframes csFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0px);
+  }
+}
+
+@keyframes csCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0px) scale(1);
+    filter: blur(0px);
+  }
+}
+
+/* ✅ Mobile-friendly */
+@media (max-width: 720px) {
+  .cs-page {
+    padding: 14px 12px 22px;
+  }
+
+  .cs-grid {
+    max-width: 100%;
+    margin: 0;
+    gap: 14px;
+  }
+
+  .cs-passwordRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cs-passwordAction {
+    justify-content: flex-start;
+  }
+}
+
+/* Accessibility: reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .cs-page,
+  .cs-animateIn {
+    animation: none !important;
+  }
+
+  .csBackBtn,
+  .cs-passwordRow {
+    transition: none !important;
+  }
+}
+
+/* Overlay / backdrop (purple-tinted instead of muddy grey) */
+:is(.cpw-overlay, .cpw-backdrop, .cpwBackdrop, .changePasswordOverlay, .changePasswordBackdrop) {
+  background: rgba(45, 27, 105, 0.35) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+
+/* Modal card depth (optional polish) */
+:is(.cpw-modal, .cpwModal, .changePasswordModal) {
+  box-shadow: 0 25px 80px rgba(45, 27, 105, 0.25) !important;
+  border: 1px solid var(--border) !important;
 }

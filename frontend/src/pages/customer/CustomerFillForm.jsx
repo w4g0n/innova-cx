@@ -8,7 +8,6 @@ import "./CustomerFillForm.css";
 export default function CustomerFillForm({ embedded = false, onCancel }) {
   const [type, setType] = useState("Auto");
   const [mode, setMode] = useState("Text");
-  const [assetType, setAssetType] = useState("Office");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
 
@@ -88,7 +87,6 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
   const resetForm = () => {
     setSubject("");
     setMessage("");
-    setAssetType("Office");
     setType("Auto");
     setMode("Text");
     setAttachments([]);
@@ -112,7 +110,6 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
     try {
       const orchestratorResult = await submitTextComplaint(details, {
         ticket_type: type === "Auto" ? null : type.toLowerCase(),
-        asset_type: assetType,
         has_audio: mode === "Audio",
         audio_features: mode === "Audio" ? latestAudioFeatures : null,
       });
@@ -251,37 +248,19 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
       <form className="custFormCard" onSubmit={submit}>
         <div className="custFormGrid">
           <div className="custField custField--span2">
-            <div className="custTwoPillsRow">
-              <div className="custTwoPillsItem">
-                <label className="custLabel">Ticket Type (optional)</label>
-                <div className="custPillHolder">
-                  <PillSelect
-                    value={type}
-                    onChange={setType}
-                    ariaLabel="Select request type"
-                    options={[
-                      { value: "Auto", label: "Auto" },
-                      { value: "Complaint", label: "Complaint" },
-                      { value: "Inquiry", label: "Inquiry" },
-                    ]}
-                  />
-                </div>
-              </div>
-
-              <div className="custTwoPillsItem">
-                <label className="custLabel">Asset</label>
-                <div className="custPillHolder">
-                  <PillSelect
-                    value={assetType}
-                    onChange={setAssetType}
-                    ariaLabel="Select asset type"
-                    options={[
-                      { value: "Office", label: "Office" },
-                      { value: "Warehouse", label: "Warehouse" },
-                      { value: "Retail Store", label: "Retail Store" },
-                    ]}
-                  />
-                </div>
+            <div className="custTwoPillsItem">
+              <label className="custLabel">Ticket Type (optional)</label>
+              <div className="custPillHolder">
+                <PillSelect
+                  value={type}
+                  onChange={setType}
+                  ariaLabel="Select request type"
+                  options={[
+                    { value: "Auto", label: "Auto" },
+                    { value: "Complaint", label: "Complaint" },
+                    { value: "Inquiry", label: "Inquiry" },
+                  ]}
+                />
               </div>
             </div>
           </div>
