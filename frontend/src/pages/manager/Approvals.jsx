@@ -264,8 +264,9 @@ export default function Approvals() {
                     </td>
                     <td className="actionsCell">
                       {r.type === "Rerouting" && r.status === "Pending" && (
-                        <div style={{ marginBottom: 8 }}>
+                        <div className="deptSelectWrap">
                           <select
+                            className="deptSelect"
                             value={selectedDepartments[r.requestId] || ""}
                             onChange={(e) =>
                               setSelectedDepartments((prev) => ({

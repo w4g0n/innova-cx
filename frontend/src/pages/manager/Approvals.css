@@ -170,6 +170,45 @@
   gap: 10px;
 }
 
+.deptSelectWrap {
+  position: relative;
+  margin-bottom: 8px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.deptSelectWrap::after {
+  content: "⌄";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-52%);
+  color: rgba(17, 17, 17, 0.55);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.deptSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text-dark);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 9px 34px 9px 12px;
+  min-width: 220px;
+  max-width: min(100%, 280px);
+}
+
+.deptSelect:focus {
+  outline: none;
+  border-color: var(--btn-primary);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.16);
+}
+
 .actionBtn {
   padding: 7px 12px;
   border-radius: 999px;
@@ -219,5 +258,16 @@
   .actionsCell {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .deptSelectWrap {
+    width: 100%;
+  }
+
+  .deptSelect {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    font-size: 16px;
   }
 }
