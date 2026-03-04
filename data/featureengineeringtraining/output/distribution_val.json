@@ -1,0 +1,23 @@
+{
+  "name": "val",
+  "rows": 5,
+  "safety_concern": {
+    "false": 4,
+    "true": 1
+  },
+  "business_impact": {
+    "low": 3,
+    "medium": 1,
+    "high": 1
+  },
+  "issue_severity": {
+    "high": 2,
+    "low": 2,
+    "medium": 1
+  },
+  "issue_urgency": {
+    "low": 2,
+    "medium": 2,
+    "high": 1
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "train",
+  "rows": 43,
+  "safety_concern": {
+    "true": 23,
+    "false": 20
+  },
+  "business_impact": {
+    "low": 15,
+    "high": 14,
+    "medium": 14
+  },
+  "issue_severity": {
+    "low": 16,
+    "medium": 14,
+    "high": 13
+  },
+  "issue_urgency": {
+    "medium": 15,
+    "high": 15,
+    "low": 13
+  }
+}

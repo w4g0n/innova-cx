@@ -1,0 +1,23 @@
+{
+  "rows": 54,
+  "safety_concern": {
+    "false": 27,
+    "true": 27
+  },
+  "business_impact": {
+    "medium": 18,
+    "high": 18,
+    "low": 18
+  },
+  "issue_severity": {
+    "medium": 18,
+    "high": 18,
+    "low": 18
+  },
+  "issue_urgency": {
+    "low": 18,
+    "high": 18,
+    "medium": 18
+  },
+  "mock": true
+}

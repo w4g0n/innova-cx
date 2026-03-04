@@ -1,0 +1,21 @@
+{
+  "safety_concern": [
+    "false",
+    "true"
+  ],
+  "business_impact": [
+    "low",
+    "medium",
+    "high"
+  ],
+  "issue_severity": [
+    "low",
+    "medium",
+    "high"
+  ],
+  "issue_urgency": [
+    "low",
+    "medium",
+    "high"
+  ]
+}

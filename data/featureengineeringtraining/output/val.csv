@@ -1,0 +1,6 @@
+text,safety_concern,business_impact,issue_severity,issue_urgency
+Mock complaint 30-0: tenant reports issue with mixed operational/safety details.,false,low,medium,low
+Mock complaint 43-0: tenant reports issue with mixed operational/safety details.,false,medium,high,medium
+Mock complaint 7-0: tenant reports issue with mixed operational/safety details.,true,low,high,medium
+Mock complaint 29-0: tenant reports issue with mixed operational/safety details.,false,low,low,high
+Mock complaint 45-0: tenant reports issue with mixed operational/safety details.,false,high,low,low

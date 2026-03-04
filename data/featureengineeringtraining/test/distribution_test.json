@@ -1,0 +1,21 @@
+{
+  "name": "test",
+  "rows": 6,
+  "safety_concern": {
+    "false": 3,
+    "true": 3
+  },
+  "business_impact": {
+    "high": 3,
+    "medium": 3
+  },
+  "issue_severity": {
+    "medium": 3,
+    "high": 3
+  },
+  "issue_urgency": {
+    "low": 3,
+    "high": 2,
+    "medium": 1
+  }
+}

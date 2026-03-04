@@ -1,0 +1,25 @@
+{
+  "best_val_metrics": {
+    "safety_concern": {
+      "accuracy": 1.0,
+      "f1_macro": 1.0
+    },
+    "business_impact": {
+      "accuracy": 1.0,
+      "f1_macro": 1.0
+    },
+    "issue_severity": {
+      "accuracy": 1.0,
+      "f1_macro": 1.0
+    },
+    "issue_urgency": {
+      "accuracy": 1.0,
+      "f1_macro": 1.0
+    }
+  },
+  "rows": {
+    "train": 43,
+    "val": 5
+  },
+  "mock": true
+}

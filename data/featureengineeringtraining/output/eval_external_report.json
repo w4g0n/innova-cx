@@ -1,0 +1,59 @@
+{
+  "rows_evaluated": 6,
+  "meets_all_thresholds": true,
+  "metrics": {
+    "safety_concern": {
+      "accuracy": 1.0,
+      "f1_macro": 1.0,
+      "meets_threshold": {
+        "accuracy": true,
+        "f1_macro": true
+      },
+      "threshold": {
+        "accuracy": 0.8,
+        "f1_macro": 0.78
+      },
+      "per_class": {}
+    },
+    "business_impact": {
+      "accuracy": 1.0,
+      "f1_macro": 1.0,
+      "meets_threshold": {
+        "accuracy": true,
+        "f1_macro": true
+      },
+      "threshold": {
+        "accuracy": 0.75,
+        "f1_macro": 0.72
+      },
+      "per_class": {}
+    },
+    "issue_severity": {
+      "accuracy": 1.0,
+      "f1_macro": 1.0,
+      "meets_threshold": {
+        "accuracy": true,
+        "f1_macro": true
+      },
+      "threshold": {
+        "accuracy": 0.75,
+        "f1_macro": 0.72
+      },
+      "per_class": {}
+    },
+    "issue_urgency": {
+      "accuracy": 1.0,
+      "f1_macro": 1.0,
+      "meets_threshold": {
+        "accuracy": true,
+        "f1_macro": true
+      },
+      "threshold": {
+        "accuracy": 0.75,
+        "f1_macro": 0.72
+      },
+      "per_class": {}
+    }
+  },
+  "mock": true
+}
