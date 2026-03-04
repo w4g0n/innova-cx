@@ -163,14 +163,36 @@ def _ensure_analytics_mvs() -> None:
         logger.warning("_ensure_analytics_mvs | %s not found — skipping", MV_SQL)
         return
 
-    # Check if MVs already exist
+    required_mvs = [
+        "mv_ticket_base",
+        "mv_daily_volume",
+        "mv_employee_daily",
+        "mv_acceptance_daily",
+        "mv_operator_qc_daily",
+        "mv_chatbot_daily",
+        "mv_sentiment_daily",
+        "mv_feature_daily",
+    ]
+
+    # Check if all required MVs already exist
     try:
         row = fetch_one(
-            "SELECT COUNT(*) AS cnt FROM pg_matviews WHERE matviewname = 'mv_ticket_base'", ()
+            "SELECT COUNT(*) AS cnt FROM pg_matviews "
+            "WHERE schemaname='public' AND matviewname = ANY(%s)",
+            (required_mvs,),
         )
-        if row and (row.get("cnt") or 0) > 0:
-            logger.info("_ensure_analytics_mvs | MVs already exist — skipping install")
+        if row and int(row.get("cnt") or 0) == len(required_mvs):
+            logger.info(
+                "_ensure_analytics_mvs | all required MVs exist (%s/%s) — skipping install",
+                int(row.get("cnt") or 0),
+                len(required_mvs),
+            )
             return
+        logger.info(
+            "_ensure_analytics_mvs | incomplete MV set (%s/%s) — installing",
+            int((row or {}).get("cnt") or 0),
+            len(required_mvs),
+        )
     except Exception as _check_err:
         logger.info("_ensure_analytics_mvs | cannot check pg_matviews — attempting MV install anyway")
 
@@ -1924,7 +1946,17 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
     if not activity or (activity.get("cnt") or 0) == 0:
         return None
 
-    report_code = f"{_MONTH_ABBR[month]}-{year}"
+    user_slug_row = fetch_one(
+        "SELECT split_part(email, '@', 1) AS slug FROM users WHERE id = %s",
+        (user_id,),
+    ) or {}
+    user_slug = str(user_slug_row.get("slug") or "").strip().lower()
+    if not user_slug:
+        user_slug = str(user_id).replace("-", "")[:8]
+
+    # Keep year in the second token for existing ORDER BY logic:
+    # mon-year-user (e.g. mar-2026-ahmed)
+    report_code = f"{_MONTH_ABBR[month]}-{year}-{user_slug}"
     month_label = f"{_MONTH_LABEL[month]} {year}"
 
     # ── aggregate KPIs from mv_employee_daily ─────────────────────────────────
