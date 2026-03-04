@@ -117,19 +117,6 @@ def _normalize_level(v: str, default: str = "medium") -> str:
     return s if s in {"low", "medium", "high"} else default
 
 
-def _to_bool(value, default=False) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    s = str(value).strip().lower()
-    if s in {"true", "1", "yes", "y"}:
-        return True
-    if s in {"false", "0", "no", "n"}:
-        return False
-    return default
-
-
 def _optional_bool(value):
     if value is None:
         return None
@@ -188,6 +175,7 @@ def _load_feature_labeler():
     if not model_name:
         logger.info("feature_engineering | no FEATURE_LABELER_MODEL_PATH provided; using mock labeler")
         return None
+
     model_path = Path(model_name)
     if not (model_path / "config.json").exists():
         logger.info("feature_engineering | labeler model missing config.json at %s; using mock", model_name)
@@ -259,7 +247,6 @@ def _apply_labeling_step(state: dict, text: str) -> None:
 def get_feature_engineering_diagnostics() -> dict[str, object]:
     labeler_model = FEATURE_LABELER_MODEL_PATH or None
     labeler_exists = bool(labeler_model and (Path(labeler_model) / "config.json").exists())
-
     return {
         "feature_engineering_mode": "nli+rules",
         "feature_labeler_model": labeler_model,

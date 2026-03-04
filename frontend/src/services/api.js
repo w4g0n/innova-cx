@@ -152,9 +152,6 @@ export async function submitTextComplaint(text, options = {}) {
   if (options.ticket_type) {
     body.set("ticket_type", options.ticket_type);
   }
-  if (options.asset_type) {
-    body.set("asset_type", options.asset_type);
-  }
   if (typeof options.has_audio === "boolean") {
     body.set("has_audio", String(options.has_audio));
   }

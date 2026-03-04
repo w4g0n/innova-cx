@@ -161,7 +161,6 @@ CREATE TABLE IF NOT EXISTS tickets (
   ticket_type         ticket_type NOT NULL DEFAULT 'Complaint',
   status              ticket_status NOT NULL DEFAULT 'Unassigned',
   priority            ticket_priority NOT NULL DEFAULT 'Medium',
-  asset_type          TEXT NOT NULL DEFAULT 'General',
   department_id       UUID REFERENCES departments(id) ON DELETE SET NULL,
   created_by_user_id  UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   assigned_to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -182,6 +181,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   model_department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
   model_confidence    NUMERIC(5,2),
   model_suggestion    TEXT,
+  ticket_source       TEXT NOT NULL DEFAULT 'user',
   final_resolution    TEXT,
   resolved_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL
 );
@@ -211,7 +211,6 @@ CREATE INDEX IF NOT EXISTS idx_ticket_resolution_feedback_employee
 
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_priority    ON tickets(priority);
-CREATE INDEX IF NOT EXISTS idx_tickets_asset_type  ON tickets(asset_type);
 CREATE INDEX IF NOT EXISTS idx_tickets_created_at  ON tickets(created_at);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee    ON tickets(assigned_to_user_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_creator     ON tickets(created_by_user_id);
@@ -496,6 +495,10 @@ CREATE TABLE IF NOT EXISTS approval_requests (
   requested_value      TEXT NOT NULL,
   request_reason       TEXT,
   submitted_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  source               TEXT NOT NULL DEFAULT 'employee',
+  requested_to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  model_name           TEXT,
+  model_confidence     NUMERIC(5,4),
   submitted_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   status               approval_status NOT NULL DEFAULT 'Pending',
   decided_by_user_id   UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -505,6 +508,21 @@ CREATE TABLE IF NOT EXISTS approval_requests (
 
 CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(status);
 CREATE INDEX IF NOT EXISTS idx_approval_requests_ticket ON approval_requests(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_requested_to ON approval_requests(requested_to_user_id);
+
+CREATE TABLE IF NOT EXISTS department_routing_feedback (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  predicted_department TEXT NOT NULL,
+  approved_department  TEXT NOT NULL,
+  confidence_score     NUMERIC(5,4),
+  model_name           TEXT,
+  approved_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_routing_feedback_predicted ON department_routing_feedback(predicted_department);
+CREATE INDEX IF NOT EXISTS idx_routing_feedback_created_at ON department_routing_feedback(created_at);
 
 -- -------------------------
 -- Auto-notify manager on new approval requests
@@ -534,8 +552,13 @@ BEGIN
   SELECT full_name INTO v_submitter_name
   FROM user_profiles WHERE user_id = NEW.submitted_by_user_id;
 
+  -- Notify targeted manager if set; otherwise notify all active managers.
   FOR v_manager_id IN
-    SELECT id FROM users WHERE role = 'manager' AND is_active = TRUE
+    SELECT id
+    FROM users
+    WHERE role = 'manager'
+      AND is_active = TRUE
+      AND (NEW.requested_to_user_id IS NULL OR id = NEW.requested_to_user_id)
   LOOP
     v_title := CASE NEW.request_type
       WHEN 'Rescoring' THEN 'Rescoring Request — ' || COALESCE(v_ticket_code, 'Unknown')
@@ -838,7 +861,7 @@ WHERE NOT EXISTS (
 
 INSERT INTO departments (name) VALUES
   ('Facilities Management'),
-  ('Legal and Compliance'),
+  ('Legal & Compliance'),
   ('Safety & Security'),
   ('HR'),
   ('Leasing'),
