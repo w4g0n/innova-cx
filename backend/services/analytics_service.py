@@ -304,14 +304,34 @@ def _ensure_analytics_mvs() -> None:
     Called at startup — fixes crashed-and-restarted DB volumes that skipped
     zzz_analytics_mvs.sh on restart (docker-entrypoint-initdb.d only runs once).
     """
+    required_mvs = [
+        "mv_ticket_base",
+        "mv_daily_volume",
+        "mv_employee_daily",
+        "mv_acceptance_daily",
+        "mv_operator_qc_daily",
+        "mv_chatbot_daily",
+        "mv_sentiment_daily",
+        "mv_feature_daily",
+    ]
     try:
-        row = _fetch_one(
+        fn_row = _fetch_one(
             "SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
             "WHERE n.nspname='public' AND p.proname='refresh_analytics_mvs'"
         )
-        if row:
-            return  # already installed — fast path
-        logger.info("_ensure_analytics_mvs | refresh_analytics_mvs() missing — installing MVs now")
+        mv_row = _fetch_one(
+            "SELECT COUNT(*)::int AS cnt FROM pg_matviews "
+            "WHERE schemaname='public' AND matviewname = ANY(%s)",
+            [required_mvs],
+        ) or {}
+        if fn_row and int(mv_row.get("cnt") or 0) == len(required_mvs):
+            return  # full install already present
+        logger.info(
+            "_ensure_analytics_mvs | missing refresh function or incomplete MV set "
+            "(found=%s/%s) — installing",
+            int(mv_row.get("cnt") or 0),
+            len(required_mvs),
+        )
     except Exception:
         logger.info("_ensure_analytics_mvs | cannot check pg_proc — attempting MV install anyway")
 
