@@ -8,11 +8,9 @@ RUN npm ci
 
 # Copy the rest of the frontend code
 COPY . .
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 5173
 
 # Run Vite dev server
-ENTRYPOINT ["docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/app/docker-entrypoint.sh"]
 CMD []
