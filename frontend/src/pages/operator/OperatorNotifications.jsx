@@ -117,7 +117,7 @@ export default function OperatorNotifications() {
       console.error("Failed to mark notification as read:", e);
     }
     if (n.userId)   navigate(`/operator/users`);
-    if (n.reportId) navigate(`/operator/model-analysis`);
+    if (n.reportId) navigate(`/operator/model-health`);
   };
 
   return (

@@ -200,7 +200,7 @@ export default function OperatorDashboard() {
                   </div>
                   <button
                     className="opDash__linkBtn"
-                    onClick={() => navigate("/operator/model-analysis")}
+                    onClick={() => navigate("/operator/model-health")}
                   >
                     View details
                   </button>
