@@ -1,0 +1,25 @@
+{
+  "trained_at": "2026-03-04T13:39:16.684690+00:00",
+  "synthetic_rows": 648,
+  "combinations_formula": "2*2*3*2*3*3*3",
+  "expected_rows": 648,
+  "epochs": 600,
+  "train_set_evaluation": {
+    "accuracy": 1.0,
+    "correct": 648,
+    "total": 648
+  },
+  "feature_order": [
+    "sentiment_score",
+    "issue_severity",
+    "issue_urgency",
+    "business_impact",
+    "safety_concern",
+    "is_recurring",
+    "ticket_type"
+  ],
+  "artifacts": {
+    "model_file": "/Users/mayood/Documents_Local/Study/Uni/Y3/innova-cx/ai-models/MultiAgentPipeline/PrioritzationAgentTraining/output/priority_xgb_model.json",
+    "synthetic_csv": "/Users/mayood/Documents_Local/Study/Uni/Y3/innova-cx/ai-models/MultiAgentPipeline/PrioritzationAgentTraining/output/synthetic_training_data.csv"
+  }
+}
