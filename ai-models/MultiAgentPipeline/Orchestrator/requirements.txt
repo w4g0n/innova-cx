@@ -8,10 +8,9 @@ pydantic==2.10.4
 python-multipart==0.0.20
 dspy-ai==2.5.41
 numpy
-scikit-fuzzy
-networkx
 joblib
 scikit-learn
 torch
 transformers
+xgboost
 psycopg2-binary==2.9.9

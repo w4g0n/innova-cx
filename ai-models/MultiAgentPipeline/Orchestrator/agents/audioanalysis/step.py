@@ -4,7 +4,8 @@ Step 4 — Audio Analysis
 Runs local audio sentiment extraction from provided audio features.
 Only runs when audio was provided and the complaint path is active.
 
-For text-only inputs, audio_sentiment defaults to 0.0 (neutral).
+For text-only inputs, this step marks the ticket as no-audio and leaves
+sentiment combination to text-only logic.
 """
 
 import logging
@@ -22,8 +23,9 @@ _analyzer = AudioSentimentAnalyzer()
 
 async def analyze_audio(state: dict) -> dict:
     has_audio_ticket = bool(state.get("has_audio")) or bool(state.get("audio_features"))
+    state["has_audio"] = has_audio_ticket
     if state["label"] != "complaint" or not has_audio_ticket:
-        state["audio_sentiment"] = 0.0
+        state["audio_sentiment"] = None
         state["combined_sentiment"] = state.get("text_sentiment", 0.0)
         logger.info(
             "audio_analysis | skipped (label=%s has_audio=%s)",
