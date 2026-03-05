@@ -4209,7 +4209,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     cur,
                     created_by_user_id=str(row["id"]),
                     ticket_type=ticket_type or "Complaint",
-                    subject=(body.subject or body.transcript or "")[:120].strip() or "Customer submission",
+                    subject=(body.transcript or "")[:120].strip() or "Customer submission",
                     details=body.transcript or "",
                     priority=priority_label or "Low",
                     status=normalized_status or "Open",
