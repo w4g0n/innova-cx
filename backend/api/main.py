@@ -4156,7 +4156,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                    "Set SYSTEM_USER_EMAIL to a valid user.",
         )
 
-    system_user_id = row["id"]
     incoming_ticket_code = (body.ticket_id or "").strip() or None
 
     priority_map = {1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
