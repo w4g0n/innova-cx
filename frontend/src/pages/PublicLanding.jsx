@@ -40,7 +40,6 @@ export default function PublicLanding() {
       {/* ─── HERO ─────────────────────────────────────────────── */}
       <section
         className="pl-hero"
-        style={{ backgroundImage: `url(${dccBg})` }}
       >
         <div className="pl-hero-overlay" />
 

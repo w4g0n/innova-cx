@@ -249,23 +249,6 @@ export default function CustomerHistory() {
                         <PriorityPill priority={item.priority} />
                       </div>
                     </div>
-
-                    {/* ── Friendly priority context ── */}
-                    <div
-                      className="historyPriorityContext"
-                      style={{ background: ctx.bg, borderColor: ctx.border }}
-                    >
-                      <span className="historyPriorityCtxIcon">{ctx.icon}</span>
-                      <div>
-                        <div
-                          className="historyPriorityCtxHeadline"
-                          style={{ color: ctx.color }}
-                        >
-                          {ctx.headline}
-                        </div>
-                        <p className="historyPriorityCtxReason">{ctx.reason}</p>
-                      </div>
-                    </div>
                   </div>
 
                   <div className="historyCardRight">

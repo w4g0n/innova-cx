@@ -251,52 +251,6 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
       <form className="custFormCard" onSubmit={submit}>
         <div className="custFormGrid">
           <div className="custField custField--span2">
-            <div className="custTwoPillsRow">
-              <div className="custTwoPillsItem">
-                <label className="custLabel">Ticket Type (optional)</label>
-                <div className="custPillHolder">
-                  <PillSelect
-                    value={type}
-                    onChange={setType}
-                    ariaLabel="Select request type"
-                    options={[
-                      { value: "Auto", label: "Auto" },
-                      { value: "Complaint", label: "Complaint" },
-                      { value: "Inquiry", label: "Inquiry" },
-                    ]}
-                  />
-                </div>
-              </div>
-
-              <div className="custTwoPillsItem">
-                <label className="custLabel">Unit Type</label>
-                <div className="custPillHolder">
-                  <PillSelect
-                    value={assetType}
-                    onChange={setAssetType}
-                    ariaLabel="Select unit type"
-                    options={[
-                      { value: "Office", label: "Office" },
-                      { value: "Warehouse", label: "Warehouse" },
-                      { value: "Retail Store", label: "Retail Store" },
-                    ]}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="custField custField--span2">
-            <label className="custLabel">Subject (optional)</label>
-            <input
-              className="custInput"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Optional short summary (e.g., Access card not working)"
-            />
-          </div>
-
-          <div className="custField custField--span2">
             <label className="custLabel">Input Method</label>
             <div className="custModeRow">
               <button

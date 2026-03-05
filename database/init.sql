@@ -3583,3 +3583,117 @@ WHERE NOT EXISTS (
 SELECT analytics.refresh_all_materialized_views();
 
 COMMIT;
+
+
+-- =============================================================================
+-- OPERATOR DASHBOARD SUMMARY SUPPORT
+-- Add these statements to init.sql (safe for re-runs — uses IF NOT EXISTS).
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 1. model_metrics  — one row per model inference / API call
+--    latency_ms  : response time in milliseconds
+--    is_error    : TRUE when the call resulted in an error
+--    created_at  : timestamp of the event
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS model_metrics (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  model_name  TEXT        NOT NULL DEFAULT 'default',
+  latency_ms  NUMERIC(10,2) NOT NULL,
+  is_error    BOOLEAN     NOT NULL DEFAULT FALSE,
+  metadata    JSONB,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_metrics_created_at
+  ON model_metrics (created_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- 2. drift_events  — one row each time drift is detected by any model
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS drift_events (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  model_name  TEXT        NOT NULL DEFAULT 'default',
+  drift_score NUMERIC(6,4),
+  description TEXT,
+  detected_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_drift_events_detected_at
+  ON drift_events (detected_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- 3. qc_reviews  — one row per quality-control review ticket
+--    status             : 'pending' | 'approved' | 'rejected'
+--    flagged            : TRUE when the ticket was flagged for attention
+--    reviewed_at        : when a reviewer completed the review (nullable)
+--    review_duration_sec: pre-computed duration; takes precedence over
+--                         (reviewed_at - created_at) if set
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS qc_reviews (
+  id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id           UUID        REFERENCES tickets(id) ON DELETE SET NULL,
+  reviewer_user_id    UUID        REFERENCES users(id)   ON DELETE SET NULL,
+  status              TEXT        NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending', 'approved', 'rejected')),
+  flagged             BOOLEAN     NOT NULL DEFAULT FALSE,
+  review_duration_sec INTEGER,          -- optional pre-computed field
+  reviewed_at         TIMESTAMPTZ,      -- NULL until review is completed
+  notes               TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_qc_reviews_status
+  ON qc_reviews (status);
+
+CREATE INDEX IF NOT EXISTS idx_qc_reviews_created_at
+  ON qc_reviews (created_at DESC);
+
+-- Keep updated_at current automatically
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$ BEGIN
+  CREATE TRIGGER trg_qc_reviews_updated_at
+  BEFORE UPDATE ON qc_reviews
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ---------------------------------------------------------------------------
+-- 4. Convenience VIEW (optional but helpful for debugging)
+--    Returns the same four model-health metrics the API endpoint computes.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE VIEW v_model_health_summary AS
+WITH mh AS (
+  SELECT
+    COALESCE(AVG(latency_ms), 0)                                    AS avg_latency_ms,
+    COALESCE(
+      SUM(CASE WHEN is_error THEN 1 ELSE 0 END)::numeric
+      / NULLIF(COUNT(*), 0) * 100,
+      0
+    )                                                               AS error_rate_pct,
+    COUNT(*) > 0                                                    AS has_data
+  FROM model_metrics
+  WHERE created_at >= now() - interval '1 hour'
+),
+drift AS (
+  SELECT COUNT(*) > 0 AS drift_detected
+  FROM drift_events
+  WHERE detected_at >= now() - interval '24 hours'
+)
+SELECT
+  CASE
+    WHEN mh.error_rate_pct > 3  OR mh.avg_latency_ms > 1500 THEN 'Critical'
+    WHEN mh.error_rate_pct >= 1 OR mh.avg_latency_ms >= 800  THEN 'Degraded'
+    ELSE 'Healthy'
+  END                                   AS status,
+  ROUND(mh.avg_latency_ms::numeric, 1)  AS avg_latency_ms,
+  ROUND(mh.error_rate_pct::numeric, 2)  AS error_rate_pct,
+  drift.drift_detected
+FROM mh, drift;

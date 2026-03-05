@@ -23,6 +23,17 @@
   color: var(--au-text);
   overflow-x: hidden;
   min-height: 100vh;
+  position: relative;
+  z-index: 0;
+}
+
+.au-nav,
+.au-hero-content,
+.au-section,
+.au-cta-banner,
+.au-footer {
+  position: relative;
+  z-index: 1;
 }
 
 /* ── Animations ── */
@@ -115,33 +126,29 @@
 }
 
 .au-blob {
-  position: absolute;
+  position: fixed;
   border-radius: 50%;
   filter: blur(80px);
-  opacity: 0.35;
+  opacity: 0.28;
   animation: blobFloat 12s ease-in-out infinite;
   pointer-events: none;
+  z-index: 0;
 }
 .au-blob-1 {
-  width: 600px; height: 600px;
+  width: 700px; height: 700px;
   background: radial-gradient(circle, #5a2970, #401c51);
-  top: -160px; left: -180px;
+  top: -200px; left: -200px;
   animation-duration: 14s;
-  transition: transform 0.4s ease-out;
 }
 .au-blob-2 {
-  width: 480px; height: 480px;
+  width: 560px; height: 560px;
   background: radial-gradient(circle, #c084fc, #7c3aed);
-  bottom: -80px; right: -120px;
+  bottom: -100px; right: -140px;
   animation-duration: 10s;
-  transition: transform 0.4s ease-out;
+  animation-delay: -5s;
 }
 .au-blob-3 {
-  width: 320px; height: 320px;
-  background: radial-gradient(circle, #f0b429, #e06c1e);
-  top: 40%; left: 50%;
-  opacity: 0.12;
-  animation-duration: 18s;
+  display: none;
 }
 
 .au-hero-content {
@@ -302,7 +309,6 @@
   grid-template-columns: 1fr 1fr;
   gap: 80px;
   align-items: center;
-  background: var(--au-surface);
   border-top: 1px solid var(--au-border);
   border-bottom: 1px solid var(--au-border);
 }
@@ -371,7 +377,6 @@
    ── Model Pipeline (Swimlane redesign) ──
    ══════════════════════════════════════════════ */
 .au-pipeline-section {
-  background: #0b0414;
   border-top: 1px solid var(--au-border);
   border-bottom: 1px solid var(--au-border);
 }
@@ -978,6 +983,7 @@
    ── Stats ──
    ══════════════════════════════════════════════ */
 .au-stats-section {
+  margin-top: 40px;
   background: var(--au-bg);
   text-align: center;
 }
@@ -1028,7 +1034,6 @@
 
 /* ── Features ── */
 .au-features-section {
-  background: var(--au-surface);
   border-top: 1px solid var(--au-border);
   border-bottom: 1px solid var(--au-border);
 }
@@ -1122,7 +1127,7 @@
 
 /* ── ROI ── */
 .au-roi-section {
-  background: var(--au-bg);
+  border-top: 1px solid var(--au-border);
 }
 
 .au-roi-inner {
@@ -1221,7 +1226,6 @@
 
 /* ── Team ── */
 .au-team-section {
-  background: var(--au-surface);
   border-top: 1px solid var(--au-border);
 }
 

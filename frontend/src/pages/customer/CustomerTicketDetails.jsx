@@ -203,58 +203,68 @@ export default function CustomerTicketDetails() {
 
             <section className="ctd-card">
               <div className="ctd-section-label">Updates</div>
+
+              {/* ── Status Pipeline Tracker ── */}
               <div className="ctd-pipeline-wrap">
-                <div className="ctd-pipeline-header">
-                  <div>
-                    <div className="ctd-pipeline-eyebrow">AI Processing Stage</div>
-                    <div className="ctd-pipeline-current-label">{currentAiStage}</div>
-                  </div>
-                  <div className="ctd-pipeline-fraction">
-                    <span className="ctd-pipeline-fraction-num">{currentAiStageIndex + 1}</span>
-                    <span className="ctd-pipeline-fraction-sep">/</span>
-                    <span className="ctd-pipeline-fraction-total">{AI_PIPELINE_STAGES.length}</span>
-                  </div>
-                </div>
+                {(() => {
+                  const STATUS_STAGES = [
+                    { id: "open",       label: "Opened" },
+                    { id: "inprogress", label: "In Progress" },
+                    { id: "assigned",   label: "Assigned" },
+                    { id: "overdue",    label: "Overdue" },
+                    { id: "escalated",  label: "Escalated" },
+                    { id: "resolved",   label: "Resolved" },
+                  ];
 
-                <div className="ctd-progress-track">
-                  <div className="ctd-progress-fill" style={{ width: `${aiProgress}%` }} />
-                </div>
+                  const normalise = (s) => String(s || "").toLowerCase().replace(/\s+/g, "");
+                  const currentKey = normalise(ticket.status);
 
-                <div className="ctd-stage-dots">
-                  {AI_PIPELINE_STAGES.map((stage, idx) => (
-                    <div
-                      key={stage.id}
-                      className={`ctd-stage-dot-wrap ${idx < currentAiStageIndex ? "done" : ""} ${idx === currentAiStageIndex ? "current" : ""}`}
-                    >
-                      <div className={`ctd-stage-dot ${idx < currentAiStageIndex ? "done" : ""} ${idx === currentAiStageIndex ? "current" : ""}`}>
-                        {idx < currentAiStageIndex && <span className="ctd-dot-check">✓</span>}
-                        {idx === currentAiStageIndex && <span className="ctd-dot-pulse" />}
+                  // Map ticket status → stage index
+                  const keyToIdx = {
+                    open: 0, inprogress: 1, assigned: 2,
+                    overdue: 3, escalated: 4, resolved: 5,
+                  };
+                  const currentIdx = keyToIdx[currentKey] ?? 0;
+                  const progress = Math.round((currentIdx / (STATUS_STAGES.length - 1)) * 100);
+
+                  return (
+                    <>
+                      <div className="ctd-pipeline-header">
+                        <div>
+                          <div className="ctd-pipeline-eyebrow">Ticket Status</div>
+                          <div className="ctd-pipeline-current-label">{STATUS_STAGES[currentIdx].label}</div>
+                        </div>
+                        <div className="ctd-pipeline-fraction">
+                          <span className="ctd-pipeline-fraction-num">{currentIdx + 1}</span>
+                          <span className="ctd-pipeline-fraction-sep">/</span>
+                          <span className="ctd-pipeline-fraction-total">{STATUS_STAGES.length}</span>
+                        </div>
                       </div>
-                      <div className={`ctd-stage-dot-label ${idx === currentAiStageIndex ? "active" : ""}`}>
-                        {stage.label}
-                        {stage.conditional && <span className="ctd-dot-cond">Conditional</span>}
-                        {idx === currentAiStageIndex && <span className="ctd-dot-cond">You are here</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
 
-                <div className="ctd-stage-cards">
-                  <div className="ctd-stage-card ctd-stage-card--current">
-                    <div className="ctd-stage-card-eyebrow">Current Stage</div>
-                    <div className="ctd-stage-card-title">{currentAiStageObj.label}</div>
-                    <p className="ctd-stage-card-text">{currentAiStageObj.explain}</p>
-                  </div>
-                  <div className="ctd-stage-card ctd-stage-card--next">
-                    <div className="ctd-stage-card-eyebrow">What Happens Next</div>
-                    <div className="ctd-stage-card-title">{nextAiStageObj ? nextAiStageObj.label : "Pipeline complete"}</div>
-                    <p className="ctd-stage-card-text">
-                      {nextAiStageObj
-                        ? nextAiStageObj.explain
-                        : "AI processing is complete. The ticket now relies on final outcome and feedback updates."}
-                    </p>
-                  </div>
-                </div>
+                      <div className="ctd-progress-track">
+                        <div className="ctd-progress-fill" style={{ width: `${progress}%` }} />
+                      </div>
+
+                      <div className="ctd-stage-dots">
+                        {STATUS_STAGES.map((stage, idx) => (
+                          <div
+                            key={stage.id}
+                            className={`ctd-stage-dot-wrap ${idx < currentIdx ? "done" : ""} ${idx === currentIdx ? "current" : ""}`}
+                          >
+                            <div className={`ctd-stage-dot ${idx < currentIdx ? "done" : ""} ${idx === currentIdx ? "current" : ""}`}>
+                              {idx < currentIdx && <span className="ctd-dot-check">✓</span>}
+                              {idx === currentIdx && <span className="ctd-dot-pulse" />}
+                            </div>
+                            <div className={`ctd-stage-dot-label ${idx === currentIdx ? "active" : ""}`}>
+                              {stage.label}
+                              {idx === currentIdx && <span className="ctd-dot-cond">Current</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="ctd-divider ctd-divider--updates" />
