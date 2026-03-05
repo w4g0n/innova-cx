@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,7 @@ def _template_response(messages: list[dict]) -> str:
         if role == "system":
             system_msg = content
         elif role == "user":
-            pass
+            user_msg = content  # last user message
 
     # If system prompt contains KB context, use it as the answer
     if "Context:" in system_msg:

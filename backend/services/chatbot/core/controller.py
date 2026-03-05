@@ -1,6 +1,6 @@
 import re
 from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression
-from .llm import generate_response
+from .llm import generate_response, llm_available
 from .logger import log_bot_response, log_user_message
 from .retriever import retrieve_context
 from .session import append_history, load_session, save_session, transition
