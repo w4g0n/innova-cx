@@ -27,11 +27,10 @@ def create_ticket(
     api_base = os.environ.get("BACKEND_API_URL", "http://backend:8000")
     local_fallback = os.environ.get("BACKEND_API_URL_LOCAL", "http://localhost:8000")
     payload = {
-        "subject": title,
-        "transcript": description,
-        "label": category,
-        "status": "Open",
         "created_by_user_id": user_id,
+        "ticket_type": category,
+        "subject": title,
+        "details": description,
         "ticket_source": "chatbot",
     }
     payload_bytes = json.dumps(payload).encode("utf-8")
@@ -40,7 +39,7 @@ def create_ticket(
     last_error = None
     for base in (api_base, local_fallback):
         req = urllib.request.Request(
-            f"{base}/api/complaints",
+            f"{base}/api/internal/tickets/create",
             data=payload_bytes,
             headers=headers,
             method="POST",

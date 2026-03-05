@@ -58,6 +58,43 @@ class PriorityRelearnRequest(BaseModel):
     retrain_now: bool = False
 
 
+def _mock_department_from_text(text: str) -> str:
+    t = (text or "").lower()
+    if any(k in t for k in ("wifi", "network", "internet", "server", "system", "software", "login")):
+        return "IT"
+    if any(k in t for k in ("leak", "pipe", "water", "ac", "air conditioning", "maintenance", "electrical", "power")):
+        return "Maintenance"
+    if any(k in t for k in ("fire", "unsafe", "hazard", "security", "alarm", "theft", "emergency")):
+        return "Safety & Security"
+    if any(k in t for k in ("contract", "legal", "policy", "compliance", "regulation", "law")):
+        return "Legal & Compliance"
+    if any(k in t for k in ("lease", "tenant", "rent", "handover", "move in")):
+        return "Leasing"
+    if any(k in t for k in ("hr", "salary", "leave", "employee", "staff")):
+        return "HR"
+    return "Facilities Management"
+
+
+async def _post_mock_fallback_update(ticket_id: str, text: str, subject: str | None, selected_type: str | None) -> dict:
+    label = selected_type if selected_type in {"complaint", "inquiry"} else "complaint"
+    payload = {
+        "ticket_id": ticket_id,
+        "subject": subject.strip() if subject else None,
+        "transcript": text.strip(),
+        "label": label,
+        "status": "Assigned",
+        "priority": 2,
+        "department": _mock_department_from_text(text),
+        "sentiment": 0.0,
+        "classification_confidence": 0.35,
+        "routing_model": "mock_fallback",
+    }
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post(f"{BACKEND_URL}/api/complaints", json=payload)
+        response.raise_for_status()
+        return response.json() if response.content else {}
+
+
 # ---------------------------------------------------------------------------
 # Startup — ensure logging tables exist (if db module is available)
 # ---------------------------------------------------------------------------
@@ -192,6 +229,8 @@ async def process_text(
     ticket_id: str | None = Form(default=None),
     subject: str | None = Form(default=None),
     ticket_type: str | None = Form(default=None),
+    created_by_user_id: str | None = Form(default=None),
+    ticket_source: str | None = Form(default=None),
     has_audio: bool | None = Form(default=None),
     audio_features: str | None = Form(default=None),
 ):
@@ -222,6 +261,8 @@ async def process_text(
         "subject": subject.strip() if subject else None,
         "label": selected_type if selected_type in {"complaint", "inquiry"} else "complaint",
         "status": "Open",
+        "created_by_user_id": created_by_user_id.strip() if created_by_user_id else None,
+        "ticket_source": ticket_source.strip() if ticket_source else None,
     }
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -257,7 +298,32 @@ async def process_text(
     }
 
     execution_id = state["_execution_id"]
-    result = await pipeline.ainvoke(state)
+    try:
+        result = await pipeline.ainvoke(state)
+    except Exception as exc:
+        logger.exception("pipeline_failed | ticket_id=%s err=%s", ticket_id, exc)
+        fallback = await _post_mock_fallback_update(
+            ticket_id=ticket_id,
+            text=text,
+            subject=subject,
+            selected_type=selected_type,
+        )
+        priority_label = str(fallback.get("priority") or "Medium").strip().lower()
+        score_map = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+        result = {
+            "ticket_id": fallback.get("ticket_id", ticket_id),
+            "label": selected_type if selected_type in {"complaint", "inquiry"} else "complaint",
+            "status": fallback.get("status", "Assigned"),
+            "department": fallback.get("department"),
+            "priority_label": priority_label,
+            "priority_score": score_map.get(priority_label, 2),
+            "text_sentiment": 0.0,
+            "class_confidence": 0.35,
+            "priority_assigned_at": fallback.get("priority_assigned_at"),
+            "respond_due_at": fallback.get("respond_due_at"),
+            "resolve_due_at": fallback.get("resolve_due_at"),
+            "pipeline_mode": "mock_fallback",
+        }
     if result.get("label") == "inquiry":
         logger.info(
             "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f "
