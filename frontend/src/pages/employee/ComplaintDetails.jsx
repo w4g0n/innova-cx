@@ -153,19 +153,13 @@ function TicketModal({
             <div className="modal-confirm-row">
               <span className="modal-confirm-label">Resolution Decision</span>
               <span className="modal-confirm-value">
-                {resolveDecision === "accepted" ? "AI Suggestion Accepted" : "Custom Resolution"}
+                {resolveReviewAction === "accepted" ? "AI Suggestion Accepted" : "Custom Resolution"}
               </span>
             </div>
             <div className="modal-confirm-row">
               <span className="modal-confirm-label">Final Resolution</span>
               <span className="modal-confirm-value modal-confirm-reason">{finalResolution || "—"}</span>
             </div>
-            {stepsTaken.trim() && (
-              <div className="modal-confirm-row">
-                <span className="modal-confirm-label">Steps Taken</span>
-                <span className="modal-confirm-value modal-confirm-reason">{stepsTaken}</span>
-              </div>
-            )}
             {resolveFiles.length > 0 && (
               <div className="modal-confirm-row">
                 <span className="modal-confirm-label">Attachments</span>
@@ -517,8 +511,8 @@ function TicketModal({
                     return;
                   }
                   if (type === "resolve") {
-                    if (resolveDecision === "declined_custom" && !finalResolution.trim()) {
-                      setResolveError("Final Resolution is required when declining suggestion.");
+                    if (resolveReviewAction !== "accepted" && !finalResolution.trim()) {
+                      setResolveError("Please provide an edited final resolution.");
                       return;
                     }
                     setResolveError("");
