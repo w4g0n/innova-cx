@@ -1,357 +1,283 @@
-/* ================================================
-   OperatorDashboard — system monitoring view
-   ================================================ */
-
+/* ===== Wrapper ===== */
 .opDash {
   width: 100%;
-  max-width: none;
-  font-size: 14px;
-  animation: fadeUp 0.4s var(--ease-out) both;
+  display: flex;
+  flex-direction: column;
 }
 
-/* ---- Header actions slot ---- */
-.opDash__topActions {
+/* ===== KPI row — 5 cards ===== */
+.opDash__kpiRow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+  margin-bottom: 18px;
+}
+
+/* ===== Body: nav panel left + module cards right ===== */
+.opDash__body {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+/* ===== Navigate panel ===== */
+.opDash__navPanel {
+  background: #1a1025;
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.opDash__navHeader {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  justify-content: space-between;
 }
 
-.opDash__selectWrap {
-  min-width: 200px;
-}
-
-/* ---- Cards row (2-column grid) ---- */
-.opDash__cardsRow {
-  display: grid;
-  grid-template-columns: 1.6fr 1fr;
-  gap: 16px;
-  margin-top: 20px;
-}
-
-/* ---- Individual card ---- */
-.opDash__card {
-  background: #ffffff;
-  border-radius: var(--radius-lg);
-  padding: 20px 22px;
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  box-shadow: 0 6px 18px rgba(64, 28, 81, 0.07);
-}
-
-.opDash__card--full {
-  margin-top: 16px;
-}
-
-.opDash__cardTitle {
+.opDash__navTitle {
   font-family: var(--font-heading);
   font-size: 16px;
   font-weight: 800;
-  margin: 0;
-  color: var(--text-dark);
+  color: #ffffff;
 }
 
-.opDash__cardSubtitle {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: rgba(17, 17, 17, 0.55);
-}
-
-/* ---- Core Services status grid ---- */
-.opDash__statusGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.opDash__statusItem {
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-  background: rgba(64, 28, 81, 0.04);
-  border: 1px solid rgba(64, 28, 81, 0.10);
-}
-
-.opDash__statusLabel {
-  font-weight: 700;
-  font-size: 13px;
-  margin-bottom: 6px;
-  color: var(--text-dark);
-}
-
-.opDash__statusNote {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: rgba(17, 17, 17, 0.60);
-}
-
-/* ---- Status pills ---- */
-.opDash__statusPill {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 11px;
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-  font-weight: 700;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.opDash__status--ok       { background: rgba(46, 204, 113, 0.16); color: #1f7a45; }
-.opDash__status--warning  { background: rgba(241, 196,  15, 0.18); color: #8a6d00; }
-.opDash__status--critical { background: rgba(231,  76,  60, 0.16); color: #a7372b; }
-
-/* ---- Mini KPI — Error/Fallback card ---- */
-.opDash__miniKpiCol {
-  margin-top: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.opDash__miniKpi {
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  border-radius: var(--radius-md);
-  padding: 14px;
-}
-
-.opDash__miniKpiLabel {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(17, 17, 17, 0.60);
-}
-
-.opDash__miniKpiValue {
-  display: block;
-  margin-top: 6px;
-  font-size: 22px;
-  font-weight: 900;
-  color: var(--text-dark);
-  font-family: var(--font-heading);
-}
-
-.opDash__miniKpiTrend {
-  display: inline-block;
-  margin-top: 6px;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: var(--radius-pill);
-}
-
-.opDash__miniKpiTrend--normal   { background: rgba(46, 204, 113, 0.16); color: #1f7a45; }
-.opDash__miniKpiTrend--critical { background: rgba(231,  76,  60, 0.16); color: #a7372b; }
-
-/* ---- Generic list (integrations + versions) ---- */
-.opDash__list {
-  list-style: none;
-  padding: 0;
-  margin: 14px 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.opDash__listItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.opDash__itemName {
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--text-dark);
-}
-
-.opDash__itemMeta {
-  margin-top: 4px;
-  font-size: 12px;
-  color: rgba(17, 17, 17, 0.55);
-}
-
-/* ---- Queue health grid ---- */
-.opDash__queueGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.opDash__queueItem {
-  padding: 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.opDash__queueLabel {
-  font-weight: 700;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: rgba(17, 17, 17, 0.55);
-}
-
-.opDash__queueValue {
-  margin-top: 8px;
-  font-size: 22px;
-  font-weight: 900;
-  color: var(--text-dark);
-  font-family: var(--font-heading);
-}
-
-.opDash__queueNote {
-  margin-top: 6px;
-  font-size: 12px;
-  color: rgba(17, 17, 17, 0.60);
-}
-
-.opDash__queueNote--warning {
-  color: #8a6d00;
-  font-weight: 700;
-}
-
-/* ---- Incident & Event Feed ---- */
-.opDash__eventFeed {
-  list-style: none;
-  padding: 0;
-  margin: 16px 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.opDash__eventItem {
-  display: flex;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: var(--radius-md);
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.opDash__eventDot {
-  width: 8px;
-  height: 8px;
+.opDash__navBadge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  margin-top: 5px;
+  padding: 3px 10px;
+}
+
+.opDash__navList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opDash__navItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  text-decoration: none;
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.17s, border-color 0.17s, transform 0.15s;
+}
+.opDash__navItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  transform: translateX(2px);
+}
+
+/* Left color bar */
+.opDash__navAccent {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+}
+
+.opDash__navIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
   flex-shrink: 0;
 }
 
-.opDash__event--critical .opDash__eventDot { background: #dc2626; }
-.opDash__event--warning  .opDash__eventDot { background: #f59e0b; }
-.opDash__event--info     .opDash__eventDot { background: var(--btn-primary); }
-
-.opDash__eventContent { flex: 1; }
-
-.opDash__eventHeader {
+.opDash__navText {
+  flex: 1;
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.opDash__navItemTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opDash__navItemDesc {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opDash__navArrow {
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.opDash__navItem:hover .opDash__navArrow {
+  opacity: 1;
+  transform: translate(1px, -1px);
+}
+
+/* ===== Module cards column (right side, 3 stacked) ===== */
+.opDash__moduleCol {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
-.opDash__eventTitle {
-  font-size: 13px;
-  font-weight: 700;
+.opDash__moduleCard {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  box-shadow: 0 3px 14px rgba(64, 28, 81, 0.07);
+  text-decoration: none;
   color: var(--text-dark);
-}
-
-.opDash__eventTime {
-  font-size: 12px;
-  color: rgba(17, 17, 17, 0.50);
-  white-space: nowrap;
-}
-
-.opDash__eventDesc {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: rgba(17, 17, 17, 0.60);
-}
-
-/* ---- Link button (AI versions "View details") ---- */
-.opDash__linkBtn {
-  border: 1px solid rgba(89, 36, 180, 0.18);
-  background: rgba(89, 36, 180, 0.07);
-  color: var(--btn-primary);
-  font-weight: 700;
-  cursor: pointer;
-  padding: 7px 13px;
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-  font-family: inherit;
-  white-space: nowrap;
-  transition: background var(--dur-fast);
-}
-
-.opDash__linkBtn:hover {
-  background: rgba(89, 36, 180, 0.13);
-}
-
-/* ---- Safety & Maintenance ---- */
-.opDash__safetyList {
-  list-style: none;
-  padding: 0;
-  margin: 14px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.17s var(--ease-out), box-shadow 0.17s;
+}
+.opDash__moduleCard::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--btn-primary), rgba(155, 113, 163, 0.4));
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.opDash__moduleCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(64, 28, 81, 0.12);
 }
 
-.opDash__safetyItem {
+.opDash__moduleTop {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 14px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  justify-content: space-between;
+  margin-bottom: 1px;
 }
 
-.opDash__safetyLabel {
-  font-size: 13px;
+.opDash__moduleTag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: rgba(17, 17, 17, 0.40);
+}
+
+.opDash__moduleArrow {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--btn-primary);
+  opacity: 0.45;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.opDash__moduleCard:hover .opDash__moduleArrow {
+  opacity: 1;
+  transform: translateX(3px);
+}
+
+.opDash__moduleTitle {
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--btn-primary);
+  line-height: 1.2;
+}
+
+.opDash__moduleDesc {
+  font-size: 12px;
+  color: rgba(17, 17, 17, 0.50);
+  line-height: 1.4;
+}
+
+.opDash__moduleDivider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+  margin: 8px 0 6px;
+}
+
+.opDash__moduleStats {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+}
+
+.opDash__moduleStat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.opDash__moduleStatLabel {
+  font-size: 11px;
   font-weight: 600;
+  color: rgba(17, 17, 17, 0.50);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.opDash__moduleStatValue {
+  font-size: 15px;
+  font-weight: 900;
   color: var(--text-dark);
 }
 
-.opDash__configPill {
-  padding: 4px 11px;
-  border-radius: var(--radius-pill);
-  background: rgba(89, 36, 180, 0.09);
-  border: 1px solid rgba(89, 36, 180, 0.18);
-  color: var(--btn-primary);
+.opDash__moduleLoading {
   font-size: 12px;
-  font-weight: 700;
+  color: rgba(17, 17, 17, 0.35);
+  padding: 4px 0;
 }
 
-/* ================================================
-   Responsive
-   ================================================ */
-@media (max-width: 1000px) {
-  .opDash__cardsRow {
-    grid-template-columns: 1fr;
-  }
+/* ── Status dot ── */
+.opDash__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
+.opDash__dot--green { background: #22c55e; }
+.opDash__dot--red   { background: #ef4444; }
 
+/* ===== Responsive ===== */
+@media (max-width: 1100px) {
+  .opDash__kpiRow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .opDash__body   { grid-template-columns: 1fr; }
+  .opDash__moduleCol { flex-direction: row; flex-wrap: wrap; }
+  .opDash__moduleCard { flex: 1 1 280px; }
+}
 @media (max-width: 700px) {
-  .opDash__statusGrid,
-  .opDash__queueGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .opDash__topActions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .opDash__selectWrap {
-    min-width: 100%;
-  }
+  .opDash__kpiRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .opDash__moduleStats { flex-direction: column; }
 }
