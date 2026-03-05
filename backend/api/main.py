@@ -1027,6 +1027,25 @@ def reset_password(body: ResetPasswordRequest):
 
     return {"ok": True, "message": "Password updated successfully"}
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+@api.post("/auth/change-password")
+def change_password(
+    body: ChangePasswordRequest,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=422, detail="New password must be at least 8 characters.")
+    if len(body.new_password) > 128:
+        raise HTTPException(status_code=422, detail="Password too long.")
+    row = fetch_one("SELECT password_hash FROM users WHERE id = %s", (user["id"],))
+    if not row or not verify_password(body.current_password, row["password_hash"]):
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    execute("UPDATE users SET password_hash = %s WHERE id = %s", (hash_password(body.new_password), user["id"]))
+    return {"ok": True}
+    
 # =========================================================
 # Employee Dashboard (EmployeeDashboard.jsx)
 # =========================================================
@@ -3933,7 +3952,7 @@ def operator_notifications_mark_all_read(
         (user["id"],),
     )
     return {"ok": True}
-    
+
 # =========================================================
 # Internal Orchestrator Endpoint (no JWT — Docker-network only)
 # =========================================================
