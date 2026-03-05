@@ -1,370 +1,356 @@
-import { useEffect, useState, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
-import PillSearch from "../../components/common/PillSearch";
-import PillSelect from "../../components/common/PillSelect";
-import KpiCard from "../../components/common/KpiCard";
-import PriorityPill from "../../components/common/PriorityPill";
-import FilterPillButton from "../../components/common/FilterPillButton";
+import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
+import { getUser, getToken } from "../../utils/auth";
+import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { apiUrl } from "../../config/apiBase";
-import { getToken, authHeader } from "../../utils/auth";
+import novaLogo from "../../assets/nova-logo.png";
 import "./CustomerHistory.css";
 
-/* ─── Friendly priority explanations for customers ─── */
-const PRIORITY_CONTEXT = {
-  Critical: {
-    color: "#dc2626",
-    bg: "rgba(220, 38, 38, 0.07)",
-    border: "rgba(220, 38, 38, 0.18)",
-    icon: "🔴",
-    headline: "Critical Priority",
-    reason:
-      "Our AI detected signs of high urgency or significant distress in your message. Your ticket has been placed at the very top of the queue for immediate attention.",
-  },
-  High: {
-    color: "#ea580c",
-    bg: "rgba(234, 88, 12, 0.07)",
-    border: "rgba(234, 88, 12, 0.18)",
-    icon: "🟠",
-    headline: "High Priority",
-    reason:
-      "Your issue was flagged as important and time-sensitive. Our team will attend to it ahead of standard requests.",
-  },
-  Medium: {
-    color: "#b45309",
-    bg: "rgba(180, 83, 9, 0.07)",
-    border: "rgba(180, 83, 9, 0.18)",
-    icon: "🟡",
-    headline: "Medium Priority",
-    reason:
-      "Your ticket has been placed in the standard queue. Our team is working through cases in order and will get to yours soon.",
-  },
-  Low: {
-    color: "#16a34a",
-    bg: "rgba(22, 163, 74, 0.07)",
-    border: "rgba(22, 163, 74, 0.18)",
-    icon: "🟢",
-    headline: "Low Priority",
-    reason:
-      "Our AI identified this as a routine inquiry. It will be handled once higher-priority tickets are resolved.",
-  },
-};
+const STATUS_KEYS = ["all", "open", "inprogress", "assigned", "resolved", "overdue"];
+const STATUS_LABELS = { all: "All", open: "Open", inprogress: "In Progress", assigned: "Assigned", resolved: "Resolved", overdue: "Overdue"};
 
-function getPriorityContext(priority) {
-  return PRIORITY_CONTEXT[String(priority || "")] || PRIORITY_CONTEXT.Medium;
+function normalizeStatus(s = "") {
+  return s.toLowerCase().replace(/[\s_-]+/g, "");
 }
 
-function formatTicketSource(value) {
-  return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
+function formatTimeAgo(isoString) {
+  if (!isoString) return "";
+  const diff = Math.floor((Date.now() - new Date(isoString)) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(isoString).toLocaleDateString();
 }
 
-const WORKFLOW_STAGES = [
-  { id: "open", label: "Open", owner: "System" },
-  { id: "assigned", label: "Assigned", owner: "Operator" },
-  { id: "in_progress", label: "In Progress", owner: "Employee" },
-  { id: "resolved", label: "Resolved", owner: "Employee" },
-];
-
-function getWorkflowState(status) {
-  const value = String(status || "").trim().toLowerCase();
-  if (value === "resolved") {
-    return { stageIndex: 3, stageLabel: "Resolved", owner: "Employee", note: "Work is complete." };
-  }
-  if (value === "in progress") {
-    return { stageIndex: 2, stageLabel: "In Progress", owner: "Employee", note: "A team member is working on this." };
-  }
-  if (value === "assigned" || value === "escalated") {
-    return { stageIndex: 1, stageLabel: "Assigned", owner: "Operator", note: "Ticket is assigned and queued for action." };
-  }
-  return { stageIndex: 0, stageLabel: "Open", owner: "System", note: "Ticket was received and is pending assignment." };
-}
-
-function getSlaTargets(priority) {
-  const value = String(priority || "").trim().toLowerCase();
-  if (value === "critical") return { minResponse: "15 min", minResolve: "4 hrs" };
-  if (value === "high") return { minResponse: "1 hr", minResolve: "8 hrs" };
-  if (value === "low") return { minResponse: "8 hrs", minResolve: "72 hrs" };
-  return { minResponse: "4 hrs", minResolve: "24 hrs" };
-}
-
-export default function CustomerHistory() {
+export default function CustomerMyTickets() {
   const navigate = useNavigate();
+  const [theme, toggleTheme] = useTheme();
+  const [user] = useState(() => getUser() || {});
+  const profileRef = useRef(null);
+  const notifRef = useRef(null);
 
-  const [query, setQuery] = useState("");
-  const [type, setType] = useState("All");
-  const [status, setStatus] = useState("All");
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [historyItems, setHistoryItems] = useState([]);
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOrder, setSortOrder] = useState("newest"); // newest | oldest
 
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const initials = getInitialsFromEmail(user?.email, "U");
+  const displayName = useMemo(() => {
+    const name = user?.name || user?.full_name || "";
+    if (name) return name.split(" ")[0];
+    const email = (user?.email || "").split("@")[0].replace(/[._\-\d]+/g, " ").trim();
+    if (!email) return "User";
+    return email.split(" ")[0].charAt(0).toUpperCase() + email.split(" ")[0].slice(1);
+  }, [user]);
+
+  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
+
+  // Fetch tickets
   useEffect(() => {
-    const fetchTickets = async () => {
-      const token = getToken();
-      if (!token) return;
-
+    async function load() {
       try {
+        const token = getToken();
         const res = await fetch(apiUrl("/api/customer/mytickets"), {
-          headers: authHeader(),
+          headers: { Authorization: `Bearer ${token}` },
         });
-
-        if (!res.ok) throw new Error("Failed to fetch tickets");
-
+        if (!res.ok) throw new Error("Failed to load tickets.");
         const data = await res.json();
-
-        const mappedTickets = (data.tickets || []).map((t) => ({
-          id: t.ticketId,
-          title: t.subject,
-          type: t.ticketType,
-          source: formatTicketSource(t.ticketSource),
-          status: t.status,
-          date: t.issueDate,
-          priority: t.priority,
-        }));
-
-        setHistoryItems(mappedTickets);
+        setTickets(data.tickets || []);
       } catch (e) {
-        console.error(e);
-        setHistoryItems([]);
+        setError(e.message);
+      } finally {
+        setLoading(false);
       }
-    };
-
-    fetchTickets();
+    }
+    load();
   }, []);
 
-  const counts = useMemo(() => {
-    const total = historyItems.length;
-    const complaints = historyItems.filter((x) => x.type === "Complaint").length;
-    const inquiries = historyItems.filter((x) => x.type === "Inquiry").length;
-    return { total, complaints, inquiries };
-  }, [historyItems]);
+  // Fetch notifications
+  useEffect(() => {
+    async function loadNotifs() {
+      try {
+        const token = getToken();
+        const res = await fetch(apiUrl("/api/customer/notifications"), { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) setNotifications((await res.json()).notifications || []);
+      } catch {}
+    }
+    loadNotifs();
+  }, []);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+  // Click-outside to close popovers
+  useEffect(() => {
+    const handler = (e) => {
+      if (profileRef.current && !profileRef.current.contains(e.target)) setProfileMenuOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
-    return historyItems.filter((item) => {
-      const matchesQuery =
-        !q || item.id.toLowerCase().includes(q) || item.title.toLowerCase().includes(q);
-      const matchesType = type === "All" ? true : item.type === type;
-      const matchesStatus = status === "All" ? true : item.status === status;
-      return matchesQuery && matchesType && matchesStatus;
+  // Filtered + sorted tickets
+  const displayedTickets = useMemo(() => {
+    let list = [...tickets];
+
+    // Filter by status
+    if (filterStatus !== "all") {
+      list = list.filter(t => normalizeStatus(t.status) === filterStatus);
+    }
+
+    // Search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(t =>
+        (t.ticketId || "").toLowerCase().includes(q) ||
+        (t.subject || t.description?.subject || "").toLowerCase().includes(q) ||
+        (t.status || "").toLowerCase().includes(q) ||
+        (t.ticketType || t.type || "").toLowerCase().includes(q)
+      );
+    }
+
+    // Sort by latest (updatedAt or issueDate), default newest first
+    list.sort((a, b) => {
+      const da = new Date(a.updatedAt || a.issueDate || 0);
+      const db = new Date(b.updatedAt || b.issueDate || 0);
+      return sortOrder === "newest" ? db - da : da - db;
     });
-  }, [historyItems, query, type, status]);
 
-  const statusOptions = useMemo(() => {
-    const orderedDefaults = ["Open", "In Progress", "Assigned", "Escalated", "Overdue", "Resolved", "Reopened"];
-    const discovered = Array.from(new Set(historyItems.map((item) => item.status).filter(Boolean)));
-    const merged = [...orderedDefaults, ...discovered.filter((value) => !orderedDefaults.includes(value))];
-    return ["All", ...merged];
-  }, [historyItems]);
+    return list;
+  }, [tickets, filterStatus, searchQuery, sortOrder]);
 
-  const ordered = useMemo(() => {
-    const rank = { Open: 0, "In Progress": 1, Resolved: 2 };
+  const markNotificationsRead = async () => {
+    try {
+      const token = getToken();
+      await fetch(apiUrl("/api/customer/notifications?mark_read=true"), { headers: { Authorization: `Bearer ${token}` } });
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch {}
+  };
 
-    return filtered
-      .map((item, idx) => ({ item, idx }))
-      .sort((a, b) => {
-        const ra = rank[a.item.status] ?? 999;
-        const rb = rank[b.item.status] ?? 999;
-        if (ra !== rb) return ra - rb;
-        return a.idx - b.idx;
-      })
-      .map((x) => x.item);
-  }, [filtered]);
-
-  const clearFilters = () => {
-    setQuery("");
-    setType("All");
-    setStatus("All");
+  const handleLogout = () => { setProfileMenuOpen(false); setShowLogoutConfirm(true); };
+  const confirmLogout = () => {
+    ["user","token","temp_token","access_token"].forEach(k => localStorage.removeItem(k));
+    navigate("/");
   };
 
   return (
-    <Layout role="customer">
-      <div className="custHistory">
-        <PageHeader
-          title="My Tickets"
-          subtitle="Review your inquiries and complaints."
-          actions={
-            <button
-              type="button"
-              className="custBackBtn"
-              onClick={() => navigate("/customer")}
-              aria-label="Back to landing page"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  d="M15 6l-6 6 6 6"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          }
-        />
-
-        <div className="historyKpis">
-          <KpiCard label="Total" value={counts.total} caption="All items" />
-          <KpiCard label="Complaints" value={counts.complaints} caption="Submitted" />
-          <KpiCard label="Inquiries" value={counts.inquiries} caption="Submitted" />
+    <div className="cs-page cmyt-page">
+      {/* TOPBAR */}
+      <header className="cs-topbar">
+        <div className="cs-topbar-left">
+          <img src={novaLogo} alt="InnovaAI" className="cs-topbar-logo" />
+          <div className="cs-topbar-divider" />
+          <span className="cs-topbar-label">My Tickets</span>
         </div>
+        <div className="cs-topbar-right">
+          <ThemeToggleBtn theme={theme} onToggle={toggleTheme} />
 
-        <div className="historyFilters">
-          <PillSearch
-            value={query}
-            onChange={setQuery}
-            placeholder="Search by ID or title..."
-            ariaLabel="Search history"
-            className="historySearch"
-          />
+          {/* Notifications */}
+          <div className="navAction" ref={notifRef}>
+            <button type="button" className={`cl-icon-btn${notifOpen ? " is-active" : ""}`} onClick={() => { setNotifOpen(p => !p); setProfileMenuOpen(false); if (!notifOpen) markNotificationsRead(); }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              {unreadCount > 0 && <span className="notifBadge">{unreadCount > 9 ? "9+" : unreadCount}</span>}
+            </button>
+            {notifOpen && (
+              <div className="navPopover">
+                <div className="navPopoverHeader">Notifications</div>
+                <div className="navPopoverList">
+                  {notifications.length === 0
+                    ? <div className="navPopoverEmpty">No notifications</div>
+                    : notifications.map((n, i) => (
+                      <div key={i} className={`navPopoverItem${n.read ? "" : " unread"}`}>
+                        <div className="navPopoverItemHeader">
+                          <span className="navPopoverItemTitle">{n.title || "Update"}</span>
+                          <span className="navPopoverItemTime">{formatTimeAgo(n.createdAt)}</span>
+                        </div>
+                        <div className="navPopoverItemMeta">{n.message || n.body}</div>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+            )}
+          </div>
 
-          <PillSelect
-            value={type}
-            onChange={setType}
-            ariaLabel="Filter by type"
-            options={["All", "Complaint", "Inquiry"]}
-            minWidth={180}
-          />
+          {/* Profile */}
+          <div className="navAction" ref={profileRef}>
+            <button type="button" className={`cl-avatar-btn${profileMenuOpen ? " is-active" : ""}`} onClick={() => { setProfileMenuOpen(p => !p); setNotifOpen(false); }}>
+              <div className="cl-avatar-initials">{initials}</div>
+              <span className="cl-avatar-name">{displayName}</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{marginLeft:2}}><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            {profileMenuOpen && (
+              <div className="navDropdown">
+                <button type="button" className="navDropdownItem" onClick={() => navigate("/customer/settings")}>Settings</button>
+                <div className="navDropdownDivider" />
+                <button type="button" className="navDropdownItem danger" onClick={handleLogout}>Log out</button>
+              </div>
+            )}
+          </div>
 
-          <PillSelect
-            value={status}
-            onChange={setStatus}
-            ariaLabel="Filter by status"
-            options={statusOptions}
-            minWidth={180}
-          />
+          <button type="button" className="cs-back-btn" onClick={() => navigate("/customer")}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+            Dashboard
+          </button>
+        </div>
+      </header>
 
-          <div className="historyReset">
-            <FilterPillButton onClick={clearFilters} label="Reset" />
+      {/* HERO */}
+      <section className="cs-hero">
+        <div className="cs-hero-neb cs-hero-neb1" />
+        <div className="cs-hero-neb cs-hero-neb2" />
+        <div className="cs-hero-content">
+          <div className="cs-eyebrow">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>
+            Support History
+          </div>
+          <h1 className="cs-page-title">My <span className="cs-grad-text">Tickets</span></h1>
+          <p className="cs-page-sub">All your submitted requests, ordered by most recent activity.</p>
+        </div>
+      </section>
+
+      {/* MAIN */}
+      <main className="cs-main">
+
+        {/* TOOLBAR */}
+        <div className="cmyt-toolbar">
+          {/* Search */}
+          <div className="cmyt-search-wrap">
+            <svg className="cmyt-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input
+              className="cmyt-search-input"
+              placeholder="Search tickets…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button type="button" className="cmyt-search-clear" onClick={() => setSearchQuery("")}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              </button>
+            )}
+          </div>
+
+          <div className="cmyt-toolbar-right">
+            {/* Sort */}
+            <div className="cmyt-sort-group">
+              <button type="button" className={`cmyt-sort-btn${sortOrder === "newest" ? " cmyt-sort-btn--active" : ""}`} onClick={() => setSortOrder("newest")}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h13M3 8h9M3 12h5M17 4v16M17 20l-4-4M17 20l4-4"/></svg>
+                Newest
+              </button>
+              <button type="button" className={`cmyt-sort-btn${sortOrder === "oldest" ? " cmyt-sort-btn--active" : ""}`} onClick={() => setSortOrder("oldest")}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h13M3 8h9M3 12h5M17 4v16M17 4l-4 4M17 4l4 4"/></svg>
+                Oldest
+              </button>
+            </div>
           </div>
         </div>
 
-        <section className="historyList">
-          {filtered.length === 0 ? (
-            <div className="historyEmpty">
-              <h3 className="historyEmptyTitle">No results found</h3>
-              <p className="historyEmptySub">Try adjusting your search or filters.</p>
+        {/* STATUS FILTER TABS */}
+        <div className="cmyt-tabs">
+          {STATUS_KEYS.map(k => {
+            const count = k === "all" ? tickets.length : tickets.filter(t => normalizeStatus(t.status) === k).length;
+            return (
+              <button key={k} type="button" className={`cmyt-tab${filterStatus === k ? " cmyt-tab--active" : ""}`} onClick={() => setFilterStatus(k)}>
+                {STATUS_LABELS[k]}
+                {count > 0 && <span className="cmyt-tab-count">{count}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* TICKET LIST */}
+        {loading ? (
+          <div className="cmyt-list">
+            {[1,2,3].map(i => (
+              <div key={i} className="cs-card cmyt-skeleton-card">
+                <div className="cs-skeleton-line" style={{width:"35%",height:12,marginBottom:10}} />
+                <div className="cs-skeleton-line" style={{width:"65%",height:18,marginBottom:14}} />
+                <div className="cs-skeleton-line" style={{width:"45%",height:12}} />
+              </div>
+            ))}
+          </div>
+        ) : error ? (
+          <div className="cmyt-empty">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="cmyt-empty-icon"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <p className="cmyt-empty-title">Couldn't load tickets</p>
+            <p className="cmyt-empty-sub">{error}</p>
+          </div>
+        ) : displayedTickets.length === 0 ? (
+          <div className="cmyt-empty">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" className="cmyt-empty-icon">
+              <path d="M2 9a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v1.5a1.5 1.5 0 0 0 0 3V15a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1.5a1.5 1.5 0 0 0 0-3V9z"/>
+              <path d="M9 12h6M9 15h4"/>
+            </svg>
+            <p className="cmyt-empty-title">{filterStatus === "all" && !searchQuery ? "No tickets yet" : "No tickets match"}</p>
+            <p className="cmyt-empty-sub">{filterStatus === "all" && !searchQuery ? "Your submitted tickets will appear here." : "Try adjusting your filters or search."}</p>
+            {filterStatus !== "all" && <button type="button" className="cs-btn cs-btn-ghost" style={{marginTop:14}} onClick={() => { setFilterStatus("all"); setSearchQuery(""); }}>Clear filters</button>}
+          </div>
+        ) : (
+          <div className="cmyt-list">
+            {displayedTickets.map((t, idx) => (
+              <div
+                key={t.ticketId || idx}
+                className="cs-card cmyt-ticket-card"
+                role="button" tabIndex={0}
+                onClick={() => navigate(`/customer/ticket/${t.ticketId}`)}
+                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") navigate(`/customer/ticket/${t.ticketId}`); }}
+                style={{ animationDelay: `${idx * 0.04}s` }}
+              >
+                <div className="cmyt-ticket-toprow">
+                  <span className="cmyt-ticket-id">{t.ticketId}</span>
+                  <span className="cmyt-ticket-sep">·</span>
+                  <span className="cmyt-ticket-type">{t.ticketType || t.type}</span>
+                  <span style={{flex:1}} />
+                  <span className={`cs-status cs-status--${normalizeStatus(t.status)}`}>
+                    <span className="cs-status-dot" />
+                    {t.status}
+                  </span>
+                  <span className="cs-priority">{t.priority}</span>
+                </div>
+
+                <h3 className="cmyt-ticket-subject">{t.subject || t.description?.subject || "Untitled Ticket"}</h3>
+
+                <div className="cmyt-ticket-footer">
+                  <span className="cmyt-ticket-date">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    {formatTimeAgo(t.updatedAt || t.issueDate)}
+                  </span>
+                  <span className="cmyt-view-cta">
+                    View details
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* LOGOUT MODAL */}
+      {showLogoutConfirm && (
+        <div className="cmyt-modal-overlay">
+          <div className="cmyt-modal">
+            <p>Are you sure you want to log out?</p>
+            <div className="cmyt-modal-btns">
+              <button type="button" className="cs-btn cs-btn-primary" onClick={confirmLogout}>Log out</button>
+              <button type="button" className="cs-btn cs-btn-ghost" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
             </div>
-          ) : (
-            ordered.map((item) => {
-              const workflow = getWorkflowState(item.status);
-              const sla = getSlaTargets(item.priority);
-              const ctx = getPriorityContext(item.priority);
-              return (
-                <article
-                  key={item.id}
-                  className="historyCard historyCard--click"
-                  onClick={() => navigate(`/customer/ticket/${item.id}`)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      navigate(`/customer/ticket/${item.id}`);
-                    }
-                  }}
-                >
-                  <div className="historyCardLeft">
-                    <div className="historyMeta">
-                      <span className="historyId">{item.id}</span>
-                      <span className="historyDot">•</span>
-                      <span className="historyType">{item.type}</span>
-                      <span className="historyDot">•</span>
-                      <span className="historyType">{item.source}</span>
-                      <span className="historyDot">•</span>
-                      <span className={`historyStatus status-${item.status.replace(" ", "")}`}>
-                        {item.status}
-                      </span>
-                    </div>
+          </div>
+        </div>
+      )}
 
-                    <h3 className="historyTitle">{item.title}</h3>
-
-                    <div className="historyFooter">
-                      <span className="historyDate">{item.date}</span>
-                      <span className="historyDot">•</span>
-                      <div className="historyPriorityWrap">
-                        <span className="historyPriorityLabel">Priority:</span>
-                        <PriorityPill priority={item.priority} />
-                      </div>
-                    </div>
-
-                <div className="historySlaRow">
-                  <span className="historySlaItem">
-                    <b>Min response:</b> {sla.minResponse}
-                  </span>
-
-                  <span className="historySlaDot">•</span>
-
-                  <span className="historySlaItem">
-                    <b>Min resolve:</b> {sla.minResolve}
-                  </span>
-                </div>
-
-                <div className="historyWorkflow">
-                  <div className="historyWorkflowHeader">
-                    <span className="historyWorkflowTitle">Workflow Stage</span>
-                    <span className={`historyWorkflowOwner owner-${workflow.owner.toLowerCase()}`}>
-                      {workflow.owner}
-                    </span>
-                  </div>
-
-                  <div className="historyWorkflowCurrent">{workflow.stageLabel}</div>
-
-                  <div
-                    className="historyWorkflowTrack"
-                    aria-label={`Workflow stage ${workflow.stageIndex + 1} of ${WORKFLOW_STAGES.length}`}
-                  >
-                    {WORKFLOW_STAGES.map((stage, index) => (
-                      <div
-                        key={stage.id}
-                        className={`historyWorkflowDot ${
-                          index <= workflow.stageIndex ? "is-done" : ""
-                        } ${index === workflow.stageIndex ? "is-current" : ""}`}
-                        title={`${stage.label} (${stage.owner})`}
-                      />
-                    ))}
-                  </div>
-
-                  <p className="historyWorkflowNote">{workflow.note}</p>
-                </div>
-
-                {/* Friendly priority context */}
-                <div
-                  className="historyPriorityContext"
-                  style={{ background: ctx.bg, borderColor: ctx.border }}
-                >
-                  <span className="historyPriorityCtxIcon">{ctx.icon}</span>
-
-                  <div>
-                    <div
-                      className="historyPriorityCtxHeadline"
-                      style={{ color: ctx.color }}
-                    >
-                      {ctx.headline}
-                    </div>
-
-                    <p className="historyPriorityCtxReason">{ctx.reason}</p>
-                  </div>
-                </div>                  
-                  </div>
-
-                  <div className="historyCardRight">
-                    <button
-                      type="button"
-                      className="primaryPillBtn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/customer/ticket/${item.id}`);
-                      }}
-                    >
-                      View
-                    </button>
-                  </div>
-                </article>
-              );
-            })
-          )}
-        </section>
-      </div>
-    </Layout>
+      <footer className="cs-footer">
+        <img src={novaLogo} alt="InnovaAI" className="cs-footer-logo" />
+        <p className="cs-footer-copy">© 2026 InnovaAI</p>
+      </footer>
+    </div>
   );
 }
