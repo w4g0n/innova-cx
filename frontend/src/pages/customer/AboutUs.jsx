@@ -323,7 +323,6 @@ export default function AboutUs() {
   /* sections in-view */
   const [missionRef, missionInView] = useInView();
   const [pipelineRef, pipelineInView] = useInView();
-  const [statsRef, statsInView] = useInView();
   const [whyRef, whyInView] = useInView();
   const [teamRef, teamInView] = useInView();
 
