@@ -152,11 +152,6 @@ export default function CustomerLanding() {
     setIsExpanded(false);
   };
 
-  const openHistory = () => {
-    closeAllPopovers();
-    navigate("/customer/mytickets");
-  };
-
   const openSettings = () => {
     closeAllPopovers();
     navigate("/customer/settings");
@@ -434,13 +429,6 @@ export default function CustomerLanding() {
                   <button
                     type="button"
                     className="navDropdownItem"
-                    onClick={openHistory}
-                  >
-                    My Tickets
-                  </button>
-                  <button
-                    type="button"
-                    className="navDropdownItem"
                     onClick={openSettings}
                   >
                     Settings
@@ -469,12 +457,6 @@ export default function CustomerLanding() {
             <span className="pl-word pl-word--3">Experience</span>
           </h1>
 
-          <p className="pl-hero-sub">
-            InnovaCX uses sentiment analysis, audio intelligence, and machine
-            learning to route and resolve complaints faster than ever — so every
-            customer feels heard.
-          </p>
-
           <div className="pl-hero-actions">
             <button
               className="pl-btn-primary"
@@ -482,80 +464,27 @@ export default function CustomerLanding() {
             >
               My Tickets
             </button>
+
             <button
-              className="pl-btn-ghost"
-              onClick={() => navigate("/customer/about")}
+              className="pl-nova-pill"
+              onClick={() => setIsOpen(true)}
+              title="Chat with Nova AI"
             >
-              About Us
+              <span className="pl-nova-dot" />
+              <span>Chat with Nova AI</span>
+              <span className="pl-nova-arrow">→</span>
             </button>
           </div>
-
-          {/* NOVA CTA */}
-          <button
-            className="pl-nova-pill"
-            onClick={() => setIsOpen(true)}
-            title="Chat with Nova AI"
-          >
-            <span className="pl-nova-dot" />
-            <span>Chat with Nova AI</span>
-            <span className="pl-nova-arrow">→</span>
-          </button>
         </div>
 
-        {/* FLOATING STATS */}
-        <div className="pl-stats">
-          {STATS.map((s, i) => (
-            <div
-              key={i}
-              className="pl-stat"
-              style={{ animationDelay: `${i * 0.15}s` }}
-            >
-              <span className="pl-stat-value">{s.value}</span>
-              <span className="pl-stat-label">{s.label}</span>
-            </div>
-          ))}
-        </div>
 
-        {/* SCROLL HINT */}
-        <div className="pl-scroll-hint">
-          <span className="pl-scroll-line" />
-        </div>
-      </section>
 
-      {/* ─── FEATURES ─────────────────────────────────────────── */}
-      <section className="pl-features">
-        <div className="pl-section-label">What We Do</div>
-        <h2 className="pl-section-title">AI that works as hard as your team</h2>
-        <p className="pl-section-sub">
-          Four intelligent layers that ensure no complaint falls through the
-          cracks.
-        </p>
-
-        <div className="pl-feature-grid">
-          {FEATURES.map((f, i) => (
-            <div
-              key={i}
-              className="pl-feature-card"
-              style={{ animationDelay: `${i * 0.1}s` }}
-            >
-              <div className="pl-feature-icon">{f.icon}</div>
-              <h3 className="pl-feature-title">{f.title}</h3>
-              <p className="pl-feature-desc">{f.desc}</p>
-            </div>
-          ))}
-        </div>
       </section>
 
       {/* ─── FOOTER ───────────────────────────────────────────── */}
       <footer className="pl-footer">
         <img src={novaLogo} alt="InnovaCX" className="pl-footer-logo" />
         <div className="pl-footer-links">
-          <button
-            className="pl-footer-link"
-            onClick={() => navigate("/customer/about")}
-          >
-            About Us
-          </button>
           <button
             className="pl-footer-link"
             onClick={() => navigate("/customer/mytickets")}
@@ -571,13 +500,6 @@ export default function CustomerLanding() {
         </div>
         <p className="pl-footer-copy">© 2026 Dubai CommerCity · InnovaCX</p>
       </footer>
-
-      {/* ─── NOVA WIDGET LAUNCHER ─────────────────────────────── */}
-      {!isOpen && (
-        <button className="novaWidgetLauncher" onClick={() => setIsOpen(true)}>
-          <span className="novaWidgetDot" /> Chat with Nova
-        </button>
-      )}
 
       {/* ─── NOVA WIDGET ──────────────────────────────────────── */}
       {isOpen && (
