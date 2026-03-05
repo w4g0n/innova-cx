@@ -113,7 +113,7 @@ export default function RoutingReviewDetails() {
 
   const [item, setItem]         = useState(null);
   const [ticket, setTicket]     = useState(null);
-  const [routing, setRouting]   = useState(null); // routing_outputs row
+  const [routing] = useState(null); // routing_outputs row
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
   const [deciding, setDeciding] = useState(false);
