@@ -104,12 +104,11 @@ export default function CustomerSettings() {
             </SettingsCard>
           </div>
         </div>
-
-        {/* Modal */}
-        {showPwModal && (
-          <ChangePasswordModal onClose={() => setShowPwModal(false)} />
-        )}
       </div>
+
+      {showPwModal && (
+        <ChangePasswordModal onClose={() => setShowPwModal(false)} />
+      )}
     </Layout>
   );
 }

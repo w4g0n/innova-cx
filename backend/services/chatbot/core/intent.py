@@ -1,19 +1,14 @@
-from .llm import generate_response
+import re
+
+from .llm import generate_response, llm_available
 
 
 # ── Parsing helpers ───────────────────────────────────────────────────────────
 
 def _extract_label(text: str, valid: set[str]) -> str:
-    """
-    Search the model output for any valid label, left-to-right.
-    More robust than splitting on the first token — handles cases where
-    Falcon prefixes with punctuation, arrows, or whitespace before the label.
-    """
     cleaned = text.strip().lower()
-    # Direct match first (cheapest)
     if cleaned in valid:
         return cleaned
-    # Scan tokens
     for token in cleaned.split():
         token = token.strip(".:->\"',()")
         if token in valid:
@@ -22,109 +17,180 @@ def _extract_label(text: str, valid: set[str]) -> str:
 
 
 def _extract_aggression(text: str) -> tuple[bool, float]:
-    """
-    Parse aggression classifier output.
-    Looks for YES/NO and a float score anywhere in the response.
-    """
-    import re
     upper = text.strip().upper()
     label = "NO"
     score = 0.0
-
     if "YES" in upper:
         label = "YES"
     elif "NO" in upper:
         label = "NO"
-
     match = re.search(r"\b(0\.\d+|1\.0+|0|1)\b", text)
     if match:
         try:
             score = float(match.group(1))
         except ValueError:
             score = 0.0
-
     return (label == "YES" and score >= 0.75), score
 
 
-# ── Classifiers ───────────────────────────────────────────────────────────────
+# ── Keyword-based classifiers (fast, no LLM needed) ─────────────────────────
 
-def classify_primary_intent(user_text: str, history: list) -> str:
-    """
-    Classifies whether the user wants to follow up on an existing ticket
-    or create a new one.
+_FOLLOW_UP_SIGNALS = [
+    "follow up", "follow-up", "followup", "existing ticket", "ticket status",
+    "update on", "status of", "my ticket", "track", "check on",
+    "ticket id", "cx-", "where is my", "any update", "progress on",
+    "what happened", "resolution", "been waiting", "still open",
+    "not resolved", "check status", "look up", "lookup",
+]
 
-    Returns: 'follow_up' | 'create_ticket' | 'unknown'
-    """
+_CREATE_SIGNALS = [
+    "new ticket", "create", "submit", "report", "problem",
+    "issue", "broken", "fault", "complaint", "not working",
+    "need help", "log a", "raise", "file a", "damaged",
+    "leaking", "out of order", "malfunction", "defective",
+    "down", "outage", "failed", "question", "inquiry",
+    "how do i", "how can i", "can you help",
+]
+
+_INQUIRY_SIGNALS = [
+    "question", "inquiry", "how do i", "how can i", "what is",
+    "where is", "when is", "can you tell", "information",
+    "help me understand", "guidance", "advice", "explain",
+    "opening hours", "policy", "procedure", "process",
+    "schedule", "available", "who do i contact",
+]
+
+_COMPLAINT_SIGNALS = [
+    "complaint", "broken", "fault", "not working", "damaged",
+    "leaking", "out of order", "malfunction", "defective",
+    "outage", "failed", "problem", "issue with", "frustrated",
+    "unacceptable", "terrible", "worst", "disgusting",
+    "reporting", "fire", "flood", "mold", "pest",
+    "safety", "hazard", "dangerous", "ac", "air conditioning",
+    "elevator", "lift", "plumbing", "electrical", "parking",
+    "wifi", "wi-fi", "network", "printer", "cctv", "window",
+    "door", "lock", "alarm", "cleaning", "restroom",
+]
+
+_AGGRESSION_WORDS = {
+    "fuck", "shit", "damn", "hell", "ass", "idiot", "stupid",
+    "incompetent", "useless", "pathetic", "ridiculous",
+    "unacceptable", "disgusting", "horrible", "terrible",
+    "worst", "garbage", "trash", "sue", "lawyer", "legal",
+    "threatening", "kill", "die", "hate",
+}
+
+_THREAT_PHRASES = [
+    "i will sue", "i'll sue", "get a lawyer", "take legal",
+    "go to the press", "go to media", "report you",
+    "escalate to", "speak to your manager", "your supervisor",
+    "fire you", "get you fired",
+]
+
+
+def _keyword_score(text: str, signals: list[str]) -> int:
+    text_lower = text.strip().lower()
+    return sum(1 for s in signals if s in text_lower)
+
+
+def _keyword_primary_intent(user_text: str) -> str:
+    follow_score = _keyword_score(user_text, _FOLLOW_UP_SIGNALS)
+    create_score = _keyword_score(user_text, _CREATE_SIGNALS)
+
+    # Check for ticket ID patterns — strong follow_up signal
+    if re.search(r"\bCX-[A-Z0-9-]+\b", user_text, re.IGNORECASE):
+        follow_score += 3
+    if re.search(r"\b[0-9a-f]{8}-[0-9a-f]{4}-", user_text, re.IGNORECASE):
+        follow_score += 3
+
+    if follow_score > create_score:
+        return "follow_up"
+    if create_score > follow_score:
+        return "create_ticket"
+    if follow_score > 0:
+        return "follow_up"
+    return "unknown"
+
+
+def _keyword_secondary_intent(user_text: str) -> str:
+    inquiry_score = _keyword_score(user_text, _INQUIRY_SIGNALS)
+    complaint_score = _keyword_score(user_text, _COMPLAINT_SIGNALS)
+
+    if complaint_score > inquiry_score:
+        return "complaint"
+    if inquiry_score > complaint_score:
+        return "inquiry"
+    if complaint_score > 0:
+        return "complaint"
+    return "unknown"
+
+
+def _keyword_aggression(user_text: str) -> tuple[bool, float]:
+    text_lower = user_text.strip().lower()
+    words = set(re.findall(r"\b\w+\b", text_lower))
+
+    aggression_hits = len(words & _AGGRESSION_WORDS)
+    threat_hits = sum(1 for p in _THREAT_PHRASES if p in text_lower)
+
+    # Caps ratio (shouting)
+    alpha_chars = [c for c in user_text if c.isalpha()]
+    caps_ratio = sum(1 for c in alpha_chars if c.isupper()) / max(len(alpha_chars), 1)
+
+    # Exclamation density
+    excl_count = user_text.count("!")
+
+    score = 0.0
+    score += min(aggression_hits * 0.25, 0.5)
+    score += min(threat_hits * 0.35, 0.5)
+    if caps_ratio > 0.6 and len(alpha_chars) > 10:
+        score += 0.2
+    score += min(excl_count * 0.05, 0.15)
+    score = min(score, 1.0)
+
+    return (score >= 0.75), round(score, 4)
+
+
+# ── LLM-based classifiers (used when LLM is available) ──────────────────────
+
+def _llm_classify_primary(user_text: str, history: list) -> str:
     system = (
         "You are an intent classifier for a support ticketing system.\n"
-        "Your only job is to output a single label. Do not explain. Do not repeat the question. "
-        "Do not add punctuation or arrows. Output the label only.\n\n"
-        "Valid labels:\n"
-        "  follow_up\n"
-        "  create_ticket\n"
-        "  unknown\n\n"
+        "Output a single label only. No explanation.\n\n"
+        "Valid labels: follow_up, create_ticket, unknown\n\n"
         "Rules:\n"
-        "  Use follow_up when the user mentions an existing ticket, ticket ID, ticket status, "
-        "or wants an update.\n"
-        "  Use create_ticket when the user describes a problem, fault, question, or wants to "
-        "raise or submit a ticket.\n"
-        "  Use unknown only when the message has no clear intent.\n\n"
+        "  follow_up: user mentions existing ticket, ticket ID, status, or wants update.\n"
+        "  create_ticket: user describes problem, fault, question, or wants to raise a ticket.\n"
+        "  unknown: no clear intent.\n\n"
         "Examples:\n"
-        "  User: What is the status of my ticket\n"
-        "  Label: follow_up\n\n"
-        "  User: My laptop will not connect to the VPN\n"
-        "  Label: create_ticket\n\n"
-        "  User: Ticket 482 update please\n"
-        "  Label: follow_up\n\n"
-        "  User: I need to log a new issue\n"
-        "  Label: create_ticket\n\n"
-        "  User: Hello\n"
-        "  Label: unknown\n\n"
-        "Now classify the following."
+        "  User: What is the status of my ticket → Label: follow_up\n"
+        "  User: My laptop will not connect → Label: create_ticket\n"
+        "  User: Hello → Label: unknown\n\n"
+        "Now classify:"
     )
     messages = [
         {"role": "system", "content": system},
         *history[-4:],
         {"role": "user", "content": user_text},
-        # Priming the assistant turn nudges Falcon to continue with the label
         {"role": "assistant", "content": "Label:"},
     ]
     output = generate_response(messages)
     return _extract_label(output, {"follow_up", "create_ticket", "unknown"})
 
 
-def classify_secondary_intent(user_text: str, history: list) -> str:
-    """
-    Classifies whether the user's issue is an inquiry or a complaint.
-
-    Returns: 'inquiry' | 'complaint' | 'unknown'
-    """
+def _llm_classify_secondary(user_text: str, history: list) -> str:
     system = (
         "You are an intent classifier for a support ticketing system.\n"
-        "Your only job is to output a single label. Do not explain. Do not repeat the question. "
-        "Do not add punctuation or arrows. Output the label only.\n\n"
-        "Valid labels:\n"
-        "  inquiry\n"
-        "  complaint\n"
-        "  unknown\n\n"
+        "Output a single label only. No explanation.\n\n"
+        "Valid labels: inquiry, complaint, unknown\n\n"
         "Rules:\n"
-        "  Use inquiry when the user is asking a question, requesting information, or needs "
-        "guidance — there is no fault or failure being reported.\n"
-        "  Use complaint when the user is reporting a fault, breakage, failure, outage, or "
-        "expressing dissatisfaction with a service or physical asset.\n"
-        "  Use unknown only when genuinely impossible to determine.\n\n"
+        "  inquiry: user asking a question, requesting information.\n"
+        "  complaint: user reporting a fault, breakage, failure, or dissatisfaction.\n"
+        "  unknown: genuinely impossible to determine.\n\n"
         "Examples:\n"
-        "  User: How do I reset my access card\n"
-        "  Label: inquiry\n\n"
-        "  User: The air conditioning in the warehouse has been broken for two weeks\n"
-        "  Label: complaint\n\n"
-        "  User: What are the opening hours for the retail office\n"
-        "  Label: inquiry\n\n"
-        "  User: There is a leak in the roof\n"
-        "  Label: complaint\n\n"
-        "  User: I am not sure\n"
-        "  Label: unknown\n\n"
-        "Now classify the following."
+        "  User: How do I reset my access card → Label: inquiry\n"
+        "  User: The AC has been broken for two weeks → Label: complaint\n"
+        "  User: I am not sure → Label: unknown\n\n"
+        "Now classify:"
     )
     messages = [
         {"role": "system", "content": system},
@@ -136,36 +202,14 @@ def classify_secondary_intent(user_text: str, history: list) -> str:
     return _extract_label(output, {"inquiry", "complaint", "unknown"})
 
 
-def detect_aggression(user_text: str, history: list) -> tuple[bool, float]:
-    """
-    Detects whether the user message is aggressive, hostile, or extremely impatient.
-    Runs as an overlay on every turn.
-
-    Returns: (is_aggressive: bool, confidence_score: float 0.0–1.0)
-    Escalation triggers when is_aggressive is True (score >= 0.75 threshold built in).
-    """
+def _llm_detect_aggression(user_text: str, history: list) -> tuple[bool, float]:
     system = (
-        "You are a tone classifier for a customer support system.\n"
-        "Assess whether the user message is aggressive, hostile, threatening, or extremely impatient.\n"
-        "Output exactly two items on one line: a label and a confidence score.\n"
-        "Label must be YES or NO. Score must be a decimal between 0.0 and 1.0.\n"
-        "Do not output anything else. No explanation. No punctuation other than the decimal point.\n\n"
-        "Scoring guide:\n"
-        "  0.0 to 0.4 — calm, neutral, or mildly frustrated\n"
-        "  0.4 to 0.7 — noticeably frustrated or impatient but not aggressive\n"
-        "  0.7 to 1.0 — aggressive, threatening, hostile, or abusive\n\n"
+        "You are a tone classifier. Output YES/NO and a score 0.0-1.0.\n"
+        "YES = aggressive/hostile/threatening. NO = calm/neutral.\n\n"
         "Examples:\n"
-        "  User: This is absolutely ridiculous fix it NOW\n"
-        "  Output: YES 0.93\n\n"
-        "  User: I have been waiting three weeks this is completely unacceptable\n"
-        "  Output: YES 0.82\n\n"
-        "  User: I am frustrated but I understand you are trying to help\n"
-        "  Output: NO 0.38\n\n"
-        "  User: Can you help me please\n"
-        "  Output: NO 0.04\n\n"
-        "  User: I swear if this is not fixed today I will escalate to your manager\n"
-        "  Output: YES 0.78\n\n"
-        "Now classify the following."
+        "  User: Fix it NOW → Output: YES 0.93\n"
+        "  User: Can you help please → Output: NO 0.04\n\n"
+        "Now classify:"
     )
     messages = [
         {"role": "system", "content": system},
@@ -175,3 +219,44 @@ def detect_aggression(user_text: str, history: list) -> tuple[bool, float]:
     ]
     raw = generate_response(messages)
     return _extract_aggression(raw)
+
+
+# ── Public API (auto-selects keyword or LLM) ─────────────────────────────────
+
+def classify_primary_intent(user_text: str, history: list) -> str:
+    """
+    Classifies whether the user wants to follow up or create a ticket.
+    Uses fast keyword matching first; falls back to LLM if keywords are ambiguous.
+    """
+    result = _keyword_primary_intent(user_text)
+    if result != "unknown":
+        return result
+    # Keywords inconclusive — try LLM if available
+    if llm_available():
+        return _llm_classify_primary(user_text, history)
+    return "unknown"
+
+
+def classify_secondary_intent(user_text: str, history: list) -> str:
+    """
+    Classifies whether the user's issue is an inquiry or a complaint.
+    Uses fast keyword matching first; falls back to LLM if keywords are ambiguous.
+    """
+    result = _keyword_secondary_intent(user_text)
+    if result != "unknown":
+        return result
+    if llm_available():
+        return _llm_classify_secondary(user_text, history)
+    return "unknown"
+
+
+def detect_aggression(user_text: str, history: list) -> tuple[bool, float]:
+    """
+    Detects aggressive/hostile tone. Keyword-based first, LLM fallback.
+    Returns: (is_aggressive: bool, confidence_score: float 0.0–1.0)
+    """
+    is_agg, score = _keyword_aggression(user_text)
+    # If keyword score is in the grey zone (0.3-0.7), consult LLM for better accuracy
+    if 0.3 <= score <= 0.7 and llm_available():
+        return _llm_detect_aggression(user_text, history)
+    return is_agg, score

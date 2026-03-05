@@ -47,15 +47,6 @@ function Card({ title, subtitle, children, wide }) {
   );
 }
 
-function SectionHeading({ icon, label, accent }) {
-  return (
-    <div className={`ma-section-heading ma-section-heading--${accent}`}>
-      <span className="ma-section-heading__icon">{icon}</span>
-      <span className="ma-section-heading__label">{label}</span>
-    </div>
-  );
-}
-
 function ProgressBar({ value, max = 100, warn, danger }) {
   const pct = Math.min((value / max) * 100, 100);
   const cls = danger && value >= danger ? "danger" : warn && value >= warn ? "warn" : "ok";
@@ -97,7 +88,15 @@ function DateRangePicker({ dateRange, onChange }) {
   return (
     <div className="qc-datepicker" ref={ref}>
       <button type="button" className="qc-datepicker__btn" onClick={() => setOpen((v) => !v)}>
-        <span className="qc-datepicker__icon">📅</span>{label}
+        {label}
+        <span className="qc-datepicker__icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+        </span>
       </button>
       {open && (
         <div className="qc-datepicker__dropdown">
@@ -124,7 +123,6 @@ function AcceptanceView({ data, loading, error, onRetry }) {
   const { kpis, trend, breakdown } = data;
   return (
     <div className="ma-view">
-      <SectionHeading icon="🎯" label="A — Suggested Resolution Acceptance" accent="purple" />
       <div className="ma-kpi-row">
         <KpiCard label="Acceptance Rate" value={`${kpis.acceptanceRate}%`} pill="Period" sub="Employees used AI suggestion unchanged" />
         <KpiCard label="Declined (Custom)" value={`${kpis.declinedRate}%`} pill="Period" sub="Employee edited before submitting" flag={kpis.declinedRate > 40 ? "warn" : undefined} />
@@ -176,7 +174,6 @@ function RescoringView({ data, loading, error, onRetry }) {
   const { kpis, byDepartment } = data;
   return (
     <div className="ma-view">
-      <SectionHeading icon="⚖️" label="B — Priority Rescoring" accent="amber" />
       <div className="ma-kpi-row">
         <KpiCard label="Rescore Rate" value={`${kpis.rescoreRate}%`} pill="vs model_priority" sub="Employees changed AI-assigned priority" flag={kpis.rescoreRate > 15 ? "warn" : undefined} />
         <KpiCard label="Upscores" value={kpis.upscores} pill="Period" sub="Employee raised priority above model" />
@@ -193,7 +190,7 @@ function RescoringView({ data, loading, error, onRetry }) {
                 <YAxis tick={{ fill: C.muted, fontSize: 12 }} />
                 <Tooltip contentStyle={{ borderRadius: 10 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="upscored" name="Upscored" fill={C.amber} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="upscored" name="Upscored" fill={C.light} radius={[4, 4, 0, 0]} />
                 <Bar dataKey="downscored" name="Downscored" fill={C.purple} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -212,9 +209,8 @@ function ReroutingView({ data, loading, error, onRetry }) {
   const { reassignmentByDept, reviewCases } = data;
   return (
     <div className="ma-view">
-      <SectionHeading icon="🔀" label="C — Department Rerouting" accent="blue" />
       <div className="ma-cards-row">
-        <Card title="Reassignment Rate by Department" subtitle="Avg rerouting requests per ticket. Amber ≥ 0.5, red ≥ 1. High avg = DepartmentRoutingAgent miscalibrated.">
+        <Card title="Reassignment Rate by Department" subtitle="Avg rerouting requests per ticket. Darker = higher concern. High avg = DepartmentRoutingAgent miscalibrated.">
           {reassignmentByDept.length === 0 ? <EmptyState message="No rerouting data for this period." /> : (
             <div className="ma-routing-list">
               {reassignmentByDept.map((d) => (
@@ -246,7 +242,7 @@ function ReroutingView({ data, loading, error, onRetry }) {
                         <td>{c.department}</td>
                         <td>{c.modelPriority && c.modelPriority !== c.priority ? <span className="ma-route-text">{c.modelPriority} → {c.priority}</span> : <span>{c.priority}</span>}</td>
                         <td><span className={`ma-reason-pill ma-reason-pill--${reason.includes("Override") ? "amber" : "blue"}`}>{reason}</span></td>
-                        <td><button className="ma-link-btn" type="button" onClick={() => navigate(`/operator/complaints/${c.ticketCode}`)}><span className="ma-open-btn__icon">↗</span> Open</button></td>
+                        <td><button className="ma-open-btn" type="button" onClick={() => navigate(`/operator/complaints/${c.ticketCode}`)}><span className="ma-open-btn__icon">↗</span> Open</button></td>
                       </tr>
                     );
                   })}
@@ -262,9 +258,9 @@ function ReroutingView({ data, loading, error, onRetry }) {
 
 /* Each tab has its own dedicated endpoint */
 const QC_SECTIONS = [
-  { id: "acceptance", label: "A — Acceptance", icon: "🎯", endpoint: "/operator/analytics/qc/acceptance" },
-  { id: "rescoring",  label: "B — Rescoring",  icon: "⚖️", endpoint: "/operator/analytics/qc/rescoring"  },
-  { id: "rerouting",  label: "C — Rerouting",  icon: "🔀", endpoint: "/operator/analytics/qc/rerouting"  },
+  { id: "acceptance", label: "A — Acceptance", endpoint: "/operator/analytics/qc/acceptance" },
+  { id: "rescoring",  label: "B — Rescoring",  endpoint: "/operator/analytics/qc/rescoring"  },
+  { id: "rerouting",  label: "C — Rerouting",  endpoint: "/operator/analytics/qc/rerouting"  },
 ];
 
 export default function QualityControl() {
@@ -325,7 +321,7 @@ export default function QualityControl() {
         <div className="ma-nav">
           {QC_SECTIONS.map((s) => (
             <button key={s.id} className={`ma-nav__btn ${activeSection === s.id ? "ma-nav__btn--active" : ""}`} onClick={() => setActiveSection(s.id)} type="button">
-              <span>{s.icon}</span> {s.label}
+              {s.label}
             </button>
           ))}
         </div>

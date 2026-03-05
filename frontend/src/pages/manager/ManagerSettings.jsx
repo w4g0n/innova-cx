@@ -76,10 +76,11 @@ export default function ManagerSettings() {
           </div>
         </div>
 
-        {showPwModal && (
-          <ChangePasswordModal onClose={() => setShowPwModal(false)} />
-        )}
       </div>
+
+      {showPwModal && (
+        <ChangePasswordModal onClose={() => setShowPwModal(false)} />
+      )}
     </Layout>
   );
 }

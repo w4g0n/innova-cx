@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 from .db import engine
 
-MAX_HISTORY = 10
+MAX_HISTORY = 30
 
 
 def _to_json_obj(value, default):

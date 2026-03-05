@@ -54,8 +54,65 @@ const STATUS_COLOR    = { Open: "blue", "In Progress": "amber", Resolved: "green
 const SENTIMENT_COLOR = { "Very Negative": "danger", Negative: "red", Neutral: "muted", Positive: "green" };
 const APPROVAL_COLOR  = { Approved: "green", Rejected: "red", Pending: "amber" };
 const EXEC_COLOR      = { success: "green", failed: "red", running: "amber", skipped: "muted" };
-const AGENT_ICONS     = { sentiment: "🧠", feature: "⚙️", routing: "🔀", priority: "⚖️", resolution: "💡", sla: "⏱️" };
-const UPDATE_ICONS    = { status_change: "🔄", assignment: "👤", override: "✏️", resolution: "✅", comment: "💬" };
+const AGENT_ICONS     = { sentiment: "brain", feature: "settings", routing: "shuffle", priority: "sliders", resolution: "zap", sla: "clock" };
+const UPDATE_ICONS    = { status_change: "refresh-cw", assignment: "user", override: "edit", resolution: "check-circle", comment: "message-circle" };
+
+// ── Inline SVG icon component ─────────────────────────────────────────────────
+function Ico({ name, size = 14, style = {} }) {
+  const p = {
+    width: size, height: size, viewBox: "0 0 24 24",
+    fill: "none", stroke: "currentColor", strokeWidth: "2",
+    strokeLinecap: "round", strokeLinejoin: "round",
+    style: { display: "inline-block", verticalAlign: "middle", flexShrink: 0, ...style },
+    "aria-hidden": "true",
+  };
+  switch (name) {
+    case "brain":
+      return <svg {...p}><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.14"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.14"/></svg>;
+    case "cpu":
+      return <svg {...p}><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>;
+    case "settings":
+      return <svg {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
+    case "shuffle":
+      return <svg {...p}><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>;
+    case "sliders":
+      return <svg {...p}><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>;
+    case "zap":
+      return <svg {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+    case "clock":
+      return <svg {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+    case "refresh-cw":
+      return <svg {...p}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>;
+    case "user":
+      return <svg {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
+    case "edit":
+      return <svg {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>;
+    case "check-circle":
+      return <svg {...p}><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>;
+    case "message-circle":
+      return <svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
+    case "search":
+      return <svg {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
+    case "file-text":
+      return <svg {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+    case "activity":
+      return <svg {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
+    case "repeat":
+      return <svg {...p}><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>;
+    case "alert-triangle":
+      return <svg {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+    case "tool":
+      return <svg {...p}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>;
+    case "briefcase":
+      return <svg {...p}><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>;
+    case "calendar":
+      return <svg {...p}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
+    case "dot":
+      return <svg {...p} fill="currentColor" stroke="none"><circle cx="12" cy="12" r="5"/></svg>;
+    default:
+      return null;
+  }
+}
 
 function transformTicket(raw) {
   const approvalRequests = (raw.approvalRequests ?? raw.approval_requests ?? []).map((ar) => ({
@@ -172,7 +229,7 @@ function ErrorView({ ticketId, message, onRetry }) {
   return (
     <Layout role="operator">
       <div className="trd-not-found">
-        <div className="trd-not-found__icon">🔍</div>
+        <div className="trd-not-found__icon"><Ico name="search" size={36} /></div>
         <h2>Could not load ticket</h2>
         <p>{message || `No ticket matching ${ticketId} was found.`}</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
@@ -235,10 +292,10 @@ export default function TicketReviewDetail() {
   const priorityChanged   = t.modelPriority !== t.priority;
 
   const TABS = [
-    { id: "overview",   label: "Overview",    icon: "📋" },
-    { id: "ai",         label: "AI Analysis", icon: "🤖" },
-    { id: "activity",   label: "Activity",    icon: "🔄" },
-    { id: "resolution", label: "Resolution",  icon: "💡" },
+    { id: "overview",   label: "Overview",    icon: "file-text" },
+    { id: "ai",         label: "AI Analysis", icon: "cpu" },
+    { id: "activity",   label: "Activity",    icon: "activity" },
+    { id: "resolution", label: "Resolution",  icon: "zap" },
   ];
 
   const saveNote = () => {
@@ -263,14 +320,14 @@ export default function TicketReviewDetail() {
             <div className="trd-hero__top-row">
               <span className="trd-hero__code">{t.ticketCode}</span>
               <Badge variant={STATUS_COLOR[t.status] || "muted"}>{t.status}</Badge>
-              {t.humanOverridden && <Badge variant="amber">✏️ Overridden</Badge>}
-              {t.isRecurring     && <Badge variant="amber">🔁 Recurring</Badge>}
-              {(t.respondBreached || t.resolveBreached) && <Badge variant="danger">⚠️ SLA Breached</Badge>}
+              {t.humanOverridden && <Badge variant="amber"><Ico name="edit" size={11} /> Overridden</Badge>}
+              {t.isRecurring     && <Badge variant="amber"><Ico name="repeat" size={11} /> Recurring</Badge>}
+              {(t.respondBreached || t.resolveBreached) && <Badge variant="danger"><Ico name="alert-triangle" size={11} /> SLA Breached</Badge>}
             </div>
             <h1 className="trd-hero__subject">{t.subject}</h1>
             <div className="trd-hero__people">
               <div className="trd-hero__person">
-                <span className="trd-hero__person-icon">👤</span>
+                <span className="trd-hero__person-icon"><Ico name="user" size={16} /></span>
                 <div>
                   <span className="trd-hero__person-role">Submitted by</span>
                   <span className="trd-hero__person-name">{t.createdByName}{t.createdByRole ? ` · ${t.createdByRole}` : ""}</span>
@@ -278,7 +335,7 @@ export default function TicketReviewDetail() {
               </div>
               <div className="trd-hero__divider" />
               <div className="trd-hero__person">
-                <span className="trd-hero__person-icon">🔧</span>
+                <span className="trd-hero__person-icon"><Ico name="tool" size={16} /></span>
                 <div>
                   <span className="trd-hero__person-role">Assigned to</span>
                   <span className="trd-hero__person-name">{t.assignedToName}</span>
@@ -287,7 +344,7 @@ export default function TicketReviewDetail() {
               </div>
               <div className="trd-hero__divider" />
               <div className="trd-hero__person">
-                <span className="trd-hero__person-icon">🏢</span>
+                <span className="trd-hero__person-icon"><Ico name="briefcase" size={16} /></span>
                 <div>
                   <span className="trd-hero__person-role">Department</span>
                   <span className="trd-hero__person-name">{t.finalDept}</span>
@@ -295,7 +352,7 @@ export default function TicketReviewDetail() {
               </div>
               <div className="trd-hero__divider" />
               <div className="trd-hero__person">
-                <span className="trd-hero__person-icon">📅</span>
+                <span className="trd-hero__person-icon"><Ico name="calendar" size={16} /></span>
                 <div>
                   <span className="trd-hero__person-role">Created</span>
                   <span className="trd-hero__person-name">{fmtTs(t.createdAt)}</span>
@@ -318,7 +375,7 @@ export default function TicketReviewDetail() {
               className={`trd-tab ${tab === tb.id ? "trd-tab--active" : ""}`}
               onClick={() => setTab(tb.id)}
             >
-              <span className="trd-tab__icon">{tb.icon}</span>
+              <span className="trd-tab__icon"><Ico name={tb.icon} size={15} /></span>
               {tb.label}
             </button>
           ))}
@@ -359,8 +416,8 @@ export default function TicketReviewDetail() {
               </div>
               {(responseTimeMins != null || resolutionTimeHrs != null) && (
                 <div className="trd-timing-row">
-                  {responseTimeMins  != null && <span className="trd-timing-chip">⚡ Response: <strong>{responseTimeMins} min</strong></span>}
-                  {resolutionTimeHrs != null && <span className="trd-timing-chip">✅ Resolved in: <strong>{resolutionTimeHrs}h</strong></span>}
+                  {responseTimeMins  != null && <span className="trd-timing-chip"><Ico name="zap" size={13} /> Response: <strong>{responseTimeMins} min</strong></span>}
+                  {resolutionTimeHrs != null && <span className="trd-timing-chip"><Ico name="check-circle" size={13} /> Resolved in: <strong>{resolutionTimeHrs}h</strong></span>}
                 </div>
               )}
             </div>
@@ -418,7 +475,7 @@ export default function TicketReviewDetail() {
           <div className="trd-ai">
             {t.humanOverridden && (
               <div className="trd-override-banner">
-                <span className="trd-override-banner__icon">✏️</span>
+                <span className="trd-override-banner__icon"><Ico name="edit" size={16} /></span>
                 <div>
                   <span className="trd-override-banner__title">Human Override Applied</span>
                   <span className="trd-override-banner__text">{t.overrideReason}</span>
@@ -429,7 +486,7 @@ export default function TicketReviewDetail() {
             <div className="trd-decisions-grid">
               <div className={`trd-decision-card ${routingChanged ? "trd-decision-card--changed" : "trd-decision-card--ok"}`}>
                 <div className="trd-decision-card__header">
-                  <span className="trd-decision-card__icon">🔀</span>
+                  <span className="trd-decision-card__icon"><Ico name="shuffle" size={16} /></span>
                   <span className="trd-decision-card__title">Routing</span>
                   {routingChanged ? <Badge variant="amber">Overridden</Badge> : <Badge variant="green">Correct</Badge>}
                 </div>
@@ -456,7 +513,7 @@ export default function TicketReviewDetail() {
               {t.modelPriority && (
                 <div className={`trd-decision-card ${priorityChanged ? "trd-decision-card--changed" : "trd-decision-card--ok"}`}>
                   <div className="trd-decision-card__header">
-                    <span className="trd-decision-card__icon">⚖️</span>
+                    <span className="trd-decision-card__icon"><Ico name="sliders" size={16} /></span>
                     <span className="trd-decision-card__title">Priority</span>
                     {priorityChanged ? <Badge variant="amber">Rescored</Badge> : <Badge variant="green">Correct</Badge>}
                   </div>
@@ -513,7 +570,7 @@ export default function TicketReviewDetail() {
                     <div key={i} className="trd-pipeline__step">
                       <div className={`trd-pipeline__dot trd-pipeline__dot--${EXEC_COLOR[entry.status] || "muted"}`} />
                       <div className="trd-pipeline__content">
-                        <span className="trd-pipeline__name">{AGENT_ICONS[entry.agent] || "🔹"} {entry.agent}</span>
+                        <span className="trd-pipeline__name"><Ico name={AGENT_ICONS[entry.agent] || "dot"} size={14} /> {entry.agent}</span>
                         <span className="trd-pipeline__dur">{fmtDur(entry.durationMs)}</span>
                       </div>
                       <span className="trd-pipeline__version">{entry.modelVersion}</span>
@@ -542,7 +599,7 @@ export default function TicketReviewDetail() {
                     <div className="trd-timeline__content trd-timeline__content--wide">
                       <div className="trd-timeline__top-row">
                         <span className="trd-timeline__update-type">
-                          {UPDATE_ICONS[u.updateType] || "•"} {u.updateType.replace(/_/g, " ")}
+                          <Ico name={UPDATE_ICONS[u.updateType] || "dot"} size={14} /> {u.updateType.replace(/_/g, " ")}
                         </span>
                         {u.fromStatus && u.toStatus && (
                           <span className="trd-timeline__status-chip">{u.fromStatus} → {u.toStatus}</span>
@@ -574,7 +631,7 @@ export default function TicketReviewDetail() {
               {t.finalResolution ? (
                 <div className="trd-final-resolution">
                   <div className="trd-final-resolution__header">
-                    <span>✅</span>
+                    <Ico name="check-circle" size={16} />
                     <strong>Final Resolution Applied</strong>
                     {t.feedbackDecision && (
                       <Badge variant={t.feedbackDecision === "accepted" ? "green" : "amber"}>
