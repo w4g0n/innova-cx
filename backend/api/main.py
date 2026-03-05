@@ -27,6 +27,14 @@ import pyotp  # for RFC 6238 TOTP
 import qrcode
 import io
 import re as _re
+try:
+    from api.ticket_creation_gate import create_ticket_via_gate, dispatch_ticket_to_orchestrator
+except Exception:
+    from ticket_creation_gate import create_ticket_via_gate, dispatch_ticket_to_orchestrator
+try:
+    from api.auto_assign_employee import auto_assign_ticket_if_needed
+except Exception:
+    from auto_assign_employee import auto_assign_ticket_if_needed
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
@@ -759,6 +767,86 @@ def _generate_suggestion_if_ready(ticket_code: str) -> None:
         (suggestion, "falcon", row["id"]),
     )
 
+
+def _mock_department_from_text(text: str) -> str:
+    t = (text or "").lower()
+    if any(k in t for k in ("wifi", "network", "internet", "server", "system", "software", "login")):
+        return "IT"
+    if any(k in t for k in ("leak", "pipe", "water", "ac", "air conditioning", "maintenance", "electrical", "power")):
+        return "Maintenance"
+    if any(k in t for k in ("fire", "unsafe", "hazard", "security", "alarm", "theft", "emergency")):
+        return "Safety & Security"
+    if any(k in t for k in ("contract", "legal", "policy", "compliance", "regulation", "law")):
+        return "Legal & Compliance"
+    if any(k in t for k in ("lease", "tenant", "rent", "handover", "move in")):
+        return "Leasing"
+    if any(k in t for k in ("hr", "salary", "leave", "employee", "staff")):
+        return "HR"
+    return "Facilities Management"
+
+
+def _apply_mock_pipeline_outcome(ticket_code: str, details: str) -> None:
+    """
+    Local fallback when orchestrator dispatch is unavailable.
+    Guarantees ticket has priority_assigned_at + SLA and a department.
+    """
+    dept_name = _mock_department_from_text(details)
+    now_utc = datetime.now(timezone.utc)
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM departments WHERE LOWER(name)=LOWER(%s) LIMIT 1;",
+                (dept_name,),
+            )
+            row = cur.fetchone()
+            if row:
+                dept_id = row[0]
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO departments (name)
+                    VALUES (%s)
+                    ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+                    RETURNING id;
+                    """,
+                    (dept_name,),
+                )
+                dept_id = cur.fetchone()[0]
+
+            cur.execute(
+                """
+                UPDATE tickets
+                SET
+                  priority = COALESCE(priority, 'Medium'),
+                  model_priority = COALESCE(model_priority, 'Medium'),
+                  status = CASE
+                             WHEN status IN ('Resolved', 'Escalated') THEN status
+                             ELSE 'Assigned'::ticket_status
+                           END,
+                  department_id = COALESCE(%s, department_id),
+                  model_department_id = COALESCE(%s, model_department_id),
+                  model_confidence = COALESCE(model_confidence, 0.35),
+                  sentiment_score = COALESCE(sentiment_score, 0.0),
+                  sentiment_label = COALESCE(sentiment_label, 'mock_orchestrator'),
+                  priority_assigned_at = COALESCE(priority_assigned_at, %s),
+                  updated_at = now()
+                WHERE ticket_code = %s;
+                """,
+                (dept_id, dept_id, now_utc, ticket_code),
+            )
+            auto_assign_ticket_if_needed(
+                cur,
+                ticket_code=ticket_code,
+                status="Assigned",
+                department_id=dept_id,
+                priority="Medium",
+            )
+    try:
+        _generate_suggestion_if_ready(ticket_code)
+    except Exception as exc:
+        logger.warning("suggested_resolution | fallback generation failed ticket=%s err=%s", ticket_code, exc)
+
+
 # =========================================================
 # Helpers for response/resolution time
 # =========================================================
@@ -1396,17 +1484,9 @@ def employee_resolution_suggestion(
 
     suggestion = str(row.get("suggested_resolution") or "").strip()
     if not suggestion:
-        suggestion = _generate_resolution_suggestion(row)
-        execute(
-            """
-            UPDATE tickets
-            SET
-              suggested_resolution = %s,
-              suggested_resolution_model = %s,
-              suggested_resolution_generated_at = now()
-            WHERE id = %s;
-            """,
-            (suggestion, "falcon", row["id"]),
+        raise HTTPException(
+            status_code=404,
+            detail="No suggested resolution available for this ticket yet",
         )
 
     return {"ticketId": row["ticket_code"], "suggestedResolution": suggestion}
@@ -1490,11 +1570,14 @@ def employee_ticket_details(
     issue_date = created_at.date().isoformat() if created_at else ""
 
     resp_base = priority_assigned_at or assigned_at or created_at
-    resp_mins = diff_minutes(first_response_at, resp_base)
+    # Show live elapsed response/resolve time when a ticket is still in progress.
+    resp_end = first_response_at or datetime.now(timezone.utc)
+    resp_mins = diff_minutes(resp_end, resp_base)
     response_time = minutes_to_label(resp_mins)
 
     res_base = priority_assigned_at or created_at
-    res_mins = diff_minutes(resolved_at, res_base)
+    res_end = resolved_at or datetime.now(timezone.utc)
+    res_mins = diff_minutes(res_end, res_base)
     resolution_time = minutes_to_label(res_mins)
 
     ticket = {
@@ -1502,6 +1585,7 @@ def employee_ticket_details(
         "priority": row.get("priority"),
         "status": row.get("status"),
         "issueDate": issue_date,
+        "suggestedResolution": row.get("suggested_resolution") or "",
         "modelSuggestion": row.get("suggested_resolution") or row.get("model_suggestion"),
         "metrics": {
             "meanTimeToRespond": response_time,
@@ -2616,49 +2700,105 @@ class CreateTicketRequest(BaseModel):
     sentiment: Optional[dict] = None
 
 
+class InternalCreateTicketRequest(BaseModel):
+    created_by_user_id: str
+    ticket_type: str
+    subject: str
+    details: str
+    ticket_source: Optional[str] = "chatbot"
+    asset_type: Optional[str] = "General"
+
+
+@api.post("/internal/tickets/create")
+def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
+    """
+    Internal ticket creation endpoint for services (e.g., chatbot).
+    Flow: ticket_creation_gate insert -> orchestrator dispatch.
+    """
+    requester = fetch_one("SELECT id FROM users WHERE id = %s LIMIT 1;", (body.created_by_user_id,))
+    if not requester:
+        raise HTTPException(status_code=404, detail="created_by_user_id not found")
+
+    type_norm = str(body.ticket_type or "").strip().lower()
+    ticket_type = "Inquiry" if type_norm == "inquiry" else "Complaint"
+    subject = (body.subject or "").strip() or (body.details or "").strip()[:120] or f"Automated {ticket_type.lower()}"
+    details = (body.details or "").strip()
+    if not details:
+        raise HTTPException(status_code=422, detail="details cannot be empty")
+
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            created = create_ticket_via_gate(
+                cur,
+                created_by_user_id=body.created_by_user_id,
+                ticket_type=ticket_type,
+                subject=subject,
+                details=details,
+                priority="Low",
+                status="Open",
+                ticket_source=(body.ticket_source or "chatbot").strip() or "chatbot",
+                model_suggestion=json.dumps({"is_recurring": False}),
+            )
+
+    ticket_code = created["ticket_code"]
+    orchestrator_dispatched = dispatch_ticket_to_orchestrator(
+        ticket_code=ticket_code,
+        details=details,
+        orchestrator_url=ORCHESTRATOR_URL,
+        orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
+        ticket_type=ticket_type,
+        subject=subject,
+    )
+    if not orchestrator_dispatched:
+        logger.warning(
+            "orchestrator_dispatch | failed for internal ticket=%s, applying local mock pipeline fallback",
+            ticket_code,
+        )
+        _apply_mock_pipeline_outcome(ticket_code, details)
+
+    return {
+        "ok": True,
+        "ticket_id": ticket_code,
+        "status": created.get("status"),
+        "priority": created.get("priority"),
+        "priority_assigned_at": created.get("priority_assigned_at").isoformat() if created.get("priority_assigned_at") else None,
+        "respond_due_at": created.get("respond_due_at").isoformat() if created.get("respond_due_at") else None,
+        "resolve_due_at": created.get("resolve_due_at").isoformat() if created.get("resolve_due_at") else None,
+    }
+
+
 @api.post("/customer/tickets")
 def create_customer_ticket(
     body: CreateTicketRequest,
     user: Dict[str, Any] = Depends(require_customer),
 ):
-    # Generate a unique ticket code (could also use DB sequence)
-    ticket_code = f"CX-{int(time.time())}-{user['id']}"
     is_recurring = predict_is_recurring(user_id=user["id"], subject=body.subject, details=body.details)
     model_suggestion = json.dumps({"is_recurring": is_recurring})
 
-    # Insert ticket into database
+    # Insert ticket into database through centralized gate.
     ticket_id = None
+    ticket_code = None
+    suggestion_text = ""
     with db_connect() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO tickets (
-                    ticket_code,
-                    ticket_type,
-                    subject,
-                    details,
-                    asset_type,
-                    priority,
-                    status,
-                    created_by_user_id,
-                    model_suggestion,
-                    created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING id;
-                """,
-                (
-                    ticket_code,
-                    body.type,         
-                    body.subject,
-                    body.details,
-                    body.asset_type,
-                    "Low",
-                    "Unassigned",
-                    user["id"],
-                    model_suggestion,
-                ),
+            normalized_ticket_type = (
+                "Inquiry"
+                if str(body.type or "").strip().lower() == "inquiry"
+                else "Complaint"
             )
-            ticket_id = cur.fetchone()[0]
+            created = create_ticket_via_gate(
+                cur,
+                created_by_user_id=user["id"],
+                ticket_type=normalized_ticket_type,
+                subject=body.subject,
+                details=body.details,
+                priority="Low",
+                status="Open",
+                ticket_source="user",
+                model_suggestion=model_suggestion,
+            )
+            ticket_id = created["id"]
+            ticket_code = created["ticket_code"]
 
             # Insert attachments if any
             for att in body.attachments or []:
@@ -2669,6 +2809,56 @@ def create_customer_ticket(
                     """,
                     (ticket_id, att.name),
                 )
+
+            # Generate suggestion at creation time so employee resolve view only loads it.
+            try:
+                suggestion_text = _generate_resolution_suggestion(
+                    {
+                        "ticket_code": ticket_code,
+                        "ticket_type": normalized_ticket_type,
+                        "subject": body.subject,
+                        "details": body.details,
+                        "asset_type": body.asset_type,
+                        "priority": "Low",
+                        "department_name": "General",
+                        "status": "Open",
+                    }
+                )
+            except Exception as exc:
+                logger.warning(
+                    "suggested_resolution | generation failed at ticket create ticket=%s err=%s",
+                    ticket_code,
+                    exc,
+                )
+                suggestion_text = ""
+
+            if suggestion_text:
+                cur.execute(
+                    """
+                    UPDATE tickets
+                    SET
+                      suggested_resolution = %s,
+                      suggested_resolution_model = %s,
+                      suggested_resolution_generated_at = now()
+                    WHERE id = %s;
+                    """,
+                    (suggestion_text, "falcon", ticket_id),
+                )
+
+    orchestrator_dispatched = dispatch_ticket_to_orchestrator(
+        ticket_code=ticket_code,
+        details=body.details,
+        orchestrator_url=ORCHESTRATOR_URL,
+        orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
+        ticket_type=body.type,
+        subject=body.subject,
+    )
+    if not orchestrator_dispatched:
+        logger.warning(
+            "orchestrator_dispatch | failed for ticket=%s, applying local mock pipeline fallback",
+            ticket_code,
+        )
+        _apply_mock_pipeline_outcome(ticket_code, body.details)
 
     return {
         "ok": True,
@@ -2912,8 +3102,8 @@ def assign_ticket(
                 assigned_at         = NOW(),
                 updated_at          = NOW(),
                 status              = CASE
-                                        WHEN status = 'Unassigned' THEN 'Assigned'::ticket_status
-                                        ELSE status
+                                        WHEN status = 'Resolved' THEN status
+                                        ELSE 'Assigned'::ticket_status
                                       END
             WHERE id = %s
             """,
@@ -2929,7 +3119,7 @@ def assign_ticket(
                 assigned_to_user_id = NULL,
                 assigned_at         = NULL,
                 updated_at          = NOW(),
-                status              = 'Unassigned'
+                status              = 'Open'
             WHERE id = %s
             """,
             (ticket_id,),
@@ -4118,6 +4308,7 @@ def operator_notifications_mark_all_read(
 
 class OrchestratorComplaintRequest(BaseModel):
     ticket_id: Optional[str] = None
+    subject: Optional[str] = None
     transcript: Optional[str] = None
     asset_type: Optional[str] = None
     sentiment: Optional[float] = None
@@ -4128,6 +4319,8 @@ class OrchestratorComplaintRequest(BaseModel):
     label: Optional[str] = None
     status: Optional[str] = None
     classification_confidence: Optional[float] = None
+    created_by_user_id: Optional[str] = None
+    ticket_source: Optional[str] = None
 
 
 class ChatbotProxyRequest(BaseModel):
@@ -4169,11 +4362,9 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
     allowed_statuses = {
         "Open",
         "In Progress",
-        "Unassigned",
         "Assigned",
         "Escalated",
         "Overdue",
-        "Reopened",
         "Resolved",
     }
     if normalized_status and normalized_status not in allowed_statuses:
@@ -4202,7 +4393,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     )
                     department_id = cur.fetchone()[0]
 
-            if not incoming_ticket_code:
+if not incoming_ticket_code:
                 # ── No ticket_id supplied → create a new ticket ──
                 from api.ticket_creation_gate import create_ticket_via_gate
                 created = create_ticket_via_gate(
@@ -4220,6 +4411,23 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     model_priority=priority_label,
                     model_department_id=department_id,
                     model_confidence=body.classification_confidence,
+                )
+                return {
+                    "ticket_id":   created["ticket_code"],
+                    "status":      created["status"],
+                    "priority":    created["priority"],
+                    "asset_type":  None,
+                    "department":  requested_department,
+                    "priority_assigned_at": created["priority_assigned_at"].isoformat() if created.get("priority_assigned_at") else None,
+                    "respond_due_at":       created["respond_due_at"].isoformat() if created.get("respond_due_at") else None,
+                    "resolve_due_at":       created["resolve_due_at"].isoformat() if created.get("resolve_due_at") else None,
+                }
+
+            # ── ticket_id supplied → update existing ticket ──
+            cur.execute(
+                "SELECT id, priority_assigned_at, department_id FROM tickets WHERE ticket_code = %s LIMIT 1",
+                (incoming_ticket_code,),
+            )
                 )
                 return {
                     "ticket_id":   created["ticket_code"],
@@ -4938,7 +5146,7 @@ def get_operator_complaint_detail(
         "assetCategory":       (feature or {}).get("asset_category") or ticket.get("asset_type"),
         "topicLabels":         (feature or {}).get("topic_labels") or [],
         "featureConfidence":   _flt((feature or {}).get("feature_confidence")),
-        "assignedToName":      ticket.get("assigned_to_name") or "Unassigned",
+        "assignedToName":      ticket.get("assigned_to_name") or "Not Assigned",
         "assignedToTitle":     ticket.get("assigned_to_title") or "",
         "createdByName":       ticket.get("created_by_name") or "Unknown",
         "createdByRole":       ticket.get("created_by_role") or "",
