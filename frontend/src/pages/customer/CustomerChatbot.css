@@ -1,55 +1,57 @@
-/* ================================================
-   CustomerChatbot — Nova AI chatbot interface
-   ================================================ */
+/* ============================================================
+   CustomerChatbot — Galaxy Theme
+   ============================================================ */
 
 .custChatPage {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  animation: fadeUp 0.4s var(--ease-out) both;
+  height: 100%;
+  font-family: "Outfit", sans-serif;
 }
 
 .custChatTop {
   flex-shrink: 0;
 }
 
-/* ---- Outer shell — fills remaining vertical space ---- */
+/* ── SHELL ─────────────────────────────────────────────────── */
 .custChatShellV2 {
+  flex: 1;
   display: flex;
-  flex-direction: column;
+  min-height: 0;
+  padding: 0 clamp(16px,3vw,32px) clamp(16px,2vw,24px);
 }
 
-/* ---- Chat panel card ---- */
 .custChatPanelV2 {
-  background: #ffffff;
-  border-radius: var(--radius-lg);
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  box-shadow: 0 6px 24px rgba(64, 28, 81, 0.08);
+  flex: 1;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 260px);
-  min-height: 420px;
+  background: rgba(12,5,32,.85);
+  border: 1px solid rgba(147,51,234,.18);
+  border-radius: 20px;
   overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0,0,0,.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
-/* ---- Quick-start bar ---- */
+/* ── QUICK TOP BAR ─────────────────────────────────────────── */
 .custQuickTop {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 18px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(147,51,234,.12);
+  background: rgba(147,51,234,.05);
   flex-shrink: 0;
   flex-wrap: wrap;
-  background: rgba(89, 36, 180, 0.02);
 }
 
 .custQuickTopHint {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  color: rgba(17, 17, 17, 0.50);
-  letter-spacing: 0.02em;
-  white-space: nowrap;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .custQuickTopBtns {
@@ -59,187 +61,171 @@
 }
 
 .custQuickTopBtns button {
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  border: 1px solid rgba(89, 36, 180, 0.22);
-  background: rgba(89, 36, 180, 0.07);
-  color: var(--btn-primary);
+  font-family: "Outfit", sans-serif;
   font-size: 13px;
   font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(147,51,234,.3);
+  background: rgba(147,51,234,.1);
+  color: var(--pink);
   cursor: pointer;
-  font-family: inherit;
-  transition: background var(--dur-fast), border-color var(--dur-fast);
+  transition: all .2s var(--ease);
+  letter-spacing: .02em;
+}
+.custQuickTopBtns button:hover:not(:disabled) {
+  background: rgba(147,51,234,.22);
+  border-color: rgba(168,85,247,.5);
+  color: var(--text);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(147,51,234,.25);
+}
+.custQuickTopBtns button:disabled {
+  opacity: .45; cursor: not-allowed;
 }
 
-.custQuickTopBtns button:hover {
-  background: rgba(89, 36, 180, 0.14);
-  border-color: rgba(89, 36, 180, 0.36);
-}
-
-/* ---- Scrollable message list ---- */
+/* ── CHAT LIST ─────────────────────────────────────────────── */
 .custChatList {
   flex: 1;
   overflow-y: auto;
-  padding: 18px;
+  padding: 20px 18px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-height: 0;
-  scroll-behavior: smooth;
+  gap: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(147,51,234,.2) transparent;
 }
+.custChatList::-webkit-scrollbar { width: 4px; }
+.custChatList::-webkit-scrollbar-thumb { background: rgba(147,51,234,.2); border-radius: 2px; }
 
-.custChatList::-webkit-scrollbar {
-  width: 4px;
-}
-.custChatList::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custChatList::-webkit-scrollbar-thumb {
-  background: rgba(89, 36, 180, 0.15);
-  border-radius: 99px;
-}
-
-/* ---- Message rows ---- */
+/* messages */
 .custMsg {
   display: flex;
-  animation: fadeUp 0.2s var(--ease-out) both;
+  animation: clMsgIn .25s var(--ease) both;
 }
+@keyframes clMsgIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 
 .custMsg--bot  { justify-content: flex-start; }
 .custMsg--user { justify-content: flex-end; }
 
-/* ---- Message bubbles ---- */
 .custMsg__bubble {
   max-width: 72%;
-  padding: 10px 14px;
+  padding: 11px 15px;
+  border-radius: 16px;
   font-size: 14px;
+  font-family: "Outfit", sans-serif;
+  font-weight: 400;
   line-height: 1.55;
-  word-break: break-word;
-  white-space: pre-wrap;
 }
-
-/* Bot bubble — soft purple tint, left-anchored corner */
-.custMsg--bot .custMsg__bubble {
-  background: rgba(89, 36, 180, 0.07);
-  border: 1px solid rgba(89, 36, 180, 0.13);
-  border-radius: 18px 18px 18px 4px;
-  color: var(--text-dark);
+.custMsg--bot  .custMsg__bubble {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.07);
+  color: rgba(255,255,255,.8);
+  border-bottom-left-radius: 4px;
 }
-
-/* User bubble — brand gradient, right-anchored corner */
 .custMsg--user .custMsg__bubble {
-  background: var(--gradient-brand);
-  color: #ffffff;
-  border-radius: 18px 18px 4px 18px;
-  box-shadow: 0 3px 12px rgba(89, 36, 180, 0.22);
+  background: linear-gradient(135deg, rgba(109,40,217,.55), rgba(147,51,234,.45));
+  border: 1px solid rgba(147,51,234,.4);
+  color: rgba(255,255,255,.94);
+  border-bottom-right-radius: 4px;
 }
 
-/* ---- Message composer ---- */
+/* typing indicator */
+.custTypingIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+.custTypingIndicator span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(192,132,252,.6);
+  animation: clTypBounce 1.2s ease-in-out infinite;
+}
+.custTypingIndicator span:nth-child(2) { animation-delay: .15s; }
+.custTypingIndicator span:nth-child(3) { animation-delay: .3s; }
+@keyframes clTypBounce {
+  0%,60%,100% { transform:translateY(0); opacity:.5; }
+  30% { transform:translateY(-5px); opacity:1; }
+}
+
+/* ── COMPOSER ──────────────────────────────────────────────── */
 .custComposer {
   display: flex;
   gap: 10px;
-  align-items: flex-end;
-  padding: 14px 18px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 14px 16px;
+  border-top: 1px solid rgba(147,51,234,.12);
+  background: rgba(7,3,15,.8);
   flex-shrink: 0;
-  background: rgba(0, 0, 0, 0.01);
+  align-items: flex-end;
 }
 
 .custInput {
   flex: 1;
-  border: 1px solid rgba(0, 0, 0, 0.13);
-  border-radius: var(--radius-md);
-  padding: 10px 14px;
-  font-size: 14px;
-  font-family: inherit;
-  color: var(--text-dark);
-  background: #ffffff;
   resize: none;
-  min-height: 44px;
-  max-height: 120px;
-  outline: none;
-  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
-  line-height: 1.5;
-}
-
-.custInput:focus {
-  border-color: rgba(89, 36, 180, 0.50);
-  box-shadow: var(--shadow-glow);
-}
-
-.custInput::placeholder {
-  color: rgba(17, 17, 17, 0.38);
-}
-
-/* ---- Send button — local definition for self-containment ---- */
-.primaryPillBtn {
-  border: none;
-  border-radius: var(--radius-pill);
-  padding: 11px 22px;
+  border-radius: 12px;
+  border: 1px solid rgba(147,51,234,.22);
+  background: rgba(255,255,255,.04);
+  color: var(--text);
+  font-family: "Outfit", sans-serif;
   font-size: 14px;
-  font-weight: 700;
-  font-family: inherit;
+  font-weight: 400;
+  line-height: 1.5;
+  padding: 12px 16px;
+  outline: none;
+  min-height: 48px;
+  max-height: 140px;
+  transition: border-color .2s, box-shadow .2s, background .2s;
+  -webkit-user-select: text; user-select: text;
+}
+.custInput::placeholder { color: var(--muted); }
+.custInput:focus {
+  border-color: rgba(147,51,234,.5);
+  box-shadow: 0 0 0 3px rgba(147,51,234,.12);
+  background: rgba(147,51,234,.05);
+}
+.custInput:disabled { opacity: .45; cursor: not-allowed; }
+
+/* shared pill button (used across customer pages) */
+.primaryPillBtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: "Outfit", sans-serif;
+  font-size: 14px; font-weight: 700;
+  padding: 11px 22px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg,#6d28d9,#9333ea,#a855f7);
+  background-size: 200% auto;
+  color: #fff;
   cursor: pointer;
   white-space: nowrap;
-  flex-shrink: 0;
-  background: var(--gradient-brand);
-  color: #ffffff;
-  box-shadow: 0 3px 12px rgba(89, 36, 180, 0.25);
-  transition: filter var(--dur-fast), transform var(--dur-fast);
+  transition: background-position .4s, transform .2s, box-shadow .3s;
+  box-shadow: 0 4px 18px rgba(147,51,234,.4);
 }
-
-.primaryPillBtn:hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
+.primaryPillBtn:hover:not(:disabled) {
+  background-position: right center;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(147,51,234,.6);
 }
-
-.primaryPillBtn:active {
-  transform: translateY(0);
-}
-
-/* ---- Typing indicator (animated bouncing dots) ---- */
-.custTypingIndicator {
-  display: inline-flex;
-  gap: 4px;
-  padding: 4px 0;
-}
-.custTypingIndicator span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(89, 36, 180, 0.35);
-  animation: typingBounce 1.2s infinite ease-in-out;
-}
-.custTypingIndicator span:nth-child(2) { animation-delay: 0.15s; }
-.custTypingIndicator span:nth-child(3) { animation-delay: 0.3s; }
-
-@keyframes typingBounce {
-  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-  40% { transform: translateY(-6px); opacity: 1; }
-}
-
-/* ---- Disabled state for buttons during send ---- */
-.custQuickTopBtns button:disabled,
 .primaryPillBtn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+  opacity: .45; cursor: not-allowed;
 }
 
-/* ================================================
-   Responsive
-   ================================================ */
-@media (max-width: 768px) {
-  .custChatPanelV2 {
-    height: calc(100vh - 200px);
-  }
-
-  .custMsg__bubble {
-    max-width: 88%;
-  }
-
-  .custQuickTop {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
+.softPillBtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: "Outfit", sans-serif;
+  font-size: 14px; font-weight: 600;
+  padding: 11px 22px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255,255,255,.12);
+  background: transparent;
+  color: rgba(255,255,255,.55);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .2s;
+}
+.softPillBtn:hover {
+  border-color: rgba(168,85,247,.4);
+  color: var(--text);
+  background: rgba(147,51,234,.08);
 }
