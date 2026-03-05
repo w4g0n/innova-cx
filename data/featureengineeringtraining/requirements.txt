@@ -1,0 +1,3 @@
+# Feature engineering training environment
+# Reuse the exact pinned stack from synthesizerv7phase2.
+-r ../synthesizerv7phase2/requirements.txt

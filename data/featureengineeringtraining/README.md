@@ -19,7 +19,7 @@ From repo root:
 ```bash
 cd /Users/mayood/Documents_local/Study/Uni/Y3/innova-cx
 source .venv/bin/activate   # if you use a venv
-pip install -r data/synthesizerv7phase2/requirements.txt
+pip install -r data/featureengineeringtraining/requirements.txt
 bash data/featureengineeringtraining/run_pipeline.sh \
   --rows 2500 \
   --epochs 3 \
