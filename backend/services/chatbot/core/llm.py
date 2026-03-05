@@ -120,7 +120,7 @@ def _template_response(messages: list[dict]) -> str:
     prompt and formatting it as a helpful answer.
     """
     system_msg = ""
-    user_msg = ""
+    #user_msg = ""
     for msg in messages:
         role = str(msg.get("role", "")).lower()
         content = str(msg.get("content", "")).strip()
