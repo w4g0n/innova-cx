@@ -152,11 +152,6 @@ export default function CustomerLanding() {
     setIsExpanded(false);
   };
 
-  const openHistory = () => {
-    closeAllPopovers();
-    navigate("/customer/mytickets");
-  };
-
   const openSettings = () => {
     closeAllPopovers();
     navigate("/customer/settings");

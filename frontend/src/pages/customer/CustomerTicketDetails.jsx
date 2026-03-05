@@ -130,10 +130,7 @@ export default function CustomerTicketDetails() {
   const currentAiStageIndex = Number.isInteger(orchestratorStageIndex)
     ? orchestratorStageIndex
     : getCurrentAiStageIndex(ticket?.status);
-  const currentAiStage = AI_PIPELINE_STAGES[currentAiStageIndex]?.label || "Controller / Orchestrator";
-  const currentAiStageObj = AI_PIPELINE_STAGES[currentAiStageIndex] || AI_PIPELINE_STAGES[0];
-  const nextAiStageObj = AI_PIPELINE_STAGES[currentAiStageIndex + 1] || null;
-  const aiProgress = Math.round((currentAiStageIndex / (AI_PIPELINE_STAGES.length - 1)) * 100);
+  
 
   const tone = statusTone(ticket?.status);
 

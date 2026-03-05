@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
 import novaLogo from "../assets/nova-logo.png";
-import dccBg from "../assets/dcc-bg.png";
 import "./PublicLanding.css";
 
 const FEATURES = [
