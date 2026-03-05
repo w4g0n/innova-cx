@@ -11,6 +11,8 @@ export default function ProtectedRoute({ role, children }) {
       const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
       const padded = b64 + "===".slice(0, (4 - (b64.length % 4)) % 4);
       const { exp } = JSON.parse(atob(padded));
+      // Intentionally impure: route guard must read the real current time.
+      // eslint-disable-next-line react-hooks/purity
       if (Date.now() / 1000 > exp) {
         clearAllAuth();
         const next = encodeURIComponent(window.location.pathname + window.location.search);
