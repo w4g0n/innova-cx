@@ -4239,121 +4239,120 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             )
             existing = cur.fetchone()
             if existing:
-                    had_priority_before = existing[1] is not None
-                    subject_update = None
-                    if requested_department and ticket_type:
-                        subject_update = f"[{requested_department.title()}] Automated {ticket_type.lower()}"
+                had_priority_before = existing[1] is not None
+                subject_update = None
+                if requested_department and ticket_type:
+                    subject_update = f"[{requested_department.title()}] Automated {ticket_type.lower()}"
 
-                    details_update = body.transcript if body.transcript else None
-                    now_utc = datetime.now(timezone.utc) if priority_label else None
-                    sentiment_label_update = "orchestrator" if body.sentiment is not None else None
+                details_update = body.transcript if body.transcript else None
+                now_utc = datetime.now(timezone.utc) if priority_label else None
+                sentiment_label_update = "orchestrator" if body.sentiment is not None else None
 
-                    cur.execute(
-                        """
-                        UPDATE tickets
-                        SET
-                          ticket_type = COALESCE(%s, ticket_type),
-                          subject = COALESCE(%s, subject),
-                          details = COALESCE(%s, details),
-                          asset_type = COALESCE(%s, asset_type),
-                          priority = COALESCE(%s, priority),
-                          status = COALESCE(%s, status),
-                          department_id = COALESCE(%s, department_id),
-                          sentiment_score = COALESCE(%s, sentiment_score),
-                          sentiment_label = COALESCE(%s, sentiment_label),
-                          model_priority = COALESCE(%s, model_priority),
-                          model_department_id = COALESCE(%s, model_department_id),
-                          model_confidence = COALESCE(%s, model_confidence),
-                          priority_assigned_at = COALESCE(%s, priority_assigned_at)
-                        WHERE ticket_code = %s
-                        RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
-                        """,
-                        (
-                            ticket_type,
-                            subject_update,
-                            details_update,
-                            requested_asset_type,
-                            priority_label,
-                            normalized_status,
-                            department_id,
-                            body.sentiment,
-                            sentiment_label_update,
-                            priority_label,
-                            department_id,
-                            body.classification_confidence,
-                            now_utc,
-                            incoming_ticket_code,
-                        ),
-                    )
-                    updated = cur.fetchone()
-                    logger.info(
-                        "orchestrator_ticket_update | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
-                        updated[0],
-                        updated[1],
-                        updated[2],
-                        updated[3],
-                        requested_department,
-                        updated[4],
-                        updated[5],
-                        updated[6],
-                    )
-                    
-                    if (not had_priority_before) and updated[4]:
-                        try:
-                            _generate_suggestion_if_ready(updated[0])
-                        except Exception as exc:
-                            logger.warning(
-                                "suggested_resolution | generation failed at first priority assignment ticket=%s err=%s",
-                                updated[0],
-                                exc,
-                            )
+                cur.execute(
+                    """
+                    UPDATE tickets
+                    SET
+                      ticket_type = COALESCE(%s, ticket_type),
+                      subject = COALESCE(%s, subject),
+                      details = COALESCE(%s, details),
+                      asset_type = COALESCE(%s, asset_type),
+                      priority = COALESCE(%s, priority),
+                      status = COALESCE(%s, status),
+                      department_id = COALESCE(%s, department_id),
+                      sentiment_score = COALESCE(%s, sentiment_score),
+                      sentiment_label = COALESCE(%s, sentiment_label),
+                      model_priority = COALESCE(%s, model_priority),
+                      model_department_id = COALESCE(%s, model_department_id),
+                      model_confidence = COALESCE(%s, model_confidence),
+                      priority_assigned_at = COALESCE(%s, priority_assigned_at)
+                    WHERE ticket_code = %s
+                    RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
+                    """,
+                    (
+                        ticket_type,
+                        subject_update,
+                        details_update,
+                        requested_asset_type,
+                        priority_label,
+                        normalized_status,
+                        department_id,
+                        body.sentiment,
+                        sentiment_label_update,
+                        priority_label,
+                        department_id,
+                        body.classification_confidence,
+                        now_utc,
+                        incoming_ticket_code,
+                    ),
+                )
+                updated = cur.fetchone()
+                logger.info(
+                    "orchestrator_ticket_update | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
+                    updated[0],
+                    updated[1],
+                    updated[2],
+                    updated[3],
+                    requested_department,
+                    updated[4],
+                    updated[5],
+                    updated[6],
+                )
 
-                    # ── Routing review: queue if confidence is below threshold ──
-                    conf = body.classification_confidence
-                    queued_for_review = False
-                    if (
-                        conf is not None
-                        and conf < ROUTING_CONFIDENCE_THRESHOLD
-                        and requested_department
-                        and existing
-                    ):
-                        ticket_uuid = str(existing[0])   # first col of the RETURNING is id
-                        already_queued = fetch_one(
-                            """
-                            SELECT id FROM routing_review_queue
-                            WHERE ticket_id = %s::uuid AND status = 'Pending'
-                            LIMIT 1
-                            """,
-                            (ticket_uuid,),
+                if (not had_priority_before) and updated[4]:
+                    try:
+                        _generate_suggestion_if_ready(updated[0])
+                    except Exception as exc:
+                        logger.warning(
+                            "suggested_resolution | generation failed at first priority assignment ticket=%s err=%s",
+                            updated[0],
+                            exc,
                         )
-                        if not already_queued:
-                            cur.execute(
-                                """
-                                INSERT INTO routing_review_queue
-                                  (ticket_id, predicted_department, confidence_score)
-                                VALUES (%s::uuid, %s, %s)
-                                ON CONFLICT DO NOTHING;
-                                """,
-                                (ticket_uuid, requested_department, conf),
-                            )
-                            queued_for_review = True
-                            logger.info(
-                                "routing_review | ticket=%s dept=%s confidence=%.3f queued=True",
-                                updated[0], requested_department, conf,
-                            )
 
-                    return {
-                        "ticket_id":        updated[0],
-                        "status":           updated[1],
-                        "priority":         updated[2],
-                        "asset_type":       updated[3],
-                        "department":       requested_department,
-                        "queued_for_review": queued_for_review,
-                        "priority_assigned_at": updated[4].isoformat() if updated[4] else None,
-                        "respond_due_at":   updated[5].isoformat() if updated[5] else None,
-                        "resolve_due_at":   updated[6].isoformat() if updated[6] else None,
-                    }
+                # ── Routing review: queue if confidence is below threshold ──
+                conf = body.classification_confidence
+                queued_for_review = False
+                if (
+                    conf is not None
+                    and conf < ROUTING_CONFIDENCE_THRESHOLD
+                    and requested_department
+                    and existing
+                ):
+                    ticket_uuid = str(existing[0])
+                    already_queued = fetch_one(
+                        """
+                        SELECT id FROM routing_review_queue
+                        WHERE ticket_id = %s::uuid AND status = 'Pending'
+                        LIMIT 1
+                        """,
+                        (ticket_uuid,),
+                    )
+                    if not already_queued:
+                        cur.execute(
+                            """
+                            INSERT INTO routing_review_queue
+                              (ticket_id, predicted_department, confidence_score)
+                            VALUES (%s::uuid, %s, %s)
+                            ON CONFLICT DO NOTHING;
+                            """,
+                            (ticket_uuid, requested_department, conf),
+                        )
+                        queued_for_review = True
+                        logger.info(
+                            "routing_review | ticket=%s dept=%s confidence=%.3f queued=True",
+                            updated[0], requested_department, conf,
+                        )
 
+                return {
+                    "ticket_id":        updated[0],
+                    "status":           updated[1],
+                    "priority":         updated[2],
+                    "asset_type":       updated[3],
+                    "department":       requested_department,
+                    "queued_for_review": queued_for_review,
+                    "priority_assigned_at": updated[4].isoformat() if updated[4] else None,
+                    "respond_due_at":   updated[5].isoformat() if updated[5] else None,
+                    "resolve_due_at":   updated[6].isoformat() if updated[6] else None,
+                }
 
 @api.post("/chatbot/chat")
 async def proxy_chatbot_chat(body: ChatbotProxyRequest):
