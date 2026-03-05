@@ -3848,6 +3848,93 @@ def manager_notifications_mark_all_read(
     return {"ok": True}
 
 # =========================================================
+# Operator Notifications
+# =========================================================
+
+@api.get("/operator/notifications")
+def operator_notifications(
+    limit: int = Query(default=200, ge=1, le=500),
+    only_unread: bool = Query(default=False),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    user_id = user["id"]
+
+    rows = fetch_all(
+        """
+        SELECT
+          n.id::text           AS "id",
+          n.type::text         AS "type",
+          n.title              AS "title",
+          n.message            AS "message",
+          n.priority::text     AS "priority",
+          t.ticket_code        AS "ticketId",
+          n.report_id          AS "reportId",
+          n.read               AS "read",
+          n.created_at         AS "timestamp"
+        FROM notifications n
+        LEFT JOIN tickets t ON t.id = n.ticket_id
+        WHERE n.user_id = %s
+          AND (%s = FALSE OR n.read = FALSE)
+        ORDER BY n.created_at DESC
+        LIMIT %s;
+        """,
+        (user_id, only_unread, limit),
+    )
+
+    unread_row = fetch_one(
+        "SELECT COUNT(*)::int AS unread FROM notifications WHERE user_id = %s AND read = FALSE;",
+        (user_id,),
+    ) or {"unread": 0}
+
+    notifications = []
+    for r in rows:
+        ts = r.get("timestamp")
+        notifications.append({
+            "id": r.get("id"),
+            "type": r.get("type"),
+            "title": r.get("title"),
+            "message": r.get("message"),
+            "priority": r.get("priority"),
+            "ticketId": r.get("ticketId"),
+            "reportId": r.get("reportId"),
+            "read": bool(r.get("read")),
+            "timestamp": ts.isoformat() if ts else None,
+        })
+
+    return {"unreadCount": int(unread_row.get("unread") or 0), "notifications": notifications}
+
+
+@api.post("/operator/notifications/{notification_id}/read")
+def operator_notification_mark_read(
+    notification_id: str,
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    import uuid
+    try:
+        uuid.UUID(notification_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid notification id")
+
+    updated = execute(
+        "UPDATE notifications SET read = TRUE WHERE id = %s::uuid AND user_id = %s;",
+        (notification_id, user["id"]),
+    )
+    if updated <= 0:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"ok": True}
+
+
+@api.post("/operator/notifications/read-all")
+def operator_notifications_mark_all_read(
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    execute(
+        "UPDATE notifications SET read = TRUE WHERE user_id = %s AND read = FALSE;",
+        (user["id"],),
+    )
+    return {"ok": True}
+    
+# =========================================================
 # Internal Orchestrator Endpoint (no JWT — Docker-network only)
 # =========================================================
 

@@ -640,6 +640,125 @@ CREATE TRIGGER trg_notify_manager_approval_decision
 AFTER UPDATE ON approval_requests
 FOR EACH ROW
 EXECUTE FUNCTION notify_manager_on_approval_decision();
+
+-- =========================================================
+-- Customer Notifications
+-- Triggers:
+--   1. On ticket INSERT → "Ticket Received" notification
+--   2. On ticket status UPDATE → "Status Changed" notification
+--   3. On ticket resolved (status = 'Resolved') → "Resolved" notification
+-- =========================================================
+
+-- ─────────────────────────────────────────────────────────
+-- Helper: notify customer on new ticket creation
+-- ─────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION notify_customer_on_ticket_create()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Only notify if the ticket was created by a customer role user
+  IF NOT EXISTS (
+    SELECT 1 FROM users
+    WHERE id = NEW.created_by_user_id AND role = 'customer'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO notifications (
+    user_id,
+    type,
+    title,
+    message,
+    priority,
+    ticket_id
+  ) VALUES (
+    NEW.created_by_user_id,
+    'ticket_assignment',
+    'Ticket Received — ' || NEW.ticket_code,
+    'Your ticket "' || NEW.subject || '" has been received and is currently ' || NEW.status::TEXT || '. We will keep you updated.',
+    NEW.priority,
+    NEW.id
+  );
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_notify_customer_ticket_create ON tickets;
+CREATE TRIGGER trg_notify_customer_ticket_create
+AFTER INSERT ON tickets
+FOR EACH ROW
+EXECUTE FUNCTION notify_customer_on_ticket_create();
+
+
+-- ─────────────────────────────────────────────────────────
+-- Helper: notify customer on ticket status change
+-- Fires on any status transition (excluding Resolved — handled separately below)
+-- ─────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION notify_customer_on_status_change()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_title   TEXT;
+  v_message TEXT;
+BEGIN
+  -- Only fire when status actually changed
+  IF OLD.status = NEW.status THEN
+    RETURN NEW;
+  END IF;
+
+  -- Only notify customers
+  IF NOT EXISTS (
+    SELECT 1 FROM users
+    WHERE id = NEW.created_by_user_id AND role = 'customer'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  -- Handle Resolved separately with a richer message
+  IF NEW.status = 'Resolved' THEN
+    v_title := 'Ticket Resolved — ' || NEW.ticket_code;
+    v_message := 'Great news! Your ticket "' || NEW.subject || '" has been resolved. '
+      || CASE
+           WHEN NEW.final_resolution IS NOT NULL
+           THEN 'Resolution: ' || NEW.final_resolution
+           ELSE 'Please contact us if you need any further assistance.'
+         END;
+  ELSE
+    v_title := 'Ticket Update — ' || NEW.ticket_code;
+    v_message := 'Your ticket "' || NEW.subject || '" status has been updated from '
+      || OLD.status::TEXT || ' to ' || NEW.status::TEXT || '.';
+  END IF;
+
+  INSERT INTO notifications (
+    user_id,
+    type,
+    title,
+    message,
+    priority,
+    ticket_id
+  ) VALUES (
+    NEW.created_by_user_id,
+    CASE
+      WHEN NEW.status = 'Resolved'  THEN 'status_change'::notification_type
+      WHEN NEW.status = 'Escalated' THEN 'sla_warning'::notification_type
+      WHEN NEW.status = 'Overdue'   THEN 'sla_warning'::notification_type
+      ELSE                               'status_change'::notification_type
+    END,
+    v_title,
+    v_message,
+    NEW.priority,
+    NEW.id
+  );
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_notify_customer_status_change ON tickets;
+CREATE TRIGGER trg_notify_customer_status_change
+AFTER UPDATE ON tickets
+FOR EACH ROW
+EXECUTE FUNCTION notify_customer_on_status_change();
+
 -- -------------------------
 -- Chat tables
 -- -------------------------
@@ -1327,6 +1446,7 @@ SET value=EXCLUDED.value;
 \ir scripts/is_recurring.sql
 \ir services/suggested.sql
 \ir migrations/001_agent_execution_logs.sql
+\ir migrations/002_operator_notifications.sql
 
 -- =========================================================
 -- Dev/Test safety: ensure ticket assignments match current
