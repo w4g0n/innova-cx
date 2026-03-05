@@ -20,7 +20,7 @@ import httpx
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 import pyotp  # for RFC 6238 TOTP
@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
 ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.75"))
-CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "120"))
+CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "30"))
 ANALYTICS_REFRESH_INTERVAL_SECONDS = int(os.getenv("ANALYTICS_REFRESH_INTERVAL_HOURS", "12")) * 3600
 _sla_heartbeat_task: Optional[asyncio.Task] = None
 _analytics_refresh_task: Optional[asyncio.Task] = None
@@ -5241,6 +5241,93 @@ def operator_delete_user(
         raise HTTPException(status_code=500, detail="Failed to delete user.")
 
     return {"success": True, "message": "User deleted successfully."}
+
+
+# =========================================================
+# TTS — call-centre audio reply
+# =========================================================
+
+try:
+    import edge_tts as _edge_tts
+except ImportError:
+    _edge_tts = None
+
+_TTS_VOICE = "en-US-JennyNeural"
+
+_TTS_TEMPLATES: dict = {
+    "ticket_logged": (
+        "Thank you for contacting us. "
+        "Your {ticket_type} has been successfully logged. "
+        "Your ticket ID is {ticket_id}. "
+        "Our team will review your concern and respond as soon as possible."
+    ),
+    "inquiry_handled": (
+        "Thank you for your inquiry. "
+        "Our team has been notified and will get back to you shortly."
+    ),
+    "generic": "{text}",
+}
+
+
+async def _generate_tts_bytes(text: str, voice: str = _TTS_VOICE) -> bytes:
+    communicate = _edge_tts.Communicate(text, voice)
+    buf = io.BytesIO()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            buf.write(chunk["data"])
+    buf.seek(0)
+    return buf.read()
+
+
+class TTSSpeakRequest(BaseModel):
+    message_type: Optional[str] = "ticket_logged"
+    ticket_id: Optional[str] = None
+    ticket_type: Optional[str] = "complaint"
+    text: Optional[str] = None
+
+
+@api.post("/tts/speak")
+async def tts_speak(body: TTSSpeakRequest):
+    if _edge_tts is None:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "TTS unavailable: edge-tts package not installed"},
+        )
+    try:
+        if body.text and body.text.strip():
+            text = body.text.strip()
+        else:
+            template = _TTS_TEMPLATES.get(
+                body.message_type or "ticket_logged",
+                _TTS_TEMPLATES["ticket_logged"],
+            )
+            text = template.format(
+                ticket_id=body.ticket_id or "unknown",
+                ticket_type=body.ticket_type or "complaint",
+                text="",
+            )
+        if not text:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "No text provided for synthesis"},
+            )
+        audio_bytes = await _generate_tts_bytes(text)
+        if not audio_bytes:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "TTS returned empty audio"},
+            )
+        return {
+            "audio_base64": base64.b64encode(audio_bytes).decode(),
+            "mime_type": "audio/mpeg",
+            "text": text,
+        }
+    except Exception as exc:
+        logger.warning("TTS generation failed: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": f"TTS unavailable: {exc}"},
+        )
 
 
 # =========================================================
