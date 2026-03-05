@@ -271,3 +271,108 @@
     font-size: 16px;
   }
 }
+
+/* ── Routing Review Queue section header ────────────────── */
+.rrq-sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin: 36px 0 16px;
+  padding: 22px 24px;
+  background: linear-gradient(125deg, #1e0a3c 0%, #3b0f6e 45%, #5b21b6 100%);
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(91,33,182,0.22);
+}
+
+.rrq-sectionHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rrq-sectionIcon {
+  font-size: 28px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rrq-sectionTitle {
+  font-size: 17px;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+
+.rrq-sectionSubtitle {
+  font-size: 12px;
+  color: rgba(233,213,255,0.75);
+  margin: 0;
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+.rrq-kpiStrip {
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.rrq-kpiChip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 22px;
+  gap: 2px;
+}
+
+.rrq-kpiVal {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+}
+.rrq-kpiVal--pending    { color: #fbbf24; }
+.rrq-kpiVal--confirmed  { color: #34d399; }
+.rrq-kpiVal--overridden { color: #a78bfa; }
+
+.rrq-kpiLabel {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(233,213,255,0.65);
+}
+
+.rrq-kpiDivider {
+  width: 1px;
+  height: 36px;
+  background: rgba(255,255,255,0.15);
+  flex-shrink: 0;
+}
+
+.rrq-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+/* Overridden pill */
+.statusPill--overridden {
+  background: rgba(99,102,241,0.14);
+  color: #3730a3;
+}
