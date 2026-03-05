@@ -37,19 +37,32 @@ def _extract_aggression(text: str) -> tuple[bool, float]:
 
 _FOLLOW_UP_SIGNALS = [
     "follow up", "follow-up", "followup", "existing ticket", "ticket status",
-    "update on", "status of", "my ticket", "track", "check on",
+    "update on", "update of", "update about", "update for",
+    "status of", "my ticket", "track", "check on", "check the",
     "ticket id", "cx-", "where is my", "any update", "progress on",
     "what happened", "resolution", "been waiting", "still open",
     "not resolved", "check status", "look up", "lookup",
+    "previous ticket", "previous complaint", "previous inquiry",
+    "earlier ticket", "earlier complaint", "old ticket",
+    "submitted earlier", "submitted before", "raised earlier",
+    "my complaint", "my inquiry", "my request", "my issue",
+    "pending ticket", "open ticket", "last ticket",
 ]
 
 _CREATE_SIGNALS = [
-    "new ticket", "create", "submit", "report", "problem",
-    "issue", "broken", "fault", "complaint", "not working",
-    "need help", "log a", "raise", "file a", "damaged",
+    "new ticket", "new complaint", "new inquiry",
+    "create a", "create ticket", "submit a", "submit ticket",
+    "report a", "report problem", "log a", "raise a", "file a",
+    "make a complaint", "make a ticket", "make a report",
+    "i have a problem", "i have an issue",
+    "i want to complain", "i want to report", "i want to create",
+    "i want to submit", "i want to raise", "i want to file",
+    "broken", "fault", "not working",
+    "need help with", "damaged",
     "leaking", "out of order", "malfunction", "defective",
-    "down", "outage", "failed", "question", "inquiry",
+    "down", "outage", "failed",
     "how do i", "how can i", "can you help",
+    "question about", "inquiry about", "ask about",
 ]
 
 _INQUIRY_SIGNALS = [
