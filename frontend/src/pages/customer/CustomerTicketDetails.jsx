@@ -46,6 +46,10 @@ function getCurrentAiStageIndex(status) {
   }
 }
 
+function formatTicketSource(value) {
+  return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
+}
+
 export default function CustomerTicketDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -70,6 +74,7 @@ export default function CustomerTicketDetails() {
           id: t.ticketId,
           title: t.description?.subject,
           type: "Ticket",
+          source: formatTicketSource(t.ticketSource),
           status: t.status,
           date: t.issueDate,
           priority: t.priority,
@@ -175,6 +180,8 @@ export default function CustomerTicketDetails() {
                   <span className="ctd-ticket-id">{ticket.id}</span>
                   <span className="ctd-divider-dot">•</span>
                   <span className="ctd-ticket-id">{ticket.type}</span>
+                  <span className="ctd-divider-dot">•</span>
+                  <span className="ctd-ticket-id">{ticket.source}</span>
                   <span className="ctd-divider-dot">•</span>
                   <span className="ctd-status-badge" style={{ color: tone.color, background: tone.bg }}>
                     <span className="ctd-status-dot" style={{ background: tone.color }} />

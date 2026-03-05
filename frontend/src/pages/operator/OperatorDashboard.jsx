@@ -3,170 +3,167 @@ import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
-import operatorDashboardData from "../../mock-data/operatorDashboard.json";
 import "./OperatorDashboard.css";
 import useScrollReveal from "../../utils/useScrollReveal";
+import { apiUrl } from "../../config/apiBase";
+
+function getStoredToken() {
+  const direct =
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken");
+  if (direct) return direct;
+  try {
+    const rawUser = localStorage.getItem("user");
+    if (!rawUser) return "";
+    const user = JSON.parse(rawUser);
+    return user?.access_token || "";
+  } catch { return ""; }
+}
+
+async function apiFetch(path) {
+  const token = getStoredToken();
+  const url = apiUrl(`/api${path}`);
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 401 || res.status === 403) { window.location.href = "/login"; throw new Error("Session expired."); }
+  if (!res.ok) { const d = await res.text().catch(() => res.statusText); throw new Error(`${res.status}: ${d}`); }
+  return res.json();
+}
+
+function Dot({ ok }) {
+  return <span className={`opDash__dot opDash__dot--${ok ? "green" : "red"}`} />;
+}
+
+function ModuleCard({ tag, title, desc, to, rows, loading }) {
+  return (
+    <Link to={to} className="opDash__moduleCard">
+      <div className="opDash__moduleTop">
+        <span className="opDash__moduleTag">{tag}</span>
+        <span className="opDash__moduleArrow">→</span>
+      </div>
+      <div className="opDash__moduleTitle">{title}</div>
+      <div className="opDash__moduleDesc">{desc}</div>
+      <div className="opDash__moduleDivider" />
+      <div className="opDash__moduleStats">
+        {loading ? (
+          <span className="opDash__moduleLoading">Loading…</span>
+        ) : (
+          rows.map((r) => (
+            <div key={r.label} className="opDash__moduleStat">
+              {r.ok !== undefined && <Dot ok={r.ok} />}
+              <span className="opDash__moduleStatLabel">{r.label}</span>
+              <span className="opDash__moduleStatValue">{r.value ?? "—"}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </Link>
+  );
+}
+
 
 export default function OperatorDashboard() {
   const revealRef = useScrollReveal();
 
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [chatbot,          setChatbot]          = useState(null);
+  const [chatbotLoading,   setChatbotLoading]   = useState(true);
+  const [sentiment,        setSentiment]        = useState(null);
+  const [sentimentLoading, setSentimentLoading] = useState(true);
+  const [qcAccept,         setQcAccept]         = useState(null);
+  const [qcAcceptLoading,  setQcAcceptLoading]  = useState(true);
+  const [qcRescore,        setQcRescore]        = useState(null);
+  const [qcRescoreLoading, setQcRescoreLoading] = useState(true);
+  const [users,            setUsers]            = useState(null);
+  const [usersLoading,     setUsersLoading]     = useState(true);
 
   useEffect(() => {
-    try {
-      setLoading(true);
-      setError(null);
-      setData(operatorDashboardData);
-    } catch (err) {
-      setError("Failed to load dashboard data");
-    } finally {
-      setLoading(false);
-    }
+    let cancelled = false;
+    const load = (path, set, setLoading) => {
+      apiFetch(path)
+        .then((d)  => { if (!cancelled) set(d); })
+        .catch(()  => {})
+        .finally(() => { if (!cancelled) setLoading(false); });
+    };
+    load("/operator/analytics/model-health/chatbot?timeRange=last30days",  setChatbot,   setChatbotLoading);
+    load("/operator/analytics/model-health/sentiment?timeRange=last30days", setSentiment, setSentimentLoading);
+    load("/operator/analytics/qc/acceptance?timeRange=last30days",          setQcAccept,  setQcAcceptLoading);
+    load("/operator/analytics/qc/rescoring?timeRange=last30days",           setQcRescore, setQcRescoreLoading);
+    load("/operator/users",                                                  setUsers,     setUsersLoading);
+    return () => { cancelled = true; };
   }, []);
 
-  const kpis = useMemo(() => {
-    if (!data) {
-      return {
-        systemErrors: 0,
-        fallbacks: 0,
-        routingFailures: 0,
-        ingestionQueue: 0,
-        modelQueue: 0,
-      };
-    }
-
-    const ingestion =
-      data.queues?.find((q) => /ingestion/i.test(q.name))?.value ?? 0;
-
-    const modelQ =
-      data.queues?.find((q) => /model/i.test(q.name))?.value ??
-      data.queues?.find((q) => /processing/i.test(q.name))?.value ??
-      0;
-
+  const userStats = useMemo(() => {
+    if (!users || !Array.isArray(users)) return null;
     return {
-      systemErrors: data.errorFallbackOverview?.systemErrors?.count ?? 0,
-      fallbacks: data.errorFallbackOverview?.chatbotToHumanFallbacks?.count ?? 0,
-      routingFailures: data.errorFallbackOverview?.routingFailures?.count ?? 0,
-      ingestionQueue: ingestion,
-      modelQueue: modelQ,
+      total:    users.length,
+      active:   users.filter((u) => u.status === "active").length,
+      inactive: users.filter((u) => u.status === "inactive").length,
     };
-  }, [data]);
+  }, [users]);
 
-  if (loading) {
-    return (
-      <Layout role="operator">
-        <div className="opDash">Loading…</div>
-      </Layout>
-    );
-  }
+  const topKpis = [
+    { label: "Containment Rate", value: chatbot?.kpis?.containmentRate     != null ? `${chatbot.kpis.containmentRate}%`          : chatbotLoading   ? "…" : "—" },
+    { label: "Escalation Rate",  value: chatbot?.kpis?.escalationRate      != null ? `${chatbot.kpis.escalationRate}%`           : chatbotLoading   ? "…" : "—" },
+    { label: "Avg Sentiment",    value: sentiment?.kpis?.avgSentimentScore  != null ? sentiment.kpis.avgSentimentScore.toFixed(2) : sentimentLoading  ? "…" : "—" },
+    { label: "QC Acceptance",    value: qcAccept?.kpis?.acceptanceRate     != null ? `${qcAccept.kpis.acceptanceRate}%`          : qcAcceptLoading   ? "…" : "—" },
+    { label: "Rescore Rate",     value: qcRescore?.kpis?.rescoreRate       != null ? `${qcRescore.kpis.rescoreRate}%`            : qcRescoreLoading  ? "…" : "—" },
+  ];
 
-  if (error) {
-    return (
-      <Layout role="operator">
-        <div className="opDash">⚠️ {error}</div>
-      </Layout>
-    );
-  }
+  const modules = [
+    {
+      tag: "Models", title: "Model Health",
+      desc: "Chatbot containment, sentiment scoring, and feature extraction diagnostics.",
+      to: "/operator/model-health", loading: chatbotLoading,
+      rows: [
+        { label: "Containment rate", value: chatbot?.kpis?.containmentRate != null ? `${chatbot.kpis.containmentRate}%` : "—", ok: chatbot?.kpis?.containmentRate >= 70 },
+        { label: "Escalation rate",  value: chatbot?.kpis?.escalationRate  != null ? `${chatbot.kpis.escalationRate}%`  : "—", ok: chatbot?.kpis?.escalationRate  <= 20 },
+        { label: "Total sessions",   value: chatbot?.kpis?.totalSessions?.toLocaleString() ?? "—" },
+      ],
+    },
+    {
+      tag: "QA", title: "Quality Control",
+      desc: "AI suggestion acceptance, priority rescoring, and routing override tracking.",
+      to: "/operator/quality-control", loading: qcAcceptLoading,
+      rows: [
+        { label: "Acceptance rate",   value: qcAccept?.kpis?.acceptanceRate != null ? `${qcAccept.kpis.acceptanceRate}%` : "—", ok: qcAccept?.kpis?.acceptanceRate >= 60 },
+        { label: "Declined (custom)", value: qcAccept?.kpis?.declinedRate   != null ? `${qcAccept.kpis.declinedRate}%`   : "—", ok: qcAccept?.kpis?.declinedRate   <= 40 },
+        { label: "Total resolutions", value: qcAccept?.kpis?.totalResolutions?.toLocaleString() ?? "—" },
+      ],
+    },
+    {
+      tag: "Access", title: "Users",
+      desc: "RBAC roles, account status, and user access management across the platform.",
+      to: "/operator/users", loading: usersLoading,
+      rows: [
+        { label: "Total users", value: userStats?.total    ?? "—" },
+        { label: "Active",      value: userStats?.active   ?? "—", ok: true },
+        { label: "Inactive",    value: userStats?.inactive ?? "—", ok: userStats ? userStats.inactive === 0 : undefined },
+      ],
+    },
+  ];
 
   return (
     <Layout role="operator">
-      <div className="opDash opDash--simple" ref={revealRef}>
+      <div className="opDash" ref={revealRef}>
         <PageHeader
-          title="Operator System Dashboard"
-          subtitle="Quick overview of the platform’s operational state."
+          title="Operator Dashboard"
+          subtitle="Metrics shown are from the last 30 days. Use each module's filters for deeper analysis."
         />
 
-        {/* KPI ROW */}
-        <section className="operatorKpiRow">
-          <KpiCard label="System Errors" value={kpis.systemErrors} />
-          <KpiCard label="Chatbot Fallbacks" value={kpis.fallbacks} />
-          <KpiCard label="Routing Failures" value={kpis.routingFailures} />
-          <KpiCard label="Ingestion Queue" value={kpis.ingestionQueue} />
-          <KpiCard label="Model Queue" value={kpis.modelQueue} />
+        {/* KPI BAR */}
+        <section className="opDash__kpiRow">
+          {topKpis.map((k) => (
+            <KpiCard key={k.label} label={k.label} value={k.value} />
+          ))}
         </section>
 
-        <p className="operatorIntro">
-          Use these quick actions to move between Operator screens.
-        </p>
-
-        {/* 3 NAVIGATION CARDS ONLY */}
-        <section className="operatorQuickGrid">
-          <Link to="/operator/model-health" className="operatorQuickCard">
-            <span className="operatorQuickTag">Models</span>
-            <div className="operatorQuickTitle">Model Health</div>
-            <div className="operatorQuickDesc">
-              Service health, latency, drift indicators, and model stability checks.
-            </div>
-            <div className="operatorQuickLink">Open →</div>
-          </Link>
-
-          <Link to="/operator/quality-control" className="operatorQuickCard">
-            <span className="operatorQuickTag">QA</span>
-            <div className="operatorQuickTitle">Quality Control</div>
-            <div className="operatorQuickDesc">
-              Review tickets, validate routing results, and approve corrections.
-            </div>
-            <div className="operatorQuickLink">Open →</div>
-          </Link>
-
-          <Link to="/operator/users" className="operatorQuickCard">
-            <span className="operatorQuickTag">Access</span>
-            <div className="operatorQuickTitle">Users Management</div>
-            <div className="operatorQuickDesc">
-              Manage RBAC roles, user access, and account status.
-            </div>
-            <div className="operatorQuickLink">Open →</div>
-          </Link>
-        </section>
-
-        {/* SUMMARY (NO LINKS INSIDE) */}
-        <section className="operatorSummaryRow">
-          <div className="operatorSummaryCard">
-            <h3 className="operatorSummaryTitle">Model Health Summary</h3>
-            <ul className="operatorSummaryList">
-              <li>
-                <span>Overall status</span>
-                <b>Healthy</b>
-              </li>
-              <li>
-                <span>Average latency</span>
-                <b>~420 ms</b>
-              </li>
-              <li>
-                <span>Error rate</span>
-                <b>0.6%</b>
-              </li>
-              <li>
-                <span>Drift detected</span>
-                <b>No</b>
-              </li>
-            </ul>
-          </div>
-
-          <div className="operatorSummaryCard">
-            <h3 className="operatorSummaryTitle">Quality Control Summary</h3>
-            <ul className="operatorSummaryList">
-              <li>
-                <span>Pending reviews</span>
-                <b>12</b>
-              </li>
-              <li>
-                <span>Average review time</span>
-                <b>4m 10s</b>
-              </li>
-              <li>
-                <span>Flagged tickets today</span>
-                <b>3</b>
-              </li>
-              <li>
-                <span>Oldest pending review</span>
-                <b>1h 22m</b>
-              </li>
-            </ul>
-          </div>
-        </section>
+        {/* MODULE CARDS — 3 equal columns filling full width */}
+        <div className="opDash__moduleCol">
+          {modules.map((m) => (
+            <ModuleCard key={m.title} {...m} />
+          ))}
+        </div>
       </div>
     </Layout>
   );

@@ -1,6 +1,7 @@
 # backend/api/main.py
 
 import os
+import subprocess
 import time
 import json
 import logging
@@ -17,14 +18,15 @@ from psycopg2.extras import RealDictCursor
 from psycopg2 import OperationalError
 import httpx
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 import pyotp  # for RFC 6238 TOTP
 import qrcode
 import io
+import re as _re
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
@@ -46,7 +48,8 @@ except Exception as _analytics_import_err:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
-CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "120"))
+ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.75"))
+CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "30"))
 ANALYTICS_REFRESH_INTERVAL_SECONDS = int(os.getenv("ANALYTICS_REFRESH_INTERVAL_HOURS", "12")) * 3600
 _sla_heartbeat_task: Optional[asyncio.Task] = None
 _analytics_refresh_task: Optional[asyncio.Task] = None
@@ -147,6 +150,82 @@ def _ensure_runtime_schema_compatibility() -> None:
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
     except Exception as exc:
         logger.warning("db_compat | failed to apply compatibility DDL: %s", exc)
+
+
+def _ensure_analytics_mvs() -> None:
+    """
+    Installs analytics materialized views if they don't exist yet.
+    Runs database/scripts/analytics_mvs.sql via psql using the DATABASE_URL.
+    Called from startup with retry logic so it safely handles the case where
+    the DB is still running its own init.sql.
+    """
+    MV_SQL = "/app/database/scripts/analytics_mvs.sql"
+    if not os.path.exists(MV_SQL):
+        logger.warning("_ensure_analytics_mvs | %s not found — skipping", MV_SQL)
+        return
+
+    required_mvs = [
+        "mv_ticket_base",
+        "mv_daily_volume",
+        "mv_employee_daily",
+        "mv_acceptance_daily",
+        "mv_operator_qc_daily",
+        "mv_chatbot_daily",
+        "mv_sentiment_daily",
+        "mv_feature_daily",
+    ]
+
+    # Check if all required MVs already exist
+    try:
+        row = fetch_one(
+            "SELECT COUNT(*) AS cnt FROM pg_matviews "
+            "WHERE schemaname='public' AND matviewname = ANY(%s)",
+            (required_mvs,),
+        )
+        if row and int(row.get("cnt") or 0) == len(required_mvs):
+            logger.info(
+                "_ensure_analytics_mvs | all required MVs exist (%s/%s) — skipping install",
+                int(row.get("cnt") or 0),
+                len(required_mvs),
+            )
+            return
+        logger.info(
+            "_ensure_analytics_mvs | incomplete MV set (%s/%s) — installing",
+            int((row or {}).get("cnt") or 0),
+            len(required_mvs),
+        )
+    except Exception as _check_err:
+        logger.info("_ensure_analytics_mvs | cannot check pg_matviews — attempting MV install anyway")
+
+    # Parse DATABASE_URL → psql connection args
+    db_url = os.getenv("DATABASE_URL", "")
+    # Format: postgresql://user:pass@host:port/dbname
+    try:
+        import urllib.parse as _urlparse
+        p = _urlparse.urlparse(db_url)
+        psql_env = {
+            **os.environ,
+            "PGPASSWORD": p.password or "",
+        }
+        psql_cmd = [
+            "psql",
+            "-h", p.hostname or "postgres",
+            "-p", str(p.port or 5432),
+            "-U", p.username or "postgres",
+            "-d", (p.path or "/postgres").lstrip("/"),
+            "-v", "ON_ERROR_STOP=1",
+            "-f", MV_SQL,
+        ]
+        result = subprocess.run(
+            psql_cmd, env=psql_env,
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            logger.info("_ensure_analytics_mvs | MVs installed successfully")
+        else:
+            logger.error("_ensure_analytics_mvs | install failed: %s", result.stderr[-500:])
+    except Exception as _install_err:
+        logger.error("_ensure_analytics_mvs | install failed: %s", _install_err)
 
 
 def _detect_sla_policy_function() -> bool:
@@ -383,6 +462,23 @@ async def _start_sla_heartbeat() -> None:
     if _ANALYTICS_READY:
         try:
             _analytics.init(fetch_one, fetch_all, db_connect)
+            # ── Self-healing: install MVs if zzz_analytics_mvs.sh was skipped ──
+            # Retry up to 10x (30s) in case DB is still finishing init.sql
+            for _mv_attempt in range(10):
+                try:
+                    row = fetch_one(
+                        "SELECT COUNT(*) AS cnt FROM pg_matviews WHERE matviewname = 'mv_ticket_base'", ()
+                    )
+                    if row and (row.get("cnt") or 0) > 0:
+                        break  # MVs already exist
+                    logger.info("_ensure_analytics_mvs | MVs missing — installing (attempt %d/10)...", _mv_attempt + 1)
+                    _ensure_analytics_mvs()
+                    break
+                except Exception as _mv_err:
+                    if _mv_attempt < 9:
+                        await asyncio.sleep(3)
+                    else:
+                        logger.error("_ensure_analytics_mvs | gave up after 10 attempts: %s", _mv_err)
             _analytics.refresh_mvs()
             logger.info("analytics_service | MVs refreshed and ready")
         except Exception as _e:
@@ -520,6 +616,8 @@ def predict_is_recurring(*, user_id: str, subject: str, details: str) -> bool:
 
 CHATBOT_URL = os.getenv("CHATBOT_URL", "http://chatbot:8000")
 CHATBOT_URL_LOCAL = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001")
+ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8004")
+ORCHESTRATOR_URL_LOCAL = os.getenv("ORCHESTRATOR_URL_LOCAL", "http://localhost:8004")
 
 
 def _generate_resolution_suggestion(ticket: Dict[str, Any]) -> str:
@@ -582,6 +680,36 @@ def _trigger_resolution_retraining() -> None:
         except Exception:
             continue
     logger.warning("resolution_retrain | failed to trigger retraining endpoint")
+
+
+def _trigger_priority_relearning(ticket_id: str, approved_priority: str, retrain_now: bool = False) -> None:
+    payload = {
+        "ticket_id": str(ticket_id),
+        "approved_priority": str(approved_priority).strip().lower(),
+        "retrain_now": bool(retrain_now),
+    }
+    for base in [ORCHESTRATOR_URL, ORCHESTRATOR_URL_LOCAL]:
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.post(
+                    f"{base}/priority/relearn/manager-approval",
+                    json=payload,
+                )
+                resp.raise_for_status()
+                logger.info(
+                    "priority_relearn | triggered via %s ticket=%s label=%s",
+                    base,
+                    ticket_id,
+                    approved_priority,
+                )
+                return
+        except Exception:
+            continue
+    logger.warning(
+        "priority_relearn | failed to trigger for ticket=%s label=%s",
+        ticket_id,
+        approved_priority,
+    )
 
 
 def _generate_suggestion_if_ready(ticket_code: str) -> None:
@@ -899,6 +1027,25 @@ def reset_password(body: ResetPasswordRequest):
             cur.execute("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = %s", (row["id"],))
 
     return {"ok": True, "message": "Password updated successfully"}
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+@api.post("/auth/change-password")
+def change_password(
+    body: ChangePasswordRequest,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=422, detail="New password must be at least 8 characters.")
+    if len(body.new_password) > 128:
+        raise HTTPException(status_code=422, detail="Password too long.")
+    row = fetch_one("SELECT password_hash FROM users WHERE id = %s", (user["id"],))
+    if not row or not verify_password(body.current_password, row["password_hash"]):
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    execute("UPDATE users SET password_hash = %s WHERE id = %s", (hash_password(body.new_password), user["id"]))
+    return {"ok": True}
 
 # =========================================================
 # Employee Dashboard (EmployeeDashboard.jsx)
@@ -1799,60 +1946,68 @@ def _safe_report_code(code: str) -> str:
 def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[str]:
     """
     Build (or rebuild) the employee_report row for the given user/year/month.
-    Returns the report_code on success, or None if the employee had no ticket
-    activity in that month.
+    Uses mv_employee_daily and mv_acceptance_daily for fast pre-aggregated data.
+    Returns the report_code on success, or None if the employee had no activity.
     """
     from datetime import date
     period_start = date(year, month, 1)
-    if month == 12:
-        period_end = date(year + 1, 1, 1)
-    else:
-        period_end = date(year, month + 1, 1)
+    period_end   = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
 
+    # ── activity check via MV ─────────────────────────────────────────────────
     activity = fetch_one(
         """
-        SELECT COUNT(*) AS cnt
-        FROM tickets
-        WHERE assigned_to = %s
-          AND created_at >= %s AND created_at < %s
+        SELECT SUM(total) AS cnt
+        FROM mv_employee_daily
+        WHERE employee_id = %s
+          AND created_day >= %s AND created_day < %s
         """,
         (user_id, period_start, period_end),
     )
     if not activity or (activity.get("cnt") or 0) == 0:
         return None
 
-    report_code = f"{_MONTH_ABBR[month]}-{year}"
+    user_slug_row = fetch_one(
+        "SELECT split_part(email, '@', 1) AS slug FROM users WHERE id = %s",
+        (user_id,),
+    ) or {}
+    user_slug = str(user_slug_row.get("slug") or "").strip().lower()
+    if not user_slug:
+        user_slug = str(user_id).replace("-", "")[:8]
+
+    # Keep year in the second token for existing ORDER BY logic:
+    # mon-year-user (e.g. mar-2026-ahmed)
+    report_code = f"{_MONTH_ABBR[month]}-{year}-{user_slug}"
     month_label = f"{_MONTH_LABEL[month]} {year}"
 
+    # ── aggregate KPIs from mv_employee_daily ─────────────────────────────────
     kpi_row = fetch_one(
         """
         SELECT
-          COUNT(*) AS total,
-          COUNT(*) FILTER (WHERE status = 'Resolved') AS resolved,
-          ROUND(
-            COUNT(*) FILTER (WHERE NOT (resolve_breached OR respond_breached))::numeric /
-            NULLIF(COUNT(*), 0) * 100, 1
-          ) AS sla_pct,
-          ROUND(
-            AVG(EXTRACT(EPOCH FROM (first_response_at - COALESCE(priority_assigned_at, created_at))) / 60.0)
-            FILTER (WHERE first_response_at IS NOT NULL), 1
-          ) AS avg_response_mins
-        FROM tickets
-        WHERE assigned_to = %s
-          AND created_at >= %s AND created_at < %s
+            SUM(total)    AS total,
+            SUM(resolved) AS resolved,
+            ROUND(
+                SUM(total - breached)::numeric / NULLIF(SUM(total), 0) * 100, 1
+            ) AS sla_pct,
+            ROUND(
+                SUM(avg_respond_mins * total) / NULLIF(SUM(total), 0), 1
+            ) AS avg_response_mins
+        FROM mv_employee_daily
+        WHERE employee_id = %s
+          AND created_day >= %s AND created_day < %s
         """,
         (user_id, period_start, period_end),
     ) or {}
 
-    total = int(kpi_row.get("total") or 0)
+    total    = int(kpi_row.get("total")    or 0)
     resolved = int(kpi_row.get("resolved") or 0)
-    sla_pct = float(kpi_row.get("sla_pct") or 0)
+    sla_pct  = float(kpi_row.get("sla_pct") or 0)
     avg_resp = kpi_row.get("avg_response_mins")
 
     resolve_rate = round(resolved / total * 100, 1) if total else 0
-    kpi_rating = round((resolve_rate * 0.5) + (sla_pct * 0.5), 1)
-    subtitle = f"{resolved} of {total} tickets resolved · {sla_pct}% SLA compliance"
+    kpi_rating   = round((resolve_rate * 0.5) + (sla_pct * 0.5), 1)
+    subtitle     = f"{resolved} of {total} tickets resolved · {sla_pct}% SLA compliance"
 
+    # ── upsert employee_reports row ───────────────────────────────────────────
     existing = fetch_one(
         "SELECT id FROM employee_reports WHERE report_code = %s AND employee_user_id = %s",
         (report_code, user_id),
@@ -1861,9 +2016,9 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
         execute(
             """
             UPDATE employee_reports SET
-              month_label = %s, subtitle = %s,
-              kpi_rating = %s, kpi_resolved = %s, kpi_sla = %s, kpi_avg_response = %s,
-              created_at = NOW()
+                month_label = %s, subtitle = %s,
+                kpi_rating = %s, kpi_resolved = %s, kpi_sla = %s, kpi_avg_response = %s,
+                created_at = NOW()
             WHERE id = %s
             """,
             (month_label, subtitle, kpi_rating, resolved, sla_pct, avg_resp, existing["id"]),
@@ -1873,8 +2028,8 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
         row = fetch_one(
             """
             INSERT INTO employee_reports
-              (employee_user_id, report_code, month_label, subtitle,
-               kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
+                (employee_user_id, report_code, month_label, subtitle,
+                 kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
@@ -1885,12 +2040,32 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
             return None
         report_id = row["id"]
 
+    # ── summary items (includes AI Acceptance Rate from mv_acceptance_daily) ──
     execute("DELETE FROM employee_report_summary_items WHERE report_id = %s", (report_id,))
+
+    acceptance_data = fetch_one(
+        """
+        SELECT
+            SUM(total)    AS total_resolutions,
+            SUM(accepted) AS accepted_count
+        FROM mv_acceptance_daily
+        WHERE employee_id = %s
+          AND created_day >= %s AND created_day < %s
+        """,
+        (user_id, period_start, period_end),
+    )
+    acceptance_rate = None
+    if acceptance_data and acceptance_data.get("total_resolutions"):
+        acceptance_rate = round(
+            (acceptance_data["accepted_count"] / acceptance_data["total_resolutions"]) * 100, 1
+        )
+
     summary_items = [
-        ("Tickets Assigned", str(total)),
-        ("Tickets Resolved", str(resolved)),
-        ("SLA Compliance", f"{sla_pct}%"),
+        ("Tickets Assigned",   str(total)),
+        ("Tickets Resolved",   str(resolved)),
+        ("SLA Compliance",     f"{sla_pct}%"),
         ("Avg First Response", f"{round(avg_resp)} min" if avg_resp else "N/A"),
+        ("AI Acceptance Rate", f"{acceptance_rate}%" if acceptance_rate is not None else "N/A"),
     ]
     for label, value in summary_items:
         execute(
@@ -1898,7 +2073,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
             (report_id, label, value),
         )
 
-    logger.info("report_gen | generated report=%s user=%s", report_code, user_id)
+    logger.info("report_gen | generated report=%s user=%s (MV-based)", report_code, user_id)
     return report_code
 
 
@@ -1939,18 +2114,16 @@ def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
           created_at  AS "createdAt"
         FROM employee_reports
         WHERE employee_user_id = %s
+        AND report_code ~ '^[a-z]{3}-[0-9]{4}$'
         ORDER BY
-          -- Sort by the actual month the report covers, not when it was generated.
-          -- report_code format is "mon-yyyy" (e.g. "feb-2026", "nov-2025").
-          -- Extract year then map the 3-letter month abbreviation to a number.
-          split_part(report_code, '-', 2)::int DESC,
-          CASE split_part(report_code, '-', 1)
+        split_part(report_code, '-', 2)::int DESC,
+        CASE split_part(report_code, '-', 1)
             WHEN 'jan' THEN 1  WHEN 'feb' THEN 2  WHEN 'mar' THEN 3
             WHEN 'apr' THEN 4  WHEN 'may' THEN 5  WHEN 'jun' THEN 6
             WHEN 'jul' THEN 7  WHEN 'aug' THEN 8  WHEN 'sep' THEN 9
             WHEN 'oct' THEN 10 WHEN 'nov' THEN 11 WHEN 'dec' THEN 12
             ELSE 0
-          END DESC
+        END DESC
         LIMIT 24;
         """,
         (user_id,),
@@ -3032,6 +3205,7 @@ def manager_rescore_ticket(
         "manager_rescore | ticket=%s from=%s to=%s request=%s by=%s",
         ticket_code, current_priority, new_priority, result["request_code"], user["id"],
     )
+    _trigger_priority_relearning(ticket_id=ticket_id, approved_priority=new_priority)
     return {
         "ok": True,
         "requestCode": result["request_code"],
@@ -3227,6 +3401,9 @@ def decide_approval(
     if ar["status"] != "Pending":
         raise HTTPException(status_code=409, detail="This request has already been decided")
 
+    relearn_ticket_id = None
+    relearn_priority = None
+
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
 
@@ -3258,6 +3435,8 @@ def decide_approval(
                             "UPDATE tickets SET priority = %s WHERE id = %s;",
                             (new_priority, ticket_id),
                         )
+                        relearn_ticket_id = str(ticket_id)
+                        relearn_priority = new_priority
 
                 elif req_type == "Rerouting":
                     new_dept_name = requested.replace("Dept:", "").strip()
@@ -3336,6 +3515,11 @@ def decide_approval(
         "approval_decision | request=%s decision=%s by=%s",
         request_id, decision, user["id"],
     )
+    if decision == "Approved" and relearn_ticket_id and relearn_priority:
+        _trigger_priority_relearning(
+            ticket_id=relearn_ticket_id,
+            approved_priority=relearn_priority,
+        )
     return {"ok": True, "requestId": request_id, "decision": decision}
 
 
@@ -3424,7 +3608,7 @@ def get_manager_trends(
     }
     start_expr   = range_sql.get(timeRange, "date_trunc('month', now())")
     period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
-    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    period_end   = fetch_one("SELECT (now() + interval '1 day')::timestamptz AS ts")["ts"]
     window_secs  = (period_end - period_start).total_seconds()
     prev_start   = fetch_one(
         "SELECT (%s::timestamptz - make_interval(secs => %s)) AS start",
@@ -3683,6 +3867,251 @@ def manager_notifications_mark_all_read(
     )
     return {"ok": True}
 
+
+@api.get("/manager/routing-review")
+def get_routing_review_queue(
+    status_filter: str = Query(default="Pending"),
+    user: Dict[str, Any] = Depends(require_manager),
+):
+    valid = {"Pending", "Approved", "Overridden", "All"}
+    if status_filter not in valid:
+        status_filter = "Pending"
+
+    where  = "" if status_filter == "All" else "WHERE rrq.status = %s::routing_review_status"
+    params = () if status_filter == "All" else (status_filter,)
+
+    rows = fetch_all(
+        f"""
+        SELECT
+          rrq.id::text                        AS "reviewId",
+          rrq.status::text                    AS "status",
+          rrq.predicted_department            AS "predictedDepartment",
+          ROUND(rrq.confidence_score * 100, 2) AS "confidencePct",
+          rrq.approved_department             AS "approvedDepartment",
+          rrq.decision_notes                  AS "decisionNotes",
+          rrq.decided_at                      AS "decidedAt",
+          rrq.created_at                      AS "createdAt",
+          t.ticket_code                       AS "ticketCode",
+          t.subject                           AS "subject",
+          t.priority::text                    AS "priority",
+          t.status::text                      AS "ticketStatus",
+          d.name                              AS "currentDepartment",
+          up.full_name                        AS "decidedBy",
+          ro.reasoning                        AS "modelReasoning"
+        FROM routing_review_queue rrq
+        JOIN  tickets        t   ON t.id  = rrq.ticket_id
+        LEFT JOIN departments  d   ON d.id  = t.department_id
+        LEFT JOIN user_profiles up ON up.user_id = rrq.decided_by_user_id
+        LEFT JOIN routing_outputs ro ON ro.ticket_id = t.id AND ro.is_current = TRUE
+        {where}
+        ORDER BY rrq.created_at DESC
+        LIMIT 500;
+        """,
+        params,
+    )
+
+    result = []
+    for r in rows:
+        result.append({
+            **{k: v for k, v in r.items() if k not in ("decidedAt", "createdAt", "confidencePct")},
+            "confidencePct": float(r.get("confidencePct") or 0),
+            "decidedAt":  r["decidedAt"].isoformat()  if r.get("decidedAt")  else None,
+            "createdAt":  r["createdAt"].isoformat()  if r.get("createdAt")  else None,
+        })
+
+    pending_count = sum(1 for r in result if r["status"] == "Pending")
+    return {"items": result, "pendingCount": pending_count}
+
+
+class RoutingReviewDecisionRequest(BaseModel):
+    decision:            str
+    approved_department: Optional[str] = None
+    decision_notes:      Optional[str] = None
+
+
+@api.patch("/manager/routing-review/{review_id}")
+def decide_routing_review(
+    review_id: str,
+    body: RoutingReviewDecisionRequest,
+    user: Dict[str, Any] = Depends(require_manager),
+):
+    decision = (body.decision or "").strip()
+    if decision not in ("Approved", "Overridden"):
+        raise HTTPException(status_code=422, detail="decision must be 'Approved' or 'Overridden'")
+    if decision == "Overridden" and not (body.approved_department or "").strip():
+        raise HTTPException(status_code=422, detail="approved_department is required when overriding")
+
+    rrq = fetch_one(
+        "SELECT id, ticket_id, predicted_department, status FROM routing_review_queue WHERE id::text = %s LIMIT 1",
+        (review_id,),
+    )
+    if not rrq:
+        raise HTTPException(status_code=404, detail="Review item not found")
+    if rrq["status"] != "Pending":
+        raise HTTPException(status_code=409, detail="This item has already been decided")
+
+    final_dept = (
+        body.approved_department.strip() if decision == "Overridden"
+        else rrq["predicted_department"]
+    )
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # 1. Update review queue
+            cur.execute(
+                """
+                UPDATE routing_review_queue
+                SET status              = %s::routing_review_status,
+                    approved_department = %s,
+                    decided_by_user_id  = %s,
+                    decided_at          = now(),
+                    decision_notes      = %s
+                WHERE id::text = %s;
+                """,
+                (decision, final_dept, user["id"], body.decision_notes or "", review_id),
+            )
+
+            # 2. Apply final department to ticket
+            cur.execute(
+                "SELECT id FROM departments WHERE LOWER(name) = LOWER(%s) LIMIT 1",
+                (final_dept,),
+            )
+            dept_row = cur.fetchone()
+            if dept_row:
+                cur.execute(
+                    "UPDATE tickets SET department_id = %s, updated_at = now() WHERE id = %s",
+                    (dept_row["id"], rrq["ticket_id"]),
+                )
+
+            # 3. Log to routing feedback for model retraining
+            cur.execute(
+                """
+                INSERT INTO department_routing_feedback
+                  (ticket_id, predicted_department, approved_department,
+                   confidence_score, model_name, approved_by_user_id)
+                SELECT
+                  %s, %s, %s,
+                  rrq.confidence_score, 'orchestrator', %s
+                FROM routing_review_queue rrq
+                WHERE rrq.id::text = %s;
+                """,
+                (rrq["ticket_id"], rrq["predicted_department"], final_dept, user["id"], review_id),
+            )
+
+            # 4. Notify manager (confirmation in sidebar)
+            ticket_info = fetch_one(
+                "SELECT ticket_code, priority FROM tickets WHERE id = %s",
+                (rrq["ticket_id"],),
+            ) or {}
+            _insert_notification(
+                cur,
+                user_id=str(user["id"]),
+                notif_type="status_change",
+                title=(
+                    f"Routing {'Confirmed' if decision == 'Approved' else 'Overridden'}: "
+                    f"{ticket_info.get('ticket_code', '')}"
+                ),
+                message=(
+                    f"You {'confirmed' if decision == 'Approved' else 'overrode'} the AI routing for "
+                    f"{ticket_info.get('ticket_code', '')} → {final_dept}."
+                ),
+                ticket_id=str(rrq["ticket_id"]),
+                priority=ticket_info.get("priority"),
+            )
+
+    logger.info(
+        "routing_review_decision | review=%s decision=%s dept=%s by=%s",
+        review_id, decision, final_dept, user["id"],
+    )
+    return {"ok": True, "reviewId": review_id, "decision": decision, "finalDepartment": final_dept}
+
+# =========================================================
+# Operator Notifications
+# =========================================================
+
+@api.get("/operator/notifications")
+def operator_notifications(
+    limit: int = Query(default=200, ge=1, le=500),
+    only_unread: bool = Query(default=False),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    user_id = user["id"]
+
+    rows = fetch_all(
+        """
+        SELECT
+          n.id::text           AS "id",
+          n.type::text         AS "type",
+          n.title              AS "title",
+          n.message            AS "message",
+          n.priority::text     AS "priority",
+          t.ticket_code        AS "ticketId",
+          n.report_id          AS "reportId",
+          n.read               AS "read",
+          n.created_at         AS "timestamp"
+        FROM notifications n
+        LEFT JOIN tickets t ON t.id = n.ticket_id
+        WHERE n.user_id = %s
+          AND (%s = FALSE OR n.read = FALSE)
+        ORDER BY n.created_at DESC
+        LIMIT %s;
+        """,
+        (user_id, only_unread, limit),
+    )
+
+    unread_row = fetch_one(
+        "SELECT COUNT(*)::int AS unread FROM notifications WHERE user_id = %s AND read = FALSE;",
+        (user_id,),
+    ) or {"unread": 0}
+
+    notifications = []
+    for r in rows:
+        ts = r.get("timestamp")
+        notifications.append({
+            "id": r.get("id"),
+            "type": r.get("type"),
+            "title": r.get("title"),
+            "message": r.get("message"),
+            "priority": r.get("priority"),
+            "ticketId": r.get("ticketId"),
+            "reportId": r.get("reportId"),
+            "read": bool(r.get("read")),
+            "timestamp": ts.isoformat() if ts else None,
+        })
+
+    return {"unreadCount": int(unread_row.get("unread") or 0), "notifications": notifications}
+
+
+@api.post("/operator/notifications/{notification_id}/read")
+def operator_notification_mark_read(
+    notification_id: str,
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    import uuid
+    try:
+        uuid.UUID(notification_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid notification id")
+
+    updated = execute(
+        "UPDATE notifications SET read = TRUE WHERE id = %s::uuid AND user_id = %s;",
+        (notification_id, user["id"]),
+    )
+    if updated <= 0:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"ok": True}
+
+
+@api.post("/operator/notifications/read-all")
+def operator_notifications_mark_all_read(
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    execute(
+        "UPDATE notifications SET read = TRUE WHERE user_id = %s AND read = FALSE;",
+        (user["id"],),
+    )
+    return {"ok": True}
+
 # =========================================================
 # Internal Orchestrator Endpoint (no JWT — Docker-network only)
 # =========================================================
@@ -3727,7 +4156,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                    "Set SYSTEM_USER_EMAIL to a valid user.",
         )
 
-    system_user_id = row["id"]
     incoming_ticket_code = (body.ticket_id or "").strip() or None
 
     priority_map = {1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
@@ -3774,13 +4202,43 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     )
                     department_id = cur.fetchone()[0]
 
-            if incoming_ticket_code:
-                cur.execute(
-                    "SELECT id, priority_assigned_at FROM tickets WHERE ticket_code = %s LIMIT 1",
-                    (incoming_ticket_code,),
+            if not incoming_ticket_code:
+                # ── No ticket_id supplied → create a new ticket ──
+                from api.ticket_creation_gate import create_ticket_via_gate
+                created = create_ticket_via_gate(
+                    cur,
+                    created_by_user_id=str(row["id"]),
+                    ticket_type=ticket_type or "Complaint",
+                    subject=(body.transcript or "")[:120].strip() or "Customer submission",
+                    details=body.transcript or "",
+                    priority=priority_label or "Low",
+                    status=normalized_status or "Open",
+                    ticket_source="form",
+                    department_id=department_id,
+                    sentiment_score=body.sentiment,
+                    sentiment_label="orchestrator" if body.sentiment is not None else None,
+                    model_priority=priority_label,
+                    model_department_id=department_id,
+                    model_confidence=body.classification_confidence,
                 )
-                existing = cur.fetchone()
-                if existing:
+                return {
+                    "ticket_id":   created["ticket_code"],
+                    "status":      created["status"],
+                    "priority":    created["priority"],
+                    "asset_type":  None,
+                    "department":  requested_department,
+                    "priority_assigned_at": created["priority_assigned_at"].isoformat() if created.get("priority_assigned_at") else None,
+                    "respond_due_at":       created["respond_due_at"].isoformat() if created.get("respond_due_at") else None,
+                    "resolve_due_at":       created["resolve_due_at"].isoformat() if created.get("resolve_due_at") else None,
+                }
+
+            # ── ticket_id supplied → update existing ticket ──
+            cur.execute(
+                "SELECT id, priority_assigned_at FROM tickets WHERE ticket_code = %s LIMIT 1",
+                (incoming_ticket_code,),
+            )
+            existing = cur.fetchone()
+            if existing:
                     had_priority_before = existing[1] is not None
                     subject_update = None
                     if requested_department and ticket_type:
@@ -3839,6 +4297,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         updated[5],
                         updated[6],
                     )
+                    
                     if (not had_priority_before) and updated[4]:
                         try:
                             _generate_suggestion_if_ready(updated[0])
@@ -3848,101 +4307,52 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                                 updated[0],
                                 exc,
                             )
+
+                    # ── Routing review: queue if confidence is below threshold ──
+                    conf = body.classification_confidence
+                    queued_for_review = False
+                    if (
+                        conf is not None
+                        and conf < ROUTING_CONFIDENCE_THRESHOLD
+                        and requested_department
+                        and existing
+                    ):
+                        ticket_uuid = str(existing[0])   # first col of the RETURNING is id
+                        already_queued = fetch_one(
+                            """
+                            SELECT id FROM routing_review_queue
+                            WHERE ticket_id = %s::uuid AND status = 'Pending'
+                            LIMIT 1
+                            """,
+                            (ticket_uuid,),
+                        )
+                        if not already_queued:
+                            cur.execute(
+                                """
+                                INSERT INTO routing_review_queue
+                                  (ticket_id, predicted_department, confidence_score)
+                                VALUES (%s::uuid, %s, %s)
+                                ON CONFLICT DO NOTHING;
+                                """,
+                                (ticket_uuid, requested_department, conf),
+                            )
+                            queued_for_review = True
+                            logger.info(
+                                "routing_review | ticket=%s dept=%s confidence=%.3f queued=True",
+                                updated[0], requested_department, conf,
+                            )
+
                     return {
-                        "ticket_id": updated[0],
-                        "status": updated[1],
-                        "priority": updated[2],
-                        "asset_type": updated[3],
-                        "department": requested_department,
+                        "ticket_id":        updated[0],
+                        "status":           updated[1],
+                        "priority":         updated[2],
+                        "asset_type":       updated[3],
+                        "department":       requested_department,
+                        "queued_for_review": queued_for_review,
                         "priority_assigned_at": updated[4].isoformat() if updated[4] else None,
-                        "respond_due_at": updated[5].isoformat() if updated[5] else None,
-                        "resolve_due_at": updated[6].isoformat() if updated[6] else None,
+                        "respond_due_at":   updated[5].isoformat() if updated[5] else None,
+                        "resolve_due_at":   updated[6].isoformat() if updated[6] else None,
                     }
-
-            if not body.transcript:
-                raise HTTPException(status_code=422, detail="transcript is required when creating a new ticket")
-
-            ticket_code = f"CX-{int(time.time())}"
-            ticket_type_create = ticket_type or "Complaint"
-            priority_create = priority_label or "Medium"
-            status_create = normalized_status or "Open"
-            asset_type_create = requested_asset_type or "General"
-            department_name_create = requested_department or "General"
-            subject = f"[{department_name_create.title()}] Automated {ticket_type_create.lower()}"
-            details = body.transcript
-
-            cur.execute(
-                """
-                INSERT INTO tickets (
-                    ticket_code,
-                    ticket_type,
-                    subject,
-                    details,
-                    asset_type,
-                    priority,
-                    status,
-                    created_by_user_id,
-                    department_id,
-                    sentiment_score,
-                    sentiment_label,
-                    model_priority,
-                    model_department_id,
-                    model_confidence,
-                    priority_assigned_at,
-                    created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
-                """,
-                (
-                    ticket_code,
-                    ticket_type_create,
-                    subject,
-                    details,
-                    asset_type_create,
-                    priority_create,
-                    status_create,
-                    system_user_id,
-                    department_id,
-                    body.sentiment,
-                    "orchestrator",
-                    priority_label,
-                    department_id,
-                    body.classification_confidence,
-                    datetime.now(timezone.utc),
-                ),
-            )
-            created = cur.fetchone()
-            logger.info(
-                "orchestrator_ticket_create | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
-                created[0],
-                created[1],
-                created[2],
-                created[3],
-                requested_department,
-                created[4],
-                created[5],
-                created[6],
-            )
-            if created[4]:
-                try:
-                    _generate_suggestion_if_ready(created[0])
-                except Exception as exc:
-                    logger.warning(
-                        "suggested_resolution | generation failed at ticket creation ticket=%s err=%s",
-                        created[0],
-                        exc,
-                    )
-
-    return {
-        "ticket_id": created[0],
-        "status": created[1],
-        "priority": created[2],
-        "asset_type": created[3],
-        "department": requested_department,
-        "priority_assigned_at": created[4].isoformat() if created[4] else None,
-        "respond_due_at": created[5].isoformat() if created[5] else None,
-        "resolve_due_at": created[6].isoformat() if created[6] else None,
-    }
 
 
 @api.post("/chatbot/chat")
@@ -4020,21 +4430,52 @@ async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
     raise HTTPException(status_code=503, detail=f"Transcriber service unavailable: {last_error}")
 
 
+@api.post("/orchestrator/process/text")
+async def proxy_orchestrator_process_text(request: Request):
+    """
+    Frontend-facing orchestrator proxy for form-based ticket submission.
+    The orchestrator is not exposed to the internet, so the backend proxies
+    requests from the browser to orchestrator:8004/process/text.
+    """
+    body_bytes = await request.body()
+    content_type = request.headers.get("content-type", "application/x-www-form-urlencoded")
+    last_error = None
+
+    for base in [ORCHESTRATOR_URL, ORCHESTRATOR_URL_LOCAL]:
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{base}/process/text",
+                    content=body_bytes,
+                    headers={"Content-Type": content_type},
+                )
+                response.raise_for_status()
+                return response.json()
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    raise HTTPException(status_code=503, detail=f"Orchestrator service unavailable: {last_error}")
+
+
 # =========================================================
 # OPERATOR ANALYTICS ENDPOINTS
 # =========================================================
-
-@api.get("/operator/analytics/qc")
-def get_operator_qc(
-    timeRange: str = Query("last30days"),
-    department: str = Query("All Departments"),
-    user: Dict[str, Any] = Depends(require_operator),
+def _parse_time_range(
+    timeRange: str,
+    dateFrom: Optional[str] = None,
+    dateTo:   Optional[str] = None,
 ):
     """
-    Quality-Control analytics for QualityControl.jsx.
-    Reads from: mv_operator_qc_daily, mv_acceptance_daily, mv_ticket_base.
-    All paths are MV-only — no base table queries.
+    Resolves (period_start, period_end) from either explicit ISO date strings
+    or a named preset. Custom range takes priority when both dateFrom and dateTo
+    are provided.
     """
+    if dateFrom and dateTo:
+        period_start = fetch_one("SELECT %s::timestamptz AS ts", [dateFrom])["ts"]
+        period_end   = fetch_one("SELECT (%s::date + interval '1 day - 1 second')::timestamptz AS ts", [dateTo])["ts"]
+        return period_start, period_end
+
     range_sql = {
         "last7days":    "now() - interval '7 days'",
         "Last 7 Days":  "now() - interval '7 days'",
@@ -4045,47 +4486,78 @@ def get_operator_qc(
     }
     start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
     period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
-    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    # Add 1 day so today's rows are included by the standard "created_day < period_end" filter
+    period_end   = fetch_one("SELECT (now() + interval '1 day')::timestamptz AS ts")["ts"]
+    return period_start, period_end
 
-    if _ANALYTICS_READY:
-        try:
-            return _analytics.get_operator_qc_data(
-                period_start=period_start,
-                period_end=period_end,
-                department=department,
-            )
-        except Exception as _svc_err:
-            logger.error(
-                "analytics_service.get_operator_qc_data failed. err=%s", _svc_err
-            )
-            raise HTTPException(status_code=500, detail=f"Analytics service error: {_svc_err}")
+@api.get("/operator/analytics/qc/acceptance")
+def get_operator_qc_acceptance(
+    timeRange:  str           = Query("last30days"),
+    department: str           = Query("All Departments"),
+    dateFrom:   Optional[str] = Query(None),
+    dateTo:     Optional[str] = Query(None),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Acceptance tab — called only when that tab is clicked."""
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
+    if not _ANALYTICS_READY:
+        raise HTTPException(status_code=503, detail="Analytics MVs not ready.")
+    try:
+        full = _analytics.get_operator_qc_data(period_start, period_end, department)
+        return full["acceptance"]
+    except Exception as e:
+        logger.error("get_operator_qc_acceptance failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
-    raise HTTPException(
-        status_code=503,
-        detail="Analytics MVs not ready. Run database/scripts/analytics_mvs.sql first."
-    )
 
+@api.get("/operator/analytics/qc/rescoring")
+def get_operator_qc_rescoring(
+    timeRange:  str           = Query("last30days"),
+    department: str           = Query("All Departments"),
+    dateFrom:   Optional[str] = Query(None),
+    dateTo:     Optional[str] = Query(None),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Rescoring tab — called only when that tab is clicked."""
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
+    if not _ANALYTICS_READY:
+        raise HTTPException(status_code=503, detail="Analytics MVs not ready.")
+    try:
+        full = _analytics.get_operator_qc_data(period_start, period_end, department)
+        return full["rescoring"]
+    except Exception as e:
+        logger.error("get_operator_qc_rescoring failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/operator/analytics/qc/rerouting")
+def get_operator_qc_rerouting(
+    timeRange:  str           = Query("last30days"),
+    department: str           = Query("All Departments"),
+    dateFrom:   Optional[str] = Query(None),
+    dateTo:     Optional[str] = Query(None),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Rerouting tab — called only when that tab is clicked."""
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
+    if not _ANALYTICS_READY:
+        raise HTTPException(status_code=503, detail="Analytics MVs not ready.")
+    try:
+        full = _analytics.get_operator_qc_data(period_start, period_end, department)
+        return full["rerouting"]
+    except Exception as e:
+        logger.error("get_operator_qc_rerouting failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api.get("/operator/analytics/model-health/chatbot")
 def get_operator_chatbot(
-    timeRange: str = Query("last30days"),
+    timeRange: str           = Query("last30days"),
+    dateFrom:  Optional[str] = Query(None),
+    dateTo:    Optional[str] = Query(None),
+    department: Optional[str] = Query(None),
     user: Dict[str, Any] = Depends(require_operator),
 ):
-    """
-    Chatbot agent analytics for ModelHealth.jsx (Chatbot Agent tab).
-    Reads from: mv_chatbot_daily (MV-only).
-    """
-    range_sql = {
-        "last7days":    "now() - interval '7 days'",
-        "Last 7 Days":  "now() - interval '7 days'",
-        "last30days":   "now() - interval '30 days'",
-        "Last 30 Days": "now() - interval '30 days'",
-        "quarter":      "date_trunc('quarter', now())",
-        "This Quarter": "date_trunc('quarter', now())",
-    }
-    start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
-    period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
-    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
 
     if _ANALYTICS_READY:
         try:
@@ -4107,25 +4579,13 @@ def get_operator_chatbot(
 
 @api.get("/operator/analytics/model-health/sentiment")
 def get_operator_sentiment(
-    timeRange: str = Query("last30days"),
-    department: str = Query("All Departments"),
+    timeRange: str           = Query("last30days"),
+    dateFrom:  Optional[str] = Query(None),
+    dateTo:    Optional[str] = Query(None),
+    department: Optional[str] = Query(None),
     user: Dict[str, Any] = Depends(require_operator),
 ):
-    """
-    Sentiment agent analytics for ModelHealth.jsx (Sentiment Agent tab).
-    Reads from: mv_sentiment_daily (MV-only).
-    """
-    range_sql = {
-        "last7days":    "now() - interval '7 days'",
-        "Last 7 Days":  "now() - interval '7 days'",
-        "last30days":   "now() - interval '30 days'",
-        "Last 30 Days": "now() - interval '30 days'",
-        "quarter":      "date_trunc('quarter', now())",
-        "This Quarter": "date_trunc('quarter', now())",
-    }
-    start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
-    period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
-    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
 
     if _ANALYTICS_READY:
         try:
@@ -4146,25 +4606,13 @@ def get_operator_sentiment(
 
 @api.get("/operator/analytics/model-health/feature")
 def get_operator_feature(
-    timeRange: str = Query("last30days"),
-    department: str = Query("All Departments"),
+    timeRange: str           = Query("last30days"),
+    dateFrom:  Optional[str] = Query(None),
+    dateTo:    Optional[str] = Query(None),
+    department: Optional[str] = Query(None),
     user: Dict[str, Any] = Depends(require_operator),
 ):
-    """
-    Feature engineering agent analytics for ModelHealth.jsx (Feature Agent tab).
-    Reads from: mv_feature_daily (MV-only).
-    """
-    range_sql = {
-        "last7days":    "now() - interval '7 days'",
-        "Last 7 Days":  "now() - interval '7 days'",
-        "last30days":   "now() - interval '30 days'",
-        "Last 30 Days": "now() - interval '30 days'",
-        "quarter":      "date_trunc('quarter', now())",
-        "This Quarter": "date_trunc('quarter', now())",
-    }
-    start_expr   = range_sql.get(timeRange, "now() - interval '30 days'")
-    period_start = fetch_one(f"SELECT ({start_expr})::timestamptz AS start")["start"]
-    period_end   = fetch_one("SELECT now()::timestamptz AS ts")["ts"]
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
 
     if _ANALYTICS_READY:
         try:
@@ -4280,6 +4728,763 @@ def operator_dashboard_summary(user: Dict[str, Any] = Depends(require_operator))
             "oldest_pending_age_sec": int(qc_row.get("oldest_pending_age_sec") or 0),
         },
     }
+
+# =========================================================
+# Operator – Quality Control / Ticket Review Detail
+# =========================================================
+
+@api.get("/operator/complaints/{ticket_id}")
+def get_operator_complaint_detail(
+    ticket_id: str,
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """
+    Full ticket detail for the QC TicketReviewDetail page.
+    Accepts either a ticket_code (e.g. CX-0042) or a raw UUID.
+    """
+    ticket = fetch_one(
+        """
+        SELECT
+            t.id                                    AS ticket_id,
+            t.ticket_code,
+            t.subject,
+            t.details,
+            t.status,
+            t.priority,
+            t.model_priority,
+            t.model_confidence                      AS priority_confidence,
+            t.sentiment_label,
+            t.sentiment_score,
+            t.created_at,
+            t.first_response_at,
+            t.resolved_at,
+            t.respond_due_at,
+            t.resolve_due_at,
+            t.respond_breached,
+            t.resolve_breached,
+            t.human_overridden,
+            t.override_reason,
+            t.is_recurring,
+            t.asset_type,
+            d.name                                  AS department_name,
+            md.name                                 AS model_dept,
+            up_assigned.full_name                   AS assigned_to_name,
+            up_assigned.job_title                   AS assigned_to_title,
+            up_created.full_name                    AS created_by_name,
+            u_created.role                          AS created_by_role
+        FROM tickets t
+        LEFT JOIN departments   d            ON d.id  = t.department_id
+        LEFT JOIN departments   md           ON md.id = t.model_department_id
+        LEFT JOIN user_profiles up_assigned  ON up_assigned.user_id = t.assigned_to_user_id
+        LEFT JOIN user_profiles up_created   ON up_created.user_id  = t.created_by_user_id
+        LEFT JOIN users         u_created    ON u_created.id         = t.created_by_user_id
+        WHERE t.ticket_code = %s OR t.id::text = %s
+        LIMIT 1
+        """,
+        (ticket_id, ticket_id),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    tid = ticket["ticket_id"]
+
+    # ── approval requests ─────────────────────────────────────────────────────
+    approval_requests = fetch_all(
+        """
+        SELECT
+            request_code,
+            request_type,
+            current_value,
+            requested_value,
+            request_reason,
+            status,
+            submitted_at,
+            decided_at,
+            decision_notes
+        FROM approval_requests
+        WHERE ticket_id = %s
+        ORDER BY submitted_at DESC
+        """,
+        (tid,),
+    ) or []
+
+    # ── model execution log ───────────────────────────────────────────────────
+    execution_log = fetch_all(
+        """
+        SELECT
+            agent_name,
+            model_version,
+            started_at,
+            ROUND(
+                EXTRACT(EPOCH FROM (completed_at - started_at)) * 1000
+            )::int                              AS duration_ms,
+            status
+        FROM model_execution_log
+        WHERE ticket_id = %s
+        ORDER BY started_at ASC
+        """,
+        (tid,),
+    ) or []
+
+    # ── ticket updates ────────────────────────────────────────────────────────
+    ticket_updates = fetch_all(
+        """
+        SELECT
+            update_type,
+            from_status,
+            to_status,
+            message,
+            created_at
+        FROM ticket_updates
+        WHERE ticket_id = %s
+        ORDER BY created_at ASC
+        """,
+        (tid,),
+    ) or []
+
+    # ── current-run AI outputs ────────────────────────────────────────────────
+    sentiment = fetch_one(
+        """
+        SELECT sentiment_label, sentiment_score,
+               confidence_score AS sentiment_confidence
+        FROM sentiment_outputs
+        WHERE ticket_id = %s AND is_current = TRUE
+        LIMIT 1
+        """,
+        (tid,),
+    )
+    feature = fetch_one(
+        """
+        SELECT asset_category, topic_labels,
+               confidence_score AS feature_confidence
+        FROM feature_outputs
+        WHERE ticket_id = %s AND is_current = TRUE
+        LIMIT 1
+        """,
+        (tid,),
+    )
+    resolution = fetch_one(
+        """
+        SELECT suggested_text   AS suggested_resolution,
+               model_version    AS suggested_resolution_model
+        FROM resolution_outputs
+        WHERE ticket_id = %s AND is_current = TRUE
+        LIMIT 1
+        """,
+        (tid,),
+    )
+    routing = fetch_one(
+        """
+        SELECT confidence_score AS routing_confidence,
+               reasoning        AS routing_reason
+        FROM routing_outputs
+        WHERE ticket_id = %s AND is_current = TRUE
+        LIMIT 1
+        """,
+        (tid,),
+    )
+    feedback = fetch_one(
+        """
+        SELECT decision AS feedback_decision, final_resolution
+        FROM ticket_resolution_feedback
+        WHERE ticket_id = %s
+        LIMIT 1
+        """,
+        (tid,),
+    )
+
+    # ── chat sentiment series (for escalated tickets) ─────────────────────────
+    chat_sentiment = fetch_all(
+        """
+        SELECT sentiment_score, created_at
+        FROM user_chat_logs
+        WHERE ticket_id = %s
+        ORDER BY created_at ASC
+        """,
+        (tid,),
+    ) or []
+
+    # ── helpers ───────────────────────────────────────────────────────────────
+    def _iso(val):
+        return val.isoformat() if val else None
+
+    def _flt(val):
+        return float(val) if val is not None else None
+
+    return {
+        "ticketCode":          ticket["ticket_code"],
+        "subject":             ticket["subject"],
+        "details":             ticket["details"],
+        "status":              ticket["status"],
+        "priority":            ticket["priority"],
+        "modelPriority":       ticket["model_priority"],
+        "priorityConfidence":  _flt(ticket.get("priority_confidence")),
+        "sentimentLabel":      (sentiment or {}).get("sentiment_label")  or ticket.get("sentiment_label"),
+        "sentimentScore":      _flt((sentiment or {}).get("sentiment_score") or ticket.get("sentiment_score")) or 0.0,
+        "sentimentConfidence": _flt((sentiment or {}).get("sentiment_confidence")),
+        "modelDept":           ticket.get("model_dept"),
+        "finalDept":           ticket.get("department_name"),
+        "routingConfidence":   _flt((routing or {}).get("routing_confidence")),
+        "routingReason":       (routing or {}).get("routing_reason") or "",
+        "humanOverridden":     ticket.get("human_overridden"),
+        "overrideReason":      ticket.get("override_reason"),
+        "isRecurring":         ticket.get("is_recurring"),
+        "respondBreached":     ticket.get("respond_breached"),
+        "resolveBreached":     ticket.get("resolve_breached"),
+        "createdAt":           _iso(ticket.get("created_at")),
+        "resolvedAt":          _iso(ticket.get("resolved_at")),
+        "firstResponseAt":     _iso(ticket.get("first_response_at")),
+        "respondDueAt":        _iso(ticket.get("respond_due_at")),
+        "resolveDueAt":        _iso(ticket.get("resolve_due_at")),
+        "assetCategory":       (feature or {}).get("asset_category") or ticket.get("asset_type"),
+        "topicLabels":         (feature or {}).get("topic_labels") or [],
+        "featureConfidence":   _flt((feature or {}).get("feature_confidence")),
+        "assignedToName":      ticket.get("assigned_to_name") or "Unassigned",
+        "assignedToTitle":     ticket.get("assigned_to_title") or "",
+        "createdByName":       ticket.get("created_by_name") or "Unknown",
+        "createdByRole":       ticket.get("created_by_role") or "",
+        "suggestedResolution": (resolution or {}).get("suggested_resolution") or "",
+        "resolutionModel":     (resolution or {}).get("suggested_resolution_model") or "",
+        "finalResolution":     (feedback or {}).get("final_resolution"),
+        "feedbackDecision":    (feedback or {}).get("feedback_decision"),
+        "approvalRequests": [
+            {
+                "requestCode":    r.get("request_code"),
+                "requestType":    r.get("request_type"),
+                "currentValue":   r.get("current_value"),
+                "requestedValue": r.get("requested_value"),
+                "requestReason":  r.get("request_reason"),
+                "status":         r.get("status"),
+                "submittedAt":    _iso(r.get("submitted_at")),
+                "decidedAt":      _iso(r.get("decided_at")),
+                "decisionNotes":  r.get("decision_notes"),
+            }
+            for r in approval_requests
+        ],
+        "executionLog": [
+            {
+                "agentName":    e.get("agent_name"),
+                "modelVersion": e.get("model_version"),
+                "startedAt":    _iso(e.get("started_at")),
+                "durationMs":   e.get("duration_ms"),
+                "status":       e.get("status"),
+            }
+            for e in execution_log
+        ],
+        "ticketUpdates": [
+            {
+                "updateType": u.get("update_type"),
+                "fromStatus": u.get("from_status"),
+                "toStatus":   u.get("to_status"),
+                "message":    u.get("message"),
+                "createdAt":  _iso(u.get("created_at")),
+            }
+            for u in ticket_updates
+        ],
+        "chatSentimentSeries": [
+            {"score": _flt(c["sentiment_score"])}
+            for c in chat_sentiment
+            if c.get("sentiment_score") is not None
+        ],
+    }
+
+
+# =========================================================
+# Operator – User Management
+# =========================================================
+_VALID_ROLES    = {"customer", "employee", "manager", "operator"}
+_VALID_STATUSES = {"active", "inactive"}
+_SAFE_TEXT_RE   = _re.compile(r'^[\w\s\-\.,\'\+\(\)@/]+$', _re.UNICODE)
+
+
+def _sanitize_text(value: str, field: str, max_len: int = 120) -> str:
+    v = value.strip()
+    if not v:
+        raise HTTPException(status_code=422, detail=f"{field} must not be empty.")
+    if len(v) > max_len:
+        raise HTTPException(status_code=422, detail=f"{field} exceeds maximum length of {max_len}.")
+    if not _SAFE_TEXT_RE.match(v):
+        raise HTTPException(status_code=422, detail=f"{field} contains invalid characters.")
+    return v
+
+
+def _sanitize_email(value: str) -> str:
+    v = value.strip().lower()
+    pattern = _re.compile(r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-.]+$')
+    if not pattern.match(v):
+        raise HTTPException(status_code=422, detail="Invalid email address.")
+    if len(v) > 254:
+        raise HTTPException(status_code=422, detail="Email address too long.")
+    return v
+
+
+class CreateUserRequest(BaseModel):
+    fullName:   str
+    email:      str
+    phone:      str
+    location:   str
+    password:   str
+    role:       str
+    # Department is required for non-customer roles; for customers it can be omitted/empty.
+    department: Optional[str] = None
+    status:     str = "active"
+
+
+@api.post("/operator/user-creation")
+def operator_create_user(
+    body: CreateUserRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Create a new user (operator-only).
+    - All fields sanitized/validated before touching the DB.
+    - Password hashed with bcrypt (cost 12) – plain text never persisted.
+    - Every DB write uses parameterised queries; no string interpolation.
+    """
+    if current_user.get("role") != "operator":
+        raise HTTPException(status_code=403, detail="Only operators can create users.")
+
+    # Sanitize & validate
+    full_name  = _sanitize_text(body.fullName,   "Full name")
+    email      = _sanitize_email(body.email)
+    phone      = _sanitize_text(body.phone,      "Phone",      max_len=30)
+    location   = _sanitize_text(body.location,   "Location")
+
+    # Department is only applicable for non-customer roles.
+    department: Optional[str] = None
+    if body.role != "customer":
+        if not (body.department or "").strip():
+            raise HTTPException(status_code=422, detail="Department is required for non-customer roles.")
+        department = _sanitize_text(body.department, "Department")
+
+    if body.role not in _VALID_ROLES:
+        raise HTTPException(status_code=422, detail=f"Invalid role '{body.role}'.")
+    if body.status not in _VALID_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Invalid status '{body.status}'.")
+
+    raw_password = body.password
+    if not raw_password or len(raw_password) < 8:
+        raise HTTPException(status_code=422, detail="Password must be at least 8 characters.")
+    if len(raw_password) > 128:
+        raise HTTPException(status_code=422, detail="Password too long (max 128 characters).")
+
+    # Hash with bcrypt cost-12
+    password_hash = bcrypt.hashpw(
+        raw_password.encode("utf-8"), bcrypt.gensalt(rounds=12)
+    ).decode("utf-8")
+
+    # Persist (fully parameterised)
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+                cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+                if cur.fetchone():
+                    raise HTTPException(status_code=409, detail="A user with that email already exists.")
+
+                dept_id = None
+                if department is not None:
+                    cur.execute(
+                        "SELECT id FROM departments WHERE LOWER(name) = LOWER(%s)", (department,)
+                    )
+                    dept_row = cur.fetchone()
+                    if dept_row:
+                        dept_id = dept_row["id"]
+                    else:
+                        cur.execute(
+                            "INSERT INTO departments (name) VALUES (%s) RETURNING id", (department,)
+                        )
+                        dept_id = cur.fetchone()["id"]
+
+                is_active = body.status == "active"
+                cur.execute(
+                    """
+                    INSERT INTO users (email, password_hash, role, is_active, mfa_enabled)
+                    VALUES (%s, %s, %s::user_role, %s, FALSE)
+                    RETURNING id
+                    """,
+                    (email, password_hash, body.role, is_active),
+                )
+                user_id = cur.fetchone()["id"]
+
+                cur.execute(
+                    """
+                    INSERT INTO user_profiles (user_id, full_name, phone, location, department_id)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (str(user_id), full_name, phone, location, dept_id),
+                )
+
+            conn.commit()
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("operator_create_user error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to create user. Please try again.")
+
+    logger.info(
+        "operator_create_user | user_id=%s email=%s role=%s by operator=%s",
+        user_id, email, body.role, current_user["id"],
+    )
+
+    return {
+        "success": True,
+        "userId": str(user_id),
+        "message": f"User '{full_name}' created successfully.",
+    }
+
+
+@api.get("/operator/users")
+def operator_list_users(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Return all users with profiles (operator-only)."""
+    if current_user.get("role") != "operator":
+        raise HTTPException(status_code=403, detail="Only operators can view users.")
+
+    rows = fetch_all(
+        """
+        SELECT
+            u.id,
+            u.email,
+            u.role,
+            u.is_active,
+            u.created_at,
+            up.full_name,
+            up.phone,
+            up.location,
+            d.name AS department
+        FROM users u
+        LEFT JOIN user_profiles up ON up.user_id = u.id
+        LEFT JOIN departments    d  ON d.id = up.department_id
+        ORDER BY u.created_at DESC
+        """,
+    )
+
+    return [
+        {
+            "id":         str(r["id"]),
+            "email":      r["email"],
+            "role":       r["role"],
+            "status":     "active" if r["is_active"] else "inactive",
+            "createdAt":  r["created_at"].isoformat() if r.get("created_at") else None,
+            "fullName":   r.get("full_name") or "",
+            "phone":      r.get("phone") or "",
+            "location":   r.get("location") or "",
+            "department": r.get("department") or "",
+        }
+        for r in rows
+    ]
+
+
+class UpdateUserRequest(BaseModel):
+    fullName: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    # Department is only applicable for non-customer roles
+    department: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None
+    # Optional password update
+    password: Optional[str] = None
+
+
+class UpdateUserStatusRequest(BaseModel):
+    status: str
+
+
+@api.put("/operator/users/{user_id}")
+def operator_update_user(
+    user_id: str,
+    body: UpdateUserRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Update user + profile (operator-only)."""
+    if current_user.get("role") != "operator":
+        raise HTTPException(status_code=403, detail="Only operators can update users.")
+
+    # Load current state
+    existing = fetch_one(
+        """
+        SELECT
+            u.id,
+            u.email,
+            u.role,
+            u.is_active,
+            up.full_name,
+            up.phone,
+            up.location,
+            up.department_id,
+            d.name AS department
+        FROM users u
+        LEFT JOIN user_profiles up ON up.user_id = u.id
+        LEFT JOIN departments d ON d.id = up.department_id
+        WHERE u.id = %s
+        """,
+        (user_id,),
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    new_email = _sanitize_email(body.email) if body.email is not None else existing["email"]
+
+    new_role = (body.role or existing["role"] or "customer").lower()
+    if new_role not in _VALID_ROLES:
+        raise HTTPException(status_code=422, detail=f"Invalid role '{new_role}'.")
+
+    new_status = (body.status or ("active" if existing["is_active"] else "inactive")).lower()
+    if new_status not in _VALID_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Invalid status '{new_status}'.")
+
+    new_full_name = _sanitize_text(body.fullName, "Full name") if body.fullName is not None else (existing.get("full_name") or "")
+    new_phone = _sanitize_text(body.phone, "Phone", max_len=30) if body.phone is not None else (existing.get("phone") or "")
+    new_location = _sanitize_text(body.location, "Location") if body.location is not None else (existing.get("location") or "")
+
+    # Department rules:
+    # - customer: department cleared (NULL)
+    # - non-customer: department required; can keep existing if not provided
+    department_value: Optional[str] = None
+    if new_role != "customer":
+        if body.department is not None:
+            department_value = _sanitize_text(body.department, "Department")
+        else:
+            # keep existing, but must exist for non-customer roles
+            department_value = (existing.get("department") or "").strip()
+            if not department_value:
+                raise HTTPException(status_code=422, detail="Department is required for non-customer roles.")
+
+    # Optional password update
+    password_hash: Optional[str] = None
+    if body.password is not None:
+        if not body.password or len(body.password) < 8:
+            raise HTTPException(status_code=422, detail="Password must be at least 8 characters.")
+        if len(body.password) > 128:
+            raise HTTPException(status_code=422, detail="Password too long (max 128 characters).")
+        password_hash = bcrypt.hashpw(
+            body.password.encode("utf-8"), bcrypt.gensalt(rounds=12)
+        ).decode("utf-8")
+
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Email uniqueness if changed
+                if new_email != existing["email"]:
+                    cur.execute("SELECT id FROM users WHERE email = %s", (new_email,))
+                    row = cur.fetchone()
+                    if row:
+                        raise HTTPException(status_code=409, detail="A user with that email already exists.")
+
+                # Department lookup/create (if applicable)
+                dept_id = None
+                if department_value is not None:
+                    cur.execute(
+                        "SELECT id FROM departments WHERE LOWER(name) = LOWER(%s)", (department_value,)
+                    )
+                    dept_row = cur.fetchone()
+                    if dept_row:
+                        dept_id = dept_row["id"]
+                    else:
+                        cur.execute(
+                            "INSERT INTO departments (name) VALUES (%s) RETURNING id", (department_value,)
+                        )
+                        dept_id = cur.fetchone()["id"]
+
+                # Update users
+                is_active = new_status == "active"
+                if password_hash is not None:
+                    cur.execute(
+                        """
+                        UPDATE users
+                        SET email=%s, role=%s::user_role, is_active=%s, password_hash=%s
+                        WHERE id=%s
+                        """,
+                        (new_email, new_role, is_active, password_hash, user_id),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE users
+                        SET email=%s, role=%s::user_role, is_active=%s
+                        WHERE id=%s
+                        """,
+                        (new_email, new_role, is_active, user_id),
+                    )
+
+                # Ensure profile row exists, then update
+                cur.execute("SELECT user_id FROM user_profiles WHERE user_id=%s", (user_id,))
+                has_profile = cur.fetchone() is not None
+                if not has_profile:
+                    cur.execute(
+                        """
+                        INSERT INTO user_profiles (user_id, full_name, phone, location, department_id)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (user_id, new_full_name, new_phone, new_location, dept_id),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE user_profiles
+                        SET full_name=%s, phone=%s, location=%s, department_id=%s
+                        WHERE user_id=%s
+                        """,
+                        (new_full_name, new_phone, new_location, dept_id, user_id),
+                    )
+
+            conn.commit()
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("operator_update_user error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to update user. Please try again.")
+
+    return {"success": True, "message": "User updated successfully."}
+
+
+@api.patch("/operator/users/{user_id}/status")
+def operator_update_user_status(
+    user_id: str,
+    body: UpdateUserStatusRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Activate/Deactivate user (operator-only)."""
+    if current_user.get("role") != "operator":
+        raise HTTPException(status_code=403, detail="Only operators can update users.")
+
+    status = (body.status or "").lower()
+    if status not in _VALID_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Invalid status '{status}'.")
+
+    is_active = status == "active"
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET is_active=%s WHERE id=%s", (is_active, user_id))
+                if cur.rowcount == 0:
+                    raise HTTPException(status_code=404, detail="User not found.")
+            conn.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("operator_update_user_status error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to update user status.")
+
+    return {"success": True, "message": f"User {status}."}
+
+
+@api.delete("/operator/users/{user_id}")
+def operator_delete_user(
+    user_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Delete a user (operator-only)."""
+    if current_user.get("role") != "operator":
+        raise HTTPException(status_code=403, detail="Only operators can delete users.")
+
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM users WHERE id=%s", (user_id,))
+                if cur.rowcount == 0:
+                    raise HTTPException(status_code=404, detail="User not found.")
+            conn.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("operator_delete_user error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete user.")
+
+    return {"success": True, "message": "User deleted successfully."}
+
+
+# =========================================================
+# TTS — call-centre audio reply
+# =========================================================
+
+try:
+    import edge_tts as _edge_tts
+except ImportError:
+    _edge_tts = None
+
+_TTS_VOICE = "en-US-JennyNeural"
+
+_TTS_TEMPLATES: dict = {
+    "ticket_logged": (
+        "Thank you for contacting us. "
+        "Your {ticket_type} has been successfully logged. "
+        "Your ticket ID is {ticket_id}. "
+        "Our team will review your concern and respond as soon as possible."
+    ),
+    "inquiry_handled": (
+        "Thank you for your inquiry. "
+        "Our team has been notified and will get back to you shortly."
+    ),
+    "generic": "{text}",
+}
+
+
+async def _generate_tts_bytes(text: str, voice: str = _TTS_VOICE) -> bytes:
+    communicate = _edge_tts.Communicate(text, voice)
+    buf = io.BytesIO()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            buf.write(chunk["data"])
+    buf.seek(0)
+    return buf.read()
+
+
+class TTSSpeakRequest(BaseModel):
+    message_type: Optional[str] = "ticket_logged"
+    ticket_id: Optional[str] = None
+    ticket_type: Optional[str] = "complaint"
+    text: Optional[str] = None
+
+
+@api.post("/tts/speak")
+async def tts_speak(body: TTSSpeakRequest):
+    if _edge_tts is None:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "TTS unavailable: edge-tts package not installed"},
+        )
+    try:
+        if body.text and body.text.strip():
+            text = body.text.strip()
+        else:
+            template = _TTS_TEMPLATES.get(
+                body.message_type or "ticket_logged",
+                _TTS_TEMPLATES["ticket_logged"],
+            )
+            text = template.format(
+                ticket_id=body.ticket_id or "unknown",
+                ticket_type=body.ticket_type or "complaint",
+                text="",
+            )
+        if not text:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "No text provided for synthesis"},
+            )
+        audio_bytes = await _generate_tts_bytes(text)
+        if not audio_bytes:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "TTS returned empty audio"},
+            )
+        return {
+            "audio_base64": base64.b64encode(audio_bytes).decode(),
+            "mime_type": "audio/mpeg",
+            "text": text,
+        }
+    except Exception as exc:
+        logger.warning("TTS generation failed: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": f"TTS unavailable: {exc}"},
+        )
 
 
 # =========================================================

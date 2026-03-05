@@ -1,13 +1,6 @@
-import os
 import re
-import urllib.parse
-import urllib.request
-
-from sqlalchemy import text
-
-from .db import engine
 from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression
-from .llm import generate_response
+from .llm import generate_response, llm_available
 from .logger import log_bot_response, log_user_message
 from .retriever import retrieve_context
 from .session import append_history, load_session, save_session, transition
@@ -66,10 +59,11 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
 
         else:
             response = (
-                "Hello! Welcome to support. I am here to help you today.\n"
-                "Would you like to:\n"
+                "Hi! I'm Nova, your AI support assistant. How can I help you today?\n\n"
+                "You can:\n"
                 "  1. Follow up on an existing ticket\n"
-                "  2. Create a new ticket"
+                "  2. Create a new ticket (complaint or inquiry)\n\n"
+                "Just describe what you need and I'll take it from there."
             )
             transition(session, "await_primary_intent")
             _log_and_save(session, response, "greeting")
@@ -323,7 +317,7 @@ def _handle_complaint(session: dict, user_id: str, user_text: str) -> dict:
     context    = session["context"]
 
     if not context.get("deescalated", False):
-        # De-escalation turn — acknowledge, do not solve, ask for asset type
+        # De-escalation turn — acknowledge, do not solve, ask for issue details
         kb_context = retrieve_context(user_text, mode="complaint")
         system = (
             "You are a calm, empathetic customer support assistant. "
@@ -340,10 +334,7 @@ def _handle_complaint(session: dict, user_id: str, user_text: str) -> dict:
             {"role": "user", "content": user_text},
         ]
         response  = generate_response(messages)
-        response += (
-            "\n\nTo raise this as a complaint ticket, "
-            "what type of asset is affected — Office, Warehouse, or Retail?"
-        )
+        response += "\n\nTo raise this as a complaint ticket, please describe the issue in as much detail as you can."
         context["deescalated"] = True
         context["category"]    = "complaint"
         transition(session, "collecting_complaint")
@@ -361,20 +352,7 @@ def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
     context    = session["context"]
     category   = context.get("category", "complaint")
 
-    # Step 1: collect asset_type
-    if "asset_type" not in context:
-        asset = _extract_asset_type(user_text)
-        if asset:
-            context["asset_type"] = asset
-            response = "Got it. Please describe the issue in as much detail as you can."
-            _log_and_save(session, response, "collected_asset_type")
-        else:
-            response = "Please specify the asset type: Office, Warehouse, or Retail."
-            _log_and_save(session, response, "prompt_asset_type")
-        # Always return here — description is collected on the next separate turn
-        return _result(response, "prompt_description", session_id)
-
-    # Step 2: collect description (this is a separate turn from asset_type)
+    # Step 1: collect description
     if "description" not in context:
         if not user_text.strip():
             response = "Could you describe the issue in a bit more detail please?"
@@ -387,7 +365,6 @@ def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
         user_id=user_id,
         session_id=session_id,
         category=category,
-        asset_type=context["asset_type"],
         description=context["description"],
     )
 
@@ -399,12 +376,6 @@ def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
         )
         transition(session, "ticket_created")
         rtype = "ticket_created"
-        _dispatch_sentiment_feed(
-            session_id=session_id,
-            ticket_id=result["ticket_id"],
-            ticket_type=category,
-            asset_type=context.get("asset_type"),
-        )
     else:
         response = (
             f"I encountered an issue creating your ticket: {result['error']}. "
@@ -427,14 +398,6 @@ def _extract_ticket_id(text: str) -> str | None:
         return uuid_match.group(0)
     code_match = re.search(r"\b(CX-[A-Z0-9-]{4,32}|[A-Z]{0,3}\d{3,8})\b", text.upper())
     return code_match.group(1) if code_match else None
-
-
-def _extract_asset_type(text: str) -> str | None:
-    text_lower = text.lower()
-    for asset in ("office", "warehouse", "retail"):
-        if asset in text_lower:
-            return asset
-    return None
 
 
 def _log_and_save(
@@ -468,49 +431,6 @@ def _result(
         "show_buttons":  buttons or [],
         "session_id":    session_id,
     }
-
-
-def _dispatch_sentiment_feed(
-    session_id: str,
-    ticket_id: str,
-    ticket_type: str | None = None,
-    asset_type: str | None = None,
-) -> None:
-    try:
-        with engine.connect() as conn:
-            rows = conn.execute(
-                text(
-                    "SELECT message FROM user_chat_logs "
-                    "WHERE session_id = :sid ORDER BY created_at ASC"
-                ),
-                {"sid": session_id},
-            ).fetchall()
-
-        transcript = "\n".join(row.message for row in rows if row.message).strip()
-        if not transcript:
-            return
-
-        url = os.environ.get("ORCHESTRATOR_URL", "http://orchestrator:8004/process/text")
-        payload = {
-            "text":        transcript,
-            "ticket_id":   ticket_id,
-            "ticket_type": ticket_type or "complaint",
-            "asset_type":  asset_type or "General",
-            "has_audio":   "false",
-        }
-        encoded = urllib.parse.urlencode(payload).encode("utf-8")
-        request = urllib.request.Request(
-            url,
-            data=encoded,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            method="POST",
-        )
-        with urllib.request.urlopen(request, timeout=8):
-            pass
-    except Exception:
-        # Never block the user response if the sentiment feed dispatch fails
-        return
-
 
 # ── Backward-compatible wrappers (used by local_model_test.py) ────────────────
 

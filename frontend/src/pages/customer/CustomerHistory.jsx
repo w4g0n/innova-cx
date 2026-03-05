@@ -55,6 +55,39 @@ function getPriorityContext(priority) {
   return PRIORITY_CONTEXT[String(priority || "")] || PRIORITY_CONTEXT.Medium;
 }
 
+function formatTicketSource(value) {
+  return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
+}
+
+const WORKFLOW_STAGES = [
+  { id: "open", label: "Open", owner: "System" },
+  { id: "assigned", label: "Assigned", owner: "Operator" },
+  { id: "in_progress", label: "In Progress", owner: "Employee" },
+  { id: "resolved", label: "Resolved", owner: "Employee" },
+];
+
+function getWorkflowState(status) {
+  const value = String(status || "").trim().toLowerCase();
+  if (value === "resolved") {
+    return { stageIndex: 3, stageLabel: "Resolved", owner: "Employee", note: "Work is complete." };
+  }
+  if (value === "in progress") {
+    return { stageIndex: 2, stageLabel: "In Progress", owner: "Employee", note: "A team member is working on this." };
+  }
+  if (value === "assigned" || value === "escalated") {
+    return { stageIndex: 1, stageLabel: "Assigned", owner: "Operator", note: "Ticket is assigned and queued for action." };
+  }
+  return { stageIndex: 0, stageLabel: "Open", owner: "System", note: "Ticket was received and is pending assignment." };
+}
+
+function getSlaTargets(priority) {
+  const value = String(priority || "").trim().toLowerCase();
+  if (value === "critical") return { minResponse: "15 min", minResolve: "4 hrs" };
+  if (value === "high") return { minResponse: "1 hr", minResolve: "8 hrs" };
+  if (value === "low") return { minResponse: "8 hrs", minResolve: "72 hrs" };
+  return { minResponse: "4 hrs", minResolve: "24 hrs" };
+}
+
 export default function CustomerHistory() {
   const navigate = useNavigate();
 
@@ -64,7 +97,6 @@ export default function CustomerHistory() {
 
   const [historyItems, setHistoryItems] = useState([]);
 
-  // Fetch tickets from backend
   useEffect(() => {
     const fetchTickets = async () => {
       const token = getToken();
@@ -83,6 +115,7 @@ export default function CustomerHistory() {
           id: t.ticketId,
           title: t.subject,
           type: t.ticketType,
+          source: formatTicketSource(t.ticketSource),
           status: t.status,
           date: t.issueDate,
           priority: t.priority,
@@ -214,6 +247,8 @@ export default function CustomerHistory() {
             </div>
           ) : (
             ordered.map((item) => {
+              const workflow = getWorkflowState(item.status);
+              const sla = getSlaTargets(item.priority);
               const ctx = getPriorityContext(item.priority);
               return (
                 <article
@@ -234,6 +269,8 @@ export default function CustomerHistory() {
                       <span className="historyDot">•</span>
                       <span className="historyType">{item.type}</span>
                       <span className="historyDot">•</span>
+                      <span className="historyType">{item.source}</span>
+                      <span className="historyDot">•</span>
                       <span className={`historyStatus status-${item.status.replace(" ", "")}`}>
                         {item.status}
                       </span>
@@ -249,6 +286,65 @@ export default function CustomerHistory() {
                         <PriorityPill priority={item.priority} />
                       </div>
                     </div>
+
+                <div className="historySlaRow">
+                  <span className="historySlaItem">
+                    <b>Min response:</b> {sla.minResponse}
+                  </span>
+
+                  <span className="historySlaDot">•</span>
+
+                  <span className="historySlaItem">
+                    <b>Min resolve:</b> {sla.minResolve}
+                  </span>
+                </div>
+
+                <div className="historyWorkflow">
+                  <div className="historyWorkflowHeader">
+                    <span className="historyWorkflowTitle">Workflow Stage</span>
+                    <span className={`historyWorkflowOwner owner-${workflow.owner.toLowerCase()}`}>
+                      {workflow.owner}
+                    </span>
+                  </div>
+
+                  <div className="historyWorkflowCurrent">{workflow.stageLabel}</div>
+
+                  <div
+                    className="historyWorkflowTrack"
+                    aria-label={`Workflow stage ${workflow.stageIndex + 1} of ${WORKFLOW_STAGES.length}`}
+                  >
+                    {WORKFLOW_STAGES.map((stage, index) => (
+                      <div
+                        key={stage.id}
+                        className={`historyWorkflowDot ${
+                          index <= workflow.stageIndex ? "is-done" : ""
+                        } ${index === workflow.stageIndex ? "is-current" : ""}`}
+                        title={`${stage.label} (${stage.owner})`}
+                      />
+                    ))}
+                  </div>
+
+                  <p className="historyWorkflowNote">{workflow.note}</p>
+                </div>
+
+                {/* Friendly priority context */}
+                <div
+                  className="historyPriorityContext"
+                  style={{ background: ctx.bg, borderColor: ctx.border }}
+                >
+                  <span className="historyPriorityCtxIcon">{ctx.icon}</span>
+
+                  <div>
+                    <div
+                      className="historyPriorityCtxHeadline"
+                      style={{ color: ctx.color }}
+                    >
+                      {ctx.headline}
+                    </div>
+
+                    <p className="historyPriorityCtxReason">{ctx.reason}</p>
+                  </div>
+                </div>                  
                   </div>
 
                   <div className="historyCardRight">

@@ -38,7 +38,6 @@ def retrain_resolution_examples(max_examples: int = 12) -> dict:
           trf.created_at,
           t.ticket_code,
           t.ticket_type,
-          t.asset_type,
           t.priority,
           t.subject,
           t.details
@@ -78,7 +77,6 @@ def retrain_resolution_examples(max_examples: int = 12) -> dict:
             {
                 "ticket_code": ticket_code,
                 "ticket_type": str(row.ticket_type or ""),
-                "asset_type": str(row.asset_type or ""),
                 "priority": str(row.priority or ""),
                 "subject": str(row.subject or ""),
                 "details": details,
@@ -131,7 +129,6 @@ def format_examples_for_prompt(limit: int = 4) -> str:
             (
                 f"Example {i}\n"
                 f"Type: {ex.get('ticket_type')}\n"
-                f"Asset: {ex.get('asset_type')}\n"
                 f"Priority: {ex.get('priority')}\n"
                 f"Subject: {ex.get('subject')}\n"
                 f"Details: {ex.get('details')}\n"

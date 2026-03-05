@@ -1,0 +1,7 @@
+# macOS prerequisite (not a pip package):
+#   brew install libomp
+# XGBoost needs libomp.dylib at runtime.
+numpy
+scikit-fuzzy
+xgboost
+scikit-learn

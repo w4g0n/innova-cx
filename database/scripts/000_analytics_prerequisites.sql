@@ -117,15 +117,18 @@ CREATE INDEX IF NOT EXISTS idx_so_is_current
     ON public.sentiment_outputs (ticket_id, is_current) WHERE is_current = TRUE;
 
 CREATE TABLE IF NOT EXISTS public.priority_outputs (
-    id                 UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-    execution_id       UUID            NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
-    ticket_id          UUID            NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
-    model_version      TEXT            NOT NULL,
-    suggested_priority ticket_priority NOT NULL,
-    confidence_score   NUMERIC(5,4)    NOT NULL,
-    reasoning          TEXT,
-    is_current         BOOLEAN         NOT NULL DEFAULT TRUE,
-    created_at         TIMESTAMPTZ     NOT NULL DEFAULT now()
+    id               UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id     UUID            NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id        UUID            NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version    TEXT            NOT NULL,
+    model_priority   ticket_priority NOT NULL,
+    confidence_score NUMERIC(5,4)    NOT NULL,
+    urgency_score    NUMERIC(5,4),
+    impact_score     NUMERIC(5,4),
+    feature_vector   JSONB           NOT NULL DEFAULT '{}'::jsonb,
+    reasoning        TEXT,
+    is_current       BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMPTZ     NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_po_ticket_id
     ON public.priority_outputs (ticket_id);
@@ -133,15 +136,17 @@ CREATE INDEX IF NOT EXISTS idx_po_is_current
     ON public.priority_outputs (ticket_id, is_current) WHERE is_current = TRUE;
 
 CREATE TABLE IF NOT EXISTS public.routing_outputs (
-    id                      UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    execution_id            UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
-    ticket_id               UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
-    model_version           TEXT         NOT NULL,
-    suggested_department_id UUID         REFERENCES public.departments(id) ON DELETE SET NULL,
-    confidence_score        NUMERIC(5,4) NOT NULL,
-    reasoning               TEXT,
-    is_current              BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at              TIMESTAMPTZ  NOT NULL DEFAULT now()
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id        UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id           UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version       TEXT         NOT NULL,
+    suggested_dept_id   UUID         REFERENCES public.departments(id) ON DELETE SET NULL,
+    suggested_dept_name TEXT,
+    confidence_score    NUMERIC(5,4) NOT NULL,
+    routing_reason      TEXT,
+    reasoning           TEXT,
+    is_current          BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_ro_ticket_id
     ON public.routing_outputs (ticket_id);
@@ -149,16 +154,20 @@ CREATE INDEX IF NOT EXISTS idx_ro_is_current
     ON public.routing_outputs (ticket_id, is_current) WHERE is_current = TRUE;
 
 CREATE TABLE IF NOT EXISTS public.sla_outputs (
-    id                     UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    execution_id           UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
-    ticket_id              UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
-    model_version          TEXT         NOT NULL,
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id        UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id           UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version       TEXT         NOT NULL,
+    sla_tier            TEXT,
+    breach_risk_score   NUMERIC(5,4),
+    response_deadline   TIMESTAMPTZ,
+    resolution_deadline TIMESTAMPTZ,
     predicted_respond_mins INTEGER,
     predicted_resolve_mins INTEGER,
-    breach_risk            NUMERIC(5,4),
-    confidence_score       NUMERIC(5,4) NOT NULL,
-    is_current             BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at             TIMESTAMPTZ  NOT NULL DEFAULT now()
+    breach_risk         NUMERIC(5,4),
+    confidence_score    NUMERIC(5,4) NOT NULL DEFAULT 0,
+    is_current          BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_slao_ticket_id
     ON public.sla_outputs (ticket_id);
@@ -166,15 +175,16 @@ CREATE INDEX IF NOT EXISTS idx_slao_is_current
     ON public.sla_outputs (ticket_id, is_current) WHERE is_current = TRUE;
 
 CREATE TABLE IF NOT EXISTS public.resolution_outputs (
-    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    execution_id     UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
-    ticket_id        UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
-    model_version    TEXT         NOT NULL,
-    suggested_text   TEXT,
-    kb_references    TEXT[]       NOT NULL DEFAULT '{}',
-    confidence_score NUMERIC(5,4) NOT NULL,
-    is_current       BOOLEAN      NOT NULL DEFAULT TRUE,
-    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now()
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id        UUID         NOT NULL REFERENCES public.model_execution_log(id) ON DELETE CASCADE,
+    ticket_id           UUID         NOT NULL REFERENCES public.tickets(id) ON DELETE CASCADE,
+    model_version       TEXT         NOT NULL,
+    suggested_resolution TEXT,
+    suggested_text      TEXT,
+    kb_references       JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    confidence_score    NUMERIC(5,4) NOT NULL,
+    is_current          BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_reso_ticket_id
     ON public.resolution_outputs (ticket_id);

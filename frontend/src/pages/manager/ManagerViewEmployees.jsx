@@ -1,7 +1,7 @@
 import Layout from "../../components/Layout";
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { PDFDownloadLink } from "@react-pdf/renderer";
+import { pdf } from "@react-pdf/renderer";
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import KpiCard from "../../components/common/KpiCard";
@@ -65,6 +65,44 @@ function buildEmployeeReport(emp) {
       "Full weekly breakdown requires backend analytics integration.",
     ],
   };
+}
+
+function DownloadReportButton({ employee: e }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleDownload = async () => {
+    setLoading(true);
+    try {
+      const blob = await pdf(
+        <EmployeeReportPDF
+          report={buildEmployeeReport(e)}
+          employeeName={e.name}
+          employeeId={e.id}
+          downloadDate={new Date()}
+        />
+      ).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `report-${e.id}-${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      className={`ve-reportBtn${loading ? " ve-reportBtn--loading" : ""}`}
+      onClick={handleDownload}
+      disabled={loading}
+    >
+      {loading ? "Preparing…" : "⬇ View Report"}
+    </button>
+  );
 }
 
 export default function ManagerViewEmployees() {
@@ -218,23 +256,7 @@ export default function ManagerViewEmployees() {
                       <td>{e.completed || 0}</td>
                       <td>{e.inProgress || 0}</td>
                       <td>
-                        <PDFDownloadLink
-                          document={
-                            <EmployeeReportPDF
-                              report={buildEmployeeReport(e)}
-                              employeeName={e.name}
-                              employeeId={e.id}
-                              downloadDate={new Date()}
-                            />
-                          }
-                          fileName={`report-${e.id}-${new Date().toISOString().slice(0, 10)}.pdf`}
-                        >
-                          {({ loading: pdfLoading }) => (
-                            <span className={`ve-reportBtn${pdfLoading ? " ve-reportBtn--loading" : ""}`}>
-                              {pdfLoading ? "Preparing…" : "⬇ View Report"}
-                            </span>
-                          )}
-                        </PDFDownloadLink>
+                        <DownloadReportButton employee={e} />
                       </td>
                     </tr>
                   ))}

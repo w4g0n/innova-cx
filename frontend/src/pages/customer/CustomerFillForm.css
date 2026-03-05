@@ -554,3 +554,43 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+
+/* ── Success screen (post-submission) ────────────────────────────── */
+.custSuccessCard {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 18px;
+  padding: 32px 24px;
+  box-shadow: var(--glass-shadow);
+  border: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  animation: fadeUp 0.35s var(--ease-out) both;
+}
+
+.custSuccessIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custSuccessTicketId {
+  font-size: 15px;
+  color: rgba(17, 17, 17, 0.75);
+}
+
+.custSuccessTicketId strong {
+  color: var(--btn-primary);
+  font-weight: 800;
+}
+
+.custSuccessText {
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(17, 17, 17, 0.72);
+  max-width: 480px;
+}

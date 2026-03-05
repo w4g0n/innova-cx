@@ -161,7 +161,6 @@ CREATE TABLE IF NOT EXISTS tickets (
   ticket_type         ticket_type NOT NULL DEFAULT 'Complaint',
   status              ticket_status NOT NULL DEFAULT 'Unassigned',
   priority            ticket_priority NOT NULL DEFAULT 'Medium',
-  asset_type          TEXT NOT NULL DEFAULT 'General',
   department_id       UUID REFERENCES departments(id) ON DELETE SET NULL,
   created_by_user_id  UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   assigned_to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -182,6 +181,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   model_department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
   model_confidence    NUMERIC(5,2),
   model_suggestion    TEXT,
+  ticket_source       TEXT NOT NULL DEFAULT 'user',
   final_resolution    TEXT,
   resolved_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL
 );
@@ -192,6 +192,9 @@ CREATE TABLE IF NOT EXISTS tickets (
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_type TEXT;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS human_overridden BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS ticket_resolution_feedback (
     id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -211,7 +214,6 @@ CREATE INDEX IF NOT EXISTS idx_ticket_resolution_feedback_employee
 
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_priority    ON tickets(priority);
-CREATE INDEX IF NOT EXISTS idx_tickets_asset_type  ON tickets(asset_type);
 CREATE INDEX IF NOT EXISTS idx_tickets_created_at  ON tickets(created_at);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee    ON tickets(assigned_to_user_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_creator     ON tickets(created_by_user_id);
@@ -496,6 +498,10 @@ CREATE TABLE IF NOT EXISTS approval_requests (
   requested_value      TEXT NOT NULL,
   request_reason       TEXT,
   submitted_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  source               TEXT NOT NULL DEFAULT 'employee',
+  requested_to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  model_name           TEXT,
+  model_confidence     NUMERIC(5,4),
   submitted_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   status               approval_status NOT NULL DEFAULT 'Pending',
   decided_by_user_id   UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -505,6 +511,21 @@ CREATE TABLE IF NOT EXISTS approval_requests (
 
 CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(status);
 CREATE INDEX IF NOT EXISTS idx_approval_requests_ticket ON approval_requests(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_requested_to ON approval_requests(requested_to_user_id);
+
+CREATE TABLE IF NOT EXISTS department_routing_feedback (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  predicted_department TEXT NOT NULL,
+  approved_department  TEXT NOT NULL,
+  confidence_score     NUMERIC(5,4),
+  model_name           TEXT,
+  approved_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_routing_feedback_predicted ON department_routing_feedback(predicted_department);
+CREATE INDEX IF NOT EXISTS idx_routing_feedback_created_at ON department_routing_feedback(created_at);
 
 -- -------------------------
 -- Auto-notify manager on new approval requests
@@ -534,8 +555,13 @@ BEGIN
   SELECT full_name INTO v_submitter_name
   FROM user_profiles WHERE user_id = NEW.submitted_by_user_id;
 
+  -- Notify targeted manager if set; otherwise notify all active managers.
   FOR v_manager_id IN
-    SELECT id FROM users WHERE role = 'manager' AND is_active = TRUE
+    SELECT id
+    FROM users
+    WHERE role = 'manager'
+      AND is_active = TRUE
+      AND (NEW.requested_to_user_id IS NULL OR id = NEW.requested_to_user_id)
   LOOP
     v_title := CASE NEW.request_type
       WHEN 'Rescoring' THEN 'Rescoring Request — ' || COALESCE(v_ticket_code, 'Unknown')
@@ -614,6 +640,125 @@ CREATE TRIGGER trg_notify_manager_approval_decision
 AFTER UPDATE ON approval_requests
 FOR EACH ROW
 EXECUTE FUNCTION notify_manager_on_approval_decision();
+
+-- =========================================================
+-- Customer Notifications
+-- Triggers:
+--   1. On ticket INSERT → "Ticket Received" notification
+--   2. On ticket status UPDATE → "Status Changed" notification
+--   3. On ticket resolved (status = 'Resolved') → "Resolved" notification
+-- =========================================================
+
+-- ─────────────────────────────────────────────────────────
+-- Helper: notify customer on new ticket creation
+-- ─────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION notify_customer_on_ticket_create()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Only notify if the ticket was created by a customer role user
+  IF NOT EXISTS (
+    SELECT 1 FROM users
+    WHERE id = NEW.created_by_user_id AND role = 'customer'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO notifications (
+    user_id,
+    type,
+    title,
+    message,
+    priority,
+    ticket_id
+  ) VALUES (
+    NEW.created_by_user_id,
+    'ticket_assignment',
+    'Ticket Received — ' || NEW.ticket_code,
+    'Your ticket "' || NEW.subject || '" has been received and is currently ' || NEW.status::TEXT || '. We will keep you updated.',
+    NEW.priority,
+    NEW.id
+  );
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_notify_customer_ticket_create ON tickets;
+CREATE TRIGGER trg_notify_customer_ticket_create
+AFTER INSERT ON tickets
+FOR EACH ROW
+EXECUTE FUNCTION notify_customer_on_ticket_create();
+
+
+-- ─────────────────────────────────────────────────────────
+-- Helper: notify customer on ticket status change
+-- Fires on any status transition (excluding Resolved — handled separately below)
+-- ─────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION notify_customer_on_status_change()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_title   TEXT;
+  v_message TEXT;
+BEGIN
+  -- Only fire when status actually changed
+  IF OLD.status = NEW.status THEN
+    RETURN NEW;
+  END IF;
+
+  -- Only notify customers
+  IF NOT EXISTS (
+    SELECT 1 FROM users
+    WHERE id = NEW.created_by_user_id AND role = 'customer'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  -- Handle Resolved separately with a richer message
+  IF NEW.status = 'Resolved' THEN
+    v_title := 'Ticket Resolved — ' || NEW.ticket_code;
+    v_message := 'Great news! Your ticket "' || NEW.subject || '" has been resolved. '
+      || CASE
+           WHEN NEW.final_resolution IS NOT NULL
+           THEN 'Resolution: ' || NEW.final_resolution
+           ELSE 'Please contact us if you need any further assistance.'
+         END;
+  ELSE
+    v_title := 'Ticket Update — ' || NEW.ticket_code;
+    v_message := 'Your ticket "' || NEW.subject || '" status has been updated from '
+      || OLD.status::TEXT || ' to ' || NEW.status::TEXT || '.';
+  END IF;
+
+  INSERT INTO notifications (
+    user_id,
+    type,
+    title,
+    message,
+    priority,
+    ticket_id
+  ) VALUES (
+    NEW.created_by_user_id,
+    CASE
+      WHEN NEW.status = 'Resolved'  THEN 'status_change'::notification_type
+      WHEN NEW.status = 'Escalated' THEN 'sla_warning'::notification_type
+      WHEN NEW.status = 'Overdue'   THEN 'sla_warning'::notification_type
+      ELSE                               'status_change'::notification_type
+    END,
+    v_title,
+    v_message,
+    NEW.priority,
+    NEW.id
+  );
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_notify_customer_status_change ON tickets;
+CREATE TRIGGER trg_notify_customer_status_change
+AFTER UPDATE ON tickets
+FOR EACH ROW
+EXECUTE FUNCTION notify_customer_on_status_change();
+
 -- -------------------------
 -- Chat tables
 -- -------------------------
@@ -656,6 +801,12 @@ CREATE TABLE IF NOT EXISTS sessions (
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE sessions
+ADD COLUMN IF NOT EXISTS bot_model_version TEXT,
+ADD COLUMN IF NOT EXISTS escalated_to_human BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS linked_ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 
@@ -678,6 +829,11 @@ CREATE TABLE IF NOT EXISTS user_chat_logs (
 
 ALTER TABLE user_chat_logs
 ADD COLUMN IF NOT EXISTS ticket_id UUID REFERENCES tickets(id) ON DELETE SET NULL;
+
+ALTER TABLE user_chat_logs
+ADD COLUMN IF NOT EXISTS sentiment_score NUMERIC(4,3),
+ADD COLUMN IF NOT EXISTS category TEXT,
+ADD COLUMN IF NOT EXISTS response_time_ms INTEGER;
 
 CREATE INDEX IF NOT EXISTS idx_user_chat_logs_session ON user_chat_logs(session_id);
 CREATE INDEX IF NOT EXISTS idx_user_chat_logs_user ON user_chat_logs(user_id);
@@ -736,6 +892,12 @@ CREATE TABLE IF NOT EXISTS employee_reports (
   kpi_avg_response TEXT NOT NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE employee_reports
+ADD COLUMN IF NOT EXISTS model_version TEXT,
+ADD COLUMN IF NOT EXISTS generated_by TEXT,
+ADD COLUMN IF NOT EXISTS period_start DATE,
+ADD COLUMN IF NOT EXISTS period_end DATE;
 
 CREATE TABLE IF NOT EXISTS employee_report_summary_items (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -838,7 +1000,7 @@ WHERE NOT EXISTS (
 
 INSERT INTO departments (name) VALUES
   ('Facilities Management'),
-  ('Legal and Compliance'),
+  ('Legal & Compliance'),
   ('Safety & Security'),
   ('HR'),
   ('Leasing'),
@@ -851,6 +1013,8 @@ ON CONFLICT (name) DO NOTHING;
 -- bearer token on login (no MFA prompt during development/testing)
 INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
   ('customer1@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
+  ('customer2@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
+  ('customer3@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
   ('manager@innova.cx',   crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
   ('operator@innova.cx',  crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  FALSE, NULL),
   ('ahmed@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
@@ -860,7 +1024,12 @@ INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
   ('bilal@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
   ('fatima@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
   ('yousef@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('khalid@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL)
+  ('khalid@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('dina@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('hassan@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('lena@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('noura@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('ziad@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL)
 ON CONFLICT (email) DO UPDATE
   SET mfa_enabled = FALSE,
       totp_secret = NULL;
@@ -923,84 +1092,164 @@ SELECT u.id, 'Customer One', '+971500000000', 'Dubai'
 FROM users u WHERE u.email='customer1@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
--- Tickets (original sample seed)
+-- Tickets (fixed assignments seed)
 WITH
-cust  AS (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
-ahmed AS (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
-maria AS (SELECT id FROM users WHERE email='maria@innova.cx' LIMIT 1),
-omar  AS (SELECT id FROM users WHERE email='omar@innova.cx' LIMIT 1),
-sara  AS (SELECT id FROM users WHERE email='sara@innova.cx' LIMIT 1),
-fac   AS (SELECT id FROM departments WHERE name='Warehouse' LIMIT 1),
-it    AS (SELECT id FROM departments WHERE name='Office' LIMIT 1)
+  cust    AS (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+  ahmed   AS (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
+  maria   AS (SELECT id FROM users WHERE email='maria@innova.cx' LIMIT 1),
+  omar    AS (SELECT id FROM users WHERE email='omar@innova.cx' LIMIT 1),
+  sara    AS (SELECT id FROM users WHERE email='sara@innova.cx' LIMIT 1),
+  bilal   AS (SELECT id FROM users WHERE email='bilal@innova.cx' LIMIT 1),
+  fatima  AS (SELECT id FROM users WHERE email='fatima@innova.cx' LIMIT 1),
+  yousef  AS (SELECT id FROM users WHERE email='yousef@innova.cx' LIMIT 1),
+  khalid  AS (SELECT id FROM users WHERE email='khalid@innova.cx' LIMIT 1),
+  facilities  AS (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1),
+  legal       AS (SELECT id FROM departments WHERE name='Legal and Compliance' LIMIT 1),
+  safety      AS (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1),
+  hr          AS (SELECT id FROM departments WHERE name='HR' LIMIT 1),
+  leasing     AS (SELECT id FROM departments WHERE name='Leasing' LIMIT 1),
+  maintenance AS (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1),
+  it          AS (SELECT id FROM departments WHERE name='IT' LIMIT 1)
+
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, priority, status, department_id,
   created_by_user_id, assigned_to_user_id, created_at,
   respond_due_at, resolve_due_at,
-  model_suggestion, model_priority, model_confidence,
-  sentiment_score, sentiment_label
-) VALUES
-('CX-1122','Air conditioning not working','AC stopped cooling in office area. Needs urgent repair.',
- 'Complaint','Critical','Unassigned',(SELECT id FROM fac),(SELECT id FROM cust),NULL,
- to_timestamp('19/11/2025','DD/MM/YYYY'),
- to_timestamp('19/11/2025','DD/MM/YYYY') + interval '30 minutes',
- to_timestamp('19/11/2025','DD/MM/YYYY') + interval '6 hours',
- 'Dispatch HVAC technician and check compressor / thermostat; confirm coolant pressure.',
- 'Critical',92.50, -0.450,'Negative'),
+  model_suggestion, model_priority, model_confidence, sentiment_score, sentiment_label
+)
+VALUES
+('CX-1122',
+  'Air conditioning not working',
+  'AC stopped cooling in office area. Needs urgent repair.',
+  'Complaint',
+  'Critical',
+  'Assigned',
+  (SELECT id FROM maintenance),
+  (SELECT id FROM cust),
+  (SELECT id FROM ahmed),
+  to_timestamp('19/11/2025','DD/MM/YYYY'),
+  to_timestamp('19/11/2025','DD/MM/YYYY') + interval '30 minutes',
+  to_timestamp('19/11/2025','DD/MM/YYYY') + interval '6 hours',
+  'Dispatch HVAC technician and check compressor / thermostat; confirm coolant pressure.',
+  'Critical',
+  92.50,
+  -0.450,
+  'Negative'),
 
-('CX-3862','Water leakage in pantry','Leakage detected under pantry sink. Water pooling on floor.',
- 'Complaint','Critical','Overdue',(SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM maria),
- to_timestamp('18/11/2025','DD/MM/YYYY'),
- to_timestamp('18/11/2025','DD/MM/YYYY') + interval '30 minutes',
- to_timestamp('18/11/2025','DD/MM/YYYY') + interval '6 hours',
- 'Isolate water source and replace faulty seal / pipe joint; dry area and confirm no further leak.',
- 'Critical',90.10,-0.380,'Negative'),
+('CX-3862',
+  'Water leakage in pantry',
+  'Leakage detected under pantry sink. Water pooling on floor.',
+  'Complaint',
+  'Critical',
+  'Assigned',
+  (SELECT id FROM maintenance),
+  (SELECT id FROM cust),
+  (SELECT id FROM bilal),
+  to_timestamp('18/11/2025','DD/MM/YYYY'),
+  to_timestamp('18/11/2025','DD/MM/YYYY') + interval '30 minutes',
+  to_timestamp('18/11/2025','DD/MM/YYYY') + interval '6 hours',
+  'Isolate water source and replace faulty seal / pipe joint; dry area and confirm no further leak.',
+  'Critical',
+  90.10,
+  -0.380,
+  'Negative'),
 
-('CX-4587','Wi-Fi connection unstable','Frequent disconnects reported across floor 2.',
- 'Inquiry','High','Escalated',(SELECT id FROM it),(SELECT id FROM cust),NULL,
- to_timestamp('19/11/2025','DD/MM/YYYY'),
- to_timestamp('19/11/2025','DD/MM/YYYY') + interval '1 hour',
- to_timestamp('19/11/2025','DD/MM/YYYY') + interval '18 hours',
- 'Check AP logs, channel overlap, and DHCP lease issues; restart controller if needed.',
- 'High',88.00,-0.120,'Neutral'),
+('CX-4587',
+  'Wi-Fi connection unstable',
+  'Frequent disconnects reported across floor 2.',
+  'Inquiry',
+  'High',
+  'Assigned',
+  (SELECT id FROM it),
+  (SELECT id FROM cust),
+  (SELECT id FROM fatima),
+  to_timestamp('19/11/2025','DD/MM/YYYY'),
+  to_timestamp('19/11/2025','DD/MM/YYYY') + interval '1 hour',
+  to_timestamp('19/11/2025','DD/MM/YYYY') + interval '18 hours',
+  'Check AP logs, channel overlap, and DHCP lease issues; restart controller if needed.',
+  'High',
+  88.00,
+  -0.120,
+  'Neutral'),
 
-('CX-4630','Lift stopping between floors','Elevator intermittently stops between floors and reboots.',
- 'Complaint','High','Assigned',(SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM ahmed),
- to_timestamp('18/11/2025','DD/MM/YYYY'),
- to_timestamp('18/11/2025','DD/MM/YYYY') + interval '1 hour',
- to_timestamp('18/11/2025','DD/MM/YYYY') + interval '18 hours',
- 'Run elevator diagnostics, inspect door sensors and control panel error logs.',
- 'High',86.40,-0.200,'Neutral'),
+('CX-4630',
+  'Lift stopping between floors',
+  'Elevator intermittently stops between floors and reboots.',
+  'Complaint',
+  'High',
+  'Assigned',
+  (SELECT id FROM safety),
+  (SELECT id FROM cust),
+  (SELECT id FROM omar),
+  to_timestamp('18/11/2025','DD/MM/YYYY'),
+  to_timestamp('18/11/2025','DD/MM/YYYY') + interval '1 hour',
+  to_timestamp('18/11/2025','DD/MM/YYYY') + interval '18 hours',
+  'Run elevator diagnostics, inspect door sensors and control panel error logs.',
+  'High',
+  86.40,
+  -0.200,
+  'Neutral'),
 
-('CX-4701','Cleaning service missed schedule','Cleaning did not occur on scheduled time.',
- 'Complaint','Medium','Unassigned',(SELECT id FROM fac),(SELECT id FROM cust),NULL,
- to_timestamp('16/11/2025','DD/MM/YYYY'),
- to_timestamp('16/11/2025','DD/MM/YYYY') + interval '3 hours',
- to_timestamp('16/11/2025','DD/MM/YYYY') + interval '2 days',
- 'Assign cleaning team; confirm schedule and update customer with ETA.',
- 'Medium',80.00,0.050,'Neutral'),
+('CX-4701',
+  'Cleaning service missed schedule',
+  'Cleaning did not occur on scheduled time.',
+  'Complaint',
+  'Medium',
+  'Unassigned',
+  NULL,
+  (SELECT id FROM cust),
+  NULL,
+  to_timestamp('16/11/2025','DD/MM/YYYY'),
+  to_timestamp('16/11/2025','DD/MM/YYYY') + interval '3 hours',
+  to_timestamp('16/11/2025','DD/MM/YYYY') + interval '2 days',
+  'Assign cleaning team; confirm schedule and update customer with ETA.',
+  'Medium',
+  80.00,
+  0.050,
+  'Neutral'),
 
-('CX-4725','Parking access card not working','Customer access card fails at gate reader.',
- 'Inquiry','Medium','Overdue',(SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM omar),
- to_timestamp('13/11/2025','DD/MM/YYYY'),
- to_timestamp('13/11/2025','DD/MM/YYYY') + interval '3 hours',
- to_timestamp('13/11/2025','DD/MM/YYYY') + interval '2 days',
- 'Re-encode card, test reader, and confirm access permissions in system.',
- 'Medium',82.20,-0.050,'Neutral'),
+('CX-4725',
+  'Parking access card not working',
+  'Customer access card fails at gate reader.',
+  'Inquiry',
+  'Medium',
+  'Assigned',
+  (SELECT id FROM legal),
+  (SELECT id FROM cust),
+  (SELECT id FROM sara),
+  to_timestamp('13/11/2025','DD/MM/YYYY'),
+  to_timestamp('13/11/2025','DD/MM/YYYY') + interval '3 hours',
+  to_timestamp('13/11/2025','DD/MM/YYYY') + interval '2 days',
+  'Re-encode card, test reader, and confirm access permissions in system.',
+  'Medium',
+  82.20,
+  -0.050,
+  'Neutral'),
 
-('CX-4780','Noise from maintenance works','Noise complaint due to late-hour maintenance.',
- 'Complaint','Low','Escalated',(SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sara),
- to_timestamp('09/11/2025','DD/MM/YYYY'),
- to_timestamp('09/11/2025','DD/MM/YYYY') + interval '6 hours',
- to_timestamp('09/11/2025','DD/MM/YYYY') + interval '3 days',
- 'Coordinate maintenance hours; add noise control measures and notify affected area.',
- 'Low',76.00,0.100,'Neutral')
+('CX-4780',
+  'Noise from maintenance works',
+  'Noise complaint due to late-hour maintenance.',
+  'Complaint',
+  'Low',
+  'Assigned',
+  (SELECT id FROM facilities),
+  (SELECT id FROM cust),
+  (SELECT id FROM maria),
+  to_timestamp('09/11/2025','DD/MM/YYYY'),
+  to_timestamp('09/11/2025','DD/MM/YYYY') + interval '6 hours',
+  to_timestamp('09/11/2025','DD/MM/YYYY') + interval '3 days',
+  'Coordinate maintenance hours; add noise control measures and notify affected area.',
+  'Low',
+  76.00,
+  0.100,
+  'Neutral')
 ON CONFLICT (ticket_code) DO NOTHING;
 
 -- ✅ KPI-friendly tickets for Ahmed (FIXED: every row has same number of columns)
 WITH
 cust  AS (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
 ahmed AS (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
-fac   AS (SELECT id FROM departments WHERE name='Warehouse' LIMIT 1)
+fac   AS (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1)
 INSERT INTO tickets (
   ticket_code,
   subject,
@@ -1077,21 +1326,27 @@ FROM tickets t WHERE t.ticket_code='CX-4630'
 ON CONFLICT (ticket_id, step_no) DO NOTHING;
 
 -- Placeholder tickets required for approvals linkage
-INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2011', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3101',
-       'Complaint','Medium','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       'Complaint','Medium','Unassigned',
+       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('18/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2011');
 
-INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2034', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3110',
-       'Complaint','Medium','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       'Complaint','Medium','Unassigned',
+       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('18/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2034');
 
-INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, created_by_user_id, created_at)
+INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2078', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3125',
-       'Complaint','High','Unassigned',(SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       'Complaint','High','Unassigned',
+       (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('17/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2078');
 
@@ -1191,6 +1446,7 @@ SET value=EXCLUDED.value;
 \ir scripts/is_recurring.sql
 \ir services/suggested.sql
 \ir migrations/001_agent_execution_logs.sql
+\ir migrations/002_operator_notifications.sql
 
 -- =========================================================
 -- Dev/Test safety: ensure ticket assignments match current
@@ -1526,10 +1782,10 @@ WITH
   fatima AS (SELECT id FROM users WHERE email='fatima@innova.cx'   LIMIT 1),
   yousef AS (SELECT id FROM users WHERE email='yousef@innova.cx'   LIMIT 1),
   khalid AS (SELECT id FROM users WHERE email='khalid@innova.cx'   LIMIT 1),
-  fac   AS (SELECT id FROM departments WHERE name='Warehouse'      LIMIT 1),
-  it    AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1),
-  sec   AS (SELECT id FROM departments WHERE name='Retail Store'   LIMIT 1),
-  cln   AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1)
+  fac   AS (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1),
+  it    AS (SELECT id FROM departments WHERE name='IT' LIMIT 1),
+  sec   AS (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1),
+  cln   AS (SELECT id FROM departments WHERE name='Cleaning Services' LIMIT 1)
 
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, priority, status,
@@ -2141,7 +2397,7 @@ INSERT INTO approval_requests (
 )
 SELECT 'REQ-3145', t.id, 'Rerouting',
   'Dept: IT', 'Dept: Maintenance',
-  'Root cause is physical cabling, not software — needs Facilities team.',
+  'Root cause is physical cabling, not software — needs Maintenance team.',
   (SELECT id FROM users WHERE email='fatima@innova.cx'),
   '2026-02-12 11:30:00+00', 'Approved'
 FROM tickets t WHERE t.ticket_code='CX-4587'
@@ -2164,8 +2420,8 @@ INSERT INTO approval_requests (
   request_reason, submitted_by_user_id, submitted_at, status
 )
 SELECT 'REQ-3155', t.id, 'Rerouting',
-  'Dept: Facilities', 'Dept: IT',
-  'Parking access card issue is a system/software problem, not hardware.',
+  'Dept: Legal & Compliance', 'Dept: IT',
+  'Parking access card issue is a system/software problem — needs IT.',
   (SELECT id FROM users WHERE email='omar@innova.cx'),
   '2026-02-16 14:20:00+00', 'Rejected'
 FROM tickets t WHERE t.ticket_code='CX-4725'
@@ -2188,8 +2444,8 @@ INSERT INTO approval_requests (
   request_reason, submitted_by_user_id, submitted_at, status
 )
 SELECT 'REQ-3165', t.id, 'Rerouting',
-  'Dept: Security', 'Dept: Facilities',
-  'Structural issue confirmed — requires Facilities, not Security.',
+  'Dept: Safety & Security', 'Dept: Facilities Management',
+  'Structural issue confirmed — requires Facilities Management, not Security.',
   (SELECT id FROM users WHERE email='bilal@innova.cx'),
   '2026-02-25 13:10:00+00', 'Pending'
 FROM tickets t WHERE t.ticket_code='CX-M53'
@@ -2235,10 +2491,10 @@ WITH
   fatima AS (SELECT id FROM users WHERE email='fatima@innova.cx'    LIMIT 1),
   yousef AS (SELECT id FROM users WHERE email='yousef@innova.cx'    LIMIT 1),
   khalid AS (SELECT id FROM users WHERE email='khalid@innova.cx'    LIMIT 1),
-  fac   AS (SELECT id FROM departments WHERE name='Warehouse'      LIMIT 1),
-  it    AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1),
-  sec   AS (SELECT id FROM departments WHERE name='Retail Store'   LIMIT 1),
-  cln   AS (SELECT id FROM departments WHERE name='Office'         LIMIT 1)
+  fac   AS (SELECT id FROM departments WHERE name='Leasing'      LIMIT 1),
+  it    AS (SELECT id FROM departments WHERE name='Legal & Compliance' LIMIT 1),
+  sec   AS (SELECT id FROM departments WHERE name='Maintenance'   LIMIT 1),
+  cln   AS (SELECT id FROM departments WHERE name='Safety & Security'         LIMIT 1)
 
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, priority, status,
@@ -2710,266 +2966,10 @@ COMMIT;
 
 BEGIN;
 
--- ---------------------------------------------------------------------------
--- 1. MODEL EXECUTION LOG  (15 rows — one per agent type, across key tickets)
---    agent_name_type: 'sentiment'|'priority'|'routing'|'sla'|'resolution'|'feature'
---    execution_status: 'running'|'success'|'failed'|'skipped'
---    trigger_source:   'ingest'|'reprocess'|'manual'|'scheduled'
--- ---------------------------------------------------------------------------
-
-INSERT INTO public.model_execution_log (
-  ticket_id, agent_name, model_version, triggered_by,
-  started_at, completed_at, status,
-  input_token_count, output_token_count, infra_metadata
-)
-SELECT t.id,
-  v.agent_name::agent_name_type,
-  v.model_version,
-  v.triggered_by::trigger_source,
-  v.started_at,
-  v.completed_at,
-  v.status::execution_status,
-  v.in_tok, v.out_tok,
-  v.infra
-FROM (VALUES
-  -- CX-R01 — sentiment (success)
-  ('CX-R01','sentiment','sentiment-v3.1','ingest',
-   '2026-03-01 06:31:00+00','2026-03-01 06:31:04+00','success',412,28,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
-  -- CX-R01 — priority (success)
-  ('CX-R01','priority','priority-v2.4','ingest',
-   '2026-03-01 06:31:05+00','2026-03-01 06:31:09+00','success',418,31,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
-  -- CX-R01 — routing (success)
-  ('CX-R01','routing','routing-v1.8','ingest',
-   '2026-03-01 06:31:10+00','2026-03-01 06:31:14+00','success',422,25,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
-  -- CX-R01 — sla (success)
-  ('CX-R01','sla','sla-v1.2','ingest',
-   '2026-03-01 06:31:15+00','2026-03-01 06:31:17+00','success',190,18,
-   '{"region":"me-south-1","instance":"ml-c5.large"}'::jsonb),
-  -- CX-R01 — resolution (success)
-  ('CX-R01','resolution','resolution-v2.0','ingest',
-   '2026-03-01 06:31:18+00','2026-03-01 06:31:26+00','success',610,142,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
-  -- CX-R01 — feature (success)
-  ('CX-R01','feature','feature-v1.5','ingest',
-   '2026-03-01 06:31:27+00','2026-03-01 06:31:30+00','success',380,44,
-   '{"region":"me-south-1","instance":"ml-c5.large"}'::jsonb),
-  -- CX-R06 — sentiment (success)
-  ('CX-R06','sentiment','sentiment-v3.1','ingest',
-   '2026-03-01 09:31:00+00','2026-03-01 09:31:05+00','success',388,26,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
-  -- CX-R06 — priority (success)
-  ('CX-R06','priority','priority-v2.4','ingest',
-   '2026-03-01 09:31:06+00','2026-03-01 09:31:10+00','success',395,30,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
-  -- CX-R06 — resolution (success)
-  ('CX-R06','resolution','resolution-v2.0','ingest',
-   '2026-03-01 09:31:11+00','2026-03-01 09:31:21+00','success',588,138,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
-  -- CX-M55 — resolution (failed — tests error_rate view)
-  ('CX-M55','resolution','resolution-v2.0','reprocess',
-   '2026-02-22 08:50:00+00','2026-02-22 08:50:12+00','failed',601,0,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
-  -- CX-M55 — resolution (success — retry after failure)
-  ('CX-M55','resolution','resolution-v2.0','reprocess',
-   '2026-02-22 09:05:00+00','2026-02-22 09:05:08+00','success',601,144,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
-  -- CX-M41 — sentiment (success, manual trigger)
-  ('CX-M41','sentiment','sentiment-v3.1','manual',
-   '2025-12-03 07:02:00+00','2025-12-03 07:02:04+00','success',401,27,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
-  -- CX-M41 — routing (skipped — dept already set)
-  ('CX-M41','routing','routing-v1.8','manual',
-   '2025-12-03 07:02:05+00','2025-12-03 07:02:06+00','skipped',0,0,
-   '{"skip_reason":"department_already_assigned"}'::jsonb),
-  -- CX-R04 — priority (success)
-  ('CX-R04','priority','priority-v2.4','ingest',
-   '2026-03-01 08:31:00+00','2026-03-01 08:31:04+00','success',376,29,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb),
-  -- CX-R10 — sentiment (running — tests in-flight view row)
-  ('CX-R10','sentiment','sentiment-v3.1','ingest',
-   '2026-03-01 11:30:30+00', NULL,'running',0,0,
-   '{"region":"me-south-1","instance":"ml-g4dn.xlarge"}'::jsonb)
-) AS v(ticket_code, agent_name, model_version, triggered_by,
-       started_at, completed_at, status, in_tok, out_tok, infra)
-JOIN public.tickets t ON t.ticket_code = v.ticket_code;
-
--- ---------------------------------------------------------------------------
--- 2. SENTIMENT OUTPUTS  (is_current = TRUE triggers legacy sync)
--- ---------------------------------------------------------------------------
-
-INSERT INTO public.sentiment_outputs (
-  execution_id, ticket_id, model_version,
-  sentiment_label, sentiment_score, confidence_score,
-  emotion_tags, raw_scores, is_current
-)
-SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
-  sv.label, sv.score, sv.conf,
-  sv.emotions, sv.raw, TRUE
-FROM (VALUES
-  ('CX-R01','Negative',  -0.720, 0.9412, ARRAY['frustrated','urgent'],
-   '{"negative":0.9412,"neutral":0.0421,"positive":0.0167}'::jsonb),
-  ('CX-R06','Negative',  -0.600, 0.9107, ARRAY['angry','concerned'],
-   '{"negative":0.9107,"neutral":0.0621,"positive":0.0272}'::jsonb),
-  ('CX-M41','Negative',  -0.680, 0.9250, ARRAY['distressed','urgent'],
-   '{"negative":0.9250,"neutral":0.0500,"positive":0.0250}'::jsonb)
-) AS sv(ticket_code, label, score, conf, emotions, raw)
-JOIN public.model_execution_log mel
-  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = sv.ticket_code LIMIT 1)
- AND mel.agent_name = 'sentiment'
- AND mel.status     = 'success'
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.sentiment_outputs so
-  WHERE so.ticket_id = mel.ticket_id AND so.is_current = TRUE
-);
-
--- ---------------------------------------------------------------------------
--- 3. PRIORITY OUTPUTS
--- ---------------------------------------------------------------------------
-
-INSERT INTO public.priority_outputs (
-  execution_id, ticket_id, model_version,
-  model_priority, confidence_score, urgency_score, impact_score,
-  feature_vector, is_current
-)
-SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
-  pv.priority::ticket_priority, pv.conf, pv.urgency, pv.impact,
-  pv.features, TRUE
-FROM (VALUES
-  ('CX-R01','Critical',0.9600,0.9800,0.9400,
-   '{"asset_type":"HVAC","complaint":true,"keywords":["AC","server","overheating"]}'::jsonb),
-  ('CX-R06','Critical',0.9400,0.9600,0.9200,
-   '{"asset_type":"Access Control","complaint":true,"keywords":["gate","badge","blocked"]}'::jsonb),
-  ('CX-R04','Medium',  0.8200,0.7500,0.8000,
-   '{"asset_type":"IT","inquiry":true,"keywords":["printer","network","floor"]}'::jsonb)
-) AS pv(ticket_code, priority, conf, urgency, impact, features)
-JOIN public.model_execution_log mel
-  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = pv.ticket_code LIMIT 1)
- AND mel.agent_name = 'priority'
- AND mel.status     = 'success'
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.priority_outputs po
-  WHERE po.ticket_id = mel.ticket_id AND po.is_current = TRUE
-);
-
--- ---------------------------------------------------------------------------
--- 4. ROUTING OUTPUTS
--- ---------------------------------------------------------------------------
-
-INSERT INTO public.routing_outputs (
-  execution_id, ticket_id, model_version,
-  suggested_dept_id, suggested_dept_name,
-  confidence_score, routing_reason, is_current
-)
-SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
-  d.id, d.name, rv.conf, rv.reason, TRUE
-FROM (VALUES
-  ('CX-R01','Facilities',    0.9700,'HVAC failure classified as Facilities — mechanical asset type.'),
-  ('CX-R06','Security',      0.9500,'Access control issue maps to Security — badge system failure.')
-) AS rv(ticket_code, dept_name, conf, reason)
-JOIN public.model_execution_log mel
-  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = rv.ticket_code LIMIT 1)
- AND mel.agent_name = 'routing'
- AND mel.status     = 'success'
-JOIN public.departments d ON d.name = rv.dept_name
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.routing_outputs ro
-  WHERE ro.ticket_id = mel.ticket_id AND ro.is_current = TRUE
-);
-
--- ---------------------------------------------------------------------------
--- 5. SLA OUTPUTS
--- ---------------------------------------------------------------------------
-
-INSERT INTO public.sla_outputs (
-  execution_id, ticket_id, model_version,
-  sla_tier, breach_risk_score,
-  response_deadline, resolution_deadline, is_current
-)
-SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
-  sv.tier, sv.risk, sv.resp_dl, sv.res_dl, TRUE
-FROM (VALUES
-  ('CX-R01','Critical-P1', 0.9800,
-   '2026-03-01 07:00:00+00'::timestamptz,
-   '2026-03-01 12:30:00+00'::timestamptz),
-  ('CX-R06','Critical-P1', 0.9600,
-   '2026-03-01 10:00:00+00'::timestamptz,
-   '2026-03-01 15:30:00+00'::timestamptz)
-) AS sv(ticket_code, tier, risk, resp_dl, res_dl)
-JOIN public.model_execution_log mel
-  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = sv.ticket_code LIMIT 1)
- AND mel.agent_name = 'sla'
- AND mel.status     = 'success'
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.sla_outputs so
-  WHERE so.ticket_id = mel.ticket_id AND so.is_current = TRUE
-);
-
--- ---------------------------------------------------------------------------
--- 6. RESOLUTION OUTPUTS
--- ---------------------------------------------------------------------------
-
-INSERT INTO public.resolution_outputs (
-  execution_id, ticket_id, model_version,
-  suggested_resolution, confidence_score,
-  kb_references, is_current
-)
-SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
-  rv.suggestion, rv.conf, rv.kb, TRUE
-FROM (VALUES
-  ('CX-R01', 0.9600,
-   'Activate backup cooling unit immediately. Dispatch HVAC technician to inspect compressor and thermostat. Confirm coolant pressure and replace failed components.',
-   '{"kb_ids":["KB-2201","KB-2209"],"similarity":[0.94,0.88]}'::jsonb),
-  ('CX-R06', 0.9400,
-   'Restart access control server and re-sync badge database. If restart fails, issue temporary manual access and schedule emergency firmware update.',
-   '{"kb_ids":["KB-3310","KB-3318"],"similarity":[0.91,0.87]}'::jsonb),
-  ('CX-M55', 0.9300,
-   'All UPS battery modules require replacement — recharging is insufficient given current capacity. Schedule maintenance window, swap modules, and run runtime certification test.',
-   '{"kb_ids":["KB-4401"],"similarity":[0.93]}'::jsonb)
-) AS rv(ticket_code, conf, suggestion, kb)
-JOIN public.model_execution_log mel
-  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = rv.ticket_code LIMIT 1)
- AND mel.agent_name = 'resolution'
- AND mel.status     = 'success'
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.resolution_outputs ro
-  WHERE ro.ticket_id = mel.ticket_id AND ro.is_current = TRUE
-);
-
--- ---------------------------------------------------------------------------
--- 7. FEATURE OUTPUTS
--- ---------------------------------------------------------------------------
-
-INSERT INTO public.feature_outputs (
-  execution_id, ticket_id, model_version,
-  asset_category, topic_labels, confidence_score, raw_features, is_current
-)
-SELECT
-  mel.execution_id, mel.ticket_id, mel.model_version,
-  fv.asset_cat, fv.topics, fv.conf, fv.raw, TRUE
-FROM (VALUES
-  ('CX-R01','HVAC',
-   ARRAY['cooling','mechanical','server-room','temperature'],0.9500,
-   '{"word_count":28,"avg_sentiment":-0.72,"capital_ratio":0.12}'::jsonb),
-  ('CX-R06','Access Control',
-   ARRAY['badge','security','gate','authentication'],0.9300,
-   '{"word_count":22,"avg_sentiment":-0.60,"capital_ratio":0.09}'::jsonb)
-) AS fv(ticket_code, asset_cat, topics, conf, raw)
-JOIN public.model_execution_log mel
-  ON mel.ticket_id = (SELECT id FROM public.tickets WHERE ticket_code = fv.ticket_code LIMIT 1)
- AND mel.agent_name = 'feature'
- AND mel.status     = 'success'
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.feature_outputs fo
-  WHERE fo.ticket_id = mel.ticket_id AND fo.is_current = TRUE
-);
+-- NOTE: ML pipeline seed data (model_execution_log, sentiment_outputs,
+-- priority_outputs, routing_outputs, sla_outputs, resolution_outputs,
+-- feature_outputs) moved to zzz_seedV2.sql, which runs after
+-- zzz_analytics_mvs.sh creates those tables.
 
 -- ---------------------------------------------------------------------------
 -- 8. CHAT CONVERSATIONS & MESSAGES
@@ -3068,7 +3068,7 @@ SELECT
 FROM (VALUES
   ('customer','customer1@innova.cx','2026-03-01 09:25:10+00','None of the badge readers at Gate 2 are working. My whole team is stuck outside!',
    'report_issue','Access Control',-0.85,FALSE,NULL),
-  ('bot','bot','2026-03-01 09:25:25+00','I'm escalating this to an operator immediately given the severity.',
+  ('bot','bot','2026-03-01 09:25:25+00',$msg$I'm escalating this to an operator immediately given the severity.$msg$,
    'escalate','Access Control',0.05,TRUE,NULL),
   ('operator','operator@innova.cx','2026-03-01 09:30:00+00','Ticket CX-R06 raised as Critical. Omar Ali is on his way to Gate 2 now.',
    'resolution','Access Control',0.30,FALSE,'CX-R06')
@@ -3175,7 +3175,7 @@ VALUES
    'faq_answer', 'answer',
    'SELECT * FROM kb WHERE topic=''support_hours''', 0.92300,
    '2026-02-28 10:00:35+00', NULL),
-  ('I'm escalating this to an operator immediately given the severity.',
+  ($msg$I'm escalating this to an operator immediately given the severity.$msg$,
    'escalation', 'escalate',
    NULL, NULL,
    '2026-03-01 09:25:25+00',
@@ -3578,122 +3578,9 @@ WHERE NOT EXISTS (
 );
 
 -- ---------------------------------------------------------------------------
--- FINAL: Refresh all analytics materialized views
+-- NOTE: Analytics materialized views are created and refreshed by
+-- zzz_analytics_mvs.sh, which runs after this file in the Docker init
+-- sequence. No refresh call needed here.
 -- ---------------------------------------------------------------------------
-SELECT analytics.refresh_all_materialized_views();
 
 COMMIT;
-
-
--- =============================================================================
--- OPERATOR DASHBOARD SUMMARY SUPPORT
--- Add these statements to init.sql (safe for re-runs — uses IF NOT EXISTS).
--- =============================================================================
-
--- ---------------------------------------------------------------------------
--- 1. model_metrics  — one row per model inference / API call
---    latency_ms  : response time in milliseconds
---    is_error    : TRUE when the call resulted in an error
---    created_at  : timestamp of the event
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS model_metrics (
-  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  model_name  TEXT        NOT NULL DEFAULT 'default',
-  latency_ms  NUMERIC(10,2) NOT NULL,
-  is_error    BOOLEAN     NOT NULL DEFAULT FALSE,
-  metadata    JSONB,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_model_metrics_created_at
-  ON model_metrics (created_at DESC);
-
--- ---------------------------------------------------------------------------
--- 2. drift_events  — one row each time drift is detected by any model
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS drift_events (
-  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  model_name  TEXT        NOT NULL DEFAULT 'default',
-  drift_score NUMERIC(6,4),
-  description TEXT,
-  detected_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_drift_events_detected_at
-  ON drift_events (detected_at DESC);
-
--- ---------------------------------------------------------------------------
--- 3. qc_reviews  — one row per quality-control review ticket
---    status             : 'pending' | 'approved' | 'rejected'
---    flagged            : TRUE when the ticket was flagged for attention
---    reviewed_at        : when a reviewer completed the review (nullable)
---    review_duration_sec: pre-computed duration; takes precedence over
---                         (reviewed_at - created_at) if set
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS qc_reviews (
-  id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  ticket_id           UUID        REFERENCES tickets(id) ON DELETE SET NULL,
-  reviewer_user_id    UUID        REFERENCES users(id)   ON DELETE SET NULL,
-  status              TEXT        NOT NULL DEFAULT 'pending'
-                        CHECK (status IN ('pending', 'approved', 'rejected')),
-  flagged             BOOLEAN     NOT NULL DEFAULT FALSE,
-  review_duration_sec INTEGER,          -- optional pre-computed field
-  reviewed_at         TIMESTAMPTZ,      -- NULL until review is completed
-  notes               TEXT,
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_qc_reviews_status
-  ON qc_reviews (status);
-
-CREATE INDEX IF NOT EXISTS idx_qc_reviews_created_at
-  ON qc_reviews (created_at DESC);
-
--- Keep updated_at current automatically
-CREATE OR REPLACE FUNCTION set_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DO $$ BEGIN
-  CREATE TRIGGER trg_qc_reviews_updated_at
-  BEFORE UPDATE ON qc_reviews
-  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
--- ---------------------------------------------------------------------------
--- 4. Convenience VIEW (optional but helpful for debugging)
---    Returns the same four model-health metrics the API endpoint computes.
--- ---------------------------------------------------------------------------
-CREATE OR REPLACE VIEW v_model_health_summary AS
-WITH mh AS (
-  SELECT
-    COALESCE(AVG(latency_ms), 0)                                    AS avg_latency_ms,
-    COALESCE(
-      SUM(CASE WHEN is_error THEN 1 ELSE 0 END)::numeric
-      / NULLIF(COUNT(*), 0) * 100,
-      0
-    )                                                               AS error_rate_pct,
-    COUNT(*) > 0                                                    AS has_data
-  FROM model_metrics
-  WHERE created_at >= now() - interval '1 hour'
-),
-drift AS (
-  SELECT COUNT(*) > 0 AS drift_detected
-  FROM drift_events
-  WHERE detected_at >= now() - interval '24 hours'
-)
-SELECT
-  CASE
-    WHEN mh.error_rate_pct > 3  OR mh.avg_latency_ms > 1500 THEN 'Critical'
-    WHEN mh.error_rate_pct >= 1 OR mh.avg_latency_ms >= 800  THEN 'Degraded'
-    ELSE 'Healthy'
-  END                                   AS status,
-  ROUND(mh.avg_latency_ms::numeric, 1)  AS avg_latency_ms,
-  ROUND(mh.error_rate_pct::numeric, 2)  AS error_rate_pct,
-  drift.drift_detected
-FROM mh, drift;

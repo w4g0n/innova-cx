@@ -25,6 +25,10 @@ function getAuthToken() {
   );
 }
 
+function formatTicketSource(value) {
+  return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
+}
+
 export default function ManagerViewComplaints() {
   const revealRef = useScrollReveal();
   const token = getAuthToken();
@@ -298,6 +302,7 @@ const confirmAssignment = async () => {
                 <th>SUBJECT</th>
                 <th>PRIORITY</th>
                 <th>STATUS</th>
+                <th>SOURCE</th>
                 <th>ASSIGNEE</th>
                 <th>ISSUE DATE</th>
                 <th>RESPOND TIME</th>
@@ -335,6 +340,7 @@ const confirmAssignment = async () => {
                         {r.status}
                       </span>
                     </td>
+                    <td className="mv-cellTight">{formatTicketSource(r.ticketSource)}</td>
                     <td className="mv-cellMid">
                       <div className="mv-assigneeCell">
                         <div className="mv-ellipsis">{r.assignee}</div>
@@ -405,7 +411,7 @@ const confirmAssignment = async () => {
               })}
               {filteredRows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="mv-empty">
+                  <td colSpan={11} className="mv-empty">
                     No tickets match your search/filters.
                   </td>
                 </tr>
