@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState} from "react";
 import novaLogo from "../assets/nova-logo.png";
 import "./PublicLanding.css";
 
@@ -397,7 +397,7 @@ function useReveal(t = 0.1) {
     const obs = new IntersectionObserver(([e]) => { if(e.isIntersecting)setVis(true); }, {threshold:t});
     if(ref.current)obs.observe(ref.current);
     return ()=>obs.disconnect();
-  }, []);
+  }, [t]);
   return [ref, vis];
 }
 
