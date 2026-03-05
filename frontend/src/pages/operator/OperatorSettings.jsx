@@ -75,10 +75,11 @@ export default function OperatorSettings() {
           </div>
         </div>
 
-        {showPwModal && (
-          <ChangePasswordModal onClose={() => setShowPwModal(false)} />
-        )}
       </div>
+
+      {showPwModal && (
+        <ChangePasswordModal onClose={() => setShowPwModal(false)} />
+      )}
     </Layout>
   );
 }
