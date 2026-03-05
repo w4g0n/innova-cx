@@ -158,7 +158,7 @@ export async function submitTextComplaint(text, options = {}) {
   if (options.audio_features) {
     body.set("audio_features", JSON.stringify(options.audio_features));
   }
-  const response = await fetch(`${API_CONFIG.orchestrator}/process/text`, {
+  const response = await fetch(apiUrl("/api/orchestrator/process/text"), {
     method: "POST",
     body,
   });
