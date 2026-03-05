@@ -18,7 +18,7 @@ from psycopg2.extras import RealDictCursor
 from psycopg2 import OperationalError
 import httpx
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -4398,6 +4398,34 @@ async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
             continue
 
     raise HTTPException(status_code=503, detail=f"Transcriber service unavailable: {last_error}")
+
+
+@api.post("/orchestrator/process/text")
+async def proxy_orchestrator_process_text(request: Request):
+    """
+    Frontend-facing orchestrator proxy for form-based ticket submission.
+    The orchestrator is not exposed to the internet, so the backend proxies
+    requests from the browser to orchestrator:8004/process/text.
+    """
+    body_bytes = await request.body()
+    content_type = request.headers.get("content-type", "application/x-www-form-urlencoded")
+    last_error = None
+
+    for base in [ORCHESTRATOR_URL, ORCHESTRATOR_URL_LOCAL]:
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{base}/process/text",
+                    content=body_bytes,
+                    headers={"Content-Type": content_type},
+                )
+                response.raise_for_status()
+                return response.json()
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    raise HTTPException(status_code=503, detail=f"Orchestrator service unavailable: {last_error}")
 
 
 # =========================================================
