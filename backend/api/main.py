@@ -4204,7 +4204,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
 
             if not incoming_ticket_code:
                 # ── No ticket_id supplied → create a new ticket ──
-                from ticket_creation_gate import create_ticket_via_gate
+                from api.ticket_creation_gate import create_ticket_via_gate
                 created = create_ticket_via_gate(
                     cur,
                     created_by_user_id=str(row["id"]),
