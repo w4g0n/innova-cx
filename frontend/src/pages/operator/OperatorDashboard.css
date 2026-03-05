@@ -14,142 +14,20 @@
   margin-bottom: 18px;
 }
 
-/* ===== Body: nav panel left + module cards right ===== */
-.opDash__body {
-  display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 18px;
-  align-items: start;
-}
-
-/* ===== Navigate panel ===== */
-.opDash__navPanel {
-  background: #1a1025;
-  border-radius: var(--radius-lg);
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.opDash__navHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.opDash__navTitle {
-  font-family: var(--font-heading);
-  font-size: 16px;
-  font-weight: 800;
-  color: #ffffff;
-}
-
-.opDash__navBadge {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.45);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  padding: 3px 10px;
-}
-
-.opDash__navList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.opDash__navItem {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  text-decoration: none;
-  color: #ffffff;
-  position: relative;
-  overflow: hidden;
-  transition: background 0.17s, border-color 0.17s, transform 0.15s;
-}
-.opDash__navItem:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
-  transform: translateX(2px);
-}
-
-/* Left color bar */
-.opDash__navAccent {
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  border-radius: 3px 0 0 3px;
-}
-
-.opDash__navIcon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.opDash__navText {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.opDash__navItemTitle {
-  font-size: 14px;
-  font-weight: 700;
-  color: #ffffff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.opDash__navItemDesc {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.opDash__navArrow {
-  font-size: 14px;
-  font-weight: 700;
-  flex-shrink: 0;
-  opacity: 0.6;
-  transition: opacity 0.15s, transform 0.15s;
-}
-.opDash__navItem:hover .opDash__navArrow {
-  opacity: 1;
-  transform: translate(1px, -1px);
-}
-
-/* ===== Module cards column (right side, 3 stacked) ===== */
+/* ===== Module cards — 3 equal columns filling full width ===== */
 .opDash__moduleCol {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-direction: row;
+  gap: 18px;
+  align-items: stretch;
 }
 
 .opDash__moduleCard {
+  flex: 1;
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.07);
   border-radius: var(--radius-lg);
-  padding: 16px 20px;
+  padding: 24px 28px;
   box-shadow: 0 3px 14px rgba(64, 28, 81, 0.07);
   text-decoration: none;
   color: var(--text-dark);
@@ -202,14 +80,14 @@
 
 .opDash__moduleTitle {
   font-family: var(--font-heading);
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 800;
   color: var(--btn-primary);
   line-height: 1.2;
 }
 
 .opDash__moduleDesc {
-  font-size: 12px;
+  font-size: 13px;
   color: rgba(17, 17, 17, 0.50);
   line-height: 1.4;
 }
@@ -217,39 +95,40 @@
 .opDash__moduleDivider {
   height: 1px;
   background: rgba(0, 0, 0, 0.06);
-  margin: 8px 0 6px;
+  margin: 12px 0 10px;
 }
 
 .opDash__moduleStats {
   display: flex;
-  flex-direction: row;
-  gap: 6px;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
 }
 
 .opDash__moduleStat {
-  flex: 1;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  padding: 7px 10px;
-  border-radius: 9px;
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+.opDash__moduleStat:last-child {
+  border-bottom: none;
 }
 
 .opDash__moduleStatLabel {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(17, 17, 17, 0.50);
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(17, 17, 17, 0.55);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  flex: 1;
 }
 
 .opDash__moduleStatValue {
   font-size: 15px;
-  font-weight: 900;
+  font-weight: 800;
   color: var(--text-dark);
 }
 
@@ -262,8 +141,8 @@
 /* ── Status dot ── */
 .opDash__dot {
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -272,12 +151,11 @@
 
 /* ===== Responsive ===== */
 @media (max-width: 1100px) {
-  .opDash__kpiRow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .opDash__body   { grid-template-columns: 1fr; }
-  .opDash__moduleCol { flex-direction: row; flex-wrap: wrap; }
+  .opDash__kpiRow    { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .opDash__moduleCol { flex-wrap: wrap; }
   .opDash__moduleCard { flex: 1 1 280px; }
 }
 @media (max-width: 700px) {
   .opDash__kpiRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .opDash__moduleStats { flex-direction: column; }
+  .opDash__moduleCol { flex-direction: column; }
 }

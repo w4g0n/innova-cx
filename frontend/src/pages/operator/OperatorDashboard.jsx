@@ -62,12 +62,6 @@ function ModuleCard({ tag, title, desc, to, rows, loading }) {
   );
 }
 
-const NAV_ITEMS = [
-  { to: "/operator/dashboard",       icon: "⊞", title: "System Dashboard",  desc: "Overview, KPIs & platform status",         accent: "#5924b4" },
-  { to: "/operator/model-health",    icon: "◈", title: "Model Health",       desc: "Chatbot, sentiment & feature analytics",   accent: "#22c55e" },
-  { to: "/operator/quality-control", icon: "◎", title: "Quality Control",    desc: "Acceptance, rescoring & rerouting",        accent: "#f59e0b" },
-  { to: "/operator/users",           icon: "◉", title: "Users Management",   desc: "Roles, access & account status",           accent: "#3b82f6" },
-];
 
 export default function OperatorDashboard() {
   const revealRef = useScrollReveal();
@@ -164,39 +158,11 @@ export default function OperatorDashboard() {
           ))}
         </section>
 
-        {/* BODY */}
-        <div className="opDash__body">
-
-          {/* Left: Navigate panel */}
-          <div className="opDash__navPanel">
-            <div className="opDash__navHeader">
-              <span className="opDash__navTitle">Navigate</span>
-              <span className="opDash__navBadge">{NAV_ITEMS.length} MODULES</span>
-            </div>
-            <div className="opDash__navList">
-              {NAV_ITEMS.map((n) => (
-                <Link key={n.to} to={n.to} className="opDash__navItem">
-                  <span className="opDash__navAccent" style={{ background: n.accent }} />
-                  <span className="opDash__navIcon" style={{ background: `${n.accent}22`, color: n.accent }}>
-                    {n.icon}
-                  </span>
-                  <div className="opDash__navText">
-                    <span className="opDash__navItemTitle">{n.title}</span>
-                    <span className="opDash__navItemDesc">{n.desc}</span>
-                  </div>
-                  <span className="opDash__navArrow" style={{ color: n.accent }}>↗</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* Right: module summary cards stacked */}
-          <div className="opDash__moduleCol">
-            {modules.map((m) => (
-              <ModuleCard key={m.title} {...m} />
-            ))}
-          </div>
-
+        {/* MODULE CARDS — 3 equal columns filling full width */}
+        <div className="opDash__moduleCol">
+          {modules.map((m) => (
+            <ModuleCard key={m.title} {...m} />
+          ))}
         </div>
       </div>
     </Layout>
