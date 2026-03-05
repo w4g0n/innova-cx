@@ -13,6 +13,7 @@ import json
 import random
 import re
 import time
+from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
@@ -57,6 +58,27 @@ DOMAINS = [
     "shared workspace and coworking",
 ]
 
+HAZARD_TERMS = {
+    "fire", "smoke", "flood", "flooding", "electrical", "electric shock", "sparking",
+    "gas leak", "ceiling collapse", "fall risk", "slip hazard", "injury", "unsafe",
+    "burn", "exposed wire", "short circuit", "overheating",
+}
+URGENT_TERMS = {
+    "immediately", "urgent", "asap", "right now", "same day", "today", "now",
+    "cannot wait", "critical deadline",
+}
+CRITICAL_TERMS = {
+    "completely down", "entire office", "critical failure", "system-wide", "major outage",
+    "unusable", "stopped working", "cannot operate", "operations halted",
+}
+HIGH_IMPACT_TERMS = {
+    "clients affected", "lost revenue", "operations halted", "staff cannot work",
+    "business disruption", "sla breach", "escalation", "blocked productivity",
+}
+LOW_IMPACT_TERMS = {
+    "minor inconvenience", "cosmetic", "non-urgent", "when convenient", "small issue",
+}
+
 
 def load_model(model_name: str):
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
@@ -99,16 +121,43 @@ Output exactly one JSON object with keys:
 Follow the requested target labels exactly.
 If safety_concern=true, include explicit physical hazard context.
 If safety_concern=false, avoid physical hazard language.
+The generated text must clearly reflect the requested labels, not generic wording.
 Respond with JSON only."""
 
 
 def build_user_prompt(target: dict, domain: str) -> str:
+    safety_true = target["safety_concern"] is True
+    safety_instruction = (
+        "Include explicit physical hazard cues (e.g., electrical risk, smoke, leak, injury risk)."
+        if safety_true else
+        "Do NOT include any physical hazard cues (no fire/smoke/electrical/flood/injury risk language)."
+    )
+    severity_instruction = {
+        "high": "Show critical/system-wide failure with major operational disruption.",
+        "medium": "Show clear disruption but with workarounds still possible.",
+        "low": "Show minor localized issue with limited disruption.",
+    }[target["issue_severity"]]
+    urgency_instruction = {
+        "high": "Use immediate time pressure language (same-day/ASAP/right now).",
+        "medium": "Needs attention soon, but not immediate emergency language.",
+        "low": "No immediate time pressure; should be schedulable.",
+    }[target["issue_urgency"]]
+    impact_instruction = {
+        "high": "State strong business impact (clients/staff blocked/revenue or operations impact).",
+        "medium": "State moderate impact (partial productivity loss).",
+        "low": "State minimal business impact; mostly inconvenience.",
+    }[target["business_impact"]]
     return (
         "Generate one complaint with exactly these target labels:\n"
         f"- issue_severity: {target['issue_severity']}\n"
         f"- issue_urgency: {target['issue_urgency']}\n"
         f"- business_impact: {target['business_impact']}\n"
         f"- safety_concern: {'true' if target['safety_concern'] else 'false'}\n"
+        f"Label constraints:\n"
+        f"- {severity_instruction}\n"
+        f"- {urgency_instruction}\n"
+        f"- {impact_instruction}\n"
+        f"- {safety_instruction}\n"
         f"Domain: {domain}\n"
         "Return JSON only."
     )
@@ -169,11 +218,68 @@ def normalize_record(parsed: dict, target: dict, domain: str) -> dict:
     }
 
 
-def generate_one(tokenizer, model, system_prompt: str, target: dict, domain: str, retries: int = 4):
+def _text_signature(text: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", text.lower())).strip()
+
+
+def _has_any(text: str, terms: set[str]) -> bool:
+    t = text.lower()
+    return any(term in t for term in terms)
+
+
+def quality_gate(record: dict, target: dict, seen_signatures: set[str]) -> tuple[bool, str]:
+    text = record["text"]
+    t = text.lower()
+    sig = _text_signature(text)
+
+    if len(sig) < 80:
+        return False, "too_short"
+    if sig in seen_signatures:
+        return False, "duplicate_text"
+
+    has_hazard = _has_any(t, HAZARD_TERMS)
+    has_urgent = _has_any(t, URGENT_TERMS)
+    has_critical = _has_any(t, CRITICAL_TERMS)
+    has_high_impact = _has_any(t, HIGH_IMPACT_TERMS)
+    has_low_impact = _has_any(t, LOW_IMPACT_TERMS)
+
+    if target["safety_concern"] and not has_hazard:
+        return False, "safety_true_missing_hazard_cue"
+    if (not target["safety_concern"]) and has_hazard:
+        return False, "safety_false_has_hazard_cue"
+
+    if target["issue_urgency"] == "high" and not has_urgent:
+        return False, "urgency_high_missing_time_pressure"
+    if target["issue_urgency"] == "low" and has_urgent:
+        return False, "urgency_low_has_time_pressure"
+
+    if target["issue_severity"] == "high" and not has_critical:
+        return False, "severity_high_missing_critical_cue"
+    if target["issue_severity"] == "low" and has_critical:
+        return False, "severity_low_has_critical_cue"
+
+    if target["business_impact"] == "high" and not has_high_impact:
+        return False, "impact_high_missing_business_cue"
+    if target["business_impact"] == "low" and has_high_impact and not has_low_impact:
+        return False, "impact_low_has_high_impact_cue"
+
+    return True, "ok"
+
+
+def generate_one(
+    tokenizer,
+    model,
+    system_prompt: str,
+    target: dict,
+    domain: str,
+    seen_signatures: set[str],
+    retries: int = 10,
+) -> tuple[dict | None, str]:
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": build_user_prompt(target, domain)},
     ]
+    last_reason = "generation_failed"
     for _ in range(retries):
         try:
             input_ids = tokenizer.apply_chat_template(
@@ -201,10 +307,17 @@ def generate_one(tokenizer, model, system_prompt: str, target: dict, domain: str
             if not m:
                 raise ValueError("No JSON object found")
             parsed = json.loads(m.group(0))
-            return normalize_record(parsed, target, domain)
+            record = normalize_record(parsed, target, domain)
+            ok, reason = quality_gate(record, target, seen_signatures)
+            if not ok:
+                last_reason = reason
+                continue
+            seen_signatures.add(_text_signature(record["text"]))
+            return record, "ok"
         except Exception:
+            last_reason = "parse_or_model_error"
             time.sleep(0.25)
-    return None
+    return None, last_reason
 
 
 def print_distribution(df: pd.DataFrame):
@@ -233,11 +346,16 @@ def main():
 
     rows = []
     failures = 0
+    reject_reasons = defaultdict(int)
+    seen_signatures: set[str] = set()
     for i, target in enumerate(tqdm(targets, desc="Generating balanced dataset"), start=1):
         domain = random.choice(DOMAINS)
-        rec = generate_one(tokenizer, model, system_prompt, target, domain)
+        rec, reason = generate_one(
+            tokenizer, model, system_prompt, target, domain, seen_signatures
+        )
         if rec is None:
             failures += 1
+            reject_reasons[reason] += 1
             continue
         rows.append(rec)
         if i % args.checkpoint_every == 0:
@@ -263,6 +381,10 @@ def main():
     print(f"Saved: {output_path}")
     print(f"Rows generated: {len(df)}")
     print(f"Failures: {failures}")
+    if reject_reasons:
+        print("Top rejection reasons:")
+        for reason, count in sorted(reject_reasons.items(), key=lambda x: x[1], reverse=True)[:10]:
+            print(f"- {reason}: {count}")
     print_distribution(df)
 
 
