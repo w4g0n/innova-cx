@@ -127,7 +127,7 @@ export default function CustomerTicketDetails() {
   const orchestratorStageIndex = latestOrchestratorUpdate
     ? AI_STAGE_INDEX[latestOrchestratorUpdate.meta.stage_id]
     : undefined;
-  const currentAiStageIndex = Number.isInteger(orchestratorStageIndex)
+  const _currentAiStageIndex = Number.isInteger(orchestratorStageIndex)
     ? orchestratorStageIndex
     : getCurrentAiStageIndex(ticket?.status);
   

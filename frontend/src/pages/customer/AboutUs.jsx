@@ -311,6 +311,7 @@ function PipelineDetail({ stage, onPrev, onNext, isFirst, isLast }) {
 }
 
 export default function AboutUs() {
+  const statsRef = useRef(null)
   const navigate = useNavigate();
 
   /* hero text cycle */
