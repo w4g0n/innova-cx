@@ -1,17 +1,21 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import logo from "../assets/nova-logo.png";
 import { apiUrl } from "../config/apiBase";
 import "./Login.css";
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(
+    searchParams.get("sessionExpired") === "1"
+  );
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -58,7 +62,16 @@ export default function Login() {
       );
 
       const role = data.user?.role;
-      navigate(role === "customer" ? "/customer/dashboard" : `/${role}`, { replace: true });
+      // Safety: only follow next if it's an internal path (starts with "/")
+      // — prevents open-redirect attacks via crafted URLs
+      const rawNext = searchParams.get("next");
+      const nextPath = rawNext && decodeURIComponent(rawNext).startsWith("/")
+        ? decodeURIComponent(rawNext)
+        : null;
+      navigate(
+        nextPath ?? (role === "customer" ? "/customer/dashboard" : `/${role}`),
+        { replace: true }
+      );
       return;
 
       /*
@@ -130,6 +143,32 @@ export default function Login() {
           <div className="loginHeader">
             <h2 className="loginTitle">Log In To InnovaCX</h2>
           </div>
+
+          {sessionExpired && (
+            <div className="login-session-banner" role="alert">
+              <div className="login-session-banner__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <div className="login-session-banner__body">
+                <span className="login-session-banner__title">Session Expired</span>
+                <span className="login-session-banner__text">For your security, please sign in again.</span>
+              </div>
+              <button
+                type="button"
+                className="login-session-banner__close"
+                aria-label="Dismiss"
+                onClick={() => setSessionExpired(false)}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          )}
 
           <form className="loginForm" onSubmit={handleSubmit}>
             <div className="field">
