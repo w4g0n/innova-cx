@@ -1,62 +1,58 @@
-/* ============================================================
-   PublicLanding — full-page redesign
-   ============================================================ */
-
-/* ── Reset / base ─────────────────────────────────────────── */
 .pl-root {
   font-family: var(--font-body, "Inter", sans-serif);
   color: #111;
   overflow-x: hidden;
 }
 
-/* ============================================================
-   HERO
-   ============================================================ */
 .pl-hero {
   position: relative;
   min-height: 100svh;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  background: #07030d;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-/* dark gradient overlay — heavier on left so text reads cleanly */
 .pl-hero-overlay {
+  display: none;
+}
+
+@keyframes plBlobFloat {
+  0%, 100% { border-radius: 60% 40% 70% 30% / 50% 60% 40% 70%; transform: translate(0,0) scale(1); }
+  33%       { border-radius: 40% 60% 30% 70% / 70% 40% 60% 30%; transform: translate(20px,-15px) scale(1.04); }
+  66%       { border-radius: 70% 30% 50% 50% / 30% 70% 50% 50%; transform: translate(-10px,20px) scale(0.97); }
+}
+
+.pl-hero::before,
+.pl-hero::after {
+  content: '';
   position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(
-      105deg,
-      rgba(10, 4, 28, 0.88) 0%,
-      rgba(10, 4, 28, 0.72) 48%,
-      rgba(10, 4, 28, 0.30) 100%
-    );
-  z-index: 0;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+  pointer-events: none;
+  animation: plBlobFloat 14s ease-in-out infinite;
 }
 
-/* shimmer sweep */
-.pl-hero-overlay::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    135deg,
-    transparent 40%,
-    rgba(139, 92, 246, 0.06) 55%,
-    transparent 70%
-  );
-  animation: plShimmer 6s ease-in-out infinite;
+.pl-hero::before {
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, #5a2970, #401c51);
+  top: -200px;
+  left: -200px;
+  animation-duration: 14s;
 }
 
-@keyframes plShimmer {
-  0%, 100% { opacity: 0.4; }
-  50%       { opacity: 1; }
+.pl-hero::after {
+  width: 560px;
+  height: 560px;
+  background: radial-gradient(circle, #c084fc, #7c3aed);
+  bottom: -100px;
+  right: -140px;
+  animation-duration: 10s;
+  animation-delay: -4s;
 }
 
-/* ── Nav ─────────────────────────────────────────────────── */
 .pl-nav {
   position: relative;
   z-index: 10;
@@ -107,22 +103,22 @@
   border: 1.5px solid rgba(255,255,255,0.35);
   border-radius: 999px;
   color: #fff;
-  font-size: 14px;
-  font-weight: 650;
-  padding: 9px 24px;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 12px 30px;
   cursor: pointer;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  transition: background 0.25s, border-color 0.25s;
+  transition: background 0.25s, border-color 0.25s, transform 0.2s;
   letter-spacing: 0.01em;
 }
 
 .pl-nav-login:hover {
   background: rgba(255,255,255,0.18);
   border-color: rgba(255,255,255,0.6);
+  transform: translateY(-1px);
 }
 
-/* ── Hero body ───────────────────────────────────────────── */
 .pl-hero-body {
   position: relative;
   z-index: 5;
@@ -185,7 +181,6 @@
   animation: plFadeUp 0.7s 0.72s var(--ease-out, ease) both;
 }
 
-/* ── Buttons ─────────────────────────────────────────────── */
 .pl-btn-primary {
   padding: 13px 32px;
   border-radius: 999px;
@@ -228,7 +223,6 @@
   padding: 16px 40px;
 }
 
-/* ── Nova pill ───────────────────────────────────────────── */
 .pl-nova-pill {
   display: inline-flex;
   align-items: center;
@@ -277,12 +271,11 @@
   50%       { box-shadow: 0 0 0 6px rgba(167, 139, 250, 0); }
 }
 
-/* ── Floating stats ──────────────────────────────────────── */
 .pl-stats {
+  display: none;
   position: absolute;
   bottom: clamp(28px, 5vw, 60px);
   right: clamp(24px, 7vw, 80px);
-  display: flex;
   flex-direction: column;
   gap: 16px;
   z-index: 5;
@@ -316,7 +309,6 @@
   margin-top: 2px;
 }
 
-/* ── Scroll hint ─────────────────────────────────────────── */
 .pl-scroll-hint {
   position: absolute;
   bottom: 28px;
@@ -350,13 +342,11 @@
   50%       { transform: scaleY(0.5); opacity: 0.3; }
 }
 
-/* ============================================================
-   FEATURES
-   ============================================================ */
 .pl-features {
-  background: #fafafa;
+  background: #0d0618 ;
   padding: clamp(60px, 8vw, 110px) clamp(24px, 7vw, 80px);
   text-align: center;
+  border-top: 1px solid rgba(167, 139, 250, 0.08);
 }
 
 .pl-section-label {
@@ -364,7 +354,7 @@
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--btn-primary, #5924b4);
+  color: #a78bfa;
   margin-bottom: 16px;
 }
 
@@ -372,7 +362,7 @@
   font-family: var(--font-heading, "Inter", sans-serif);
   font-size: clamp(28px, 4vw, 48px);
   font-weight: 900;
-  color: #0f0a1e;
+  color: #fff;
   margin: 0 0 16px;
   letter-spacing: -0.02em;
   line-height: 1.1;
@@ -380,7 +370,7 @@
 
 .pl-section-sub {
   font-size: 16px;
-  color: rgba(17,17,17,0.55);
+  color: rgba(255,255,255,0.45);
   max-width: 520px;
   margin: 0 auto 56px;
   line-height: 1.65;
@@ -395,19 +385,20 @@
 }
 
 .pl-feature-card {
-  background: #fff;
-  border: 1px solid rgba(0,0,0,0.07);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(167, 139, 250, 0.12);
   border-radius: 20px;
   padding: 32px 28px;
   text-align: left;
-  box-shadow: 0 4px 18px rgba(0,0,0,0.05);
-  transition: transform 0.25s var(--ease-out, ease), box-shadow 0.25s;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+  transition: transform 0.25s var(--ease-out, ease), box-shadow 0.25s, border-color 0.25s;
   animation: plFadeUp 0.6s var(--ease-out, ease) both;
 }
 
 .pl-feature-card:hover {
   transform: translateY(-5px);
-  box-shadow: 0 12px 36px rgba(89,36,180,0.12);
+  box-shadow: 0 12px 40px rgba(124,58,237,0.2);
+  border-color: rgba(167, 139, 250, 0.3);
 }
 
 .pl-feature-icon {
@@ -420,21 +411,18 @@
   font-family: var(--font-heading, "Inter", sans-serif);
   font-size: 17px;
   font-weight: 800;
-  color: #0f0a1e;
+  color: #fff;
   margin: 0 0 10px;
   letter-spacing: -0.01em;
 }
 
 .pl-feature-desc {
   font-size: 14px;
-  color: rgba(17,17,17,0.6);
+  color: rgba(255,255,255,0.5);
   line-height: 1.65;
   margin: 0;
 }
 
-/* ============================================================
-   CTA STRIP
-   ============================================================ */
 .pl-cta-strip {
   background: linear-gradient(135deg, #1e0b4b 0%, #2d1264 50%, #1a0a3d 100%);
   padding: clamp(60px, 8vw, 100px) clamp(24px, 7vw, 80px);
@@ -473,9 +461,6 @@
   line-height: 1.6;
 }
 
-/* ============================================================
-   FOOTER
-   ============================================================ */
 .pl-footer {
   background: #0b0519;
   padding: 40px clamp(24px, 7vw, 80px);
@@ -523,9 +508,6 @@
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 
-/* ============================================================
-   KEYFRAMES
-   ============================================================ */
 @keyframes plFadeUp {
   from { opacity: 0; transform: translateY(20px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -536,9 +518,6 @@
   to   { opacity: 1; transform: translateX(0); }
 }
 
-/* ============================================================
-   RESPONSIVE
-   ============================================================ */
 @media (max-width: 768px) {
   .pl-stats {
     display: none;

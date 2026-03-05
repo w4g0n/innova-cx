@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
 import novaLogo from "../assets/nova-logo.png";
-import dccBg from "../assets/dcc-bg.png";
 import "./PublicLanding.css";
 
 const FEATURES = [
@@ -40,7 +39,6 @@ export default function PublicLanding() {
       {/* ─── HERO ─────────────────────────────────────────────── */}
       <section
         className="pl-hero"
-        style={{ backgroundImage: `url(${dccBg})` }}
       >
         <div className="pl-hero-overlay" />
 

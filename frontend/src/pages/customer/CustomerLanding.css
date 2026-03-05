@@ -1,10 +1,6 @@
-/* ============================================================
-   CustomerLanding — chatbot widget + authenticated nav styles
-   (hero / features / CTA / footer styles come from PublicLanding.css)
-   ============================================================ */
-
 * {
   box-sizing: border-box;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -15,10 +11,42 @@ body {
 }
 
 .customer-landing-page {
-  overflow-x: hidden;
+  overflow: hidden;
+  height: 100vh;
+  max-height: 100vh;
 }
 
-/* ── Authenticated nav actions ───────────────────────────── */
+.customer-landing-page .pl-hero {
+  height: 100vh;
+  min-height: unset;
+  overflow: hidden;
+  position: relative;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-color: rgba(0, 0, 0, 0.68);
+  background-blend-mode: multiply;
+}
+
+.customer-landing-page .pl-hero::before,
+.customer-landing-page .pl-hero::after {
+  content: none !important;
+  display: none !important;
+}
+
+.customer-landing-page .pl-hero-overlay {
+  display: block;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    165deg,
+    rgba(0, 0, 0, 0.62) 0%,
+    rgba(0, 0, 0, 0.54) 55%,
+    rgba(0, 0, 0, 0.68) 100%
+  );
+}
+
 .nav-actions {
   display: flex;
   align-items: center;
@@ -29,7 +57,6 @@ body {
   position: relative;
 }
 
-/* Base circle button (overridden below with dark glass style) */
 .navIconButton {
   width: 44px;
   height: 44px;
@@ -91,8 +118,8 @@ body {
   border: 1px solid rgba(192, 132, 252, 0.28);
   background: radial-gradient(
     circle at 30% 30%,
-    rgba(192, 132, 252, 0.38),
-    rgba(26, 14, 42, 0.65)
+    rgba(192, 132, 252, 0.34),
+    rgba(12, 8, 18, 0.72)
   );
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
   cursor: pointer;
@@ -101,10 +128,9 @@ body {
 
 .navAvatarCircle:hover {
   transform: translateY(-2px);
-  border-color: rgba(192, 132, 252, 0.45);
+  border-color: rgba(192, 132, 252, 0.42);
 }
 
-/* Popover (notifications) + Dropdown (profile) */
 .navPopover,
 .navDropdown {
   position: absolute;
@@ -113,8 +139,8 @@ body {
   width: 360px;
   max-width: calc(100vw - 24px);
   border-radius: 16px;
-  background: rgba(17, 8, 32, 0.82);
-  border: 1px solid rgba(155, 113, 163, 0.22);
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
@@ -126,8 +152,8 @@ body {
   padding: 14px;
   font-weight: 800;
   font-size: 14px;
-  color: rgba(245, 240, 252, 0.92);
-  border-bottom: 1px solid rgba(155, 113, 163, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .navPopoverList {
@@ -137,23 +163,23 @@ body {
 
 .navPopoverEmpty {
   padding: 18px 14px;
-  color: rgba(245, 240, 252, 0.6);
+  color: rgba(255, 255, 255, 0.65);
   font-size: 13px;
 }
 
 .navPopoverItem {
   padding: 12px 14px;
-  border-bottom: 1px solid rgba(155, 113, 163, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   transition: background 0.18s ease;
   cursor: default;
 }
 
 .navPopoverItem:hover {
-  background: rgba(192, 132, 252, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .navPopoverItem.unread {
-  background: rgba(192, 132, 252, 0.06);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .navPopoverItemHeader {
@@ -166,24 +192,23 @@ body {
 .navPopoverItemTitle {
   font-weight: 800;
   font-size: 13px;
-  color: rgba(245, 240, 252, 0.92);
+  color: rgba(255, 255, 255, 0.92);
   line-height: 1.3;
 }
 
 .navPopoverItemTime {
   font-size: 12px;
-  color: rgba(245, 240, 252, 0.55);
+  color: rgba(255, 255, 255, 0.6);
   white-space: nowrap;
 }
 
 .navPopoverItemMeta {
   margin-top: 6px;
-  color: rgba(245, 240, 252, 0.66);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 12.5px;
   line-height: 1.35;
 }
 
-/* Profile dropdown */
 .navDropdown {
   width: 240px;
 }
@@ -199,34 +224,33 @@ body {
   padding: 12px 14px;
   font-size: 13px;
   font-weight: 800;
-  color: rgba(245, 240, 252, 0.86);
+  color: rgba(255, 255, 255, 0.9);
   transition: background 0.18s ease, color 0.18s ease;
 }
 
 .navDropdownItem:hover {
-  background: rgba(192, 132, 252, 0.1);
-  color: rgba(245, 240, 252, 1);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 1);
 }
 
 .navDropdownDivider {
   height: 1px;
-  background: rgba(155, 113, 163, 0.18);
+  background: rgba(255, 255, 255, 0.12);
   margin: 0;
 }
 
 .navDropdownItem.danger {
-  color: rgba(255, 140, 140, 0.9);
+  color: rgba(255, 140, 140, 0.92);
 }
 
 .navDropdownItem.danger:hover {
   background: rgba(255, 140, 140, 0.12);
 }
 
-/* Dark glass overrides for navIconButton on the dark hero */
 .customer-landing-page .navIconButton {
-  border: 1px solid rgba(155, 113, 163, 0.22);
-  background: rgba(26, 14, 42, 0.65);
-  color: rgba(245, 240, 252, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.48);
+  color: rgba(255, 255, 255, 0.92);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
   transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease,
     border-color 0.22s ease;
@@ -234,23 +258,20 @@ body {
 
 .customer-landing-page .navIconButton:hover {
   transform: translateY(-2px);
-  background: rgba(26, 14, 42, 0.82);
-  border-color: rgba(192, 132, 252, 0.35);
+  background: rgba(0, 0, 0, 0.62);
+  border-color: rgba(255, 255, 255, 0.22);
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
 }
 
 .customer-landing-page .navIconButton.isOpen {
-  background: rgba(64, 28, 81, 0.78);
-  border-color: rgba(192, 132, 252, 0.45);
+  background: rgba(0, 0, 0, 0.62);
+  border-color: rgba(255, 255, 255, 0.26);
 }
 
 .customer-landing-page .notifBadge {
-  border: 2px solid rgba(7, 3, 13, 0.8);
+  border: 2px solid rgba(0, 0, 0, 0.8);
 }
 
-/* ============================================================
-   Nova Chatbot Widget
-   ============================================================ */
 :root {
   --nova-purple: #401c51;
 }
@@ -602,14 +623,29 @@ body {
   transform-origin: bottom;
 }
 
-.novaWave:nth-child(2) { animation-delay: 0.1s; }
-.novaWave:nth-child(3) { animation-delay: 0.2s; }
-.novaWave:nth-child(4) { animation-delay: 0.3s; }
-.novaWave:nth-child(5) { animation-delay: 0.4s; }
+.novaWave:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.novaWave:nth-child(3) {
+  animation-delay: 0.2s;
+}
+.novaWave:nth-child(4) {
+  animation-delay: 0.3s;
+}
+.novaWave:nth-child(5) {
+  animation-delay: 0.4s;
+}
 
 @keyframes novaWaveAnim {
-  0%, 100% { transform: scaleY(0.6); opacity: 0.65; }
-  50%       { transform: scaleY(1.6); opacity: 1; }
+  0%,
+  100% {
+    transform: scaleY(0.6);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scaleY(1.6);
+    opacity: 1;
+  }
 }
 
 .novaVoiceActions {
@@ -684,7 +720,6 @@ body {
   padding: 14px;
 }
 
-/* ── Close / Logout confirm modals ───────────────────────── */
 .novaCloseModal {
   position: fixed;
   inset: 0;
@@ -750,9 +785,145 @@ body {
   background: #d8d8d8;
 }
 
-/* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 768px) {
   .nav-actions {
     gap: 8px;
   }
+}
+
+.customer-landing-page .pl-hero-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: center;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 24px;
+  padding-top: 14vh;
+  position: relative;
+  left: 0;
+  transform: none;
+  z-index: 2;
+}
+
+.customer-landing-page .pl-hero-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.customer-landing-page .pl-hero-eyebrow {
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  margin-bottom: 18px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.customer-landing-page .pl-hero-headline {
+  font-size: clamp(2.4rem, 6vw, 4.5rem);
+  margin-bottom: 44px;
+  color: #fff;
+}
+
+.customer-landing-page .pl-word {
+  font-size: inherit;
+  color: inherit;
+}
+
+.customer-landing-page .pl-nova-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 52px;
+  font-size: 20px;
+  font-weight: 700;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%);
+  color: #fff;
+  cursor: pointer;
+  position: relative;
+  animation: none;
+  box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.4),
+    0 6px 28px rgba(124, 58, 237, 0.55), 0 0 60px rgba(168, 85, 247, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+}
+
+.customer-landing-page .pl-nova-pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 65%
+  );
+  background-size: 200% 100%;
+  background-position: -100% 0;
+  border-radius: inherit;
+  transition: background-position 0.5s ease;
+  pointer-events: none;
+}
+
+.customer-landing-page .pl-nova-pill:hover::before {
+  background-position: 200% 0;
+}
+
+.customer-landing-page .pl-nova-pill:hover {
+  transform: translateY(-3px);
+  filter: brightness(1.12);
+  box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.6),
+    0 10px 40px rgba(124, 58, 237, 0.7), 0 0 80px rgba(168, 85, 247, 0.35);
+}
+
+.customer-landing-page .pl-nova-pill:active {
+  transform: translateY(-1px);
+}
+
+.customer-landing-page .pl-nova-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6);
+  animation: novaDotPulse 2s ease-in-out infinite;
+}
+
+@keyframes novaDotPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0);
+  }
+}
+
+.customer-landing-page .pl-nova-arrow {
+  font-size: 18px;
+  opacity: 0.85;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.customer-landing-page .pl-nova-pill:hover .pl-nova-arrow {
+  transform: translateX(4px);
+}
+
+.customer-landing-page .pl-btn-primary {
+  padding: 22px 60px;
+  font-size: 20px;
+  font-weight: 700;
+  border-radius: 999px;
+  box-shadow: 0 4px 24px rgba(64, 28, 81, 0.6);
 }
