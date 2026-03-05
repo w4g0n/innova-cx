@@ -79,6 +79,8 @@ function TicketModal({
   // shared
   closeModal, loadTicket, uploadAttachmentsOrThrow, onSuccess,
 }) {
+  const [confirming, setConfirming] = useState(false);
+
   if (!type || !ticket) return null;
 
   const titles = {
@@ -90,6 +92,92 @@ function TicketModal({
 
   const submitText =
     type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
+
+  // ── Confirmation summary for reroute / rescore ──
+  const renderConfirmation = () => {
+    if (type === "reroute") {
+      return (
+        <div className="modal-confirm-body">
+          <div className="modal-confirm-icon">↗</div>
+          <p className="modal-confirm-heading">Confirm Reroute Request</p>
+          <p className="modal-confirm-sub">
+            Please review the details below before submitting. This will be sent for manager approval.
+          </p>
+          <div className="modal-confirm-rows">
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">New Department</span>
+              <span className="modal-confirm-value">{rerouteDepartment}</span>
+            </div>
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">Reason</span>
+              <span className="modal-confirm-value modal-confirm-reason">{rerouteReason}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (type === "rescore") {
+      return (
+        <div className="modal-confirm-body">
+          <div className="modal-confirm-icon">⚖</div>
+          <p className="modal-confirm-heading">Confirm Rescore Request</p>
+          <p className="modal-confirm-sub">
+            Please review the details below before submitting. This will be sent for manager approval.
+          </p>
+          <div className="modal-confirm-rows">
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">Current Priority</span>
+              <span className="modal-confirm-value">{ticket.priority ?? "—"}</span>
+            </div>
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">New Priority</span>
+              <span className="modal-confirm-value">{rescoreNewPriority}</span>
+            </div>
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">Reason</span>
+              <span className="modal-confirm-value modal-confirm-reason">{rescoreReason}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (type === "resolve") {
+      return (
+        <div className="modal-confirm-body">
+          <div className="modal-confirm-icon">✓</div>
+          <p className="modal-confirm-heading">Confirm Resolution</p>
+          <p className="modal-confirm-sub">
+            Please review the details below before submitting. This action will mark the ticket as resolved.
+          </p>
+          <div className="modal-confirm-rows">
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">Resolution Decision</span>
+              <span className="modal-confirm-value">
+                {resolveDecision === "accepted" ? "AI Suggestion Accepted" : "Custom Resolution"}
+              </span>
+            </div>
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">Final Resolution</span>
+              <span className="modal-confirm-value modal-confirm-reason">{finalResolution || "—"}</span>
+            </div>
+            {stepsTaken.trim() && (
+              <div className="modal-confirm-row">
+                <span className="modal-confirm-label">Steps Taken</span>
+                <span className="modal-confirm-value modal-confirm-reason">{stepsTaken}</span>
+              </div>
+            )}
+            {resolveFiles.length > 0 && (
+              <div className="modal-confirm-row">
+                <span className="modal-confirm-label">Attachments</span>
+                <span className="modal-confirm-value">{resolveFiles.length} file(s): {resolveFiles.map(f => f.name).join(", ")}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
 
   const renderBody = () => {
     switch (type) {
@@ -387,17 +475,65 @@ function TicketModal({
           <span className="modal-close" onClick={closeModal}>✕</span>
         </div>
 
-        <div className="modal-body">{renderBody()}</div>
+        <div className="modal-body">
+          {confirming ? renderConfirmation() : renderBody()}
+        </div>
 
         <div className="modal-footer">
-          <button className="modal-btn cancel" onClick={closeModal}>Cancel</button>
-          <button
-            className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
-            onClick={handleSubmit}
-            disabled={resolveBusy || suggestionBusy}
-          >
-            {resolveBusy ? "Saving..." : submitText}
-          </button>
+          {confirming ? (
+            <>
+              <button className="modal-btn cancel" onClick={() => setConfirming(false)}>← Back</button>
+              <button
+                className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
+                onClick={handleSubmit}
+                disabled={resolveBusy || suggestionBusy}
+              >
+                {resolveBusy ? "Saving..." : type === "resolve" ? "Confirm & Resolve" : "Confirm & Submit"}
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="modal-btn cancel" onClick={closeModal}>Cancel</button>
+              <button
+                className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
+                onClick={() => {
+                  // reroute / rescore → show confirmation first
+                  if (type === "reroute") {
+                    if (!rerouteDepartment || !rerouteReason.trim()) {
+                      setRerouteError("Please select a department and provide a reason.");
+                      return;
+                    }
+                    setRerouteError("");
+                    setConfirming(true);
+                    return;
+                  }
+                  if (type === "rescore") {
+                    if (!rescoreNewPriority || !rescoreReason.trim()) {
+                      setRescoreError("Please select a priority and provide a reason.");
+                      return;
+                    }
+                    setRescoreError("");
+                    setConfirming(true);
+                    return;
+                  }
+                  if (type === "resolve") {
+                    if (resolveDecision === "declined_custom" && !finalResolution.trim()) {
+                      setResolveError("Final Resolution is required when declining suggestion.");
+                      return;
+                    }
+                    setResolveError("");
+                    setConfirming(true);
+                    return;
+                  }
+                  // all other types submit directly
+                  handleSubmit();
+                }}
+                disabled={resolveBusy || suggestionBusy}
+              >
+                {resolveBusy ? "Saving..." : submitText}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

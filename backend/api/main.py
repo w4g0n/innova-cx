@@ -18,9 +18,9 @@ from psycopg2.extras import RealDictCursor
 from psycopg2 import OperationalError
 import httpx
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 import pyotp  # for RFC 6238 TOTP
@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
 ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.75"))
-CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "120"))
+CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "30"))
 ANALYTICS_REFRESH_INTERVAL_SECONDS = int(os.getenv("ANALYTICS_REFRESH_INTERVAL_HOURS", "12")) * 3600
 _sla_heartbeat_task: Optional[asyncio.Task] = None
 _analytics_refresh_task: Optional[asyncio.Task] = None
@@ -4398,8 +4398,24 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     "SELECT id, priority_assigned_at, department_id FROM tickets WHERE ticket_code = %s LIMIT 1",
                     (incoming_ticket_code,),
                 )
-                existing = cur.fetchone()
-                if existing:
+                return {
+                    "ticket_id":   created["ticket_code"],
+                    "status":      created["status"],
+                    "priority":    created["priority"],
+                    "asset_type":  None,
+                    "department":  requested_department,
+                    "priority_assigned_at": created["priority_assigned_at"].isoformat() if created.get("priority_assigned_at") else None,
+                    "respond_due_at":       created["respond_due_at"].isoformat() if created.get("respond_due_at") else None,
+                    "resolve_due_at":       created["resolve_due_at"].isoformat() if created.get("resolve_due_at") else None,
+                }
+
+            # ── ticket_id supplied → update existing ticket ──
+            cur.execute(
+                "SELECT id, priority_assigned_at FROM tickets WHERE ticket_code = %s LIMIT 1",
+                (incoming_ticket_code,),
+            )
+            existing = cur.fetchone()
+            if existing:
                     had_priority_before = existing[1] is not None
                     existing_department_id = existing[2]
                     subject_update = None
@@ -4693,6 +4709,34 @@ async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
     raise HTTPException(status_code=503, detail=f"Transcriber service unavailable: {last_error}")
 
 
+@api.post("/orchestrator/process/text")
+async def proxy_orchestrator_process_text(request: Request):
+    """
+    Frontend-facing orchestrator proxy for form-based ticket submission.
+    The orchestrator is not exposed to the internet, so the backend proxies
+    requests from the browser to orchestrator:8004/process/text.
+    """
+    body_bytes = await request.body()
+    content_type = request.headers.get("content-type", "application/x-www-form-urlencoded")
+    last_error = None
+
+    for base in [ORCHESTRATOR_URL, ORCHESTRATOR_URL_LOCAL]:
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{base}/process/text",
+                    content=body_bytes,
+                    headers={"Content-Type": content_type},
+                )
+                response.raise_for_status()
+                return response.json()
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    raise HTTPException(status_code=503, detail=f"Orchestrator service unavailable: {last_error}")
+
+
 # =========================================================
 # OPERATOR ANALYTICS ENDPOINTS
 # =========================================================
@@ -4864,6 +4908,105 @@ def get_operator_feature(
         status_code=503,
         detail="Analytics MVs not ready. Run database/scripts/analytics_mvs.sql first."
     )
+# =========================================================
+# OPERATOR DASHBOARD SUMMARY  
+# =========================================================
+
+@api.get("/operator/dashboard/summary")
+def operator_dashboard_summary(user: Dict[str, Any] = Depends(require_operator)):
+    """
+    Returns live model-health and quality-control metrics for the
+    Operator Dashboard summary cards.
+
+    Model health window : last 1 hour
+    Drift window        : last 24 hours
+    QC pending/oldest   : current pending queue
+    QC avg review time + flagged today : last 24 hours
+    """
+
+    # ── Model Health ──────────────────────────────────────────────────────────
+    mh_row = fetch_one(
+        """
+        SELECT
+          COALESCE(AVG(latency_ms), 0)::numeric           AS avg_latency_ms,
+          COALESCE(
+            SUM(CASE WHEN is_error THEN 1 ELSE 0 END)::numeric
+            / NULLIF(COUNT(*), 0) * 100,
+            0
+          )                                               AS error_rate_pct
+        FROM model_metrics
+        WHERE created_at >= now() - interval '1 hour';
+        """
+    ) or {}
+
+    avg_latency_ms  = float(mh_row.get("avg_latency_ms")  or 0)
+    error_rate_pct  = round(float(mh_row.get("error_rate_pct") or 0), 2)
+
+    drift_row = fetch_one(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM drift_events
+        WHERE detected_at >= now() - interval '24 hours';
+        """
+    ) or {}
+    drift_detected = int(drift_row.get("cnt") or 0) > 0
+
+    # Status logic (exact as spec)
+    if error_rate_pct > 3 or avg_latency_ms > 1500:
+        status = "Critical"
+    elif (1 <= error_rate_pct <= 3) or (800 <= avg_latency_ms <= 1500):
+        status = "Degraded"
+    else:
+        status = "Healthy"
+
+    # ── Quality Control ───────────────────────────────────────────────────────
+    qc_row = fetch_one(
+        """
+        SELECT
+          -- pending queue
+          COUNT(*) FILTER (WHERE status = 'pending')                   AS pending_reviews,
+          -- oldest pending age (seconds since created_at)
+          COALESCE(
+            EXTRACT(EPOCH FROM (now() - MIN(created_at) FILTER (WHERE status = 'pending')))
+          , 0)::int                                                     AS oldest_pending_age_sec,
+          -- average review time for completed reviews in last 24h
+          COALESCE(
+            AVG(
+              CASE
+                WHEN review_duration_sec IS NOT NULL THEN review_duration_sec
+                WHEN reviewed_at IS NOT NULL
+                  THEN EXTRACT(EPOCH FROM (reviewed_at - created_at))
+                ELSE NULL
+              END
+            ) FILTER (
+              WHERE status IN ('approved', 'rejected')
+                AND created_at >= now() - interval '24 hours'
+            ),
+            0
+          )::int                                                        AS avg_review_time_sec,
+          -- flagged today
+          COUNT(*) FILTER (
+            WHERE flagged = TRUE
+              AND created_at >= now() - interval '24 hours'
+          )                                                              AS flagged_today
+        FROM qc_reviews;
+        """
+    ) or {}
+
+    return {
+        "modelHealth": {
+            "status":          status,
+            "avg_latency_ms":  round(avg_latency_ms, 1),
+            "error_rate_pct":  error_rate_pct,
+            "drift_detected":  drift_detected,
+        },
+        "qualityControl": {
+            "pending_reviews":      int(qc_row.get("pending_reviews")      or 0),
+            "avg_review_time_sec":  int(qc_row.get("avg_review_time_sec")  or 0),
+            "flagged_today":        int(qc_row.get("flagged_today")         or 0),
+            "oldest_pending_age_sec": int(qc_row.get("oldest_pending_age_sec") or 0),
+        },
+    }
 
 # =========================================================
 # Operator – Quality Control / Ticket Review Detail
@@ -5534,6 +5677,93 @@ def operator_delete_user(
         raise HTTPException(status_code=500, detail="Failed to delete user.")
 
     return {"success": True, "message": "User deleted successfully."}
+
+
+# =========================================================
+# TTS — call-centre audio reply
+# =========================================================
+
+try:
+    import edge_tts as _edge_tts
+except ImportError:
+    _edge_tts = None
+
+_TTS_VOICE = "en-US-JennyNeural"
+
+_TTS_TEMPLATES: dict = {
+    "ticket_logged": (
+        "Thank you for contacting us. "
+        "Your {ticket_type} has been successfully logged. "
+        "Your ticket ID is {ticket_id}. "
+        "Our team will review your concern and respond as soon as possible."
+    ),
+    "inquiry_handled": (
+        "Thank you for your inquiry. "
+        "Our team has been notified and will get back to you shortly."
+    ),
+    "generic": "{text}",
+}
+
+
+async def _generate_tts_bytes(text: str, voice: str = _TTS_VOICE) -> bytes:
+    communicate = _edge_tts.Communicate(text, voice)
+    buf = io.BytesIO()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            buf.write(chunk["data"])
+    buf.seek(0)
+    return buf.read()
+
+
+class TTSSpeakRequest(BaseModel):
+    message_type: Optional[str] = "ticket_logged"
+    ticket_id: Optional[str] = None
+    ticket_type: Optional[str] = "complaint"
+    text: Optional[str] = None
+
+
+@api.post("/tts/speak")
+async def tts_speak(body: TTSSpeakRequest):
+    if _edge_tts is None:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "TTS unavailable: edge-tts package not installed"},
+        )
+    try:
+        if body.text and body.text.strip():
+            text = body.text.strip()
+        else:
+            template = _TTS_TEMPLATES.get(
+                body.message_type or "ticket_logged",
+                _TTS_TEMPLATES["ticket_logged"],
+            )
+            text = template.format(
+                ticket_id=body.ticket_id or "unknown",
+                ticket_type=body.ticket_type or "complaint",
+                text="",
+            )
+        if not text:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "No text provided for synthesis"},
+            )
+        audio_bytes = await _generate_tts_bytes(text)
+        if not audio_bytes:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "TTS returned empty audio"},
+            )
+        return {
+            "audio_base64": base64.b64encode(audio_bytes).decode(),
+            "mime_type": "audio/mpeg",
+            "text": text,
+        }
+    except Exception as exc:
+        logger.warning("TTS generation failed: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": f"TTS unavailable: {exc}"},
+        )
 
 
 # =========================================================

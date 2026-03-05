@@ -3,41 +3,44 @@ import { useNavigate } from "react-router-dom";
 import "../PublicLanding.css";
 import "./CustomerLanding.css";
 import novaLogo from "../../assets/nova-logo.png";
-import dccBg from "../../assets/dcc-bg.png";
 import CustomerFillForm from "./CustomerFillForm";
 import useNovaChatbot from "./chatbot.js";
 import { apiUrl } from "../../config/apiBase";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { getToken, getUser } from "../../utils/auth";
 
-const FEATURES = [
+const QUICK_ACTIONS = [
   {
-    icon: "🧠",
-    title: "Sentiment Analysis",
-    desc: "Our AI reads the emotional tone of every complaint in real time, ensuring the most distressed customers are never left waiting.",
+    icon: "✦",
+    title: "Chat with Nova",
+    desc: "Get instant help from our AI assistant",
+    action: "nova",
+    accent: "#c084fc",
   },
   {
-    icon: "🎯",
-    title: "Smart Prioritisation",
-    desc: "Tickets are automatically ranked by urgency and customer value so your team always works on what matters most.",
+    icon: "📋",
+    title: "My Tickets",
+    desc: "View and track all your submitted tickets",
+    action: "tickets",
+    accent: "#818cf8",
   },
   {
-    icon: "🎙️",
-    title: "Audio Intelligence",
-    desc: "Voice complaints are transcribed and analysed instantly — capturing nuance that text alone can miss.",
+    icon: "✏️",
+    title: "Create a Ticket",
+    desc: "File a new complaint or inquiry",
+    action: "form",
+    accent: "#e879f9",
   },
   {
-    icon: "⚡",
-    title: "Instant Resolution",
-    desc: "AI-suggested resolutions cut average handling time dramatically, freeing your team for complex cases.",
+    icon: "⚙️",
+    title: "Settings",
+    desc: "Manage your account preferences",
+    action: "settings",
+    accent: "#a855f7",
   },
 ];
 
-const STATS = [
-  { value: "40%", label: "Faster resolution" },
-  { value: "3×", label: "Complaint throughput" },
-  { value: "98%", label: "Triage accuracy" },
-];
+
 
 export default function CustomerLanding() {
   const navigate = useNavigate();
@@ -76,8 +79,34 @@ export default function CustomerLanding() {
 
   const [user] = useState(() => getUser() || {});
   const [notifications, setNotifications] = useState([]);
+  const [recentTicket, setRecentTicket] = useState(null);
+  const [ticketLoading, setTicketLoading] = useState(true);
 
-  // Fetch notifications from API
+  useEffect(() => {
+    async function fetchRecentTicket() {
+      try {
+        const token = getToken();
+        const res = await fetch(apiUrl("/api/customer/mytickets"), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const tickets = data.tickets || [];
+          // Most recently updated ticket
+          const sorted = [...tickets].sort((a, b) =>
+            new Date(b.updatedAt || b.issueDate) - new Date(a.updatedAt || a.issueDate)
+          );
+          setRecentTicket(sorted[0] || null);
+        }
+      } catch {
+        setRecentTicket(null);
+      } finally {
+        setTicketLoading(false);
+      }
+    }
+    fetchRecentTicket();
+  }, []);
+
   useEffect(() => {
     async function fetchNotifications() {
       try {
@@ -95,7 +124,6 @@ export default function CustomerLanding() {
         setNotifications([]);
       }
     }
-
     fetchNotifications();
   }, []);
 
@@ -103,6 +131,24 @@ export default function CustomerLanding() {
     () => getInitialsFromEmail(user?.email, "U"),
     [user]
   );
+
+  // Derive a friendly first name from email
+  const firstName = useMemo(() => {
+    const email = (user?.email || "").trim();
+    const name = user?.name || user?.full_name || user?.fullName || "";
+    if (name) return name.split(" ")[0];
+    if (!email.includes("@")) return "there";
+    const raw = email.split("@")[0].replace(/[._\-\d]+/g, " ").trim();
+    if (!raw) return "there";
+    return raw.split(" ")[0].charAt(0).toUpperCase() + raw.split(" ")[0].slice(1);
+  }, [user]);
+
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  }, []);
 
   const unreadCount = useMemo(
     () =>
@@ -152,11 +198,6 @@ export default function CustomerLanding() {
     setIsExpanded(false);
   };
 
-  const openHistory = () => {
-    closeAllPopovers();
-    navigate("/customer/mytickets");
-  };
-
   const openSettings = () => {
     closeAllPopovers();
     navigate("/customer/settings");
@@ -176,35 +217,34 @@ export default function CustomerLanding() {
     localStorage.removeItem("token");
     localStorage.removeItem("temp_token");
     localStorage.removeItem("access_token");
-    navigate("/login");
+    navigate("/");
   };
 
   const toggleNotifications = async () => {
     setProfileMenuOpen(false);
-    setNotifOpen((prev) => {
-      const next = !prev;
-      return next;
-    });
-
+    setNotifOpen((prev) => !prev);
     if (!notifOpen) {
       try {
         const token = getToken();
         const res = await fetch(
           apiUrl("/api/customer/notifications?mark_read=true"),
-          {
-            method: "GET",
-            headers: { Authorization: `Bearer ${token}` },
-          }
+          { method: "GET", headers: { Authorization: `Bearer ${token}` } }
         );
         if (res.ok) {
           setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-        } else {
-          console.error("Failed to mark notifications as read");
         }
       } catch (err) {
         console.error("Error marking notifications as read:", err);
       }
     }
+  };
+
+  const handleQuickAction = (action) => {
+    closeAllPopovers();
+    if (action === "nova") { setIsOpen(true); }
+    else if (action === "tickets") { navigate("/customer/mytickets"); }
+    else if (action === "form") { navigate("/customer/fill-form"); }
+    else if (action === "settings") { navigate("/customer/settings"); }
   };
 
   const toggleFormInChat = () => {
@@ -243,37 +283,24 @@ export default function CustomerLanding() {
 
   const startVoice = () => {
     const SR = getSpeechRecognition();
-    if (!SR) {
-      alert("Voice input isn't supported in this browser. Try Chrome.");
-      return;
-    }
-
+    if (!SR) { alert("Voice input isn't supported in this browser. Try Chrome."); return; }
     setVoiceDraft("");
     setVoiceBusy(false);
     setVoiceActive(true);
-
     const rec = new SR();
     rec.lang = "en-US";
     rec.interimResults = true;
     rec.continuous = false;
-
     rec.onresult = (event) => {
-      let interim = "";
-      let finalText = "";
+      let interim = "", finalText = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const chunk = event.results[i][0]?.transcript || "";
         if (event.results[i].isFinal) finalText += chunk;
         else interim += chunk;
       }
-      const merged = (finalText || interim || "").trim();
-      setVoiceDraft(merged);
+      setVoiceDraft((finalText || interim || "").trim());
     };
-
-    rec.onerror = () => {
-      setVoiceActive(false);
-      setVoiceBusy(false);
-    };
-
+    rec.onerror = () => { setVoiceActive(false); setVoiceBusy(false); };
     rec.onend = () => {
       setVoiceBusy(false);
       setTimeout(() => {
@@ -283,22 +310,12 @@ export default function CustomerLanding() {
         });
       }, 0);
     };
-
     speechRef.current = rec;
-
-    try {
-      rec.start();
-    } catch (err) {
-      console.debug("Speech recognition failed to start:", err);
-    }
+    try { rec.start(); } catch (err) { console.debug("Speech recognition failed to start:", err); }
   };
 
   const cancelVoice = () => {
-    try {
-      speechRef.current?.stop?.();
-    } catch (err) {
-      console.debug("Speech recognition stop failed:", err);
-    }
+    try { speechRef.current?.stop?.(); } catch (err) { console.debug(err); }
     setVoiceActive(false);
     setVoiceBusy(false);
     setVoiceDraft("");
@@ -306,10 +323,7 @@ export default function CustomerLanding() {
 
   const confirmVoice = () => {
     const t = (voiceDraft || "").trim();
-    if (!t) {
-      cancelVoice();
-      return;
-    }
+    if (!t) { cancelVoice(); return; }
     setText((prev) => (prev ? `${prev} ${t}` : t));
     cancelVoice();
   };
@@ -319,267 +333,295 @@ export default function CustomerLanding() {
     const now = new Date();
     const date = new Date(isoString);
     const diff = Math.floor((now - date) / 1000);
-
-    if (diff < 60) return `${diff} sec${diff !== 1 ? "s" : ""} ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
     return date.toLocaleDateString();
   };
 
   return (
-    <div className="customer-landing-page pl-root">
+    <div className="cl-dashboard pl-root">
 
-      {/* ─── HERO ─────────────────────────────────────────────── */}
-      <section
-        className="pl-hero"
-        style={{ backgroundImage: `url(${dccBg})` }}
-      >
-        <div className="pl-hero-overlay" />
+      {/* ─── TOPBAR ────────────────────────────────────────────── */}
+      <header className="cl-topbar">
+        <div className="cl-topbar-left">
+          <img src={novaLogo} alt="InnovaCX" className="cl-topbar-logo" />
+          <div className="cl-topbar-divider" />
+          <span className="cl-topbar-portal">Customer Portal</span>
+        </div>
 
-        {/* NAV */}
-        <nav className="pl-nav">
-          <img src={novaLogo} alt="InnovaCX" className="pl-nav-logo" />
-
-          {/* Authenticated nav actions */}
-          <div className="nav-actions">
-            {/* Notifications bell */}
-            <div className="navAction" ref={notifRef}>
-              <button
-                type="button"
-                className={`navIconButton ${notifOpen ? "isOpen" : ""}`}
-                aria-label="Notifications"
-                onClick={toggleNotifications}
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                </svg>
-
-                {unreadCount > 0 && (
-                  <span
-                    className="notifBadge"
-                    aria-label={`${unreadCount} notifications`}
-                  >
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-
-              {notifOpen && (
-                <div
-                  className="navPopover"
-                  role="menu"
-                  aria-label="Notifications"
-                >
-                  <div className="navPopoverHeader">Notifications</div>
-                  <div className="navPopoverList">
-                    {notifications.length === 0 ? (
-                      <div className="navPopoverEmpty">No notifications</div>
-                    ) : (
-                      notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          className={`navPopoverItem ${n.read ? "" : "unread"}`}
-                        >
-                          <div className="navPopoverItemHeader">
-                            <div className="navPopoverItemTitle">
-                              {n.title || n.type || "Notification"}
-                            </div>
-                            {n.createdAt && (
-                              <div className="navPopoverItemTime">
-                                {formatTimeAgo(n.createdAt)}
-                              </div>
-                            )}
-                          </div>
-                          <div className="navPopoverItemMeta">
-                            {n.message || ""}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Profile avatar */}
-            <div className="navAction" ref={profileRef}>
-              <button
-                type="button"
-                className={`navIconButton navProfileButton ${profileMenuOpen ? "isOpen" : ""}`}
-                aria-label="Profile menu"
-                onClick={() => {
-                  setNotifOpen(false);
-                  setProfileMenuOpen((v) => !v);
-                }}
-              >
-                <span className="navAvatarCircle" aria-hidden="true">
-                  {initialsFromEmail}
+        <div className="cl-topbar-right">
+          {/* Notifications */}
+          <div className="navAction" ref={notifRef}>
+            <button
+              type="button"
+              className={`cl-icon-btn ${notifOpen ? "is-active" : ""}`}
+              aria-label="Notifications"
+              onClick={toggleNotifications}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="notifBadge" aria-label={`${unreadCount} notifications`}>
+                  {unreadCount}
                 </span>
-              </button>
-
-              {profileMenuOpen && (
-                <div className="navDropdown" role="menu" aria-label="Profile">
-                  <button
-                    type="button"
-                    className="navDropdownItem"
-                    onClick={openHistory}
-                  >
-                    My Tickets
-                  </button>
-                  <button
-                    type="button"
-                    className="navDropdownItem"
-                    onClick={openSettings}
-                  >
-                    Settings
-                  </button>
-                  <div className="navDropdownDivider" />
-                  <button
-                    type="button"
-                    className="navDropdownItem danger"
-                    onClick={handleLogout}
-                  >
-                    Logout
-                  </button>
-                </div>
               )}
+            </button>
+
+            {notifOpen && (
+              <div className="navPopover" role="menu" aria-label="Notifications">
+                <div className="navPopoverHeader">Notifications</div>
+                <div className="navPopoverList">
+                  {notifications.length === 0 ? (
+                    <div className="navPopoverEmpty">No notifications yet</div>
+                  ) : (
+                    notifications.map((n) => (
+                      <div key={n.id} className={`navPopoverItem ${n.read ? "" : "unread"}`}>
+                        <div className="navPopoverItemHeader">
+                          <div className="navPopoverItemTitle">{n.title || n.type || "Notification"}</div>
+                          {n.createdAt && <div className="navPopoverItemTime">{formatTimeAgo(n.createdAt)}</div>}
+                        </div>
+                        <div className="navPopoverItemMeta">{n.message || ""}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Profile */}
+          <div className="navAction" ref={profileRef}>
+            <button
+              type="button"
+              className={`cl-avatar-btn ${profileMenuOpen ? "is-active" : ""}`}
+              aria-label="Profile menu"
+              onClick={() => { setNotifOpen(false); setProfileMenuOpen((v) => !v); }}
+            >
+              <span className="cl-avatar-initials">{initialsFromEmail}</span>
+              <span className="cl-avatar-name">{firstName}</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+
+            {profileMenuOpen && (
+              <div className="navDropdown" role="menu" aria-label="Profile">
+                <button type="button" className="navDropdownItem" onClick={openSettings}>Settings</button>
+                <div className="navDropdownDivider" />
+                <button type="button" className="navDropdownItem danger" onClick={handleLogout}>Log out</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* ─── MAIN CONTENT ──────────────────────────────────────── */}
+      <main className="cl-main">
+
+        {/* GREETING HERO */}
+        <section className="cl-greeting-section">
+          <div className="cl-greeting-bg" aria-hidden="true">
+            <div className="cl-greeting-neb cl-greeting-neb1" />
+            <div className="cl-greeting-neb cl-greeting-neb2" />
+          </div>
+
+          <div className="cl-greeting-content">
+            <div className="cl-greeting-eyebrow">
+              <span className="cl-live-dot" />
+              Dubai CommerCity · Customer Portal
+            </div>
+            <h1 className="cl-greeting-headline">
+              {greeting},<br />
+              <span className="cl-greeting-name">{firstName}.</span>
+            </h1>
+            <p className="cl-greeting-sub">
+              Welcome back to your InnovaCX dashboard. How can we help you today?
+            </p>
+
+            <div className="cl-greeting-actions">
+              <button
+                className="cl-btn-primary"
+                onClick={() => navigate("/customer/mytickets")}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+                My Tickets
+              </button>
+              <button
+                className="cl-btn-ghost"
+                onClick={() => setIsOpen(true)}
+              >
+                <span className="cl-nova-dot-sm" />
+                Chat with Nova
+              </button>
             </div>
           </div>
-        </nav>
 
-        {/* HERO CONTENT */}
-        <div className="pl-hero-body">
-          <div className="pl-hero-eyebrow">Dubai CommerCity · AI-Powered CX</div>
+          <div className="cl-greeting-badge">
+            <div className="cl-greeting-badge-inner">
+              <span className="cl-greeting-badge-icon">✦</span>
+              <span className="cl-greeting-badge-text">Nova AI is online</span>
+            </div>
+          </div>
+        </section>
 
-          <h1 className="pl-hero-headline">
-            <span className="pl-word pl-word--1">Transforming</span>
-            <span className="pl-word pl-word--2">Customer</span>
-            <span className="pl-word pl-word--3">Experience</span>
-          </h1>
+        {/* QUICK ACTIONS */}
+        <section className="cl-section">
+          <div className="cl-section-header">
+            <h2 className="cl-section-title">Quick Actions</h2>
+            <p className="cl-section-sub">Everything you need, one tap away</p>
+          </div>
+          <div className="cl-quick-grid">
+            {QUICK_ACTIONS.map((q) => (
+              <button
+                key={q.action}
+                type="button"
+                className="cl-quick-card"
+                style={{ "--qc": q.accent }}
+                onClick={() => handleQuickAction(q.action)}
+              >
+                <div className="cl-quick-card-glow" />
+                <div className="cl-quick-icon">{q.icon}</div>
+                <div className="cl-quick-body">
+                  <div className="cl-quick-title">{q.title}</div>
+                  <div className="cl-quick-desc">{q.desc}</div>
+                </div>
+                <div className="cl-quick-footer">
+                  <svg className="cl-quick-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                  </svg>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
 
-          <p className="pl-hero-sub">
-            InnovaCX uses sentiment analysis, audio intelligence, and machine
-            learning to route and resolve complaints faster than ever — so every
-            customer feels heard.
-          </p>
 
-          <div className="pl-hero-actions">
+
+        {/* RECENT TICKET */}
+        <section className="cl-section cl-section--ticket">
+          <div className="cl-section-header">
+            <div>
+              <h2 className="cl-section-title">Most Recent Ticket</h2>
+              <p className="cl-section-sub">Latest activity on your account</p>
+            </div>
             <button
-              className="pl-btn-primary"
+              type="button"
+              className="cl-view-all-btn"
               onClick={() => navigate("/customer/mytickets")}
             >
-              My Tickets
-            </button>
-            <button
-              className="pl-btn-ghost"
-              onClick={() => navigate("/customer/about")}
-            >
-              About Us
+              View all
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
             </button>
           </div>
 
-          {/* NOVA CTA */}
-          <button
-            className="pl-nova-pill"
-            onClick={() => setIsOpen(true)}
-            title="Chat with Nova AI"
-          >
-            <span className="pl-nova-dot" />
-            <span>Chat with Nova AI</span>
-            <span className="pl-nova-arrow">→</span>
-          </button>
-        </div>
-
-        {/* FLOATING STATS */}
-        <div className="pl-stats">
-          {STATS.map((s, i) => (
-            <div
-              key={i}
-              className="pl-stat"
-              style={{ animationDelay: `${i * 0.15}s` }}
-            >
-              <span className="pl-stat-value">{s.value}</span>
-              <span className="pl-stat-label">{s.label}</span>
+          {ticketLoading ? (
+            <div className="cl-ticket-skeleton">
+              <div className="cl-skeleton-line cl-skeleton-line--wide" />
+              <div className="cl-skeleton-line cl-skeleton-line--med" />
+              <div className="cl-skeleton-line cl-skeleton-line--narrow" />
             </div>
-          ))}
-        </div>
-
-        {/* SCROLL HINT */}
-        <div className="pl-scroll-hint">
-          <span className="pl-scroll-line" />
-        </div>
-      </section>
-
-      {/* ─── FEATURES ─────────────────────────────────────────── */}
-      <section className="pl-features">
-        <div className="pl-section-label">What We Do</div>
-        <h2 className="pl-section-title">AI that works as hard as your team</h2>
-        <p className="pl-section-sub">
-          Four intelligent layers that ensure no complaint falls through the
-          cracks.
-        </p>
-
-        <div className="pl-feature-grid">
-          {FEATURES.map((f, i) => (
-            <div
-              key={i}
-              className="pl-feature-card"
-              style={{ animationDelay: `${i * 0.1}s` }}
-            >
-              <div className="pl-feature-icon">{f.icon}</div>
-              <h3 className="pl-feature-title">{f.title}</h3>
-              <p className="pl-feature-desc">{f.desc}</p>
+          ) : !recentTicket ? (
+            <div className="cl-ticket-empty">
+              <div className="cl-ticket-empty-icon">🎫</div>
+              <p className="cl-ticket-empty-title">No tickets yet</p>
+              <p className="cl-ticket-empty-sub">Your submitted tickets will appear here.</p>
+              <button className="cl-btn-primary" style={{marginTop: "16px"}} onClick={() => navigate("/customer/fill-form")}>
+                Submit your first ticket
+              </button>
             </div>
-          ))}
-        </div>
-      </section>
+          ) : (
+            <div
+              className="cl-ticket-card"
+              onClick={() => navigate(`/customer/ticket/${recentTicket.ticketId}`)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") navigate(`/customer/ticket/${recentTicket.ticketId}`); }}
+            >
+              {/* Top row: ID · type · status */}
+              <div className="cl-ticket-toprow">
+                <span className="cl-ticket-id">{recentTicket.ticketId}</span>
+                <span className="cl-ticket-dot">·</span>
+                <span className="cl-ticket-type">{recentTicket.ticketType || recentTicket.type}</span>
+                <span className="cl-ticket-dot">·</span>
+                <span className={`cl-ticket-status cl-status--${(recentTicket.status || "").toLowerCase().replace(/\s+/g,"")}`}>
+                  <span className="cl-status-dot" />
+                  {recentTicket.status}
+                </span>
+                <span className="cl-ticket-dot cl-ticket-dot--spacer">·</span>
+                <span className="cl-ticket-priority cl-priority--${(recentTicket.priority||'medium').toLowerCase()}">
+                  {recentTicket.priority}
+                </span>
+              </div>
 
-      {/* ─── FOOTER ───────────────────────────────────────────── */}
-      <footer className="pl-footer">
-        <img src={novaLogo} alt="InnovaCX" className="pl-footer-logo" />
-        <div className="pl-footer-links">
-          <button
-            className="pl-footer-link"
-            onClick={() => navigate("/customer/about")}
-          >
-            About Us
-          </button>
-          <button
-            className="pl-footer-link"
-            onClick={() => navigate("/customer/mytickets")}
-          >
-            My Tickets
-          </button>
-          <button
-            className="pl-footer-link"
-            onClick={() => navigate("/customer/settings")}
-          >
-            Settings
-          </button>
+              {/* Subject */}
+              <h3 className="cl-ticket-subject">{recentTicket.subject || recentTicket.description?.subject || "Untitled ticket"}</h3>
+
+              {/* Updates feed */}
+              {recentTicket.updates && recentTicket.updates.length > 0 ? (
+                <div className="cl-updates-feed">
+                  <div className="cl-updates-label">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    Activity
+                  </div>
+                  <div className="cl-updates-list">
+                    {recentTicket.updates.slice(-3).reverse().map((u, i) => {
+                      const typeMap = {
+                        system: { dot: "#a855f7", tag: "AI" },
+                        status_change: { dot: "#4ade80", tag: "Status" },
+                        priority_change: { dot: "#fb923c", tag: "Priority" },
+                      };
+                      const tone = typeMap[u.type] || { dot: "rgba(255,255,255,.25)", tag: "Update" };
+                      return (
+                        <div key={i} className="cl-update-row">
+                          <span className="cl-update-dot" style={{ background: tone.dot }} />
+                          <span className="cl-update-tag" style={{ color: tone.dot }}>{tone.tag}</span>
+                          <span className="cl-update-msg">{u.message || u.text}</span>
+                          {u.date && (
+                            <span className="cl-update-time">{formatTimeAgo(u.date)}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="cl-updates-feed cl-updates-feed--empty">
+                  <span className="cl-updates-label">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    No activity yet — our team is reviewing your ticket.
+                  </span>
+                </div>
+              )}
+
+              {/* Footer */}
+              <div className="cl-ticket-footer">
+                <span className="cl-ticket-date">Submitted {recentTicket.issueDate || recentTicket.date}</span>
+                <span className="cl-ticket-cta">
+                  View full details
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </span>
+              </div>
+            </div>
+          )}
+        </section>
+
+      </main>
+
+      {/* ─── FOOTER ────────────────────────────────────────────── */}
+      <footer className="cl-footer">
+        <img src={novaLogo} alt="InnovaCX" className="cl-footer-logo" />
+        <div className="cl-footer-links">
+          <button className="cl-footer-link" onClick={() => navigate("/customer/mytickets")}>My Tickets</button>
+          <button className="cl-footer-link" onClick={() => navigate("/customer/settings")}>Settings</button>
         </div>
-        <p className="pl-footer-copy">© 2026 Dubai CommerCity · InnovaCX</p>
+        <p className="cl-footer-copy">© 2026 Dubai CommerCity · InnovaCX</p>
       </footer>
 
-      {/* ─── NOVA WIDGET LAUNCHER ─────────────────────────────── */}
-      {!isOpen && (
-        <button className="novaWidgetLauncher" onClick={() => setIsOpen(true)}>
-          <span className="novaWidgetDot" /> Chat with Nova
-        </button>
-      )}
-
-      {/* ─── NOVA WIDGET ──────────────────────────────────────── */}
+      {/* ─── NOVA WIDGET ───────────────────────────────────────── */}
       {isOpen && (
         <div className={`novaWidget ${isExpanded ? "expanded" : ""} open`}>
           <div className="novaWidgetHeader">
@@ -592,101 +634,42 @@ export default function CustomerLanding() {
             </div>
 
             <div className="novaWidgetHeaderRight">
-              <button
-                type="button"
-                className={`novaTextBtn ${novaView === "form" ? "active" : ""}`}
-                onClick={toggleFormInChat}
-              >
+              <button type="button" className={`novaTextBtn ${novaView === "form" ? "active" : ""}`} onClick={toggleFormInChat}>
                 Fill a form
               </button>
-              <button
-                type="button"
-                className="novaIconBtn"
-                onClick={toggleExpand}
-                aria-label={isExpanded ? "Exit fullscreen" : "Enter fullscreen"}
-              >
+              <button type="button" className="novaIconBtn" onClick={toggleExpand} aria-label={isExpanded ? "Exit fullscreen" : "Enter fullscreen"}>
                 {isExpanded ? (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M9 3H3v6M15 3h6v6M21 15v6h-6M3 15v6h6"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
+                    <path d="M9 3H3v6M15 3h6v6M21 15v6h-6M3 15v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 ) : (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M14 3h7v7M10 21H3v-7M21 3l-7 7M3 21l7-7"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
+                    <path d="M14 3h7v7M10 21H3v-7M21 3l-7 7M3 21l7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 )}
               </button>
-
-              <button
-                type="button"
-                className="novaIconBtn"
-                onClick={minimizeWidget}
-                aria-label="Minimize"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M6 11H18V13H6V11Z" fill="currentColor" />
-                </svg>
+              <button type="button" className="novaIconBtn" onClick={minimizeWidget} aria-label="Minimize">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 11H18V13H6V11Z" fill="currentColor" /></svg>
               </button>
-
-              <button
-                type="button"
-                className="novaIconBtn"
-                onClick={handleClose}
-                aria-label="Close"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M6 6l12 12M18 6 6 18"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                </svg>
+              <button type="button" className="novaIconBtn" onClick={handleClose} aria-label="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
               </button>
             </div>
           </div>
 
-          <div
-            className={`novaWidgetBody ${
-              novaView === "form" ? "novaWidgetBody--form" : ""
-            }`}
-          >
+          <div className={`novaWidgetBody ${novaView === "form" ? "novaWidgetBody--form" : ""}`}>
             {novaView === "form" ? (
               <div className="novaFormHost">
-                <CustomerFillForm
-                  embedded
-                  initialType={embeddedFormType}
-                  onCancel={() => setNovaView("chat")}
-                />
+                <CustomerFillForm embedded initialType={embeddedFormType} onCancel={() => setNovaView("chat")} />
               </div>
             ) : (
               <>
                 <div className="novaChatList" ref={listRef}>
                   {messages.map((m) => (
-                    <div
-                      key={m.id}
-                      className={`novaMsg ${
-                        m.from === "user" ? "novaMsg--user" : "novaMsg--bot"
-                      }`}
-                    >
+                    <div key={m.id} className={`novaMsg ${m.from === "user" ? "novaMsg--user" : "novaMsg--bot"}`}>
                       <div className="novaBubble">
                         {m.typing ? (
-                          <div className="novaTyping">
-                            <span />
-                            <span />
-                            <span />
-                          </div>
+                          <div className="novaTyping"><span /><span /><span /></div>
                         ) : (
                           m.text
                         )}
@@ -700,138 +683,46 @@ export default function CustomerLanding() {
                     <div className={`novaVoiceBar ${voiceBusy ? "isBusy" : ""}`}>
                       <div className="novaVoiceLeft">
                         <div className="novaVoiceText">
-                          {voiceBusy
-                            ? "Transcribing…"
-                            : voiceDraft.trim()
-                            ? "Review & insert"
-                            : "Listening…"}
+                          {voiceBusy ? "Transcribing…" : voiceDraft.trim() ? "Review & insert" : "Listening…"}
                         </div>
                         <div className="novaWaves" aria-hidden="true">
-                          <span className="novaWave" />
-                          <span className="novaWave" />
-                          <span className="novaWave" />
-                          <span className="novaWave" />
-                          <span className="novaWave" />
+                          <span className="novaWave" /><span className="novaWave" /><span className="novaWave" /><span className="novaWave" /><span className="novaWave" />
                         </div>
                       </div>
-
                       <div className="novaVoiceActions">
-                        <button
-                          type="button"
-                          className="novaVoiceIconBtn cancel"
-                          onClick={cancelVoice}
-                          aria-label="Cancel recording"
-                          disabled={voiceBusy}
-                        >
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M6 6l12 12M18 6 6 18"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                            />
-                          </svg>
+                        <button type="button" className="novaVoiceIconBtn cancel" onClick={cancelVoice} aria-label="Cancel recording" disabled={voiceBusy}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
                         </button>
-
-                        <button
-                          type="button"
-                          className="novaVoiceIconBtn confirm"
-                          onClick={confirmVoice}
-                          aria-label="Insert transcript"
-                          disabled={voiceBusy}
-                        >
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M20 6L9 17l-5-5"
-                              stroke="currentColor"
-                              strokeWidth="2.4"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
+                        <button type="button" className="novaVoiceIconBtn confirm" onClick={confirmVoice} aria-label="Insert transcript" disabled={voiceBusy}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
                         </button>
                       </div>
                     </div>
                   )}
 
-                  <form
-                    className="novaComposer"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleSend(text);
-                      setText("");
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className={`novaMicBtn ${voiceActive ? "active" : ""}`}
-                      aria-label="Voice input"
-                      onClick={() => {
-                        if (voiceActive) cancelVoice();
-                        else startVoice();
-                      }}
-                    >
-                      <svg
-                        width="22"
-                        height="22"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z"
-                          fill="currentColor"
-                          opacity="0.95"
-                        />
-                        <path
-                          d="M19 11a7 7 0 0 1-14 0"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                        />
-                        <path
-                          d="M12 18v3"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                        />
+                  <form className="novaComposer" onSubmit={(e) => { e.preventDefault(); handleSend(text); setText(""); }}>
+                    <button type="button" className={`novaMicBtn ${voiceActive ? "active" : ""}`} aria-label="Voice input" onClick={() => { if (voiceActive) cancelVoice(); else startVoice(); }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" fill="currentColor" opacity="0.95" />
+                        <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                        <path d="M12 18v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                       </svg>
                     </button>
-
-                    <input
-                      value={text}
-                      onChange={(e) => setText(e.target.value)}
-                      placeholder="Type a message…"
-                    />
-
+                    <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" />
                     <button type="submit">Send</button>
                   </form>
                 </div>
-
               </>
             )}
           </div>
+
           {showCloseConfirm && (
             <div className="novaCloseModal">
               <div className="novaCloseModalContent">
                 <p>Are you sure you want to close the chat?</p>
                 <div className="novaCloseModalBtns">
                   <button onClick={confirmClose}>Yes, close</button>
-                  <button onClick={() => setShowCloseConfirm(false)}>
-                    Keep chatting
-                  </button>
+                  <button onClick={() => setShowCloseConfirm(false)}>Keep chatting</button>
                 </div>
               </div>
             </div>
@@ -839,7 +730,7 @@ export default function CustomerLanding() {
         </div>
       )}
 
-      {/* ─── LOGOUT CONFIRM MODAL ─────────────────────────────── */}
+      {/* ─── LOGOUT CONFIRM ────────────────────────────────────── */}
       {showLogoutConfirm && (
         <div className="novaCloseModal">
           <div className="novaCloseModalContent">
