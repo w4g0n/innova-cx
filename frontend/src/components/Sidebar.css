@@ -104,6 +104,7 @@
     color var(--dur-fast);
   min-height: 40px;
   overflow: hidden;
+  position: relative;
 }
 
 .sidebar--expanded .sidebar__link {
@@ -192,6 +193,7 @@
   padding: 0;
   border-radius: 999px;
   gap: 0;
+  overflow: visible;
 }
 
 .sidebar:not(.sidebar--expanded) .sidebar__bottom {
