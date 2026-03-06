@@ -35,6 +35,32 @@ try:
     from api.auto_assign_employee import auto_assign_ticket_if_needed
 except Exception:
     from auto_assign_employee import auto_assign_ticket_if_needed
+try:
+    from api.suggested_resolution_service import (
+        generate_resolution_suggestion,
+        get_resolution_model_label,
+        retrain_resolution_examples_from_rows,
+    )
+except Exception:
+    from suggested_resolution_service import (
+        generate_resolution_suggestion,
+        get_resolution_model_label,
+        retrain_resolution_examples_from_rows,
+    )
+try:
+    from api.department_routing_service import (
+        build_routing_meta,
+        decide_routing_review as decide_routing_review_service,
+        get_routing_review_payload,
+        record_department_routing_decision,
+    )
+except Exception:
+    from department_routing_service import (
+        build_routing_meta,
+        decide_routing_review as decide_routing_review_service,
+        get_routing_review_payload,
+        record_department_routing_decision,
+    )
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
@@ -56,7 +82,7 @@ except Exception as _analytics_import_err:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
-ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.75"))
+ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.70"))
 CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "30"))
 ANALYTICS_REFRESH_INTERVAL_SECONDS = int(os.getenv("ANALYTICS_REFRESH_INTERVAL_HOURS", "12")) * 3600
 _sla_heartbeat_task: Optional[asyncio.Task] = None
@@ -153,6 +179,69 @@ def _ensure_runtime_schema_compatibility() -> None:
                     );
                     """
                 )
+                cur.execute(
+                    """
+                    DO $$ BEGIN
+                      CREATE TYPE routing_review_status AS ENUM ('Pending', 'Approved', 'Overridden');
+                    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS routing_review_queue (
+                      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+                      predicted_department TEXT NOT NULL,
+                      confidence_score     NUMERIC(5,4) NOT NULL,
+                      status               routing_review_status NOT NULL DEFAULT 'Pending',
+                      approved_department  TEXT,
+                      decided_by_user_id   UUID REFERENCES users(id) ON DELETE SET NULL,
+                      decided_at           TIMESTAMPTZ,
+                      decision_notes       TEXT,
+                      created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS department_routing_feedback (
+                      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+                      predicted_department TEXT NOT NULL,
+                      approved_department  TEXT NOT NULL,
+                      confidence_score     NUMERIC(5,4),
+                      model_name           TEXT,
+                      approved_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+                      created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS department_routing (
+                      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+                      suggested_department TEXT NOT NULL,
+                      confidence_score     NUMERIC(5,2) NOT NULL CHECK (confidence_score >= 0 AND confidence_score <= 100),
+                      is_confident         BOOLEAN NOT NULL,
+                      final_department     TEXT,
+                      routed_by            TEXT CHECK (routed_by IN ('model', 'manager')),
+                      manager_id           UUID REFERENCES users(id) ON DELETE SET NULL,
+                      created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+                      updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
+                    """
+                )
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_department_routing_ticket ON department_routing(ticket_id);")
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_department_routing_pending ON department_routing(is_confident, final_department, created_at DESC);"
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_department_routing_finalized ON department_routing(final_department, routed_by, updated_at DESC);"
+                )
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_rrq_ticket ON routing_review_queue(ticket_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_rrq_status ON routing_review_queue(status);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_rrq_created ON routing_review_queue(created_at DESC);")
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
@@ -627,33 +716,6 @@ CHATBOT_URL_LOCAL = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001")
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8004")
 ORCHESTRATOR_URL_LOCAL = os.getenv("ORCHESTRATOR_URL_LOCAL", "http://localhost:8004")
 
-
-def _generate_resolution_suggestion(ticket: Dict[str, Any]) -> str:
-    payload = {
-        "ticket_code": ticket.get("ticket_code"),
-        "ticket_type": ticket.get("ticket_type") or "Complaint",
-        "subject": ticket.get("subject") or "No subject",
-        "details": ticket.get("details") or "",
-        "asset_type": ticket.get("asset_type") or "General",
-        "priority": ticket.get("priority") or "Medium",
-        "department": ticket.get("department_name") or "General",
-        "status": ticket.get("status") or "Assigned",
-    }
-    last_error = None
-    for base in [CHATBOT_URL, CHATBOT_URL_LOCAL]:
-        try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.post(f"{base}/api/suggest-resolution", json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-                suggestion = str(data.get("suggested_resolution") or "").strip()
-                if suggestion:
-                    return suggestion
-        except Exception as exc:
-            last_error = exc
-            continue
-    raise HTTPException(status_code=503, detail=f"Resolution suggestion service unavailable: {last_error}")
-
 def _insert_notification(
     cur,
     user_id: str,
@@ -677,17 +739,40 @@ def _insert_notification(
         (user_id, notif_type, title, message, priority, ticket_id),
     )
 
+
 def _trigger_resolution_retraining() -> None:
-    for base in [CHATBOT_URL, CHATBOT_URL_LOCAL]:
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                resp = client.post(f"{base}/api/retrain-resolution-model", json={"max_examples": 12})
-                resp.raise_for_status()
-                logger.info("resolution_retrain | triggered via %s", base)
-                return
-        except Exception:
-            continue
-    logger.warning("resolution_retrain | failed to trigger retraining endpoint")
+    max_examples = max(1, min(int(os.getenv("SUGGESTED_RESOLUTION_RETRAIN_MAX_EXAMPLES", "12")), 50))
+    rows = fetch_all(
+        """
+        SELECT
+          trf.decision,
+          trf.suggested_resolution,
+          trf.employee_resolution,
+          trf.final_resolution,
+          trf.created_at,
+          t.ticket_code,
+          t.ticket_type,
+          t.priority,
+          t.subject,
+          t.details
+        FROM ticket_resolution_feedback trf
+        JOIN tickets t ON t.id = trf.ticket_id
+        WHERE trf.final_resolution IS NOT NULL
+          AND btrim(trf.final_resolution) <> ''
+        ORDER BY trf.created_at DESC
+        LIMIT 500;
+        """
+    )
+    try:
+        result = retrain_resolution_examples_from_rows(rows or [], max_examples=max_examples)
+        logger.info(
+            "resolution_retrain | ok examples_written=%s feedback_rows=%s path=%s",
+            result.get("examples_written"),
+            result.get("feedback_rows"),
+            result.get("path"),
+        )
+    except Exception as exc:
+        logger.warning("resolution_retrain | failed err=%s", exc)
 
 
 def _trigger_priority_relearning(ticket_id: str, approved_priority: str, retrain_now: bool = False) -> None:
@@ -754,7 +839,8 @@ def _generate_suggestion_if_ready(ticket_code: str) -> None:
     if str(row.get("suggested_resolution") or "").strip():
         return
 
-    suggestion = _generate_resolution_suggestion(row)
+    suggestion = generate_resolution_suggestion(row, logger)
+    model_label = get_resolution_model_label()
     execute(
         """
         UPDATE tickets
@@ -764,7 +850,7 @@ def _generate_suggestion_if_ready(ticket_code: str) -> None:
           suggested_resolution_generated_at = now()
         WHERE id = %s;
         """,
-        (suggestion, "falcon", row["id"]),
+        (suggestion, model_label, row["id"]),
     )
 
 
@@ -2812,7 +2898,7 @@ def create_customer_ticket(
 
             # Generate suggestion at creation time so employee resolve view only loads it.
             try:
-                suggestion_text = _generate_resolution_suggestion(
+                suggestion_text = generate_resolution_suggestion(
                     {
                         "ticket_code": ticket_code,
                         "ticket_type": normalized_ticket_type,
@@ -2822,7 +2908,8 @@ def create_customer_ticket(
                         "priority": "Low",
                         "department_name": "General",
                         "status": "Open",
-                    }
+                    },
+                    logger,
                 )
             except Exception as exc:
                 logger.warning(
@@ -2842,7 +2929,7 @@ def create_customer_ticket(
                       suggested_resolution_generated_at = now()
                     WHERE id = %s;
                     """,
-                    (suggestion_text, "falcon", ticket_id),
+                    (suggestion_text, get_resolution_model_label(), ticket_id),
                 )
 
     orchestrator_dispatched = dispatch_ticket_to_orchestrator(
@@ -4063,60 +4150,12 @@ def get_routing_review_queue(
     status_filter: str = Query(default="Pending"),
     user: Dict[str, Any] = Depends(require_manager),
 ):
-    valid = {"Pending", "Approved", "Overridden", "All"}
-    if status_filter not in valid:
-        status_filter = "Pending"
-
-    where  = "" if status_filter == "All" else "WHERE rrq.status = %s::routing_review_status"
-    params = () if status_filter == "All" else (status_filter,)
-
-    rows = fetch_all(
-        f"""
-        SELECT
-          rrq.id::text                        AS "reviewId",
-          rrq.status::text                    AS "status",
-          rrq.predicted_department            AS "predictedDepartment",
-          ROUND(rrq.confidence_score * 100, 2) AS "confidencePct",
-          rrq.approved_department             AS "approvedDepartment",
-          rrq.decision_notes                  AS "decisionNotes",
-          rrq.decided_at                      AS "decidedAt",
-          rrq.created_at                      AS "createdAt",
-          t.ticket_code                       AS "ticketCode",
-          t.subject                           AS "subject",
-          t.priority::text                    AS "priority",
-          t.status::text                      AS "ticketStatus",
-          d.name                              AS "currentDepartment",
-          up.full_name                        AS "decidedBy",
-          ro.reasoning                        AS "modelReasoning"
-        FROM routing_review_queue rrq
-        JOIN  tickets        t   ON t.id  = rrq.ticket_id
-        LEFT JOIN departments  d   ON d.id  = t.department_id
-        LEFT JOIN user_profiles up ON up.user_id = rrq.decided_by_user_id
-        LEFT JOIN routing_outputs ro ON ro.ticket_id = t.id AND ro.is_current = TRUE
-        {where}
-        ORDER BY rrq.created_at DESC
-        LIMIT 500;
-        """,
-        params,
-    )
-
-    result = []
-    for r in rows:
-        result.append({
-            **{k: v for k, v in r.items() if k not in ("decidedAt", "createdAt", "confidencePct")},
-            "confidencePct": float(r.get("confidencePct") or 0),
-            "decidedAt":  r["decidedAt"].isoformat()  if r.get("decidedAt")  else None,
-            "createdAt":  r["createdAt"].isoformat()  if r.get("createdAt")  else None,
-        })
-
-    pending_count = sum(1 for r in result if r["status"] == "Pending")
-    return {"items": result, "pendingCount": pending_count}
+    return get_routing_review_payload(fetch_all=fetch_all, status_filter=status_filter)
 
 
 class RoutingReviewDecisionRequest(BaseModel):
-    decision:            str
+    decision:            Optional[str] = None
     approved_department: Optional[str] = None
-    decision_notes:      Optional[str] = None
 
 
 @api.patch("/manager/routing-review/{review_id}")
@@ -4125,95 +4164,17 @@ def decide_routing_review(
     body: RoutingReviewDecisionRequest,
     user: Dict[str, Any] = Depends(require_manager),
 ):
-    decision = (body.decision or "").strip()
-    if decision not in ("Approved", "Overridden"):
-        raise HTTPException(status_code=422, detail="decision must be 'Approved' or 'Overridden'")
-    if decision == "Overridden" and not (body.approved_department or "").strip():
-        raise HTTPException(status_code=422, detail="approved_department is required when overriding")
-
-    rrq = fetch_one(
-        "SELECT id, ticket_id, predicted_department, status FROM routing_review_queue WHERE id::text = %s LIMIT 1",
-        (review_id,),
+    return decide_routing_review_service(
+        review_id=review_id,
+        decision=body.decision,
+        approved_department=body.approved_department,
+        user=user,
+        fetch_one=fetch_one,
+        db_connect=db_connect,
+        auto_assign_ticket_if_needed=auto_assign_ticket_if_needed,
+        insert_notification=_insert_notification,
+        logger=logger,
     )
-    if not rrq:
-        raise HTTPException(status_code=404, detail="Review item not found")
-    if rrq["status"] != "Pending":
-        raise HTTPException(status_code=409, detail="This item has already been decided")
-
-    final_dept = (
-        body.approved_department.strip() if decision == "Overridden"
-        else rrq["predicted_department"]
-    )
-
-    with db_connect() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # 1. Update review queue
-            cur.execute(
-                """
-                UPDATE routing_review_queue
-                SET status              = %s::routing_review_status,
-                    approved_department = %s,
-                    decided_by_user_id  = %s,
-                    decided_at          = now(),
-                    decision_notes      = %s
-                WHERE id::text = %s;
-                """,
-                (decision, final_dept, user["id"], body.decision_notes or "", review_id),
-            )
-
-            # 2. Apply final department to ticket
-            cur.execute(
-                "SELECT id FROM departments WHERE LOWER(name) = LOWER(%s) LIMIT 1",
-                (final_dept,),
-            )
-            dept_row = cur.fetchone()
-            if dept_row:
-                cur.execute(
-                    "UPDATE tickets SET department_id = %s, updated_at = now() WHERE id = %s",
-                    (dept_row["id"], rrq["ticket_id"]),
-                )
-
-            # 3. Log to routing feedback for model retraining
-            cur.execute(
-                """
-                INSERT INTO department_routing_feedback
-                  (ticket_id, predicted_department, approved_department,
-                   confidence_score, model_name, approved_by_user_id)
-                SELECT
-                  %s, %s, %s,
-                  rrq.confidence_score, 'orchestrator', %s
-                FROM routing_review_queue rrq
-                WHERE rrq.id::text = %s;
-                """,
-                (rrq["ticket_id"], rrq["predicted_department"], final_dept, user["id"], review_id),
-            )
-
-            # 4. Notify manager (confirmation in sidebar)
-            ticket_info = fetch_one(
-                "SELECT ticket_code, priority FROM tickets WHERE id = %s",
-                (rrq["ticket_id"],),
-            ) or {}
-            _insert_notification(
-                cur,
-                user_id=str(user["id"]),
-                notif_type="status_change",
-                title=(
-                    f"Routing {'Confirmed' if decision == 'Approved' else 'Overridden'}: "
-                    f"{ticket_info.get('ticket_code', '')}"
-                ),
-                message=(
-                    f"You {'confirmed' if decision == 'Approved' else 'overrode'} the AI routing for "
-                    f"{ticket_info.get('ticket_code', '')} → {final_dept}."
-                ),
-                ticket_id=str(rrq["ticket_id"]),
-                priority=ticket_info.get("priority"),
-            )
-
-    logger.info(
-        "routing_review_decision | review=%s decision=%s dept=%s by=%s",
-        review_id, decision, final_dept, user["id"],
-    )
-    return {"ok": True, "reviewId": review_id, "decision": decision, "finalDepartment": final_dept}
 
 # =========================================================
 # Operator Notifications
@@ -4358,6 +4319,14 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
     ticket_type = "Inquiry" if label == "inquiry" else ("Complaint" if label else None)
     requested_asset_type = (body.asset_type or "").strip() or None
     requested_department = (body.department or "").strip() or None
+    routing_meta = build_routing_meta(
+        requested_department=requested_department,
+        classification_confidence=body.classification_confidence,
+        threshold=ROUTING_CONFIDENCE_THRESHOLD,
+    )
+    has_routing_decision = routing_meta["has_routing_decision"]
+    routing_confidence_pct = routing_meta["routing_confidence_pct"]
+    routing_is_confident = routing_meta["routing_is_confident"]
     normalized_status = (body.status or "").strip() or None
     allowed_statuses = {
         "Open",
@@ -4437,7 +4406,10 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         subject_update = f"[{requested_department.title()}] Automated {ticket_type.lower()}"
 
                     details_update = body.transcript if body.transcript else None
-                    effective_department_id = department_id or existing_department_id
+                    if has_routing_decision:
+                        effective_department_id = department_id if routing_is_confident else None
+                    else:
+                        effective_department_id = department_id or existing_department_id
                     should_start_sla = bool(
                         effective_department_id
                         and normalized_status == "Assigned"
@@ -4483,6 +4455,17 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         ),
                     )
                     updated = cur.fetchone()
+                    if has_routing_decision and not routing_is_confident:
+                        cur.execute(
+                            """
+                            UPDATE tickets
+                            SET department_id = NULL, updated_at = now()
+                            WHERE ticket_code = %s
+                            RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
+                            """,
+                            (incoming_ticket_code,),
+                        )
+                        updated = cur.fetchone()
                     logger.info(
                         "orchestrator_ticket_update | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                         updated[0],
@@ -4521,39 +4504,21 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                                 exc,
                             )
 
-                    # ── Routing review: queue if confidence is below threshold ──
-                    conf = body.classification_confidence
                     queued_for_review = False
-                    if (
-                        conf is not None
-                        and conf < ROUTING_CONFIDENCE_THRESHOLD
-                        and requested_department
-                        and existing
-                    ):
-                        ticket_uuid = str(existing[0])   # first col of the RETURNING is id
-                        already_queued = fetch_one(
-                            """
-                            SELECT id FROM routing_review_queue
-                            WHERE ticket_id = %s::uuid AND status = 'Pending'
-                            LIMIT 1
-                            """,
-                            (ticket_uuid,),
+                    if has_routing_decision and existing:
+                        ticket_uuid = str(existing[0])
+                        queued_for_review = record_department_routing_decision(
+                            cur,
+                            ticket_uuid=ticket_uuid,
+                            ticket_code=updated[0],
+                            suggested_department=requested_department,
+                            routing_confidence_pct=float(routing_confidence_pct),
+                            routing_is_confident=routing_is_confident,
+                            department_id=str(department_id) if department_id else None,
+                            priority=updated[2],
+                            insert_notification=_insert_notification,
+                            logger=logger,
                         )
-                        if not already_queued:
-                            cur.execute(
-                                """
-                                INSERT INTO routing_review_queue
-                                  (ticket_id, predicted_department, confidence_score)
-                                VALUES (%s::uuid, %s, %s)
-                                ON CONFLICT DO NOTHING;
-                                """,
-                                (ticket_uuid, requested_department, conf),
-                            )
-                            queued_for_review = True
-                            logger.info(
-                                "routing_review | ticket=%s dept=%s confidence=%.3f queued=True",
-                                updated[0], requested_department, conf,
-                            )
 
                     return {
                         "ticket_id":        updated[0],
@@ -4583,9 +4548,12 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             normalized_type = ticket_type or "Complaint"
             initial_priority = priority_label or "Low"
             initial_status = normalized_status or "Open"
+            initial_department_id = department_id
+            if has_routing_decision and not routing_is_confident:
+                initial_department_id = None
             initial_priority_assigned_at = (
                 datetime.now(timezone.utc)
-                if (initial_status == "Assigned" and department_id)
+                if (initial_status == "Assigned" and initial_department_id)
                 else None
             )
             subject_text = (
@@ -4603,7 +4571,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 priority=initial_priority,
                 status=initial_status,
                 ticket_source=ticket_source,
-                department_id=department_id,
+                department_id=initial_department_id,
                 sentiment_score=body.sentiment,
                 sentiment_label="orchestrator" if body.sentiment is not None else None,
                 model_priority=initial_priority,
@@ -4615,9 +4583,31 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 cur,
                 ticket_code=created.get("ticket_code"),
                 status=created.get("status"),
-                department_id=department_id,
+                department_id=initial_department_id,
                 priority=created.get("priority"),
             )
+
+            queued_for_review = False
+            if has_routing_decision and created.get("ticket_code"):
+                cur.execute(
+                    "SELECT id::text AS id FROM tickets WHERE ticket_code = %s LIMIT 1;",
+                    (created.get("ticket_code"),),
+                )
+                created_row = cur.fetchone()
+                if created_row:
+                    ticket_uuid = str(created_row[0])
+                    queued_for_review = record_department_routing_decision(
+                        cur,
+                        ticket_uuid=ticket_uuid,
+                        ticket_code=str(created.get("ticket_code")),
+                        suggested_department=requested_department,
+                        routing_confidence_pct=float(routing_confidence_pct),
+                        routing_is_confident=routing_is_confident,
+                        department_id=str(department_id) if department_id else None,
+                        priority=created.get("priority"),
+                        insert_notification=_insert_notification,
+                        logger=logger,
+                    )
 
             if created.get("ticket_code"):
                 try:
@@ -4635,7 +4625,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 "priority": created.get("priority"),
                 "asset_type": requested_asset_type,
                 "department": requested_department,
-                "queued_for_review": False,
+                "queued_for_review": queued_for_review,
                 "priority_assigned_at": created.get("priority_assigned_at").isoformat()
                 if created.get("priority_assigned_at")
                 else None,
@@ -4646,6 +4636,77 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 if created.get("resolve_due_at")
                 else None,
             }
+
+
+@api.post("/internal/tickets/{ticket_code}/generate-suggested-resolution")
+def internal_generate_suggested_resolution(ticket_code: str):
+    """
+    Trigger suggested-resolution generation for a ticket code and return
+    the latest stored suggestion. Used by orchestrator pipeline step.
+    """
+    row = fetch_one(
+        """
+        SELECT
+          t.id,
+          t.ticket_code,
+          t.ticket_type,
+          t.subject,
+          t.details,
+          t.asset_type,
+          t.priority,
+          t.status,
+          t.priority_assigned_at,
+          t.suggested_resolution,
+          t.suggested_resolution_model,
+          d.name AS department_name
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.ticket_code = %s
+        LIMIT 1;
+        """,
+        (ticket_code,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    try:
+        _generate_suggestion_if_ready(ticket_code)
+    except Exception as exc:
+        logger.warning("suggested_resolution | pipeline trigger failed ticket=%s err=%s", ticket_code, exc)
+
+    refreshed = fetch_one(
+        """
+        SELECT suggested_resolution, suggested_resolution_model
+        FROM tickets
+        WHERE ticket_code = %s
+        LIMIT 1;
+        """,
+        (ticket_code,),
+    ) or {}
+    suggestion = str(refreshed.get("suggested_resolution") or "").strip()
+    model_name = str(refreshed.get("suggested_resolution_model") or "mock_template").strip() or "mock_template"
+
+    # Fallback: force-generate even if priority/department guard wasn't met.
+    if not suggestion:
+        suggestion = generate_resolution_suggestion(row, logger)
+        model_name = get_resolution_model_label()
+        execute(
+            """
+            UPDATE tickets
+            SET
+              suggested_resolution = %s,
+              suggested_resolution_model = %s,
+              suggested_resolution_generated_at = now()
+            WHERE ticket_code = %s;
+            """,
+            (suggestion, model_name, ticket_code),
+        )
+
+    return {
+        "ticketId": ticket_code,
+        "suggestedResolution": suggestion,
+        "model": model_name,
+    }
 
 
 @api.post("/chatbot/chat")

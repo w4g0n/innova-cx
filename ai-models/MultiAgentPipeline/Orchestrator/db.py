@@ -46,6 +46,14 @@ def ensure_log_tables() -> None:
                         created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
                     );
                 """)
+                # Backward/forward compatibility with older/newer schemas.
+                cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS agent_name_old VARCHAR(120);")
+                cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS status VARCHAR(30);")
+                cur.execute(
+                    "ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS infra_metadata JSONB DEFAULT '{}'::jsonb;"
+                )
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS agent_output_log (
                         id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

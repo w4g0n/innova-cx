@@ -21,6 +21,7 @@ from pipeline import pipeline
 from agents.sentimentanalysis.step import get_sentiment_diagnostics
 from agents.classifier.step import get_classifier_diagnostics
 from agents.featureengineering.step import get_feature_engineering_diagnostics
+from agents.subjectgeneration.step import get_subject_generation_diagnostics
 from agents.priority.step import record_manager_feedback_from_state
 from agents.router.step import get_router_diagnostics
 
@@ -114,6 +115,7 @@ async def health():
     return {
         "status": "healthy",
         "service": "orchestrator",
+        **get_subject_generation_diagnostics(),
         **get_sentiment_diagnostics(),
         **get_classifier_diagnostics(),
         **get_feature_engineering_diagnostics(),
