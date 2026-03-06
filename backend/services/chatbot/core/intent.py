@@ -52,7 +52,9 @@ _FOLLOW_UP_SIGNALS = [
 _CREATE_SIGNALS = [
     "new ticket", "new complaint", "new inquiry",
     "create a", "create ticket", "submit a", "submit ticket",
+    "creating a", "creating ticket",
     "report a", "report problem", "log a", "raise a", "file a",
+    "reporting a", "submitting a", "raising a", "filing a",
     "make a complaint", "make a ticket", "make a report",
     "i have a problem", "i have an issue",
     "i want to complain", "i want to report", "i want to create",
@@ -71,6 +73,7 @@ _INQUIRY_SIGNALS = [
     "help me understand", "guidance", "advice", "explain",
     "opening hours", "policy", "procedure", "process",
     "schedule", "available", "who do i contact",
+    "how much", "cost", "price", "pricing", "quote", "estimate",
 ]
 
 _COMPLAINT_SIGNALS = [
@@ -109,12 +112,17 @@ def _keyword_score(text: str, signals: list[str]) -> int:
 def _keyword_primary_intent(user_text: str) -> str:
     follow_score = _keyword_score(user_text, _FOLLOW_UP_SIGNALS)
     create_score = _keyword_score(user_text, _CREATE_SIGNALS)
+    inquiry_score = _keyword_score(user_text, _INQUIRY_SIGNALS)
 
     # Check for ticket ID patterns — strong follow_up signal
     if re.search(r"\bCX-[A-Z0-9-]+\b", user_text, re.IGNORECASE):
         follow_score += 3
     if re.search(r"\b[0-9a-f]{8}-[0-9a-f]{4}-", user_text, re.IGNORECASE):
         follow_score += 3
+
+    # Primary intent treats question-style messages as create_ticket
+    # so they can continue into inquiry/complaint disambiguation.
+    create_score += inquiry_score
 
     if follow_score > create_score:
         return "follow_up"

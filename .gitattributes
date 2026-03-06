@@ -1,18 +1,28 @@
-postman/          merge=ours
-docs/             merge=ours
-CLOUD_README.md   merge=ours
-README.md         merge=ours
-test.csv          merge=ours
-Prototype/        merge=ours
-deslop.pdf        merge=ours
-test.csv merge=ours 
-database/
+# ============================================================
+# PROD-LIVE MERGE PROTECTION
+# These paths are removed/excluded from prod-live.
+# Required one-time setup per clone: git config merge.ours.driver true
+# (The sync script runs this automatically.)
+# ============================================================
 
-# Track large model artifacts in Git LFS
+# Protect this file itself — prod-live's attribute rules always win on merge
+.gitattributes        merge=ours
+
+# Dev-only paths — deleted from prod-live, must not re-appear from main
+data/                 merge=ours
+docs/                 merge=ours
+tests/                merge=ours
+Prototype/            merge=ours
+postman/              merge=ours
+deslop.pdf            merge=ours
+test.csv              merge=ours
+
+# Branch-specific docs — prod-live keeps its own version
+README.md             merge=ours
+CLOUD_README.md       merge=ours
+
+# Git LFS (retained for compatibility; actual files absent from prod-live)
 data/synthesizerv7/models/**/*.safetensors filter=lfs diff=lfs merge=lfs -text
-data/synthesizerv7/models/**/*.bin filter=lfs diff=lfs merge=lfs -text
-data/synthesizerv7/models/**/*.pt filter=lfs diff=lfs merge=lfs -text
-data/synthesizerv7/models/**/*.onnx filter=lfs diff=lfs merge=lfs -text
-
-# Keep shell scripts POSIX-safe across platforms.
-*.sh text eol=lf
+data/synthesizerv7/models/**/*.bin         filter=lfs diff=lfs merge=lfs -text
+data/synthesizerv7/models/**/*.pt          filter=lfs diff=lfs merge=lfs -text
+data/synthesizerv7/models/**/*.onnx        filter=lfs diff=lfs merge=lfs -text

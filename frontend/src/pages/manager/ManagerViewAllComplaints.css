@@ -456,3 +456,122 @@
 .mv-menuCancelReroute:hover {
   background: rgba(220, 38, 38, 0.15);
 }
+
+/* ── Status pill colour variants ─────────────────────────────────────────── */
+.mv-statusPill--submitted {
+  background: rgba(107, 114, 128, 0.1);
+  border-color: rgba(107, 114, 128, 0.25);
+  color: #374151;
+}
+.mv-statusPill--assigned {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.28);
+  color: #1d4ed8;
+}
+.mv-statusPill--escalated {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #b45309;
+}
+.mv-statusPill--resolved {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.28);
+  color: #065f46;
+}
+.mv-statusPill--unassigned {
+  background: rgba(156, 163, 175, 0.12);
+  border-color: rgba(156, 163, 175, 0.3);
+  color: #6b7280;
+}
+/* overdue already defined in base CSS */
+
+/* ── Critical + Overdue row highlight ────────────────────────────────────── */
+.mv-row--criticalOverdue {
+  background: rgba(220, 38, 38, 0.05) !important;
+  border-left: 3px solid rgba(220, 38, 38, 0.55);
+}
+.mv-row--criticalOverdue:hover {
+  background: rgba(220, 38, 38, 0.09) !important;
+}
+
+/* ── KPI card click-to-filter wrapper ────────────────────────────────────── */
+.mv-kpiWrap {
+  cursor: pointer;
+  border-radius: 18px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, outline 0.15s ease;
+  outline: 2px solid transparent;
+}
+.mv-kpiWrap:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(89, 36, 180, 0.13);
+}
+.mv-kpiWrap--active {
+  outline: 2px solid rgba(89, 36, 180, 0.55);
+  box-shadow: 0 4px 18px rgba(89, 36, 180, 0.18);
+  transform: translateY(-1px);
+}
+
+/* ── Live result count ───────────────────────────────────────────────────── */
+.mv-resultCount {
+  margin-left: auto;
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+.mv-resultCount strong {
+  color: #111827;
+  font-weight: 700;
+}
+.mv-resultCount__kpi {
+  font-weight: 700;
+  color: #5924b4;
+}
+
+/* ── Toast notifications ─────────────────────────────────────────────────── */
+.mv-toastStack {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+.mv-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.14);
+  animation: mv-toastIn 0.25s ease;
+  min-width: 260px;
+  max-width: 360px;
+}
+.mv-toast--success {
+  background: #ecfdf5;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #065f46;
+}
+.mv-toast--error {
+  background: #fef2f2;
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: #991b1b;
+}
+.mv-toast--info {
+  background: #eff6ff;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #1e40af;
+}
+.mv-toastIcon {
+  font-weight: 900;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+@keyframes mv-toastIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

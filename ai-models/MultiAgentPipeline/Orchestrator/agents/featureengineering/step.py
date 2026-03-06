@@ -22,6 +22,12 @@ FEATURE_LABELER_MODEL_PATH = os.getenv(
     "FEATURE_LABELER_MODEL_PATH",
     "/app/models/featureengineering/feature_labeler",
 ).strip()
+FEATURE_LABELER_MODEL_NAME = os.getenv(
+    "FEATURE_LABELER_MODEL_NAME",
+    "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+).strip()
+FEATURE_LABELER_AUTO_DOWNLOAD = os.getenv("FEATURE_LABELER_AUTO_DOWNLOAD", "true").lower() in {"1", "true", "yes"}
+HF_TOKEN = os.getenv("HF_TOKEN", "").strip() or None
 
 SAFETY_KEYWORDS = (
     "fire",
@@ -177,6 +183,23 @@ def _load_feature_labeler():
         return None
 
     model_path = Path(model_name)
+    if not (model_path / "config.json").exists() and FEATURE_LABELER_AUTO_DOWNLOAD and FEATURE_LABELER_MODEL_NAME:
+        try:
+            from huggingface_hub import snapshot_download  # type: ignore
+
+            logger.info(
+                "feature_engineering | downloading labeler model=%s to %s",
+                FEATURE_LABELER_MODEL_NAME,
+                model_name,
+            )
+            snapshot_download(
+                repo_id=FEATURE_LABELER_MODEL_NAME,
+                local_dir=model_name,
+                token=HF_TOKEN,
+            )
+        except Exception as exc:
+            logger.warning("feature_engineering | labeler auto-download failed (%s), using mock", exc)
+
     if not (model_path / "config.json").exists():
         logger.info("feature_engineering | labeler model missing config.json at %s; using mock", model_name)
         return None
@@ -250,6 +273,8 @@ def get_feature_engineering_diagnostics() -> dict[str, object]:
     return {
         "feature_engineering_mode": "nli+rules",
         "feature_labeler_model": labeler_model,
+        "feature_labeler_model_name": FEATURE_LABELER_MODEL_NAME or None,
+        "feature_labeler_auto_download": FEATURE_LABELER_AUTO_DOWNLOAD,
         "feature_labeler_model_exists": labeler_exists,
         "feature_labeler_mode": "model" if labeler_exists else "mock",
     }

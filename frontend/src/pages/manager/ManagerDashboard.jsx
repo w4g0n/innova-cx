@@ -36,6 +36,7 @@ export default function ManagerDashboard() {
       })
       .then((data) => {
         if (data) setKpis(data);
+        console.log("Manager API response:", data);
       })
       .catch((err) => {
         console.error("Failed to fetch KPIs:", err);

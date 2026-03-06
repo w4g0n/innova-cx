@@ -27,6 +27,40 @@ import pyotp  # for RFC 6238 TOTP
 import qrcode
 import io
 import re as _re
+try:
+    from api.ticket_creation_gate import create_ticket_via_gate, dispatch_ticket_to_orchestrator
+except Exception:
+    from ticket_creation_gate import create_ticket_via_gate, dispatch_ticket_to_orchestrator
+try:
+    from api.auto_assign_employee import auto_assign_ticket_if_needed
+except Exception:
+    from auto_assign_employee import auto_assign_ticket_if_needed
+try:
+    from api.suggested_resolution_service import (
+        generate_resolution_suggestion,
+        get_resolution_model_label,
+        retrain_resolution_examples_from_rows,
+    )
+except Exception:
+    from suggested_resolution_service import (
+        generate_resolution_suggestion,
+        get_resolution_model_label,
+        retrain_resolution_examples_from_rows,
+    )
+try:
+    from api.department_routing_service import (
+        build_routing_meta,
+        decide_routing_review as decide_routing_review_service,
+        get_routing_review_payload,
+        record_department_routing_decision,
+    )
+except Exception:
+    from department_routing_service import (
+        build_routing_meta,
+        decide_routing_review as decide_routing_review_service,
+        get_routing_review_payload,
+        record_department_routing_decision,
+    )
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
@@ -48,7 +82,7 @@ except Exception as _analytics_import_err:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
-ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.75"))
+ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.70"))
 CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "30"))
 ANALYTICS_REFRESH_INTERVAL_SECONDS = int(os.getenv("ANALYTICS_REFRESH_INTERVAL_HOURS", "12")) * 3600
 _sla_heartbeat_task: Optional[asyncio.Task] = None
@@ -619,33 +653,6 @@ CHATBOT_URL_LOCAL = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001")
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8004")
 ORCHESTRATOR_URL_LOCAL = os.getenv("ORCHESTRATOR_URL_LOCAL", "http://localhost:8004")
 
-
-def _generate_resolution_suggestion(ticket: Dict[str, Any]) -> str:
-    payload = {
-        "ticket_code": ticket.get("ticket_code"),
-        "ticket_type": ticket.get("ticket_type") or "Complaint",
-        "subject": ticket.get("subject") or "No subject",
-        "details": ticket.get("details") or "",
-        "asset_type": ticket.get("asset_type") or "General",
-        "priority": ticket.get("priority") or "Medium",
-        "department": ticket.get("department_name") or "General",
-        "status": ticket.get("status") or "Assigned",
-    }
-    last_error = None
-    for base in [CHATBOT_URL, CHATBOT_URL_LOCAL]:
-        try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.post(f"{base}/api/suggest-resolution", json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-                suggestion = str(data.get("suggested_resolution") or "").strip()
-                if suggestion:
-                    return suggestion
-        except Exception as exc:
-            last_error = exc
-            continue
-    raise HTTPException(status_code=503, detail=f"Resolution suggestion service unavailable: {last_error}")
-
 def _insert_notification(
     cur,
     user_id: str,
@@ -669,17 +676,40 @@ def _insert_notification(
         (user_id, notif_type, title, message, priority, ticket_id),
     )
 
+
 def _trigger_resolution_retraining() -> None:
-    for base in [CHATBOT_URL, CHATBOT_URL_LOCAL]:
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                resp = client.post(f"{base}/api/retrain-resolution-model", json={"max_examples": 12})
-                resp.raise_for_status()
-                logger.info("resolution_retrain | triggered via %s", base)
-                return
-        except Exception:
-            continue
-    logger.warning("resolution_retrain | failed to trigger retraining endpoint")
+    max_examples = max(1, min(int(os.getenv("SUGGESTED_RESOLUTION_RETRAIN_MAX_EXAMPLES", "12")), 50))
+    rows = fetch_all(
+        """
+        SELECT
+          trf.decision,
+          trf.suggested_resolution,
+          trf.employee_resolution,
+          trf.final_resolution,
+          trf.created_at,
+          t.ticket_code,
+          t.ticket_type,
+          t.priority,
+          t.subject,
+          t.details
+        FROM ticket_resolution_feedback trf
+        JOIN tickets t ON t.id = trf.ticket_id
+        WHERE trf.final_resolution IS NOT NULL
+          AND btrim(trf.final_resolution) <> ''
+        ORDER BY trf.created_at DESC
+        LIMIT 500;
+        """
+    )
+    try:
+        result = retrain_resolution_examples_from_rows(rows or [], max_examples=max_examples)
+        logger.info(
+            "resolution_retrain | ok examples_written=%s feedback_rows=%s path=%s",
+            result.get("examples_written"),
+            result.get("feedback_rows"),
+            result.get("path"),
+        )
+    except Exception as exc:
+        logger.warning("resolution_retrain | failed err=%s", exc)
 
 
 def _trigger_priority_relearning(ticket_id: str, approved_priority: str, retrain_now: bool = False) -> None:
@@ -746,7 +776,8 @@ def _generate_suggestion_if_ready(ticket_code: str) -> None:
     if str(row.get("suggested_resolution") or "").strip():
         return
 
-    suggestion = _generate_resolution_suggestion(row)
+    suggestion = generate_resolution_suggestion(row, logger)
+    model_label = get_resolution_model_label()
     execute(
         """
         UPDATE tickets
@@ -756,8 +787,88 @@ def _generate_suggestion_if_ready(ticket_code: str) -> None:
           suggested_resolution_generated_at = now()
         WHERE id = %s;
         """,
-        (suggestion, "falcon", row["id"]),
+        (suggestion, model_label, row["id"]),
     )
+
+
+def _mock_department_from_text(text: str) -> str:
+    t = (text or "").lower()
+    if any(k in t for k in ("wifi", "network", "internet", "server", "system", "software", "login")):
+        return "IT"
+    if any(k in t for k in ("leak", "pipe", "water", "ac", "air conditioning", "maintenance", "electrical", "power")):
+        return "Maintenance"
+    if any(k in t for k in ("fire", "unsafe", "hazard", "security", "alarm", "theft", "emergency")):
+        return "Safety & Security"
+    if any(k in t for k in ("contract", "legal", "policy", "compliance", "regulation", "law")):
+        return "Legal & Compliance"
+    if any(k in t for k in ("lease", "tenant", "rent", "handover", "move in")):
+        return "Leasing"
+    if any(k in t for k in ("hr", "salary", "leave", "employee", "staff")):
+        return "HR"
+    return "Facilities Management"
+
+
+def _apply_mock_pipeline_outcome(ticket_code: str, details: str) -> None:
+    """
+    Local fallback when orchestrator dispatch is unavailable.
+    Guarantees ticket has priority_assigned_at + SLA and a department.
+    """
+    dept_name = _mock_department_from_text(details)
+    now_utc = datetime.now(timezone.utc)
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM departments WHERE LOWER(name)=LOWER(%s) LIMIT 1;",
+                (dept_name,),
+            )
+            row = cur.fetchone()
+            if row:
+                dept_id = row[0]
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO departments (name)
+                    VALUES (%s)
+                    ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+                    RETURNING id;
+                    """,
+                    (dept_name,),
+                )
+                dept_id = cur.fetchone()[0]
+
+            cur.execute(
+                """
+                UPDATE tickets
+                SET
+                  priority = COALESCE(priority, 'Medium'),
+                  model_priority = COALESCE(model_priority, 'Medium'),
+                  status = CASE
+                             WHEN status IN ('Resolved', 'Escalated') THEN status
+                             ELSE 'Assigned'::ticket_status
+                           END,
+                  department_id = COALESCE(%s, department_id),
+                  model_department_id = COALESCE(%s, model_department_id),
+                  model_confidence = COALESCE(model_confidence, 0.35),
+                  sentiment_score = COALESCE(sentiment_score, 0.0),
+                  sentiment_label = COALESCE(sentiment_label, 'mock_orchestrator'),
+                  priority_assigned_at = COALESCE(priority_assigned_at, %s),
+                  updated_at = now()
+                WHERE ticket_code = %s;
+                """,
+                (dept_id, dept_id, now_utc, ticket_code),
+            )
+            auto_assign_ticket_if_needed(
+                cur,
+                ticket_code=ticket_code,
+                status="Assigned",
+                department_id=dept_id,
+                priority="Medium",
+            )
+    try:
+        _generate_suggestion_if_ready(ticket_code)
+    except Exception as exc:
+        logger.warning("suggested_resolution | fallback generation failed ticket=%s err=%s", ticket_code, exc)
+
 
 # =========================================================
 # Helpers for response/resolution time
@@ -1396,17 +1507,9 @@ def employee_resolution_suggestion(
 
     suggestion = str(row.get("suggested_resolution") or "").strip()
     if not suggestion:
-        suggestion = _generate_resolution_suggestion(row)
-        execute(
-            """
-            UPDATE tickets
-            SET
-              suggested_resolution = %s,
-              suggested_resolution_model = %s,
-              suggested_resolution_generated_at = now()
-            WHERE id = %s;
-            """,
-            (suggestion, "falcon", row["id"]),
+        raise HTTPException(
+            status_code=404,
+            detail="No suggested resolution available for this ticket yet",
         )
 
     return {"ticketId": row["ticket_code"], "suggestedResolution": suggestion}
@@ -1490,11 +1593,14 @@ def employee_ticket_details(
     issue_date = created_at.date().isoformat() if created_at else ""
 
     resp_base = priority_assigned_at or assigned_at or created_at
-    resp_mins = diff_minutes(first_response_at, resp_base)
+    # Show live elapsed response/resolve time when a ticket is still in progress.
+    resp_end = first_response_at or datetime.now(timezone.utc)
+    resp_mins = diff_minutes(resp_end, resp_base)
     response_time = minutes_to_label(resp_mins)
 
     res_base = priority_assigned_at or created_at
-    res_mins = diff_minutes(resolved_at, res_base)
+    res_end = resolved_at or datetime.now(timezone.utc)
+    res_mins = diff_minutes(res_end, res_base)
     resolution_time = minutes_to_label(res_mins)
 
     ticket = {
@@ -1502,6 +1608,7 @@ def employee_ticket_details(
         "priority": row.get("priority"),
         "status": row.get("status"),
         "issueDate": issue_date,
+        "suggestedResolution": row.get("suggested_resolution") or "",
         "modelSuggestion": row.get("suggested_resolution") or row.get("model_suggestion"),
         "metrics": {
             "meanTimeToRespond": response_time,
@@ -2616,49 +2723,105 @@ class CreateTicketRequest(BaseModel):
     sentiment: Optional[dict] = None
 
 
+class InternalCreateTicketRequest(BaseModel):
+    created_by_user_id: str
+    ticket_type: str
+    subject: str
+    details: str
+    ticket_source: Optional[str] = "chatbot"
+    asset_type: Optional[str] = "General"
+
+
+@api.post("/internal/tickets/create")
+def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
+    """
+    Internal ticket creation endpoint for services (e.g., chatbot).
+    Flow: ticket_creation_gate insert -> orchestrator dispatch.
+    """
+    requester = fetch_one("SELECT id FROM users WHERE id = %s LIMIT 1;", (body.created_by_user_id,))
+    if not requester:
+        raise HTTPException(status_code=404, detail="created_by_user_id not found")
+
+    type_norm = str(body.ticket_type or "").strip().lower()
+    ticket_type = "Inquiry" if type_norm == "inquiry" else "Complaint"
+    subject = (body.subject or "").strip() or (body.details or "").strip()[:120] or f"Automated {ticket_type.lower()}"
+    details = (body.details or "").strip()
+    if not details:
+        raise HTTPException(status_code=422, detail="details cannot be empty")
+
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            created = create_ticket_via_gate(
+                cur,
+                created_by_user_id=body.created_by_user_id,
+                ticket_type=ticket_type,
+                subject=subject,
+                details=details,
+                priority="Low",
+                status="Open",
+                ticket_source=(body.ticket_source or "chatbot").strip() or "chatbot",
+                model_suggestion=json.dumps({"is_recurring": False}),
+            )
+
+    ticket_code = created["ticket_code"]
+    orchestrator_dispatched = dispatch_ticket_to_orchestrator(
+        ticket_code=ticket_code,
+        details=details,
+        orchestrator_url=ORCHESTRATOR_URL,
+        orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
+        ticket_type=ticket_type,
+        subject=subject,
+    )
+    if not orchestrator_dispatched:
+        logger.warning(
+            "orchestrator_dispatch | failed for internal ticket=%s, applying local mock pipeline fallback",
+            ticket_code,
+        )
+        _apply_mock_pipeline_outcome(ticket_code, details)
+
+    return {
+        "ok": True,
+        "ticket_id": ticket_code,
+        "status": created.get("status"),
+        "priority": created.get("priority"),
+        "priority_assigned_at": created.get("priority_assigned_at").isoformat() if created.get("priority_assigned_at") else None,
+        "respond_due_at": created.get("respond_due_at").isoformat() if created.get("respond_due_at") else None,
+        "resolve_due_at": created.get("resolve_due_at").isoformat() if created.get("resolve_due_at") else None,
+    }
+
+
 @api.post("/customer/tickets")
 def create_customer_ticket(
     body: CreateTicketRequest,
     user: Dict[str, Any] = Depends(require_customer),
 ):
-    # Generate a unique ticket code (could also use DB sequence)
-    ticket_code = f"CX-{int(time.time())}-{user['id']}"
     is_recurring = predict_is_recurring(user_id=user["id"], subject=body.subject, details=body.details)
     model_suggestion = json.dumps({"is_recurring": is_recurring})
 
-    # Insert ticket into database
+    # Insert ticket into database through centralized gate.
     ticket_id = None
+    ticket_code = None
+    suggestion_text = ""
     with db_connect() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO tickets (
-                    ticket_code,
-                    ticket_type,
-                    subject,
-                    details,
-                    asset_type,
-                    priority,
-                    status,
-                    created_by_user_id,
-                    model_suggestion,
-                    created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING id;
-                """,
-                (
-                    ticket_code,
-                    body.type,         
-                    body.subject,
-                    body.details,
-                    body.asset_type,
-                    "Low",
-                    "Unassigned",
-                    user["id"],
-                    model_suggestion,
-                ),
+            normalized_ticket_type = (
+                "Inquiry"
+                if str(body.type or "").strip().lower() == "inquiry"
+                else "Complaint"
             )
-            ticket_id = cur.fetchone()[0]
+            created = create_ticket_via_gate(
+                cur,
+                created_by_user_id=user["id"],
+                ticket_type=normalized_ticket_type,
+                subject=body.subject,
+                details=body.details,
+                priority="Low",
+                status="Open",
+                ticket_source="user",
+                model_suggestion=model_suggestion,
+            )
+            ticket_id = created["id"]
+            ticket_code = created["ticket_code"]
 
             # Insert attachments if any
             for att in body.attachments or []:
@@ -2669,6 +2832,57 @@ def create_customer_ticket(
                     """,
                     (ticket_id, att.name),
                 )
+
+            # Generate suggestion at creation time so employee resolve view only loads it.
+            try:
+                suggestion_text = generate_resolution_suggestion(
+                    {
+                        "ticket_code": ticket_code,
+                        "ticket_type": normalized_ticket_type,
+                        "subject": body.subject,
+                        "details": body.details,
+                        "asset_type": body.asset_type,
+                        "priority": "Low",
+                        "department_name": "General",
+                        "status": "Open",
+                    },
+                    logger,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "suggested_resolution | generation failed at ticket create ticket=%s err=%s",
+                    ticket_code,
+                    exc,
+                )
+                suggestion_text = ""
+
+            if suggestion_text:
+                cur.execute(
+                    """
+                    UPDATE tickets
+                    SET
+                      suggested_resolution = %s,
+                      suggested_resolution_model = %s,
+                      suggested_resolution_generated_at = now()
+                    WHERE id = %s;
+                    """,
+                    (suggestion_text, get_resolution_model_label(), ticket_id),
+                )
+
+    orchestrator_dispatched = dispatch_ticket_to_orchestrator(
+        ticket_code=ticket_code,
+        details=body.details,
+        orchestrator_url=ORCHESTRATOR_URL,
+        orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
+        ticket_type=body.type,
+        subject=body.subject,
+    )
+    if not orchestrator_dispatched:
+        logger.warning(
+            "orchestrator_dispatch | failed for ticket=%s, applying local mock pipeline fallback",
+            ticket_code,
+        )
+        _apply_mock_pipeline_outcome(ticket_code, body.details)
 
     return {
         "ok": True,
@@ -2862,6 +3076,7 @@ def get_complaints(user: Dict[str, Any] = Depends(require_manager)):
 
         result.append({
             "id": t["ticket_id"],
+            "resolvedAt": t["resolved_at"].isoformat() if t.get("resolved_at") else None,
             "subject": t.get("subject") or "No description",
             "priority": (t.get("priority") or "").lower(),
             "priorityText": priority_text,
@@ -2912,8 +3127,8 @@ def assign_ticket(
                 assigned_at         = NOW(),
                 updated_at          = NOW(),
                 status              = CASE
-                                        WHEN status = 'Unassigned' THEN 'Assigned'::ticket_status
-                                        ELSE status
+                                        WHEN status = 'Resolved' THEN status
+                                        ELSE 'Assigned'::ticket_status
                                       END
             WHERE id = %s
             """,
@@ -2929,7 +3144,7 @@ def assign_ticket(
                 assigned_to_user_id = NULL,
                 assigned_at         = NULL,
                 updated_at          = NOW(),
-                status              = 'Unassigned'
+                status              = 'Open'
             WHERE id = %s
             """,
             (ticket_id,),
@@ -3299,8 +3514,8 @@ def get_departments(authorization: Optional[str] = Header(default=None)):
 def get_manager_kpis(user: Dict[str, Any] = Depends(require_manager)):
     row = fetch_one("""
         SELECT
-            COUNT(*) FILTER (WHERE status = 'Open')                            AS open_complaints,
-            COUNT(*) FILTER (WHERE status = 'In Progress')                     AS in_progress,
+            COUNT(*) FILTER (WHERE status <> 'Resolved')                                AS open_complaints,
+            COUNT(*) FILTER (WHERE status NOT IN ('Resolved'::ticket_status, 'Open'::ticket_status))  AS in_progress,
             COUNT(*) FILTER (WHERE resolved_at::date = CURRENT_DATE)           AS resolved_today,
             (SELECT COUNT(*) FROM users WHERE role = 'employee')               AS active_employees,
             (SELECT COUNT(*) FROM approval_requests WHERE status = 'Pending')  AS pending_approvals
@@ -3370,8 +3585,9 @@ ORDER BY ar.submitted_at DESC;
 # =========================================================
 
 class ApprovalDecisionRequest(BaseModel):
-    decision: str          # "Approved" or "Rejected"
+    decision: str                      # "Approved" or "Rejected"
     decision_notes: Optional[str] = None
+    override_value: Optional[str] = None   # Manager override: priority name OR department name
 
 @api.patch("/manager/approvals/{request_id}")
 def decide_approval(
@@ -3422,13 +3638,20 @@ def decide_approval(
             )
 
             # 2. If approved, apply the change to the ticket
+            #    If override_value is provided, the manager chose a different value
+            #    than what the employee requested — use that instead.
             if decision == "Approved":
                 req_type  = ar["request_type"]
                 requested = ar["requested_value"] or ""
                 ticket_id = ar["ticket_id"]
+                override  = (body.override_value or "").strip()
 
                 if req_type == "Rescoring":
-                    new_priority = requested.replace("Priority:", "").strip()
+                    # Use override priority if provided, otherwise use requested
+                    if override:
+                        new_priority = override
+                    else:
+                        new_priority = requested.replace("Priority:", "").strip()
                     allowed = {"Low", "Medium", "High", "Critical"}
                     if new_priority in allowed:
                         cur.execute(
@@ -3439,7 +3662,11 @@ def decide_approval(
                         relearn_priority = new_priority
 
                 elif req_type == "Rerouting":
-                    new_dept_name = requested.replace("Dept:", "").strip()
+                    # Use override department if provided, otherwise use requested
+                    if override:
+                        new_dept_name = override
+                    else:
+                        new_dept_name = requested.replace("Dept:", "").strip()
                     cur.execute(
                         "SELECT id FROM departments WHERE name = %s LIMIT 1;",
                         (new_dept_name,),
@@ -3873,61 +4100,61 @@ def get_routing_review_queue(
     status_filter: str = Query(default="Pending"),
     user: Dict[str, Any] = Depends(require_manager),
 ):
-    valid = {"Pending", "Approved", "Overridden", "All"}
-    if status_filter not in valid:
-        status_filter = "Pending"
-
-    where  = "" if status_filter == "All" else "WHERE rrq.status = %s::routing_review_status"
-    params = () if status_filter == "All" else (status_filter,)
-
-    rows = fetch_all(
-        f"""
-        SELECT
-          rrq.id::text                        AS "reviewId",
-          rrq.status::text                    AS "status",
-          rrq.predicted_department            AS "predictedDepartment",
-          ROUND(rrq.confidence_score * 100, 2) AS "confidencePct",
-          rrq.approved_department             AS "approvedDepartment",
-          rrq.decision_notes                  AS "decisionNotes",
-          rrq.decided_at                      AS "decidedAt",
-          rrq.created_at                      AS "createdAt",
-          t.ticket_code                       AS "ticketCode",
-          t.subject                           AS "subject",
-          t.priority::text                    AS "priority",
-          t.status::text                      AS "ticketStatus",
-          d.name                              AS "currentDepartment",
-          up.full_name                        AS "decidedBy",
-          ro.reasoning                        AS "modelReasoning"
-        FROM routing_review_queue rrq
-        JOIN  tickets        t   ON t.id  = rrq.ticket_id
-        LEFT JOIN departments  d   ON d.id  = t.department_id
-        LEFT JOIN user_profiles up ON up.user_id = rrq.decided_by_user_id
-        LEFT JOIN routing_outputs ro ON ro.ticket_id = t.id AND ro.is_current = TRUE
-        {where}
-        ORDER BY rrq.created_at DESC
-        LIMIT 500;
-        """,
-        params,
-    )
-
-    result = []
-    for r in rows:
-        result.append({
-            **{k: v for k, v in r.items() if k not in ("decidedAt", "createdAt", "confidencePct")},
-            "confidencePct": float(r.get("confidencePct") or 0),
-            "decidedAt":  r["decidedAt"].isoformat()  if r.get("decidedAt")  else None,
-            "createdAt":  r["createdAt"].isoformat()  if r.get("createdAt")  else None,
-        })
-
-    pending_count = sum(1 for r in result if r["status"] == "Pending")
-    return {"items": result, "pendingCount": pending_count}
+    return get_routing_review_payload(fetch_all=fetch_all, status_filter=status_filter)
 
 
 class RoutingReviewDecisionRequest(BaseModel):
-    decision:            str
+    decision:            Optional[str] = None
     approved_department: Optional[str] = None
-    decision_notes:      Optional[str] = None
 
+
+
+@api.get("/manager/routing-review/{review_id}")
+def get_routing_review_item(
+    review_id: str,
+    user: Dict[str, Any] = Depends(require_manager),
+):
+    """Fetch a single routing review item by its UUID."""
+    row = fetch_one(
+        """
+        SELECT
+          dr.id::text                          AS "reviewId",
+          CASE
+            WHEN dr.final_department IS NULL THEN 'Pending'
+            WHEN dr.routed_by = 'manager' THEN 'Overridden'
+            ELSE 'Approved'
+          END                                  AS "status",
+          dr.suggested_department              AS "predictedDepartment",
+          ROUND(dr.confidence_score, 2)        AS "confidencePct",
+          dr.final_department                  AS "approvedDepartment",
+          NULL::text                           AS "decisionNotes",
+          dr.updated_at                        AS "decidedAt",
+          dr.created_at                        AS "createdAt",
+          t.ticket_code                        AS "ticketCode",
+          t.subject                            AS "subject",
+          t.priority::text                     AS "priority",
+          t.status::text                       AS "ticketStatus",
+          d.name                               AS "currentDepartment",
+          up.full_name                         AS "decidedBy"
+        FROM department_routing dr
+        JOIN tickets t ON t.id = dr.ticket_id
+        LEFT JOIN departments d ON d.id = t.department_id
+        LEFT JOIN user_profiles up ON up.user_id = dr.manager_id
+        WHERE dr.id::text = %s AND dr.is_confident = FALSE
+        LIMIT 1
+        """,
+        (review_id,),
+    )
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Routing review item not found")
+
+    return {
+        **{k: v for k, v in row.items() if k not in ("decidedAt", "createdAt", "confidencePct")},
+        "confidencePct": float(row.get("confidencePct") or 0),
+        "decidedAt":     row["decidedAt"].isoformat() if row.get("decidedAt") else None,
+        "createdAt":     row["createdAt"].isoformat() if row.get("createdAt") else None,
+    }
 
 @api.patch("/manager/routing-review/{review_id}")
 def decide_routing_review(
@@ -3935,95 +4162,17 @@ def decide_routing_review(
     body: RoutingReviewDecisionRequest,
     user: Dict[str, Any] = Depends(require_manager),
 ):
-    decision = (body.decision or "").strip()
-    if decision not in ("Approved", "Overridden"):
-        raise HTTPException(status_code=422, detail="decision must be 'Approved' or 'Overridden'")
-    if decision == "Overridden" and not (body.approved_department or "").strip():
-        raise HTTPException(status_code=422, detail="approved_department is required when overriding")
-
-    rrq = fetch_one(
-        "SELECT id, ticket_id, predicted_department, status FROM routing_review_queue WHERE id::text = %s LIMIT 1",
-        (review_id,),
+    return decide_routing_review_service(
+        review_id=review_id,
+        decision=body.decision,
+        approved_department=body.approved_department,
+        user=user,
+        fetch_one=fetch_one,
+        db_connect=db_connect,
+        auto_assign_ticket_if_needed=auto_assign_ticket_if_needed,
+        insert_notification=_insert_notification,
+        logger=logger,
     )
-    if not rrq:
-        raise HTTPException(status_code=404, detail="Review item not found")
-    if rrq["status"] != "Pending":
-        raise HTTPException(status_code=409, detail="This item has already been decided")
-
-    final_dept = (
-        body.approved_department.strip() if decision == "Overridden"
-        else rrq["predicted_department"]
-    )
-
-    with db_connect() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # 1. Update review queue
-            cur.execute(
-                """
-                UPDATE routing_review_queue
-                SET status              = %s::routing_review_status,
-                    approved_department = %s,
-                    decided_by_user_id  = %s,
-                    decided_at          = now(),
-                    decision_notes      = %s
-                WHERE id::text = %s;
-                """,
-                (decision, final_dept, user["id"], body.decision_notes or "", review_id),
-            )
-
-            # 2. Apply final department to ticket
-            cur.execute(
-                "SELECT id FROM departments WHERE LOWER(name) = LOWER(%s) LIMIT 1",
-                (final_dept,),
-            )
-            dept_row = cur.fetchone()
-            if dept_row:
-                cur.execute(
-                    "UPDATE tickets SET department_id = %s, updated_at = now() WHERE id = %s",
-                    (dept_row["id"], rrq["ticket_id"]),
-                )
-
-            # 3. Log to routing feedback for model retraining
-            cur.execute(
-                """
-                INSERT INTO department_routing_feedback
-                  (ticket_id, predicted_department, approved_department,
-                   confidence_score, model_name, approved_by_user_id)
-                SELECT
-                  %s, %s, %s,
-                  rrq.confidence_score, 'orchestrator', %s
-                FROM routing_review_queue rrq
-                WHERE rrq.id::text = %s;
-                """,
-                (rrq["ticket_id"], rrq["predicted_department"], final_dept, user["id"], review_id),
-            )
-
-            # 4. Notify manager (confirmation in sidebar)
-            ticket_info = fetch_one(
-                "SELECT ticket_code, priority FROM tickets WHERE id = %s",
-                (rrq["ticket_id"],),
-            ) or {}
-            _insert_notification(
-                cur,
-                user_id=str(user["id"]),
-                notif_type="status_change",
-                title=(
-                    f"Routing {'Confirmed' if decision == 'Approved' else 'Overridden'}: "
-                    f"{ticket_info.get('ticket_code', '')}"
-                ),
-                message=(
-                    f"You {'confirmed' if decision == 'Approved' else 'overrode'} the AI routing for "
-                    f"{ticket_info.get('ticket_code', '')} → {final_dept}."
-                ),
-                ticket_id=str(rrq["ticket_id"]),
-                priority=ticket_info.get("priority"),
-            )
-
-    logger.info(
-        "routing_review_decision | review=%s decision=%s dept=%s by=%s",
-        review_id, decision, final_dept, user["id"],
-    )
-    return {"ok": True, "reviewId": review_id, "decision": decision, "finalDepartment": final_dept}
 
 # =========================================================
 # Operator Notifications
@@ -4118,6 +4267,7 @@ def operator_notifications_mark_all_read(
 
 class OrchestratorComplaintRequest(BaseModel):
     ticket_id: Optional[str] = None
+    subject: Optional[str] = None
     transcript: Optional[str] = None
     asset_type: Optional[str] = None
     sentiment: Optional[float] = None
@@ -4128,6 +4278,8 @@ class OrchestratorComplaintRequest(BaseModel):
     label: Optional[str] = None
     status: Optional[str] = None
     classification_confidence: Optional[float] = None
+    created_by_user_id: Optional[str] = None
+    ticket_source: Optional[str] = None
 
 
 class ChatbotProxyRequest(BaseModel):
@@ -4165,15 +4317,21 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
     ticket_type = "Inquiry" if label == "inquiry" else ("Complaint" if label else None)
     requested_asset_type = (body.asset_type or "").strip() or None
     requested_department = (body.department or "").strip() or None
+    routing_meta = build_routing_meta(
+        requested_department=requested_department,
+        classification_confidence=body.classification_confidence,
+        threshold=ROUTING_CONFIDENCE_THRESHOLD,
+    )
+    has_routing_decision = routing_meta["has_routing_decision"]
+    routing_confidence_pct = routing_meta["routing_confidence_pct"]
+    routing_is_confident = routing_meta["routing_is_confident"]
     normalized_status = (body.status or "").strip() or None
     allowed_statuses = {
         "Open",
         "In Progress",
-        "Unassigned",
         "Assigned",
         "Escalated",
         "Overdue",
-        "Reopened",
         "Resolved",
     }
     if normalized_status and normalized_status not in allowed_statuses:
@@ -4234,18 +4392,27 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
 
             # ── ticket_id supplied → update existing ticket ──
             cur.execute(
-                "SELECT id, priority_assigned_at FROM tickets WHERE ticket_code = %s LIMIT 1",
+                "SELECT id, priority_assigned_at, department_id FROM tickets WHERE ticket_code = %s LIMIT 1",
                 (incoming_ticket_code,),
             )
             existing = cur.fetchone()
             if existing:
                     had_priority_before = existing[1] is not None
+                    existing_department_id = existing[2]
                     subject_update = None
                     if requested_department and ticket_type:
                         subject_update = f"[{requested_department.title()}] Automated {ticket_type.lower()}"
 
                     details_update = body.transcript if body.transcript else None
-                    now_utc = datetime.now(timezone.utc) if priority_label else None
+                    if has_routing_decision:
+                        effective_department_id = department_id if routing_is_confident else None
+                    else:
+                        effective_department_id = department_id or existing_department_id
+                    should_start_sla = bool(
+                        effective_department_id
+                        and normalized_status == "Assigned"
+                    )
+                    now_utc = datetime.now(timezone.utc) if should_start_sla else None
                     sentiment_label_update = "orchestrator" if body.sentiment is not None else None
 
                     cur.execute(
@@ -4275,17 +4442,28 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                             requested_asset_type,
                             priority_label,
                             normalized_status,
-                            department_id,
+                            effective_department_id,
                             body.sentiment,
                             sentiment_label_update,
                             priority_label,
-                            department_id,
+                            effective_department_id,
                             body.classification_confidence,
                             now_utc,
                             incoming_ticket_code,
                         ),
                     )
                     updated = cur.fetchone()
+                    if has_routing_decision and not routing_is_confident:
+                        cur.execute(
+                            """
+                            UPDATE tickets
+                            SET department_id = NULL, updated_at = now()
+                            WHERE ticket_code = %s
+                            RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
+                            """,
+                            (incoming_ticket_code,),
+                        )
+                        updated = cur.fetchone()
                     logger.info(
                         "orchestrator_ticket_update | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                         updated[0],
@@ -4297,6 +4475,22 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         updated[5],
                         updated[6],
                     )
+
+                    auto_assigned_user_id = auto_assign_ticket_if_needed(
+                        cur,
+                        ticket_code=updated[0],
+                        status=updated[1],
+                        department_id=effective_department_id,
+                        priority=updated[2],
+                    )
+                    if auto_assigned_user_id:
+                        logger.info(
+                            "auto_assign | ticket_id=%s assignee=%s dept_id=%s priority=%s",
+                            updated[0],
+                            auto_assigned_user_id,
+                            effective_department_id,
+                            updated[2],
+                        )
                     
                     if (not had_priority_before) and updated[4]:
                         try:
@@ -4308,39 +4502,21 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                                 exc,
                             )
 
-                    # ── Routing review: queue if confidence is below threshold ──
-                    conf = body.classification_confidence
                     queued_for_review = False
-                    if (
-                        conf is not None
-                        and conf < ROUTING_CONFIDENCE_THRESHOLD
-                        and requested_department
-                        and existing
-                    ):
-                        ticket_uuid = str(existing[0])   # first col of the RETURNING is id
-                        already_queued = fetch_one(
-                            """
-                            SELECT id FROM routing_review_queue
-                            WHERE ticket_id = %s::uuid AND status = 'Pending'
-                            LIMIT 1
-                            """,
-                            (ticket_uuid,),
+                    if has_routing_decision and existing:
+                        ticket_uuid = str(existing[0])
+                        queued_for_review = record_department_routing_decision(
+                            cur,
+                            ticket_uuid=ticket_uuid,
+                            ticket_code=updated[0],
+                            suggested_department=requested_department,
+                            routing_confidence_pct=float(routing_confidence_pct),
+                            routing_is_confident=routing_is_confident,
+                            department_id=str(department_id) if department_id else None,
+                            priority=updated[2],
+                            insert_notification=_insert_notification,
+                            logger=logger,
                         )
-                        if not already_queued:
-                            cur.execute(
-                                """
-                                INSERT INTO routing_review_queue
-                                  (ticket_id, predicted_department, confidence_score)
-                                VALUES (%s::uuid, %s, %s)
-                                ON CONFLICT DO NOTHING;
-                                """,
-                                (ticket_uuid, requested_department, conf),
-                            )
-                            queued_for_review = True
-                            logger.info(
-                                "routing_review | ticket=%s dept=%s confidence=%.3f queued=True",
-                                updated[0], requested_department, conf,
-                            )
 
                     return {
                         "ticket_id":        updated[0],
@@ -4353,6 +4529,182 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         "respond_due_at":   updated[5].isoformat() if updated[5] else None,
                         "resolve_due_at":   updated[6].isoformat() if updated[6] else None,
                     }
+
+            # Create new ticket via central ticket creation gate when no ticket_id
+            # was supplied or when supplied ticket_id is not found.
+            requester_user_id = str(body.created_by_user_id or "").strip() or row["id"]
+            if requester_user_id != row["id"]:
+                requester_exists = fetch_one(
+                    "SELECT id FROM users WHERE id = %s LIMIT 1;",
+                    (requester_user_id,),
+                )
+                if not requester_exists:
+                    requester_user_id = row["id"]
+            ticket_source = str(body.ticket_source or "").strip() or (
+                "chatbot" if str(body.created_by_user_id or "").strip() else "orchestrator"
+            )
+            normalized_type = ticket_type or "Complaint"
+            initial_priority = priority_label or "Low"
+            initial_status = normalized_status or "Open"
+            initial_department_id = department_id
+            if has_routing_decision and not routing_is_confident:
+                initial_department_id = None
+            initial_priority_assigned_at = (
+                datetime.now(timezone.utc)
+                if (initial_status == "Assigned" and initial_department_id)
+                else None
+            )
+            subject_text = (
+                (body.subject or "").strip()
+                or (body.transcript or "").strip()[:120]
+                or f"Automated {normalized_type.lower()}"
+            )
+            details_text = (body.transcript or "").strip()
+            created = create_ticket_via_gate(
+                cur,
+                created_by_user_id=requester_user_id,
+                ticket_type=normalized_type,
+                subject=subject_text,
+                details=details_text,
+                priority=initial_priority,
+                status=initial_status,
+                ticket_source=ticket_source,
+                department_id=initial_department_id,
+                sentiment_score=body.sentiment,
+                sentiment_label="orchestrator" if body.sentiment is not None else None,
+                model_priority=initial_priority,
+                model_department_id=department_id,
+                model_confidence=body.classification_confidence,
+                priority_assigned_at=initial_priority_assigned_at,
+            )
+            auto_assign_ticket_if_needed(
+                cur,
+                ticket_code=created.get("ticket_code"),
+                status=created.get("status"),
+                department_id=initial_department_id,
+                priority=created.get("priority"),
+            )
+
+            queued_for_review = False
+            if has_routing_decision and created.get("ticket_code"):
+                cur.execute(
+                    "SELECT id::text AS id FROM tickets WHERE ticket_code = %s LIMIT 1;",
+                    (created.get("ticket_code"),),
+                )
+                created_row = cur.fetchone()
+                if created_row:
+                    ticket_uuid = str(created_row[0])
+                    queued_for_review = record_department_routing_decision(
+                        cur,
+                        ticket_uuid=ticket_uuid,
+                        ticket_code=str(created.get("ticket_code")),
+                        suggested_department=requested_department,
+                        routing_confidence_pct=float(routing_confidence_pct),
+                        routing_is_confident=routing_is_confident,
+                        department_id=str(department_id) if department_id else None,
+                        priority=created.get("priority"),
+                        insert_notification=_insert_notification,
+                        logger=logger,
+                    )
+
+            if created.get("ticket_code"):
+                try:
+                    _generate_suggestion_if_ready(created["ticket_code"])
+                except Exception as exc:
+                    logger.warning(
+                        "suggested_resolution | generation failed at create ticket=%s err=%s",
+                        created.get("ticket_code"),
+                        exc,
+                    )
+
+            return {
+                "ticket_id": created.get("ticket_code"),
+                "status": created.get("status"),
+                "priority": created.get("priority"),
+                "asset_type": requested_asset_type,
+                "department": requested_department,
+                "queued_for_review": queued_for_review,
+                "priority_assigned_at": created.get("priority_assigned_at").isoformat()
+                if created.get("priority_assigned_at")
+                else None,
+                "respond_due_at": created.get("respond_due_at").isoformat()
+                if created.get("respond_due_at")
+                else None,
+                "resolve_due_at": created.get("resolve_due_at").isoformat()
+                if created.get("resolve_due_at")
+                else None,
+            }
+
+
+@api.post("/internal/tickets/{ticket_code}/generate-suggested-resolution")
+def internal_generate_suggested_resolution(ticket_code: str):
+    """
+    Trigger suggested-resolution generation for a ticket code and return
+    the latest stored suggestion. Used by orchestrator pipeline step.
+    """
+    row = fetch_one(
+        """
+        SELECT
+          t.id,
+          t.ticket_code,
+          t.ticket_type,
+          t.subject,
+          t.details,
+          t.asset_type,
+          t.priority,
+          t.status,
+          t.priority_assigned_at,
+          t.suggested_resolution,
+          t.suggested_resolution_model,
+          d.name AS department_name
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.ticket_code = %s
+        LIMIT 1;
+        """,
+        (ticket_code,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    try:
+        _generate_suggestion_if_ready(ticket_code)
+    except Exception as exc:
+        logger.warning("suggested_resolution | pipeline trigger failed ticket=%s err=%s", ticket_code, exc)
+
+    refreshed = fetch_one(
+        """
+        SELECT suggested_resolution, suggested_resolution_model
+        FROM tickets
+        WHERE ticket_code = %s
+        LIMIT 1;
+        """,
+        (ticket_code,),
+    ) or {}
+    suggestion = str(refreshed.get("suggested_resolution") or "").strip()
+    model_name = str(refreshed.get("suggested_resolution_model") or "mock_template").strip() or "mock_template"
+
+    # Fallback: force-generate even if priority/department guard wasn't met.
+    if not suggestion:
+        suggestion = generate_resolution_suggestion(row, logger)
+        model_name = get_resolution_model_label()
+        execute(
+            """
+            UPDATE tickets
+            SET
+              suggested_resolution = %s,
+              suggested_resolution_model = %s,
+              suggested_resolution_generated_at = now()
+            WHERE ticket_code = %s;
+            """,
+            (suggestion, model_name, ticket_code),
+        )
+
+    return {
+        "ticketId": ticket_code,
+        "suggestedResolution": suggestion,
+        "model": model_name,
+    }
 
 
 @api.post("/chatbot/chat")
@@ -4629,6 +4981,105 @@ def get_operator_feature(
         status_code=503,
         detail="Analytics MVs not ready. Run database/scripts/analytics_mvs.sql first."
     )
+# =========================================================
+# OPERATOR DASHBOARD SUMMARY  
+# =========================================================
+
+@api.get("/operator/dashboard/summary")
+def operator_dashboard_summary(user: Dict[str, Any] = Depends(require_operator)):
+    """
+    Returns live model-health and quality-control metrics for the
+    Operator Dashboard summary cards.
+
+    Model health window : last 1 hour
+    Drift window        : last 24 hours
+    QC pending/oldest   : current pending queue
+    QC avg review time + flagged today : last 24 hours
+    """
+
+    # ── Model Health ──────────────────────────────────────────────────────────
+    mh_row = fetch_one(
+        """
+        SELECT
+          COALESCE(AVG(latency_ms), 0)::numeric           AS avg_latency_ms,
+          COALESCE(
+            SUM(CASE WHEN is_error THEN 1 ELSE 0 END)::numeric
+            / NULLIF(COUNT(*), 0) * 100,
+            0
+          )                                               AS error_rate_pct
+        FROM model_metrics
+        WHERE created_at >= now() - interval '1 hour';
+        """
+    ) or {}
+
+    avg_latency_ms  = float(mh_row.get("avg_latency_ms")  or 0)
+    error_rate_pct  = round(float(mh_row.get("error_rate_pct") or 0), 2)
+
+    drift_row = fetch_one(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM drift_events
+        WHERE detected_at >= now() - interval '24 hours';
+        """
+    ) or {}
+    drift_detected = int(drift_row.get("cnt") or 0) > 0
+
+    # Status logic (exact as spec)
+    if error_rate_pct > 3 or avg_latency_ms > 1500:
+        status = "Critical"
+    elif (1 <= error_rate_pct <= 3) or (800 <= avg_latency_ms <= 1500):
+        status = "Degraded"
+    else:
+        status = "Healthy"
+
+    # ── Quality Control ───────────────────────────────────────────────────────
+    qc_row = fetch_one(
+        """
+        SELECT
+          -- pending queue
+          COUNT(*) FILTER (WHERE status = 'pending')                   AS pending_reviews,
+          -- oldest pending age (seconds since created_at)
+          COALESCE(
+            EXTRACT(EPOCH FROM (now() - MIN(created_at) FILTER (WHERE status = 'pending')))
+          , 0)::int                                                     AS oldest_pending_age_sec,
+          -- average review time for completed reviews in last 24h
+          COALESCE(
+            AVG(
+              CASE
+                WHEN review_duration_sec IS NOT NULL THEN review_duration_sec
+                WHEN reviewed_at IS NOT NULL
+                  THEN EXTRACT(EPOCH FROM (reviewed_at - created_at))
+                ELSE NULL
+              END
+            ) FILTER (
+              WHERE status IN ('approved', 'rejected')
+                AND created_at >= now() - interval '24 hours'
+            ),
+            0
+          )::int                                                        AS avg_review_time_sec,
+          -- flagged today
+          COUNT(*) FILTER (
+            WHERE flagged = TRUE
+              AND created_at >= now() - interval '24 hours'
+          )                                                              AS flagged_today
+        FROM qc_reviews;
+        """
+    ) or {}
+
+    return {
+        "modelHealth": {
+            "status":          status,
+            "avg_latency_ms":  round(avg_latency_ms, 1),
+            "error_rate_pct":  error_rate_pct,
+            "drift_detected":  drift_detected,
+        },
+        "qualityControl": {
+            "pending_reviews":      int(qc_row.get("pending_reviews")      or 0),
+            "avg_review_time_sec":  int(qc_row.get("avg_review_time_sec")  or 0),
+            "flagged_today":        int(qc_row.get("flagged_today")         or 0),
+            "oldest_pending_age_sec": int(qc_row.get("oldest_pending_age_sec") or 0),
+        },
+    }
 
 # =========================================================
 # Operator – Quality Control / Ticket Review Detail
@@ -4840,7 +5291,7 @@ def get_operator_complaint_detail(
         "assetCategory":       (feature or {}).get("asset_category") or ticket.get("asset_type"),
         "topicLabels":         (feature or {}).get("topic_labels") or [],
         "featureConfidence":   _flt((feature or {}).get("feature_confidence")),
-        "assignedToName":      ticket.get("assigned_to_name") or "Unassigned",
+        "assignedToName":      ticket.get("assigned_to_name") or "Not Assigned",
         "assignedToTitle":     ticket.get("assigned_to_title") or "",
         "createdByName":       ticket.get("created_by_name") or "Unknown",
         "createdByRole":       ticket.get("created_by_role") or "",

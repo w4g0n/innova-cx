@@ -75,7 +75,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   flex: 1;
-  scrollbar-width: none;
+  -ms-overflow-style: none;  /* IE / Edge legacy */
 }
 .sidebar__nav::-webkit-scrollbar { display: none; }
 
@@ -104,6 +104,7 @@
     color var(--dur-fast);
   min-height: 40px;
   overflow: hidden;
+  position: relative;
 }
 
 .sidebar--expanded .sidebar__link {
@@ -192,6 +193,7 @@
   padding: 0;
   border-radius: 999px;
   gap: 0;
+  overflow: visible;
 }
 
 .sidebar:not(.sidebar--expanded) .sidebar__bottom {
@@ -300,4 +302,43 @@
     width: 210px !important;
     min-width: 210px !important;
   }
+}
+
+/* ── Nav badge (notifications / approvals count) ─────────── */
+.sidebar__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e8445a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Collapsed sidebar — float badge top-right of icon */
+.sidebar:not(.sidebar--expanded) .sidebar__badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 15px;
+  height: 15px;
+  font-size: 9px;
+  padding: 0 3px;
+}
+/* RRQ badge — purple, distinct from red approval badge */
+.sidebar__badge--rrq {
+  background: #7c3aed;
+  margin-left: 4px;
+}
+
+.sidebar:not(.sidebar--expanded) .sidebar__badge--rrq {
+  top: 2px;
+  right: -10px; /* offset so it doesn't overlap the red badge */
 }

@@ -39,7 +39,7 @@
 /* ── Hero ────────────────────────────────────────────────── */
 .rrd-hero {
   position: relative;
-  border-radius: 18px; overflow: hidden;
+  border-radius: 18px;
   background: linear-gradient(125deg, #0f172a 0%, #1e0a3c 30%, #3b0f6e 65%, #5b21b6 100%);
   box-shadow: 0 8px 40px rgba(91,33,182,0.28);
   margin-bottom: 20px;
@@ -79,8 +79,7 @@
   100%{ box-shadow: 0 8px 40px rgba(167,139,250,0.18); }
 }
 @keyframes rrd-shake {
-  0%,100%{transform:translateX(0)} 18%{transform:translateX(-9px)} 36%{transform:translateX(9px)}
-  54%{transform:translateX(-5px)} 72%{transform:translateX(5px)} 90%{transform:translateX(-2px)}
+  0%,100%{transform:translateX(0)} 30%{transform:translateX(-3px)} 60%{transform:translateX(3px)}
 }
 
 .rrd-heroContent {
@@ -110,7 +109,7 @@
 .rrd-badge--confirmed  { background: rgba(52,211,153,0.18);  color: #34d399; border: 1px solid rgba(52,211,153,0.35); }
 .rrd-badge--overridden { background: rgba(167,139,250,0.18); color: #a78bfa; border: 1px solid rgba(167,139,250,0.35); }
 
-.rrd-heroRight { display: flex; flex-direction: column; align-items: flex-end; gap: 14px; flex-shrink: 0; }
+.rrd-heroRight { display: flex; flex-direction: column; align-items: flex-end; gap: 14px; flex-shrink: 0; position: relative; z-index: 10; }
 .rrd-heroStats {
   display: flex; align-items: center;
   background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
@@ -122,6 +121,87 @@
 .rrd-heroStatDivider { width: 1px; height: 32px; background: rgba(255,255,255,0.15); flex-shrink: 0; }
 
 .rrd-heroActions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Override popup menu (replaces dept select) */
+.rrd-overrideWrap {
+  position: relative;
+}
+
+.rrd-overrideMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  background: #1e0a3c;
+  border: 1px solid rgba(167,139,250,0.25);
+  border-radius: 12px;
+  padding: 6px;
+  z-index: 500;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  animation: rrd-menuIn 0.15s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+@keyframes rrd-menuIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.rrd-overrideMenuTitle {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(233,213,255,0.45);
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 4px;
+}
+
+.rrd-overrideMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  color: rgba(233,213,255,0.85);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.rrd-overrideMenuItem:hover,
+.rrd-overrideMenuItem--selected {
+  background: rgba(167,139,250,0.15);
+  color: #e9d5ff;
+}
+
+.rrd-overrideMenuDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(167,139,250,0.6);
+  flex-shrink: 0;
+}
+
+.rrd-overrideMenuAiBadge {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #a78bfa;
+  background: rgba(167,139,250,0.15);
+  border: 1px solid rgba(167,139,250,0.3);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
 .rrd-deptSelect {
   appearance: none; -webkit-appearance: none;
   background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.22);
@@ -171,7 +251,12 @@
   padding: 14px 20px; border-bottom: 1px solid rgba(0,0,0,0.06);
   background: rgba(0,0,0,0.02);
 }
-.rrd-cardHeaderIcon { font-size: 17px; }
+.rrd-cardHeaderIcon {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px;
+  background: rgba(89,36,180,0.08); flex-shrink: 0;
+  color: var(--btn-primary, #5924b4);
+}
 .rrd-cardTitle { font-size: 13px; font-weight: 700; color: #111; margin: 0; }
 
 /* ── Confidence body ─────────────────────────────────────── */
@@ -301,6 +386,79 @@
 @keyframes rrd-tlblink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 .rrd-tlTitle { font-size: 13px; font-weight: 600; color: #111; line-height: 1.3; }
 .rrd-tlDate  { font-size: 11px; color: rgba(17,17,17,0.5); margin-top: 1px; }
+
+/* ── Horizontal Stepper Timeline ─────────────────────────── */
+.rrd-stepper {
+  display: flex;
+  align-items: flex-start;
+  padding: 24px 20px 28px;
+  gap: 0;
+  overflow-x: auto;
+}
+
+/* Each step = dot + label stacked, with the connector line living BEFORE the dot */
+.rrd-stepItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 80px;
+  position: relative;
+}
+
+/* The connector is a pseudo-row element: absolutely positioned between this dot and the previous */
+.rrd-stepLine {
+  position: absolute;
+  top: 10px; /* half of dot height (20px) */
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  z-index: 0;
+}
+.rrd-stepLine--done    { background: rgba(89,36,180,0.2); }
+.rrd-stepLine--pending { background: repeating-linear-gradient(90deg, rgba(89,36,180,0.15) 0, rgba(89,36,180,0.15) 6px, transparent 6px, transparent 12px); }
+
+.rrd-stepDotWrap {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 10px;
+}
+
+.rrd-stepDot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+}
+
+.rrd-stepDot--pending {
+  background: #fff;
+  border: 3px solid #d97706;
+  box-shadow: 0 0 0 3px rgba(217,119,6,0.15);
+  animation: rrd-tlblink 1.4s ease-in-out infinite;
+}
+
+.rrd-stepLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 3px;
+  padding: 0 4px;
+}
+
+.rrd-stepTitle {
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #111;
+}
+
+.rrd-stepSub {
+  font-size: 10px;
+  color: rgba(17,17,17,0.48);
+  line-height: 1.4;
+}
 
 /* Toast */
 .rrd-toast {

@@ -1,0 +1,149 @@
+{
+  "updated_at": "2026-03-06T01:28:11.382521+00:00",
+  "examples": [
+    {
+      "ticket_code": "CX-H002",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "Power outage \u2013 Finance floor",
+      "details": "Complete power failure affecting Finance department. UPS not kicking in.",
+      "decision": "accepted",
+      "suggested_resolution": "Reset tripped MCB and test UPS bypass.",
+      "employee_resolution": "",
+      "final_resolution": "Faulty MCB replaced; power restored. UPS tested operational.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    },
+    {
+      "ticket_code": "CX-H011",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "Boiler failure \u2013 Building A heating",
+      "details": "Entire Building A without heating during winter. Heat exchanger fault.",
+      "decision": "accepted",
+      "suggested_resolution": "Replace heat exchanger and restore pressure.",
+      "employee_resolution": "",
+      "final_resolution": "Heat exchanger replaced; boiler pressure normalised. Heating restored.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    },
+    {
+      "ticket_code": "CX-H010",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "UPS batteries below minimum capacity",
+      "details": "Data centre UPS batteries flagged at 18% capacity. Emergency runtime insufficient.",
+      "decision": "declined_custom",
+      "suggested_resolution": "Recharge UPS batteries.",
+      "employee_resolution": "Batteries degraded beyond recharge \u2014 full module replacement required.",
+      "final_resolution": "All 12 UPS battery modules replaced; 47-minute runtime certified.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    },
+    {
+      "ticket_code": "CX-H009",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "Fire suppression system test failure \u2013 server room",
+      "details": "Annual suppression test failed. System will not trigger on test activation.",
+      "decision": "accepted",
+      "suggested_resolution": "Replace suppression head and retest.",
+      "employee_resolution": "",
+      "final_resolution": "Suppression head replaced; system retested \u2014 full pass. Certificate issued.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    },
+    {
+      "ticket_code": "CX-H007",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "Chiller plant failure \u2013 building-wide cooling",
+      "details": "Main chiller breakdown caused complete loss of cooling across all floors.",
+      "decision": "accepted",
+      "suggested_resolution": "Replace compressor and recharge refrigerant.",
+      "employee_resolution": "",
+      "final_resolution": "Compressor replaced and refrigerant recharged. Cooling restored.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    },
+    {
+      "ticket_code": "CX-H005",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "Water ingress \u2013 basement carpark flooding",
+      "details": "Heavy rain caused flooding in basement carpark. Vehicles and equipment at risk.",
+      "decision": "accepted",
+      "suggested_resolution": "Deploy pumping crew and clear drainage channels.",
+      "employee_resolution": "",
+      "final_resolution": "Pumping crew deployed; drainage channel cleared.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    },
+    {
+      "ticket_code": "CX-H004",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "Server room overheating",
+      "details": "Server room temperature crossed 28\u00b0C threshold. Backup cooling unit fault.",
+      "decision": "accepted",
+      "suggested_resolution": "Activate backup cooling; repair primary unit.",
+      "employee_resolution": "",
+      "final_resolution": "Backup cooling activated; primary compressor replaced.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    },
+    {
+      "ticket_code": "CX-H001",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "Gas leak alarm \u2013 Main kitchen",
+      "details": "Gas sensor triggered in building kitchen. Evacuated area as precaution.",
+      "decision": "accepted",
+      "suggested_resolution": "Isolate gas supply and replace faulty valve.",
+      "employee_resolution": "",
+      "final_resolution": "Gas supply isolated; faulty valve replaced and area cleared for re-entry.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    },
+    {
+      "ticket_code": "CX-H015",
+      "ticket_type": "Inquiry",
+      "priority": "High",
+      "subject": "Parking access card system \u2013 repeated failures",
+      "details": "Customer parking access cards failing at gate reader. Issue recurring for third time this month.",
+      "decision": "declined_custom",
+      "suggested_resolution": "Re-encode access card.",
+      "employee_resolution": "Card re-encode insufficient \u2014 server-side permission sync required.",
+      "final_resolution": "Cards re-encoded; permission sync completed. Readers all operational.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    },
+    {
+      "ticket_code": "CX-H006",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "Intruder detected \u2013 rooftop after hours",
+      "details": "Motion sensors triggered on restricted rooftop area at 23:15. Unclear if threat.",
+      "decision": "accepted",
+      "suggested_resolution": "Secure rooftop area and review access logs.",
+      "employee_resolution": "",
+      "final_resolution": "Area secured; access logs reviewed; door lock replaced.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    },
+    {
+      "ticket_code": "CX-H014",
+      "ticket_type": "Complaint",
+      "priority": "Medium",
+      "subject": "Smoke detector false alarms \u2013 laboratory",
+      "details": "Lab smoke detector triggering false alarms every morning causing unnecessary evacuations.",
+      "decision": "declined_custom",
+      "suggested_resolution": "Replace detector head.",
+      "employee_resolution": "Root cause was accumulated dust \u2014 cleaning needed before replacement test.",
+      "final_resolution": "Detector cleaned and head replaced. No false alarms in 48-hour test.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    },
+    {
+      "ticket_code": "CX-H003",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "CCTV system completely offline",
+      "details": "All 48 cameras showing signal lost on monitoring console. Security breach risk.",
+      "decision": "accepted",
+      "suggested_resolution": "Replace NVR hard drive and restore camera feeds.",
+      "employee_resolution": "",
+      "final_resolution": "NVR hard drive replaced; all 48 camera feeds restored.",
+      "created_at": "2026-03-04T18:38:44.073955+00:00"
+    }
+  ]
+}
