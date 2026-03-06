@@ -108,7 +108,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
 
     try {
       const orchestratorResult = await submitTextComplaint(details, {
-        subject: subject.trim() || undefined,
         ticket_type: initialType ? initialType.toLowerCase() : null,
         has_audio: wasAudio,
         audio_features: wasAudio ? latestAudioFeatures : null,
@@ -185,7 +184,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     cancelRecordingRef.current = true;
     try {
       if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
-    } catch {
+    } catch (_err) {
       setIsRecording(false); cleanupStream(); setVoiceStage("idle");
     }
   };
@@ -195,7 +194,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     cancelRecordingRef.current = false;
     try {
       if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
-    } catch {
+    } catch (_err) {
       setIsRecording(false); cleanupStream(); setVoiceStage("idle");
     }
   };

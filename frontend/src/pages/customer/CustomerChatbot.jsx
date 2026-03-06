@@ -24,7 +24,12 @@ export default function CustomerChatbot() {
   const listRef = useRef(null);
 
   const user = useMemo(() => {
-    try { return JSON.parse(localStorage.getItem("user") || "{}"); } catch { return {}; }
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}");
+    } catch (_err) {
+      // If localStorage has bad JSON / is unavailable, fall back safely
+      return {};
+    }
   }, []);
 
   const userId = user?.id || "";
@@ -35,21 +40,31 @@ export default function CustomerChatbot() {
     const raw = email.split("@")[0] || "";
     const cleaned = raw.replace(/[._-]+/g, " ").trim();
     if (!cleaned) return "there";
-    return cleaned.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    return cleaned
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
   }, [user]);
 
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
 
   const [chatSessionId, setChatSessionId] = useState(() => {
-    try { return localStorage.getItem(SESSION_KEY) || null; } catch { return null; }
+    try {
+      return localStorage.getItem(SESSION_KEY) || null;
+    } catch (_err) {
+      // localStorage may be blocked/unavailable in some browsers or privacy modes
+      return null;
+    }
   });
 
   useEffect(() => {
     try {
       if (chatSessionId) localStorage.setItem(SESSION_KEY, chatSessionId);
       else localStorage.removeItem(SESSION_KEY);
-    } catch {}
+    } catch (_err) {
+      // ignore storage write errors (e.g., blocked storage)
+    }
   }, [chatSessionId]);
 
   const [actionButtons, setActionButtons] = useState([]);
@@ -74,7 +89,11 @@ export default function CustomerChatbot() {
   }, []);
 
   const goToForm = (prefillType) => {
-    navigate(prefillType ? `/customer/fill-form?type=${encodeURIComponent(prefillType)}` : "/customer/fill-form");
+    navigate(
+      prefillType
+        ? `/customer/fill-form?type=${encodeURIComponent(prefillType)}`
+        : "/customer/fill-form"
+    );
   };
 
   const initSession = useCallback(async () => {
@@ -84,54 +103,72 @@ export default function CustomerChatbot() {
     return newSid;
   }, [userId]);
 
-  const sendToChatbot = useCallback(async (message) => {
-    let sid = chatSessionId;
-    if (!sid) sid = await initSession();
-    try {
-      const data = await sendChatMessage(message, { userId, sessionId: sid });
-      if (data?.session_id && data.session_id !== sid) setChatSessionId(data.session_id);
-      return data;
-    } catch (err) {
-      if (err?.message?.includes("500") || err?.message?.includes("404") || err?.message?.includes("not found")) {
-        const newSid = await initSession();
-        const data = await sendChatMessage(message, { userId, sessionId: newSid });
-        if (data?.session_id && data.session_id !== newSid) setChatSessionId(data.session_id);
+  const sendToChatbot = useCallback(
+    async (message) => {
+      let sid = chatSessionId;
+      if (!sid) sid = await initSession();
+
+      try {
+        const data = await sendChatMessage(message, { userId, sessionId: sid });
+        if (data?.session_id && data.session_id !== sid) setChatSessionId(data.session_id);
         return data;
+      } catch (err) {
+        if (
+          err?.message?.includes("500") ||
+          err?.message?.includes("404") ||
+          err?.message?.includes("not found")
+        ) {
+          const newSid = await initSession();
+          const data = await sendChatMessage(message, { userId, sessionId: newSid });
+          if (data?.session_id && data.session_id !== newSid) setChatSessionId(data.session_id);
+          return data;
+        }
+        throw err;
       }
-      throw err;
-    }
-  }, [chatSessionId, userId, initSession]);
+    },
+    [chatSessionId, userId, initSession]
+  );
 
-  const sendAndRender = useCallback(async (message) => {
-    pushUser(message);
-    setMessages((prev) => [...prev, { id: `typing-${Date.now()}`, from: "bot", text: "", isTyping: true }]);
+  const sendAndRender = useCallback(
+    async (message) => {
+      pushUser(message);
 
-    const data = await sendToChatbot(message);
-    const botText = data?.response || data?.reply || "I could not generate a response.";
+      // Add typing placeholder
+      setMessages((prev) => [...prev, { id: `typing-${Date.now()}`, from: "bot", text: "", isTyping: true }]);
 
-    setMessages((prev) => [
-      ...prev.slice(0, -1),
-      { id: `b-${Date.now()}`, from: "bot", text: botText },
-    ]);
-    setActionButtons(Array.isArray(data?.show_buttons) ? data.show_buttons : []);
+      const data = await sendToChatbot(message);
+      const botText = data?.response || data?.reply || "I could not generate a response.";
 
-    if (data?.response_type === "ticket_created") {
-      const ticketIdMatch = botText.match(/ticket ID is (CX-[A-Za-z0-9_-]+)/i);
-      setTicketPopup({
-        ticketId: ticketIdMatch ? ticketIdMatch[1] : null,
-        isInquiry: false,
-        replyText: botText,
-      });
-    }
-  }, [sendToChatbot]);
+      // Replace typing placeholder with real bot response
+      setMessages((prev) => [
+        ...prev.slice(0, -1),
+        { id: `b-${Date.now()}`, from: "bot", text: botText },
+      ]);
+
+      setActionButtons(Array.isArray(data?.show_buttons) ? data.show_buttons : []);
+
+      if (data?.response_type === "ticket_created") {
+        const ticketIdMatch = botText.match(/ticket ID is (CX-[A-Za-z0-9_-]+)/i);
+        setTicketPopup({
+          ticketId: ticketIdMatch ? ticketIdMatch[1] : null,
+          isInquiry: false,
+          replyText: botText,
+        });
+      }
+    },
+    [sendToChatbot] // pushUser comes from state setter, pushBot not used here
+  );
 
   const handleSelect = async (type) => {
     if (sending) return;
     setSending(true);
+
     try {
-      const message = type === "complaint"
-        ? "I want to create a new ticket"
-        : "I want to follow up on an existing ticket";
+      const message =
+        type === "complaint"
+          ? "I want to create a new ticket"
+          : "I want to follow up on an existing ticket";
+
       await sendAndRender(message);
     } catch (err) {
       console.error(err);
@@ -145,8 +182,10 @@ export default function CustomerChatbot() {
     e.preventDefault();
     const t = text.trim();
     if (!t || sending) return;
+
     setText("");
     setSending(true);
+
     try {
       await sendAndRender(t);
     } catch (err) {
@@ -160,6 +199,7 @@ export default function CustomerChatbot() {
   const handleActionButton = async (button) => {
     const message = BUTTON_MESSAGE[button];
     if (!message || sending) return;
+
     setSending(true);
     try {
       await sendAndRender(message);
@@ -203,9 +243,13 @@ export default function CustomerChatbot() {
                   <div className="custMsg__bubble">
                     {m.isTyping ? (
                       <span className="custTypingIndicator">
-                        <span/><span/><span/>
+                        <span />
+                        <span />
+                        <span />
                       </span>
-                    ) : m.text}
+                    ) : (
+                      m.text
+                    )}
                   </div>
                 </div>
               ))}

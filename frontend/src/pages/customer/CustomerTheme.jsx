@@ -1,22 +1,16 @@
 /**
- * customerTheme.js — Shared theme utility for all customer-facing pages.
- * Import this in every customer page to keep light/dark mode in sync.
+ * CustomerTheme.jsx — React components only (useTheme hook + ThemeToggleBtn).
+ * Pure utility functions (getStoredTheme, applyTheme) live in customerThemeUtils.js.
  *
  * Usage:
- *   import { getStoredTheme, applyTheme, useTheme } from "./customerTheme";
- *   const [theme, toggleTheme] = useTheme();
+ *   import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
+ *   import { getStoredTheme, applyTheme } from "./customerThemeUtils";
  */
 
 import { useState, useEffect } from "react";
+import { getStoredTheme, applyTheme } from "./customerThemeUtils";
 
-export function getStoredTheme() {
-  try { return localStorage.getItem("cl_theme") || "dark"; } catch { return "dark"; }
-}
-
-export function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-  try { localStorage.setItem("cl_theme", theme); } catch {}
-}
+export { getStoredTheme, applyTheme };
 
 /** Drop-in hook: returns [theme, toggleFn] and keeps <html> in sync. */
 export function useTheme() {
@@ -36,7 +30,7 @@ export function useTheme() {
   return [theme, toggleTheme];
 }
 
-/** Reusable theme toggle button JSX element — just call ThemeToggleBtn({ theme, onToggle }) */
+/** Reusable theme toggle button — call ThemeToggleBtn({ theme, onToggle }) */
 export function ThemeToggleBtn({ theme, onToggle }) {
   return (
     <button

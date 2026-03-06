@@ -6,8 +6,8 @@ import CustomerFillForm from "./CustomerFillForm";
 import useNovaChatbot from "./chatbot.js";
 import { apiUrl } from "../../config/apiBase";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
-import { getToken, getUser } from "../../utils/auth";
-import { useTheme, ThemeToggleBtn } from "./CustomerTheme.jsx";
+import { getToken} from "../../utils/auth";
+import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
 
 export default function CustomerLanding() {
   const navigate = useNavigate();
@@ -101,7 +101,7 @@ const QUICK_ACTIONS = [
   const [user] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("user")) || {};
-    } catch {
+    } catch (_err) {
       return {};
     }
   });
@@ -124,7 +124,7 @@ const QUICK_ACTIONS = [
           );
           setRecentTicket(sorted[0] || null);
         }
-      } catch {
+      } catch (_err) {
         setRecentTicket(null);
       } finally {
         setTicketLoading(false);
@@ -146,7 +146,7 @@ const QUICK_ACTIONS = [
         } else {
           setNotifications([]);
         }
-      } catch {
+      } catch (_err) {
         setNotifications([]);
       }
     }
@@ -217,15 +217,6 @@ const QUICK_ACTIONS = [
     setIsExpanded((prev) => { if (prev) setNovaView("chat"); return !prev; });
   };
   const minimizeWidget = () => { setIsOpen(false); setIsExpanded(false); };
-  const toggleFormInChat = () => {
-    closeAllPopovers();
-    if (!isOpen) setIsOpen(true);
-    setNovaView((prev) => {
-      const next = prev === "form" ? "chat" : "form";
-      if (next === "form") resetSession();
-      return next;
-    });
-  };
 
   // ── Fill Form widget handlers ──────────────────────────────────────────
   const openFormWidget = () => {
@@ -317,7 +308,7 @@ const QUICK_ACTIONS = [
     try { rec.start(); } catch (err) { console.debug(err); }
   };
   const cancelVoice = () => {
-    try { speechRef.current?.stop?.(); } catch {}
+    try { speechRef.current?.stop?.(); } catch (_err) { /* ignore */ }
     setVoiceActive(false); setVoiceBusy(false); setVoiceDraft("");
   };
   const confirmVoice = () => {
