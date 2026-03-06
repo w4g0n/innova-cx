@@ -149,7 +149,7 @@ export default function CustomerMyTickets() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    } catch (_err) {
+    } catch {
       // ignore mark-read errors (non-critical)
     }
   };

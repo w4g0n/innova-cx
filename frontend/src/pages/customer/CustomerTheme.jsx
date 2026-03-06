@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * CustomerTheme.jsx — React components only (useTheme hook + ThemeToggleBtn).
  * Pure utility functions (getStoredTheme, applyTheme) live in customerThemeUtils.js.
