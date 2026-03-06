@@ -3489,8 +3489,8 @@ def get_departments(authorization: Optional[str] = Header(default=None)):
 def get_manager_kpis(user: Dict[str, Any] = Depends(require_manager)):
     row = fetch_one("""
         SELECT
-            COUNT(*) FILTER (WHERE status = 'Open')                            AS open_complaints,
-            COUNT(*) FILTER (WHERE status = 'In Progress')                     AS in_progress,
+            COUNT(*) FILTER (WHERE status IN ('Unassigned', 'Assigned', 'Escalated'))  AS open_complaints,
+            COUNT(*) FILTER (WHERE status IN ('Assigned', 'In Progress'))               AS in_progress,
             COUNT(*) FILTER (WHERE resolved_at::date = CURRENT_DATE)           AS resolved_today,
             (SELECT COUNT(*) FROM users WHERE role = 'employee')               AS active_employees,
             (SELECT COUNT(*) FROM approval_requests WHERE status = 'Pending')  AS pending_approvals
