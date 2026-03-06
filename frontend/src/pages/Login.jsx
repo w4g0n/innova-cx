@@ -154,13 +154,13 @@ export default function Login() {
       const onStaffDomain = window.location.hostname.startsWith("staff.");
 
       if (onStaffDomain && role === "customer") {
-        setLoginError("This portal is for staff only. Please visit innovacx.net.");
+        setLoginError("Invalid credentials");
         localStorage.removeItem("access_token");
         localStorage.removeItem("user");
         return;
       }
       if (!onStaffDomain && staffRoles.includes(role)) {
-        setLoginError("Staff must log in at staff.innovacx.net.");
+        setLoginError("Invalid credentials");
         localStorage.removeItem("access_token");
         localStorage.removeItem("user");
         return;
