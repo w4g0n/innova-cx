@@ -75,7 +75,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   flex: 1;
-  scrollbar-width: none;
+  -ms-overflow-style: none;  /* IE / Edge legacy */
 }
 .sidebar__nav::-webkit-scrollbar { display: none; }
 
