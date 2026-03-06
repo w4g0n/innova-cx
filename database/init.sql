@@ -1104,7 +1104,7 @@ WITH
   yousef  AS (SELECT id FROM users WHERE email='yousef@innova.cx' LIMIT 1),
   khalid  AS (SELECT id FROM users WHERE email='khalid@innova.cx' LIMIT 1),
   facilities  AS (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1),
-  legal       AS (SELECT id FROM departments WHERE name='Legal and Compliance' LIMIT 1),
+  legal       AS (SELECT id FROM departments WHERE name='Legal & Compliance' LIMIT 1),
   safety      AS (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1),
   hr          AS (SELECT id FROM departments WHERE name='HR' LIMIT 1),
   leasing     AS (SELECT id FROM departments WHERE name='Leasing' LIMIT 1),
