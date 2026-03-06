@@ -18,8 +18,12 @@ QUANTIZATION = os.environ.get("CHATBOT_QUANTIZATION", "4bit").strip().lower()
 HF_TOKEN = os.environ.get("HF_TOKEN") or None
 
 CHATBOT_MODEL_PATH = os.environ.get(
-    "CHATBOT_MODEL_PATH", "Qwen/Qwen2.5-0.5B-Instruct"
+    "CHATBOT_MODEL_PATH", ""
 ).strip()
+CHATBOT_MODEL_NAME = os.environ.get(
+    "CHATBOT_MODEL_NAME", "Qwen/Qwen2.5-0.5B-Instruct"
+).strip()
+CHATBOT_AUTO_DOWNLOAD = os.environ.get("CHATBOT_AUTO_DOWNLOAD", "true").lower() in {"1", "true", "yes"}
 
 # Legacy env var — now ignored in favour of CHATBOT_LLM_PROVIDER
 CHATBOT_USE_MOCK = os.environ.get("CHATBOT_USE_MOCK", "true").lower() in {"1", "true", "yes"}
@@ -40,12 +44,17 @@ def llm_available() -> bool:
 
 
 def get_llm_diagnostics() -> dict[str, Any]:
+    local_model_exists = bool(CHATBOT_MODEL_PATH and (Path(CHATBOT_MODEL_PATH) / "config.json").exists())
     return {
         "chatbot_llm_provider": CHATBOT_LLM_PROVIDER,
         "chatbot_model_path": CHATBOT_MODEL_PATH or None,
+        "chatbot_model_name": CHATBOT_MODEL_NAME or None,
+        "chatbot_auto_download": CHATBOT_AUTO_DOWNLOAD,
+        "chatbot_local_model_exists": local_model_exists,
         "chatbot_model_loaded": _model is not None and _tokenizer is not None,
         "chatbot_quantization": QUANTIZATION,
         "chatbot_max_new_tokens": MAX_NEW_TOKENS,
+        "chatbot_mode": "model" if (_model is not None and _tokenizer is not None) else "mock",
     }
 
 
@@ -66,12 +75,33 @@ def _init_model_once() -> None:
         logger.warning("chatbot_llm | CHATBOT_MODEL_PATH is empty, falling back to template mode")
         return
 
+    model_path = Path(CHATBOT_MODEL_PATH)
+    if not (model_path / "config.json").exists() and CHATBOT_AUTO_DOWNLOAD and CHATBOT_MODEL_NAME:
+        try:
+            from huggingface_hub import snapshot_download
+
+            logger.info("chatbot_llm | downloading model=%s to %s", CHATBOT_MODEL_NAME, CHATBOT_MODEL_PATH)
+            snapshot_download(
+                repo_id=CHATBOT_MODEL_NAME,
+                local_dir=CHATBOT_MODEL_PATH,
+                token=HF_TOKEN,
+            )
+        except Exception as exc:
+            logger.warning("chatbot_llm | auto-download failed (%s), falling back to template mode", exc)
+
+    if not (model_path / "config.json").exists():
+        logger.warning(
+            "chatbot_llm | no local model found at %s (missing config.json), falling back to template mode",
+            CHATBOT_MODEL_PATH,
+        )
+        return
+
     try:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         model_name = CHATBOT_MODEL_PATH
-        logger.info("chatbot_llm | loading model %s (quantization=%s)", model_name, QUANTIZATION)
+        logger.info("chatbot_llm | loading local model %s (quantization=%s)", model_name, QUANTIZATION)
 
         _tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN, trust_remote_code=True)
 
@@ -121,14 +151,15 @@ def _template_response(messages: list[dict]) -> str:
     prompt and formatting it as a helpful answer.
     """
     system_msg = ""
-    user_msg = ""
+    #user_msg = ""
     for msg in messages:
         role = str(msg.get("role", "")).lower()
         content = str(msg.get("content", "")).strip()
         if role == "system":
             system_msg = content
         elif role == "user":
-            user_msg = content  # last user message
+            pass
+            #user_msg = content  # last user message
 
     # If system prompt contains KB context, use it as the answer
     if "Context:" in system_msg:

@@ -183,29 +183,29 @@ EXECUTE FUNCTION notify_operator_model_confidence();
 -- =========================================================
 
 -- ─────────────────────────────────────────────────────────
--- 2a. Unassigned backlog exceeds 10 tickets
---     Fires on INSERT or when status changes to Unassigned.
+-- 2a. Open backlog exceeds 10 tickets
+--     Fires on INSERT or when status changes to Open.
 -- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_unassigned_backlog()
 RETURNS TRIGGER AS $$
 DECLARE
   v_count INTEGER;
 BEGIN
-  -- Only relevant when the ticket is or becomes Unassigned
-  IF NEW.status <> 'Unassigned' THEN
+  -- Only relevant when the ticket is or becomes Open
+  IF NEW.status <> 'Open' THEN
     RETURN NEW;
   END IF;
 
   SELECT COUNT(*)
   INTO v_count
   FROM tickets
-  WHERE status = 'Unassigned';
+  WHERE status = 'Open';
 
   IF v_count >= 10 THEN
     PERFORM notify_all_operators(
       'system',
-      'Unassigned Ticket Backlog Alert',
-      'There are currently ' || v_count || ' unassigned tickets in the queue. '
+      'Open Ticket Backlog Alert',
+      'There are currently ' || v_count || ' open tickets in the queue. '
         || 'Immediate assignment is recommended to avoid SLA breaches.'
     );
   END IF;
@@ -222,9 +222,9 @@ EXECUTE FUNCTION notify_operator_unassigned_backlog();
 
 
 -- ─────────────────────────────────────────────────────────
--- 2b. Critical ticket unassigned for too long
+-- 2b. Critical open ticket for too long
 --     Fires on UPDATE — if a Critical ticket remains
---     Unassigned for more than 15 minutes after creation.
+--     Open for more than 15 minutes after creation.
 --     Checked on any ticket update as a lightweight poll.
 -- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_critical_unassigned()
@@ -232,11 +232,11 @@ RETURNS TRIGGER AS $$
 DECLARE
   v_ticket RECORD;
 BEGIN
-  -- Scan for any critical+unassigned ticket older than 15 minutes
+  -- Scan for any critical+open ticket older than 15 minutes
   FOR v_ticket IN
     SELECT id, ticket_code, subject
     FROM tickets
-    WHERE status = 'Unassigned'
+    WHERE status = 'Open'
       AND priority = 'Critical'
       AND created_at <= now() - interval '15 minutes'
   LOOP
@@ -244,14 +244,14 @@ BEGIN
     IF NOT EXISTS (
       SELECT 1 FROM notifications
       WHERE ticket_id = v_ticket.id
-        AND title LIKE 'Critical Ticket Unassigned%'
+        AND title LIKE 'Critical Ticket Open%'
         AND created_at >= now() - interval '1 hour'
     ) THEN
       PERFORM notify_all_operators(
         'system',
-        'Critical Ticket Unassigned — ' || v_ticket.ticket_code,
+        'Critical Ticket Open — ' || v_ticket.ticket_code,
         'Ticket "' || v_ticket.subject || '" (' || v_ticket.ticket_code || ') '
-          || 'is Critical priority and has been unassigned for over 15 minutes.',
+          || 'is Critical priority and has been open for over 15 minutes.',
         'Critical',
         v_ticket.id
       );
