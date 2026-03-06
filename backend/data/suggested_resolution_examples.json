@@ -1,29 +1,17 @@
 {
-  "updated_at": "2026-03-06T01:28:11.382521+00:00",
+  "updated_at": "2026-03-06T22:45:48.751284+00:00",
   "examples": [
     {
-      "ticket_code": "CX-H002",
+      "ticket_code": "CX-9001",
       "ticket_type": "Complaint",
-      "priority": "Critical",
-      "subject": "Power outage \u2013 Finance floor",
-      "details": "Complete power failure affecting Finance department. UPS not kicking in.",
-      "decision": "accepted",
-      "suggested_resolution": "Reset tripped MCB and test UPS bypass.",
-      "employee_resolution": "",
-      "final_resolution": "Faulty MCB replaced; power restored. UPS tested operational.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
-    },
-    {
-      "ticket_code": "CX-H011",
-      "ticket_type": "Complaint",
-      "priority": "Critical",
-      "subject": "Boiler failure \u2013 Building A heating",
-      "details": "Entire Building A without heating during winter. Heat exchanger fault.",
-      "decision": "accepted",
-      "suggested_resolution": "Replace heat exchanger and restore pressure.",
-      "employee_resolution": "",
-      "final_resolution": "Heat exchanger replaced; boiler pressure normalised. Heating restored.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
+      "priority": "Medium",
+      "subject": "New today test ticket",
+      "details": "Seed ticket to populate \"New Today\".",
+      "decision": "declined_custom",
+      "suggested_resolution": "",
+      "employee_resolution": "123",
+      "final_resolution": "123",
+      "created_at": "2026-03-06T22:45:48.634324+00:00"
     },
     {
       "ticket_code": "CX-H010",
@@ -35,7 +23,7 @@
       "suggested_resolution": "Recharge UPS batteries.",
       "employee_resolution": "Batteries degraded beyond recharge \u2014 full module replacement required.",
       "final_resolution": "All 12 UPS battery modules replaced; 47-minute runtime certified.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
+      "created_at": "2026-03-06T18:41:52.536950+00:00"
     },
     {
       "ticket_code": "CX-H009",
@@ -47,7 +35,7 @@
       "suggested_resolution": "Replace suppression head and retest.",
       "employee_resolution": "",
       "final_resolution": "Suppression head replaced; system retested \u2014 full pass. Certificate issued.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
+      "created_at": "2026-03-06T18:41:52.536950+00:00"
     },
     {
       "ticket_code": "CX-H007",
@@ -59,7 +47,7 @@
       "suggested_resolution": "Replace compressor and recharge refrigerant.",
       "employee_resolution": "",
       "final_resolution": "Compressor replaced and refrigerant recharged. Cooling restored.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
+      "created_at": "2026-03-06T18:41:52.536950+00:00"
     },
     {
       "ticket_code": "CX-H005",
@@ -71,7 +59,7 @@
       "suggested_resolution": "Deploy pumping crew and clear drainage channels.",
       "employee_resolution": "",
       "final_resolution": "Pumping crew deployed; drainage channel cleared.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
+      "created_at": "2026-03-06T18:41:52.536950+00:00"
     },
     {
       "ticket_code": "CX-H004",
@@ -83,7 +71,7 @@
       "suggested_resolution": "Activate backup cooling; repair primary unit.",
       "employee_resolution": "",
       "final_resolution": "Backup cooling activated; primary compressor replaced.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
+      "created_at": "2026-03-06T18:41:52.536950+00:00"
     },
     {
       "ticket_code": "CX-H001",
@@ -95,19 +83,19 @@
       "suggested_resolution": "Isolate gas supply and replace faulty valve.",
       "employee_resolution": "",
       "final_resolution": "Gas supply isolated; faulty valve replaced and area cleared for re-entry.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
+      "created_at": "2026-03-06T18:41:52.536950+00:00"
     },
     {
       "ticket_code": "CX-H015",
       "ticket_type": "Inquiry",
-      "priority": "High",
+      "priority": "Medium",
       "subject": "Parking access card system \u2013 repeated failures",
       "details": "Customer parking access cards failing at gate reader. Issue recurring for third time this month.",
       "decision": "declined_custom",
       "suggested_resolution": "Re-encode access card.",
       "employee_resolution": "Card re-encode insufficient \u2014 server-side permission sync required.",
       "final_resolution": "Cards re-encoded; permission sync completed. Readers all operational.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
+      "created_at": "2026-03-06T18:41:52.536950+00:00"
     },
     {
       "ticket_code": "CX-H006",
@@ -119,7 +107,7 @@
       "suggested_resolution": "Secure rooftop area and review access logs.",
       "employee_resolution": "",
       "final_resolution": "Area secured; access logs reviewed; door lock replaced.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
+      "created_at": "2026-03-06T18:41:52.536950+00:00"
     },
     {
       "ticket_code": "CX-H014",
@@ -131,7 +119,7 @@
       "suggested_resolution": "Replace detector head.",
       "employee_resolution": "Root cause was accumulated dust \u2014 cleaning needed before replacement test.",
       "final_resolution": "Detector cleaned and head replaced. No false alarms in 48-hour test.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
+      "created_at": "2026-03-06T18:41:52.536950+00:00"
     },
     {
       "ticket_code": "CX-H003",
@@ -143,7 +131,19 @@
       "suggested_resolution": "Replace NVR hard drive and restore camera feeds.",
       "employee_resolution": "",
       "final_resolution": "NVR hard drive replaced; all 48 camera feeds restored.",
-      "created_at": "2026-03-04T18:38:44.073955+00:00"
+      "created_at": "2026-03-06T18:41:52.536950+00:00"
+    },
+    {
+      "ticket_code": "CX-H012",
+      "ticket_type": "Inquiry",
+      "priority": "High",
+      "subject": "VPN access failure \u2013 all remote staff",
+      "details": "Remote employees unable to connect to internal VPN since certificate expiry.",
+      "decision": "accepted",
+      "suggested_resolution": "Renew VPN gateway certificate and update routing.",
+      "employee_resolution": "",
+      "final_resolution": "VPN certificate renewed; all remote users confirmed online.",
+      "created_at": "2026-03-06T18:41:52.536950+00:00"
     }
   ]
 }
