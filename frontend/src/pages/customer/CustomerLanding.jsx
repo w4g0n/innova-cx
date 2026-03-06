@@ -43,8 +43,8 @@ const QUICK_ACTIONS = [
   },
   {
     action: "form",
-    title: "Agent Pipeline",
-    desc: "Submit a new request through our agent pipeline",
+    title: "Fill a Form",
+    desc: "Submit a new support request",
     accent: "#e879f9",
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -695,7 +695,7 @@ const QUICK_ACTIONS = [
                 </svg>
               </div>
               <div>
-                <div className="novaHeaderTitle">Agent Pipeline</div>
+                <div className="novaHeaderTitle">Fill a Form</div>
                 <div className="novaHeaderSub">Submit a new request</div>
               </div>
             </div>

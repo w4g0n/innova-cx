@@ -193,7 +193,13 @@ export function SettingsSaveButton({ label = "Save changes", onClick, variant = 
 export function DangerZone({ title, description, actions = [] }) {
   return (
     <div className="dz-root">
-      <p className="dz-title">⚠ {title || "Danger Zone"}</p>
+      <p className="dz-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:6,verticalAlign:"middle"}}>
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        {title || "Danger Zone"}
+      </p>
       {description && <p className="dz-zone-desc">{description}</p>}
       <div className="dz-actions">
         {actions.map((a, i) => (
@@ -277,20 +283,29 @@ export function ChangePasswordModal({ onClose }) {
     >
       <div className="cpw-modal" onClick={(e) => e.stopPropagation()}>
         <div className="cpw-header">
-          <h3 className="cpw-title">🔑 Change Password</h3>
+          <h3 className="cpw-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:8,verticalAlign:"middle"}}>
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+            Change Password
+          </h3>
           <button
             type="button"
             className="cpw-close"
             onClick={onClose}
             aria-label="Close"
           >
-            ✕
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
 
         {success ? (
           <div className="cpw-success">
-            <div className="cpw-success-icon">✓</div>
+            <div className="cpw-success-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5"/>
+              </svg>
+            </div>
             <p>Password updated successfully!</p>
           </div>
         ) : (
