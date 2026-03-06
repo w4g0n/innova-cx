@@ -4,10 +4,19 @@ from .llm import generate_response
 from .logger import log_bot_response, log_user_message
 from .retriever import retrieve_context
 from .session import append_history, load_session, save_session, transition
-from .sql_agent import get_open_tickets, get_ticket_status
+from .sql_agent import get_open_tickets, get_ticket_status, resolve_ticket_id_from_hint
 from .ticket import create_ticket
 
 MAX_INQUIRY_ATTEMPTS = 3
+URGENCY_HINTS = (
+    "urgent", "urgently", "asap", "immediately", "right now",
+    "emergency", "critical", "priority", "today", "now",
+)
+_GENERIC_INQUIRY_INPUTS = {
+    "inquiry", "question", "help", "support",
+    "create ticket", "creating a ticket", "create a ticket",
+    "complaint", "follow up", "follow-up", "followup",
+}
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -102,6 +111,14 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
     # AWAIT TICKET ID
     if state == "await_ticket_id":
         tid = _extract_ticket_id(user_text)
+        if not tid:
+            hint_result = resolve_ticket_id_from_hint(user_text, user_id)
+            if hint_result.get("found"):
+                tid = hint_result.get("ticket_id")
+        if not tid and _looks_urgent(user_text):
+            last_tid = session["context"].get("last_ticket_id")
+            if last_tid:
+                tid = last_tid
 
         if tid:
             result   = get_ticket_status(tid, user_id)
@@ -110,6 +127,8 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
                 if result.get("found")
                 else "I could not retrieve that ticket. Please check the ID and try again."
             )
+            if result.get("ticket_found"):
+                session["context"]["last_ticket_id"] = result.get("ticket_code") or tid
             transition(session, "resolved")
             _log_and_save(session, response, "ticket_status",
                           sql_query=result.get("query"))
@@ -121,7 +140,8 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
                 response = (
                     "No problem. Here are your open tickets:\n\n"
                     + result["raw"]
-                    + "\n\nPlease reply with the ticket ID you would like to follow up on."
+                    + "\n\nPlease reply with the ticket ID you would like to follow up on "
+                    + "(for example, CX-123456). You can also paste part of the ticket subject."
                 )
                 # Stay in await_ticket_id — do not transition
                 _log_and_save(session, response, "open_tickets_list",
@@ -168,16 +188,42 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
     if state in ("collecting_inquiry_ticket", "collecting_complaint"):
         return _collect_ticket_fields(session, user_id, user_text)
 
-    # POST TICKET CREATED
-    if state == "ticket_created":
+    # POST TICKET CREATED / RESOLVED:
+    # User sent a new message after closure. Re-enter primary intent handling
+    # in the same turn so we do not discard their latest message.
+    if state in ("ticket_created", "resolved"):
         transition(session, "await_primary_intent")
-        response = "Is there anything else I can help you with today?"
-        _log_and_save(session, response, "post_ticket_prompt")
-        return _result(response, "post_ticket_prompt", session_id)
+        if _looks_urgent(user_text):
+            last_tid = session["context"].get("last_ticket_id")
+            if last_tid:
+                response = (
+                    f"I understand this is urgent. I can keep tracking ticket {last_tid} with you. "
+                    "Please share the immediate impact (for example, safety risk or service downtime), "
+                    "and I will help you log an urgent complaint update."
+                )
+                _log_and_save(session, response, "urgency_follow_up")
+                return _result(response, "urgency_follow_up", session_id)
 
-    # RESOLVED
-    if state == "resolved":
-        transition(session, "await_primary_intent")
+        intent = classify_primary_intent(user_text, history)
+
+        if intent == "follow_up":
+            transition(session, "await_ticket_id")
+            response = (
+                "Sure, I can help with that. Could you please provide your ticket ID? "
+                "If you do not have it, just say so and I will look up your open tickets."
+            )
+            _log_and_save(session, response, "prompt_ticket_id")
+            return _result(response, "prompt_ticket_id", session_id)
+
+        if intent == "create_ticket":
+            transition(session, "await_secondary_intent")
+            response = (
+                "Of course. To help you better, is this an inquiry (you have a question) "
+                "or a complaint (you are reporting a problem or fault)?"
+            )
+            _log_and_save(session, response, "prompt_ticket_type")
+            return _result(response, "prompt_ticket_type", session_id)
+
         response = "Is there anything else I can help you with today?"
         _log_and_save(session, response, "post_resolved_prompt")
         return _result(response, "post_resolved_prompt", session_id)
@@ -283,9 +329,12 @@ def _handle_inquiry_confirm(session: dict, user_id: str, user_text: str) -> dict
         flags=re.IGNORECASE,
     ).strip()
     next_question = clarification if len(clarification) >= 4 else _recover_original_question(session["history"])
+    if _is_generic_inquiry_input(next_question):
+        next_question = ""
     if not next_question:
         response = (
-            "Thanks for clarifying. Could you restate your question with a bit more detail so I can try again?"
+            "Thanks for clarifying. Please tell me the exact information you need "
+            "(for example pricing, availability, lease terms, or move-in timeline)."
         )
         transition(session, "inquiry")
         _log_and_save(session, response, "clarify")
@@ -301,13 +350,18 @@ def _recover_original_question(history: list) -> str:
     that is not a yes/no confirmation reply.
     """
     noise = {"yes", "no", "yeah", "nope", "yep", "yup", "nah",
-             "correct", "thanks", "thank you", "ok", "okay"}
+             "correct", "thanks", "thank you", "ok", "okay"} | _GENERIC_INQUIRY_INPUTS
     for entry in reversed(history):
         if entry.get("role") == "user":
             content = entry.get("content", "").strip().lower()
             if content not in noise and len(content) > 4:
                 return entry["content"]
     return ""
+
+
+def _is_generic_inquiry_input(text: str) -> bool:
+    t = (text or "").strip().lower()
+    return not t or t in _GENERIC_INQUIRY_INPUTS
 
 
 # ── Complaint handler ─────────────────────────────────────────────────────────
@@ -398,6 +452,13 @@ def _extract_ticket_id(text: str) -> str | None:
         return uuid_match.group(0)
     code_match = re.search(r"\b(CX-[A-Z0-9-]{4,32}|[A-Z]{0,3}\d{3,8})\b", text.upper())
     return code_match.group(1) if code_match else None
+
+
+def _looks_urgent(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    return any(h in t for h in URGENCY_HINTS)
 
 
 def _log_and_save(
