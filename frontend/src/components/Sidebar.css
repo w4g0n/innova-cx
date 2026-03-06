@@ -293,6 +293,44 @@
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
 }
 
+/* Unread badge on Notifications */
+.sidebar__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e8445a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+  /* visible in both expanded and collapsed states */
+  opacity: 1 !important;
+  width: auto !important;
+  flex: 0 !important;
+  pointer-events: none;
+}
+
+/* In collapsed mode, float the badge over the icon */
+.sidebar:not(.sidebar--expanded) .sidebar__badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 15px;
+  height: 15px;
+  font-size: 9px;
+  padding: 0 3px;
+}
+
+/* Make the pill position:relative so the absolute badge works in collapsed mode */
+.sidebar:not(.sidebar--expanded) .sidebar__pill {
+  position: relative;
+}
+
 /* Mobile: hide sidebar */
 @media (max-width: 768px) {
   .sidebar {

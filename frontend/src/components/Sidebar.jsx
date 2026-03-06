@@ -142,7 +142,7 @@ const menus = {
   ],
 };
 
-export default function Sidebar({ role }) {
+export default function Sidebar({ role, unreadCount = 0 }) {
   const navigate = useNavigate();
 
   /* Pinned = stays open without hover */
@@ -207,6 +207,11 @@ export default function Sidebar({ role }) {
                 {Icon[item.icon]}
               </span>
               <span className="sidebar__label">{item.label}</span>
+              {item.icon === "bell" && unreadCount > 0 && (
+                <span className="sidebar__badge" aria-label={`${unreadCount} unread`}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
             </div>
           </NavLink>
         ))}
