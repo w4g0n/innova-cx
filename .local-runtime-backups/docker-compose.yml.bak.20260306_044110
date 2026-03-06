@@ -1,0 +1,177 @@
+services:
+  postgres:
+    profiles: ["frontend", "pipeline", "dev"]
+    image: postgres:14-alpine
+    container_name: innovacx-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-innovacx_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      POSTGRES_DB: ${POSTGRES_DB:-complaints_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"
+    networks:
+      - innovacx-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    profiles: ["frontend", "pipeline", "dev"]
+    build: ./backend
+    container_name: innovacx-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
+      DISABLE_MFA: "${DISABLE_MFA:-false}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
+      CHATBOT_PROXY_TIMEOUT_SECONDS: "${CHATBOT_PROXY_TIMEOUT_SECONDS:-30}"
+      SUGGESTED_RESOLUTION_MODEL_NAME: "${SUGGESTED_RESOLUTION_MODEL_NAME:-google/flan-t5-small}"
+      SUGGESTED_RESOLUTION_MODEL_PATH: "${SUGGESTED_RESOLUTION_MODEL_PATH:-}"
+      SUGGESTED_RESOLUTION_AUTO_DOWNLOAD: "${SUGGESTED_RESOLUTION_AUTO_DOWNLOAD:-false}"
+      SUGGESTED_RESOLUTION_USE_MOCK: "${SUGGESTED_RESOLUTION_USE_MOCK:-true}"
+      SUGGESTED_RESOLUTION_PIPELINE_ONLY: "${SUGGESTED_RESOLUTION_PIPELINE_ONLY:-true}"
+      WATCHFILES_FORCE_POLLING: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./database:/app/database
+      - uploads_data:/app/uploads
+    networks:
+      - innovacx-network
+
+  chatbot:
+    profiles: ["dev"]
+    build: ./backend/services/chatbot
+    container_name: innovacx-chatbot
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
+      HF_TOKEN: "${HF_TOKEN:-}"
+      HF_HOME: /app/hf_cache
+      CHATBOT_LLM_PROVIDER: "${CHATBOT_LLM_PROVIDER:-template}"
+      CHATBOT_MODEL_PATH: "${CHATBOT_MODEL_PATH:-}"
+      CHATBOT_MODEL_NAME: "${CHATBOT_MODEL_NAME:-Qwen/Qwen2.5-0.5B-Instruct}"
+      CHATBOT_AUTO_DOWNLOAD: "${CHATBOT_AUTO_DOWNLOAD:-true}"
+      CHATBOT_USE_MOCK: "${CHATBOT_USE_MOCK:-false}"
+      CHATBOT_MAX_NEW_TOKENS: "${CHATBOT_MAX_NEW_TOKENS:-128}"
+      CHATBOT_QUANTIZATION: "${CHATBOT_QUANTIZATION:-4bit}"
+      CHATBOT_DO_SAMPLE: "${CHATBOT_DO_SAMPLE:-true}"
+      CHATBOT_TEMPERATURE: "${CHATBOT_TEMPERATURE:-0.7}"
+      CHATBOT_TOP_P: "${CHATBOT_TOP_P:-0.9}"
+      ORCHESTRATOR_URL: "${ORCHESTRATOR_URL:-http://orchestrator:8004}"
+      ORCHESTRATOR_URL_LOCAL: "${ORCHESTRATOR_URL_LOCAL:-http://localhost:8004}"
+      BACKEND_API_URL: "${BACKEND_API_URL:-http://backend:8000}"
+      BACKEND_API_URL_LOCAL: "${BACKEND_API_URL_LOCAL:-http://localhost:8000}"
+    volumes:
+      - hf_cache:/app/hf_cache
+      - chatbot_models:/app/models
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)\""]
+      interval: 20s
+      timeout: 7s
+      retries: 5
+      start_period: 20s
+    networks:
+      - innovacx-network
+
+  transcriber:
+    profiles: ["dev"]
+    build: ./backend/services/transcriber
+    container_name: innovacx-transcriber
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    networks:
+      - innovacx-network
+
+  orchestrator:
+    profiles: ["pipeline", "dev"]
+    build:
+      context: .
+      dockerfile: ai-models/MultiAgentPipeline/Orchestrator/Dockerfile
+    container_name: innovacx-orchestrator
+    restart: unless-stopped
+    environment:
+      PYTHONPATH: /app
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
+      SENTIMENT_MODEL_DIR: "${SENTIMENT_MODEL_DIR:-/app/models/sentimentanalysis}"
+      CLASSIFIER_MODEL_DIR: "${CLASSIFIER_MODEL_DIR:-/app/models/classifier}"
+      CLASSIFIER_MODEL_PATH: "${CLASSIFIER_MODEL_PATH:-}"
+      CLASSIFIER_VECTORIZER_PATH: "${CLASSIFIER_VECTORIZER_PATH:-}"
+      PRIORITY_USE_MOCK: "${PRIORITY_USE_MOCK:-false}"
+      PRIORITY_MODEL_DIR: "${PRIORITY_MODEL_DIR:-/app/models/prioritization}"
+      FEATURE_LABELER_MODEL_PATH: "${FEATURE_LABELER_MODEL_PATH:-/app/models/featureengineering/feature_labeler}"
+      FEATURE_LABELER_MODEL_NAME: "${FEATURE_LABELER_MODEL_NAME:-MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli}"
+      FEATURE_LABELER_AUTO_DOWNLOAD: "${FEATURE_LABELER_AUTO_DOWNLOAD:-true}"
+      FEATURE_ENGINEERING_STATE_DIR: "${FEATURE_ENGINEERING_STATE_DIR:-/app/models/featureengineering}"
+      FEATURE_LABELER_FORCE_CPU: "${FEATURE_LABELER_FORCE_CPU:-false}"
+      DEPARTMENT_ROUTER_MODEL_PATH: "${DEPARTMENT_ROUTER_MODEL_PATH:-/app/models/classifier/deberta-v3-base-mnli-fever-anli}"
+      DEPARTMENT_ROUTER_MODEL_NAME: "${DEPARTMENT_ROUTER_MODEL_NAME:-MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli}"
+      DEPARTMENT_ROUTER_AUTO_DOWNLOAD: "${DEPARTMENT_ROUTER_AUTO_DOWNLOAD:-true}"
+      DEPARTMENT_ROUTER_FORCE_CPU: "${DEPARTMENT_ROUTER_FORCE_CPU:-false}"
+      DEPARTMENT_ROUTING_THRESHOLD: "${DEPARTMENT_ROUTING_THRESHOLD:-0.7}"
+      DEPARTMENT_ROUTER_CALIBRATION_WEIGHT: "${DEPARTMENT_ROUTER_CALIBRATION_WEIGHT:-0.12}"
+      SUBJECT_GENERATOR_MODEL_PATH: "${SUBJECT_GENERATOR_MODEL_PATH:-/app/models/subjectgeneration/flan-t5-small}"
+      SUBJECT_GENERATOR_MODEL_NAME: "${SUBJECT_GENERATOR_MODEL_NAME:-google/flan-t5-small}"
+      SUBJECT_GENERATOR_AUTO_DOWNLOAD: "${SUBJECT_GENERATOR_AUTO_DOWNLOAD:-true}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    ports:
+      - "8004:8004"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8004/health', timeout=5)\""]
+      interval: 20s
+      timeout: 7s
+      retries: 5
+      start_period: 20s
+    networks:
+      - innovacx-network
+
+  frontend:
+    profiles: ["frontend", "pipeline", "dev"]
+    build: ./frontend
+    container_name: innovacx-frontend
+    entrypoint:
+      - /bin/sh
+      - -c
+      - sed -i 's/\r$//' /app/docker-entrypoint.sh && exec /bin/sh /app/docker-entrypoint.sh
+    environment:
+      VITE_API_BASE_URL: "${VITE_API_BASE_URL:-}"
+      VITE_ORCHESTRATOR_URL: "${VITE_ORCHESTRATOR_URL:-}"
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "250"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - innovacx-network
+
+volumes:
+  postgres_data:
+  hf_cache:
+  chatbot_models:
+  uploads_data:
+
+networks:
+  innovacx-network:
