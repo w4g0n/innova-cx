@@ -40,21 +40,44 @@ ROUTER_MODEL_NAME = os.getenv(
     "DEPARTMENT_ROUTER_MODEL_NAME",
     "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
 ).strip()
+ROUTER_AUTO_DOWNLOAD = os.getenv("DEPARTMENT_ROUTER_AUTO_DOWNLOAD", "true").lower() in {"1", "true", "yes"}
+HF_TOKEN = os.getenv("HF_TOKEN", "").strip() or None
 CALIBRATION_WEIGHT = float(os.getenv("DEPARTMENT_ROUTER_CALIBRATION_WEIGHT", "0.12"))
 
 
 @lru_cache(maxsize=1)
 def _load_department_router():
-    model_ref = ROUTER_MODEL_PATH if (Path(ROUTER_MODEL_PATH) / "config.json").exists() else ROUTER_MODEL_NAME
+    if not ROUTER_MODEL_PATH:
+        logger.info("department_router | DEPARTMENT_ROUTER_MODEL_PATH is empty, using mock routing")
+        return None
+
+    model_path = Path(ROUTER_MODEL_PATH)
+    if not (model_path / "config.json").exists() and ROUTER_AUTO_DOWNLOAD and ROUTER_MODEL_NAME:
+        try:
+            from huggingface_hub import snapshot_download  # type: ignore
+
+            logger.info("department_router | downloading model=%s to %s", ROUTER_MODEL_NAME, ROUTER_MODEL_PATH)
+            snapshot_download(
+                repo_id=ROUTER_MODEL_NAME,
+                local_dir=ROUTER_MODEL_PATH,
+                token=HF_TOKEN,
+            )
+        except Exception as exc:
+            logger.warning("department_router | auto-download failed (%s), using mock routing", exc)
+
+    if not (model_path / "config.json").exists():
+        logger.info("department_router | no local model at %s, using mock routing", ROUTER_MODEL_PATH)
+        return None
+
     force_cpu = os.getenv("DEPARTMENT_ROUTER_FORCE_CPU", "false").lower() in {"1", "true", "yes"}
     device = -1 if force_cpu else (0 if torch.cuda.is_available() else -1)
     device_name = "CPU" if device == -1 else "GPU"
     try:
-        logger.info("department_router | loading model=%s device=%s", model_ref, device_name)
+        logger.info("department_router | loading local model=%s device=%s", ROUTER_MODEL_PATH, device_name)
         return pipeline(
             task="zero-shot-classification",
-            model=model_ref,
-            tokenizer=model_ref,
+            model=ROUTER_MODEL_PATH,
+            tokenizer=ROUTER_MODEL_PATH,
             device=device,
         )
     except Exception as exc:
@@ -66,11 +89,12 @@ def get_router_diagnostics() -> dict[str, object]:
     local_model_exists = bool(ROUTER_MODEL_PATH and (Path(ROUTER_MODEL_PATH) / "config.json").exists())
     return {
         "department_router_model_path": ROUTER_MODEL_PATH or None,
-        "department_router_local_model_exists": local_model_exists,
         "department_router_model_name": ROUTER_MODEL_NAME or None,
+        "department_router_auto_download": ROUTER_AUTO_DOWNLOAD,
+        "department_router_local_model_exists": local_model_exists,
         "department_router_threshold": ROUTING_CONFIDENCE_THRESHOLD,
         "department_router_calibration_weight": CALIBRATION_WEIGHT,
-        "department_router_mode": "deberta_zero_shot_or_mock",
+        "department_router_mode": "model" if local_model_exists else "mock",
     }
 
 
@@ -160,6 +184,9 @@ def _build_orchestrator_payload(
     route_source: str,
 ) -> dict:
     should_auto_route = bool(routed_department) and route_confidence >= ROUTING_CONFIDENCE_THRESHOLD
+    # Always send the top predicted department so backend can queue
+    # low-confidence routes for manager review.
+    predicted_department = routed_department if should_auto_route else top_department
     return {
         "ticket_id": state.get("ticket_id"),
         "subject": state.get("subject"),
@@ -167,7 +194,7 @@ def _build_orchestrator_payload(
         "sentiment": state.get("text_sentiment", 0.0),
         "audio_sentiment": state.get("audio_sentiment", 0.0),
         "priority": state.get("priority_score", 3),
-        "department": routed_department if should_auto_route else None,
+        "department": predicted_department,
         "department_candidate": top_department,
         "keywords": state.get("keywords", []),
         "label": state.get("label", "complaint"),
