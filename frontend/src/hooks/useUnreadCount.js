@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { apiUrl } from "../config/apiBase";
 
 function getAuthToken() {
@@ -18,14 +18,8 @@ function getAuthToken() {
   );
 }
 
-/**
- * Returns the number of unread notifications for the given role.
- * Polls every `intervalMs` milliseconds (default 60 s).
- */
 export function useUnreadCount(role, intervalMs = 60_000) {
   const [count, setCount] = useState(0);
-  const countRef = useRef(count);
-  countRef.current = count;
 
   useEffect(() => {
     if (!role) return;
@@ -43,9 +37,9 @@ export function useUnreadCount(role, intervalMs = 60_000) {
         .then((data) => {
           if (cancelled || !data) return;
           const unread = (data.notifications || []).filter((n) => !n.read).length;
-          if (unread !== countRef.current) setCount(unread);
+          setCount(unread);
         })
-        .catch(() => { /* silently ignore */ });
+        .catch(() => {});
     };
 
     const id = setInterval(load, intervalMs);
