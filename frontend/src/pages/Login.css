@@ -497,3 +497,95 @@
   .loginBg { padding: 16px 10px; }
   .loginRight { padding: 28px 20px 36px; }
 }
+
+/* ============================================================
+   LOGIN VALIDATION — append these rules to Login.css
+   ============================================================ */
+
+/* ── Input wrapper (positions the state icon) ── */
+.input-wrap {
+  position: relative;
+}
+
+.input-icon {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+/* Give icon clearance so it doesn't overlap text */
+.input-wrap .input {
+  padding-right: 44px;
+}
+
+/* Password field already has toggle btn — no extra icon needed */
+.passwordField .input-icon {
+  display: none;
+}
+
+/* ── Field state: error ── */
+.field--error .input {
+  border-color: rgba(248, 113, 113, .55) !important;
+  background: rgba(248, 113, 113, .04) !important;
+  box-shadow:
+    0 0 0 3px rgba(248, 113, 113, .1),
+    inset 0 0 12px rgba(248, 113, 113, .03) !important;
+  animation: inputShake .35s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+@keyframes inputShake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(3px); }
+  30%, 50%, 70% { transform: translateX(-3px); }
+  40%, 60% { transform: translateX(3px); }
+}
+
+/* ── Inline field messages ── */
+.field-msg-placeholder {
+  height: 20px;
+}
+
+.field-msg {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  line-height: 1.4;
+  animation: msgReveal .2s ease both;
+}
+
+@keyframes msgReveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.field-msg--error {
+  color: #f87171;
+}
+.field-msg--error svg {
+  flex-shrink: 0;
+}
+
+/* ── Server-side error banner ── */
+.loginError {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border-radius: 11px;
+  background: rgba(248, 113, 113, .07);
+  border: 1.5px solid rgba(248, 113, 113, .22);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #f87171;
+  animation: msgReveal .25s ease both;
+}
+.loginError::before { content: none; }

@@ -1231,7 +1231,16 @@ def employee_dashboard(user: Dict[str, Any] = Depends(require_employee)):
           ) AS "month"
         FROM employee_reports er
         WHERE er.employee_user_id = %s
-        ORDER BY er.created_at DESC
+          AND er.report_code ~ '^[a-z]{3}-[0-9]{4}'
+        ORDER BY
+          split_part(er.report_code, '-', 2)::int DESC,
+          CASE split_part(er.report_code, '-', 1)
+            WHEN 'jan' THEN 1  WHEN 'feb' THEN 2  WHEN 'mar' THEN 3
+            WHEN 'apr' THEN 4  WHEN 'may' THEN 5  WHEN 'jun' THEN 6
+            WHEN 'jul' THEN 7  WHEN 'aug' THEN 8  WHEN 'sep' THEN 9
+            WHEN 'oct' THEN 10 WHEN 'nov' THEN 11 WHEN 'dec' THEN 12
+            ELSE 0
+          END DESC
         LIMIT 6;
         """,
         (user_id,),
@@ -2214,23 +2223,33 @@ def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
 
     rows = fetch_all(
         """
-        SELECT
-          report_code AS "id",
-          month_label AS "month",
-          subtitle    AS "subtitle",
-          created_at  AS "createdAt"
-        FROM employee_reports
-        WHERE employee_user_id = %s
-        AND report_code ~ '^[a-z]{3}-[0-9]{4}$'
+        SELECT "id", "month", "subtitle", "createdAt"
+        FROM (
+          SELECT DISTINCT ON (
+              split_part(report_code, '-', 2),
+              split_part(report_code, '-', 1)
+            )
+            report_code AS "id",
+            month_label AS "month",
+            subtitle    AS "subtitle",
+            created_at  AS "createdAt"
+          FROM employee_reports
+          WHERE employee_user_id = %s
+          AND report_code ~ '^[a-z]{3}-[0-9]{4}(-[a-z0-9]+)?$'
+          ORDER BY
+            split_part(report_code, '-', 2),
+            split_part(report_code, '-', 1),
+            created_at DESC
+        ) deduped
         ORDER BY
-        split_part(report_code, '-', 2)::int DESC,
-        CASE split_part(report_code, '-', 1)
+          split_part("id", '-', 2)::int DESC,
+          CASE split_part("id", '-', 1)
             WHEN 'jan' THEN 1  WHEN 'feb' THEN 2  WHEN 'mar' THEN 3
             WHEN 'apr' THEN 4  WHEN 'may' THEN 5  WHEN 'jun' THEN 6
             WHEN 'jul' THEN 7  WHEN 'aug' THEN 8  WHEN 'sep' THEN 9
             WHEN 'oct' THEN 10 WHEN 'nov' THEN 11 WHEN 'dec' THEN 12
             ELSE 0
-        END DESC
+          END DESC
         LIMIT 24;
         """,
         (user_id,),
@@ -4998,34 +5017,44 @@ def operator_dashboard_summary(user: Dict[str, Any] = Depends(require_operator))
     """
 
     # ── Model Health ──────────────────────────────────────────────────────────
-    mh_row = fetch_one(
-        """
-        SELECT
-          COALESCE(AVG(latency_ms), 0)::numeric           AS avg_latency_ms,
-          COALESCE(
-            SUM(CASE WHEN is_error THEN 1 ELSE 0 END)::numeric
-            / NULLIF(COUNT(*), 0) * 100,
-            0
-          )                                               AS error_rate_pct
-        FROM model_metrics
-        WHERE created_at >= now() - interval '1 hour';
-        """
-    ) or {}
+    try:
+        mh_row = fetch_one(
+            """
+            SELECT
+              COALESCE(AVG(latency_ms), 0)::numeric           AS avg_latency_ms,
+              COALESCE(
+                SUM(CASE WHEN is_error THEN 1 ELSE 0 END)::numeric
+                / NULLIF(COUNT(*), 0) * 100,
+                0
+              )                                               AS error_rate_pct
+            FROM model_metrics
+            WHERE created_at >= now() - interval '1 hour';
+            """
+        ) or {}
+        avg_latency_ms = float(mh_row.get("avg_latency_ms") or 0)
+        error_rate_pct = round(float(mh_row.get("error_rate_pct") or 0), 2)
+        model_metrics_available = True
+    except Exception:
+        avg_latency_ms = 0.0
+        error_rate_pct = 0.0
+        model_metrics_available = False
 
-    avg_latency_ms  = float(mh_row.get("avg_latency_ms")  or 0)
-    error_rate_pct  = round(float(mh_row.get("error_rate_pct") or 0), 2)
-
-    drift_row = fetch_one(
-        """
-        SELECT COUNT(*) AS cnt
-        FROM drift_events
-        WHERE detected_at >= now() - interval '24 hours';
-        """
-    ) or {}
-    drift_detected = int(drift_row.get("cnt") or 0) > 0
+    try:
+        drift_row = fetch_one(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM drift_events
+            WHERE detected_at >= now() - interval '24 hours';
+            """
+        ) or {}
+        drift_detected = int(drift_row.get("cnt") or 0) > 0
+    except Exception:
+        drift_detected = False
 
     # Status logic (exact as spec)
-    if error_rate_pct > 3 or avg_latency_ms > 1500:
+    if not model_metrics_available:
+        status = "No Data"
+    elif error_rate_pct > 3 or avg_latency_ms > 1500:
         status = "Critical"
     elif (1 <= error_rate_pct <= 3) or (800 <= avg_latency_ms <= 1500):
         status = "Degraded"
@@ -5033,45 +5062,49 @@ def operator_dashboard_summary(user: Dict[str, Any] = Depends(require_operator))
         status = "Healthy"
 
     # ── Quality Control ───────────────────────────────────────────────────────
-    qc_row = fetch_one(
-        """
-        SELECT
-          -- pending queue
-          COUNT(*) FILTER (WHERE status = 'pending')                   AS pending_reviews,
-          -- oldest pending age (seconds since created_at)
-          COALESCE(
-            EXTRACT(EPOCH FROM (now() - MIN(created_at) FILTER (WHERE status = 'pending')))
-          , 0)::int                                                     AS oldest_pending_age_sec,
-          -- average review time for completed reviews in last 24h
-          COALESCE(
-            AVG(
-              CASE
-                WHEN review_duration_sec IS NOT NULL THEN review_duration_sec
-                WHEN reviewed_at IS NOT NULL
-                  THEN EXTRACT(EPOCH FROM (reviewed_at - created_at))
-                ELSE NULL
-              END
-            ) FILTER (
-              WHERE status IN ('approved', 'rejected')
-                AND created_at >= now() - interval '24 hours'
-            ),
-            0
-          )::int                                                        AS avg_review_time_sec,
-          -- flagged today
-          COUNT(*) FILTER (
-            WHERE flagged = TRUE
-              AND created_at >= now() - interval '24 hours'
-          )                                                              AS flagged_today
-        FROM qc_reviews;
-        """
-    ) or {}
+    try:
+        qc_row = fetch_one(
+            """
+            SELECT
+              -- pending queue
+              COUNT(*) FILTER (WHERE status = 'pending')                   AS pending_reviews,
+              -- oldest pending age (seconds since created_at)
+              COALESCE(
+                EXTRACT(EPOCH FROM (now() - MIN(created_at) FILTER (WHERE status = 'pending')))
+              , 0)::int                                                     AS oldest_pending_age_sec,
+              -- average review time for completed reviews in last 24h
+              COALESCE(
+                AVG(
+                  CASE
+                    WHEN review_duration_sec IS NOT NULL THEN review_duration_sec
+                    WHEN reviewed_at IS NOT NULL
+                      THEN EXTRACT(EPOCH FROM (reviewed_at - created_at))
+                    ELSE NULL
+                  END
+                ) FILTER (
+                  WHERE status IN ('approved', 'rejected')
+                    AND created_at >= now() - interval '24 hours'
+                ),
+                0
+              )::int                                                        AS avg_review_time_sec,
+              -- flagged today
+              COUNT(*) FILTER (
+                WHERE flagged = TRUE
+                  AND created_at >= now() - interval '24 hours'
+              )                                                              AS flagged_today
+            FROM qc_reviews;
+            """
+        ) or {}
+    except Exception:
+        qc_row = {}
 
     return {
         "modelHealth": {
-            "status":          status,
-            "avg_latency_ms":  round(avg_latency_ms, 1),
-            "error_rate_pct":  error_rate_pct,
-            "drift_detected":  drift_detected,
+            "status":                   status,
+            "avg_latency_ms":           round(avg_latency_ms, 1),
+            "error_rate_pct":           error_rate_pct,
+            "drift_detected":           drift_detected,
+            "model_metrics_available":  model_metrics_available,
         },
         "qualityControl": {
             "pending_reviews":      int(qc_row.get("pending_reviews")      or 0),

@@ -20,7 +20,7 @@ function formatTicketSource(value) {
   return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
 }
 
-// ─── AttachmentThumb ────────────────────────────────────────────────────────
+// --- AttachmentThumb --------------------------------------------------------
 function AttachmentThumb({ url, fileName }) {
   const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(fileName || "");
   const [imgError, setImgError] = useState(false);
@@ -29,14 +29,12 @@ function AttachmentThumb({ url, fileName }) {
 
   if (isImage && !imgError) {
     return (
-      <a href={url} target="_blank" rel="noopener noreferrer" title={fileName}
-         style={{ display:"block", width:80, height:80, borderRadius:10,
-                  overflow:"hidden", flexShrink:0,
-                  border:"1px solid rgba(0,0,0,0.1)" }}>
+      <a href={url} target="_blank" rel="noopener noreferrer"
+         title={fileName} className="attachment-thumb attachment-thumb--image">
         <img
           src={url}
           alt={fileName}
-          style={{ width:"100%", height:"100%", objectFit:"cover" }}
+          className="attachment-thumb__img"
           onError={() => setImgError(true)}
         />
       </a>
@@ -45,15 +43,13 @@ function AttachmentThumb({ url, fileName }) {
 
   return (
     <a href={url} download={fileName} target="_blank" rel="noopener noreferrer"
-       className="attachment-thumb" title={fileName}
-       style={{ display:"flex", flexDirection:"column", alignItems:"center",
-                justifyContent:"center", width:80, height:80, fontSize:11,
-                color:"#5b21b6", textDecoration:"none", wordBreak:"break-all",
-                padding:4, textAlign:"center", background:"#f5f3ff",
-                borderRadius:10, border:"1px solid rgba(89,36,180,0.15)",
-                flexShrink:0 }}>
-      <span style={{ fontSize:26 }}>{imgError ? "🖼️" : "📎"}</span>
-      <span style={{ marginTop:4, lineHeight:1.2 }}>{fileName}</span>
+       className="attachment-thumb attachment-thumb--file" title={fileName}>
+      <svg className="attachment-thumb__icon" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" />
+        <path d="M14 2v6h6M8 13h8M8 17h5" />
+      </svg>
+      <span className="attachment-thumb__name">{fileName}</span>
     </a>
   );
 }
@@ -319,31 +315,68 @@ function TicketModal({
               </div>
             )}
 
-            <label>Attachments (optional)</label>
+            <label>Attachments <span className="modal-label-optional">optional</span></label>
             <div className="modal-upload-box">
-              <input
-                type="file"
-                multiple
-                onChange={(e) => setResolveFiles(Array.from(e.target.files || []))}
-              />
+              <label className="modal-upload-box__label">
+                <div className="modal-upload-box__inner">
+                  <div className="modal-upload-box__icon-wrap">
+                    <svg viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                  </div>
+                  <span className="modal-upload-box__title">
+                    {resolveFiles.length > 0
+                      ? `${resolveFiles.length} file${resolveFiles.length > 1 ? "s" : ""} attached`
+                      : "Click to upload files"}
+                  </span>
+                </div>
+                <input
+                  type="file"
+                  multiple
+                  className="modal-upload-box__input"
+                  onChange={(e) => setResolveFiles(prev => [...prev, ...Array.from(e.target.files || [])])}
+                />
+              </label>
               {resolveFiles.length > 0 && (
-                <div style={{ marginTop: 6, fontSize: 13, color: "#5b21b6" }}>
-                  {resolveFiles.length} file(s) selected: {resolveFiles.map((f) => f.name).join(", ")}
+                <div className="modal-upload-box__files">
+                  {resolveFiles.map((f, i) => (
+                    <div key={i} className="modal-upload-box__file">
+                      <div className="modal-upload-box__file-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" />
+                          <path d="M14 2v6h6" />
+                        </svg>
+                      </div>
+                      <div className="modal-upload-box__file-info">
+                        <span className="modal-upload-box__file-name">{f.name}</span>
+                        <span className="modal-upload-box__file-size">
+                          {f.size < 1024 * 1024
+                            ? `${Math.round(f.size / 1024)} KB`
+                            : `${(f.size / (1024 * 1024)).toFixed(1)} MB`}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="modal-upload-box__remove"
+                        onClick={() => setResolveFiles((prev) => prev.filter((_, j) => j !== i))}
+                        disabled={resolveBusy}
+                        aria-label="Remove file"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-
-            {resolveFiles.length > 0 && (
-              <button
-                type="button"
-                className="modal-btn cancel"
-                style={{ marginTop: 10 }}
-                onClick={() => setResolveFiles([])}
-                disabled={resolveBusy || suggestionBusy}
-              >
-                Clear selected files
-              </button>
-            )}
           </>
         );
 
@@ -534,6 +567,18 @@ function TicketModal({
   );
 }
 
+function statusPillClass(status) {
+  switch ((status || "").toLowerCase().replace(/\s+/g, "")) {
+    case "open":       return "empStatusPill--open";
+    case "assigned":   return "empStatusPill--assigned";
+    case "inprogress": return "empStatusPill--inprogress";
+    case "escalated":  return "empStatusPill--escalated";
+    case "overdue":    return "empStatusPill--overdue";
+    case "resolved":   return "empStatusPill--resolved";
+    default:           return "";
+  }
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 export default function ComplaintDetails() {
   const { id } = useParams();
@@ -633,7 +678,7 @@ export default function ComplaintDetails() {
               <span className={`header-pill ${(ticket.priority || "").toLowerCase()}-pill`}>
                 {ticket.priority}
               </span>
-              <span className="header-pill empStatusPill">{ticket.status}</span>
+              <span className={`header-pill empStatusPill ${statusPillClass(ticket.status)}`}>{ticket.status}</span>
             </div>
           </div>
 

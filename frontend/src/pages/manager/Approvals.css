@@ -193,6 +193,12 @@
   color: #a7372b;
 }
 
+.statusPill--denied {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.2);
+}
+
 .actionsCell {
   display: flex;
   align-items: center;
@@ -220,8 +226,8 @@
 }
 
 .deptSelect {
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
   border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 10px;
   background: #fff;
@@ -256,6 +262,18 @@
   background: var(--btn-primary);
   color: #ffffff;
   border-color: var(--btn-primary);
+}
+
+.actionBtn--deny {
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
+.actionBtn--deny:hover {
+  background: rgba(220, 38, 38, 0.15);
+  border-color: rgba(220, 38, 38, 0.4);
+  color: #991b1b;
 }
 
 .actionBtn:disabled {

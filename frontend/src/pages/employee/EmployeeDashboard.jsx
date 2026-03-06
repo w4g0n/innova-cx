@@ -61,6 +61,7 @@ export default function EmployeeDashboard() {
   const [tickets, setTickets] = useState([]);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState("");
 
   // 🔐 MFA + Auth Enforcement
   const token = getStoredToken();
@@ -81,6 +82,11 @@ export default function EmployeeDashboard() {
             Authorization: `Bearer ${token}`,
           },
         });
+
+        if (res.status === 403) {
+          if (!cancelled) setAuthError("Invalid Credentials");
+          return;
+        }
 
         if (!res.ok) {
           const text = await res.text();
@@ -135,6 +141,31 @@ export default function EmployeeDashboard() {
     return (
       <Layout role="employee">
         <main>Loading...</main>
+      </Layout>
+    );
+
+  if (authError)
+    return (
+      <Layout role="employee">
+        <main style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+          <div style={{
+            background: "#fff",
+            border: "1px solid rgba(220,38,38,0.2)",
+            borderRadius: 16,
+            padding: "40px 48px",
+            textAlign: "center",
+            boxShadow: "0 6px 24px rgba(0,0,0,0.07)",
+          }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+            <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 800, color: "#b91c1c" }}>
+              Invalid Credentials
+            </h2>
+            <p style={{ margin: 0, fontSize: 15, color: "rgba(17,17,17,0.65)" }}>
+              You do not have permission to access this portal.<br />
+              Please log in with a valid staff account.
+            </p>
+          </div>
+        </main>
       </Layout>
     );
 

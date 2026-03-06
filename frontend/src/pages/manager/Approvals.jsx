@@ -393,7 +393,7 @@ export default function Approvals() {
         body: JSON.stringify({ decision, approved_department: department || undefined }),
       });
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || `Failed (${res.status})`); }
-      pushToast(decision === "Approved" ? "AI routing confirmed ✓" : `Routing overridden → ${department}`, "success");
+      pushToast(decision === "Approved" ? "AI routing confirmed ✓" : decision === "Denied" ? "Routing request denied" : `Routing overridden → ${department}`, decision === "Denied" ? "error" : "success");
     } catch (e) {
       setRrqRows((prev) => prev.map((r) => (r.reviewId === reviewId ? { ...r, status: "Pending" } : r)));
       pushToast(e.message || "Failed to save decision.", "error");
@@ -540,6 +540,10 @@ export default function Approvals() {
                               <button className="actionBtn actionBtn--primary" type="button"
                                 onClick={(e) => { e.stopPropagation(); setConfirm({ open: true, requestId: r.requestId, decision: "Approved", selectedDepartment: r.type === "Rerouting" ? String(r.requested || "").replace(/^Dept:\s*/i, "").trim() : undefined }); }}>
                                 ✓ Approve
+                              </button>
+                              <button className="actionBtn actionBtn--deny" type="button"
+                                onClick={(e) => { e.stopPropagation(); setConfirm({ open: true, requestId: r.requestId, decision: "Rejected" }); }}>
+                                ✕ Deny
                               </button>
                               <div className="apr-overrideWrap">
                                 <button className="actionBtn" type="button"
@@ -700,7 +704,7 @@ export default function Approvals() {
                           <td><span className="apr-deptPill">{r.predictedDepartment}</span></td>
                           <td><ConfidenceBar pct={r.confidencePct} /></td>
                           <td>
-                            <span className={`statusPill ${r.status === "Approved" ? "statusPill--approved" : r.status === "Overridden" ? "statusPill--overridden" : "statusPill--pending"}`}>
+                            <span className={`statusPill ${r.status === "Approved" ? "statusPill--approved" : r.status === "Overridden" ? "statusPill--overridden" : r.status === "Denied" ? "statusPill--denied" : "statusPill--pending"}`}>
                               {r.status === "Approved" ? "Confirmed" : r.status}
                             </span>
                           </td>
@@ -713,6 +717,10 @@ export default function Approvals() {
                                 <button className="actionBtn actionBtn--primary" type="button"
                                   onClick={() => setRrqConfirm({ open: true, reviewId: r.reviewId, decision: "Approved", department: r.predictedDepartment })}>
                                   ✓ Confirm
+                                </button>
+                                <button className="actionBtn actionBtn--deny" type="button"
+                                  onClick={(e) => { e.stopPropagation(); setRrqConfirm({ open: true, reviewId: r.reviewId, decision: "Denied", department: r.predictedDepartment }); }}>
+                                  ✕ Deny
                                 </button>
                                 <div className="apr-overrideWrap">
                                   <button className="actionBtn" type="button"
@@ -741,7 +749,7 @@ export default function Approvals() {
                               </div>
                             ) : (
                               <span style={{ fontSize: 12, color: "rgba(17,17,17,0.5)", fontStyle: "italic" }}>
-                                {r.status === "Approved" ? `→ ${r.approvedDepartment || r.predictedDepartment}` : `↺ ${r.approvedDepartment}`}
+                                {r.status === "Approved" ? `→ ${r.approvedDepartment || r.predictedDepartment}` : r.status === "Denied" ? `✕ Denied` : `↺ ${r.approvedDepartment}`}
                               </span>
                             )}
                           </td>
@@ -794,12 +802,14 @@ export default function Approvals() {
       />
       <ConfirmDialog
         open={rrqConfirm.open}
-        title={rrqConfirm.decision === "Approved" ? "Confirm AI Routing" : "Override Routing"}
+        title={rrqConfirm.decision === "Approved" ? "Confirm AI Routing" : rrqConfirm.decision === "Denied" ? "Deny Routing Request" : "Override Routing"}
         message={rrqConfirm.decision === "Approved"
           ? `Confirm that this ticket should be routed to "${rrqConfirm.department}"?`
+          : rrqConfirm.decision === "Denied"
+          ? `Deny this routing request? The ticket will keep its current department assignment.`
           : `Override AI routing and assign this ticket to "${rrqConfirm.department}"?`}
         variant={rrqConfirm.decision === "Approved" ? "success" : "danger"}
-        confirmLabel={rrqConfirm.decision === "Approved" ? "Yes, Confirm" : "Yes, Override"}
+        confirmLabel={rrqConfirm.decision === "Approved" ? "Yes, Confirm" : rrqConfirm.decision === "Denied" ? "Yes, Deny" : "Yes, Override"}
         onConfirm={() => { const { reviewId, decision, department } = rrqConfirm; closeRrqConfirm(); decideRrq(reviewId, decision, department); }}
         onCancel={closeRrqConfirm}
       />
