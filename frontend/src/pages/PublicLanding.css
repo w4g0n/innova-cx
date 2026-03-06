@@ -314,7 +314,7 @@
 .pl-footer{background:#020108;padding:32px clamp(20px,5vw,60px);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;border-top:1px solid rgba(147,51,234,.1);}
 .pl-footer-logo{height:36px;object-fit:contain;opacity:.5;filter:brightness(0) invert(1);transition:opacity .2s;}
 .pl-footer-logo:hover{opacity:.85;}
-.pl-footer-links{display:flex;gap:22px;}
+.pl-footer-links{display:flex;gap: 22px;padding-left: 90px;}
 .pl-footer-link{background:none;border:none;color:rgba(255,255,255,.28);font-family:"Outfit",sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:color .2s;}
 .pl-footer-link:hover{color:rgba(168,85,247,.8);}
 .pl-footer-copy{font-size:11px;color:rgba(255,255,255,.16);width:100%;text-align:center;padding-top:16px;border-top:1px solid rgba(255,255,255,.04);}
