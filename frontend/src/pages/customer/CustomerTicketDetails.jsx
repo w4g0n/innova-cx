@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
-import { getUser, getToken, authHeader } from "../../utils/auth";
+import { getUser, authHeader } from "../../utils/auth";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { apiUrl } from "../../config/apiBase";
 import PriorityPill from "../../components/common/PriorityPill";
@@ -90,7 +90,7 @@ export default function CustomerTicketDetails() {
             author:  u.author || "System",
           })),
         });
-      } catch {
+      } catch (_err) {
         if (mounted) setTicket(null);
       } finally {
         if (!silent && mounted) setLoading(false);
@@ -177,7 +177,7 @@ export default function CustomerTicketDetails() {
         <div className="ctd-not-found">
           <div className="ctd-not-found-icon">🧾</div>
           <h3>Ticket not found</h3>
-          <p>We couldn't find ticket <strong>{id}</strong>.</p>
+          <p>We couldn&apos;t find ticket <strong>{id}</strong>.</p>
           <button type="button" className="cs-btn cs-btn-primary" onClick={() => navigate("/customer/mytickets")}>
             Go to My Tickets
           </button>
