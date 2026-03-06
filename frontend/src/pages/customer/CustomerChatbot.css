@@ -117,6 +117,9 @@
   font-family: "Outfit", sans-serif;
   font-weight: 400;
   line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .custMsg--bot .custMsg__bubble {
   background: rgba(255,255,255,.06);

@@ -43,8 +43,15 @@ if [[ ! -f ".gitattributes" ]]; then
   exit 1
 fi
 
-# Ensure the 'ours' merge driver is registered in this clone
-git config merge.ours.driver true
+# Require the 'ours' merge driver to be preconfigured in this clone.
+# This avoids silent mis-merges when merge=ours is present in .gitattributes.
+ours_driver="$(git config --get merge.ours.driver || true)"
+if [[ "${ours_driver}" != "true" ]]; then
+  echo "Error: merge.ours.driver is not configured as 'true' in this clone." >&2
+  echo "Run: git config merge.ours.driver true" >&2
+  echo "Then re-run this script." >&2
+  exit 1
+fi
 
 # --- Record pre-merge state ---
 

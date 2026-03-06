@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Complaint Trends – InnovaCX Manager</title>
+  <link rel="stylesheet" href="complaintTrends.css">
+</head>
+<body>
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="nova-logo.png" alt="Nova logo" class="logo-img">
+      <span class="logo-text">InnovaCX</span>
+    </div>
+
+    <nav class="sidebar-links">
+      <a href="manager-notifications.html" class="sidebar-link">Notifications</a>
+      <a href="manager-dashboard.html" class="sidebar-link">Dashboard</a>
+      <a href="manager-view-complaints.html" class="sidebar-link">View All Complaints</a>
+      <a href="manager-view-employees.html" class="sidebar-link">View All Employees</a>
+      <a href="manager-approvals.html" class="sidebar-link">Approvals</a>
+      <a href="manager-complaint-trends.html" class="sidebar-link active">Complaint Trends</a>
+    </nav>
+
+    <button class="settings-btn">
+      <span class="settings-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 14.86 2h-3.72a.5.5 0 0 0-.49.41l-.36 2.54c-.6.23-1.14.54-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L3.84 8.47a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .61.22l2.39-.96c.49.4 1.03.72 1.63.94l.36 2.54a.5.5 0 0 0 .49.41h3.72a.5.5 0 0 0 .49-.41l.36-2.54c.6-.23 1.14-.54 1.63-.94l2.39.96a.5.5 0 0 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"
+                fill="#ffffff"/>
+        </svg>
+      </span>
+      <span>Settings</span>
+    </button>
+
+    <button class="logout-btn">
+      <span class="logout-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M10 5v2h6.59L13 10.59 14.41 12 20 6.41 14.41 1 13 2.41 16.59 6H10z"
+                fill="#ffffff"/>
+          <path d="M4 3h6v2H6v14h4v2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"
+                fill="#ffffff"/>
+        </svg>
+      </span>
+      <span>Logout</span>
+    </button>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- Header -->
+    <header class="main-header">
+      <div>
+        <h1 class="page-title">Complaint Trends</h1>
+        <p class="page-subtitle">
+          Track complaint volumes, resolution performance, and top categories over time.
+        </p>
+      </div>
+    </header>
+
+    <!-- KPI row -->
+    <section class="kpi-row">
+      <div class="kpi-card">
+        <span class="kpi-label">Complaints This Month</span>
+        <span class="kpi-value">128</span>
+        <span class="kpi-caption">↑ 12% vs last month</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Resolved Within SLA</span>
+        <span class="kpi-value">91%</span>
+        <span class="kpi-caption">Target: 90%</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Average Response Time</span>
+        <span class="kpi-value">38 mins</span>
+        <span class="kpi-caption">First agent response</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Average Resolve Time</span>
+        <span class="kpi-value">1.6 days</span>
+        <span class="kpi-caption">From creation to closure</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Top Category</span>
+        <span class="kpi-value">HVAC Issues</span>
+        <span class="kpi-caption">32 tickets this month</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Repeat Complaints</span>
+        <span class="kpi-value">9%</span>
+        <span class="kpi-caption">Same issue in 30 days</span>
+      </div>
+    </section>
+
+    <!-- FILTERS -->
+    <section class="filters-row">
+      <div class="filters-left">
+
+        <div class="select-wrapper">
+          <select>
+            <option>This Month</option>
+            <option>This Month</option>
+            <option>Last 6 Months</option>
+            <option>Last 12 Months</option>
+          </select>
+        </div>
+
+        <div class="select-wrapper">
+          <select>
+            <option>All Departments</option>
+            <option>Facilities Management</option>
+            <option>Security</option>
+            <option>Cleaning</option>
+            <option>IT Support</option>
+          </select>
+        </div>
+
+        <div class="select-wrapper">
+          <select>
+            <option>All Priorities</option>
+            <option>Critical only</option>
+            <option>High & Critical</option>
+            <option>Low & Medium</option>
+          </select>
+        </div>
+
+      </div>
+
+      <button class="filter-btn">
+        <span class="filter-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 4h18l-7 8v6l-4 2v-8L3 4z" fill="currentColor"/>
+          </svg>
+        </span>
+        Apply filters
+      </button>
+    </section>
+
+    <!-- CHARTS -->
+    <section class="charts-grid">
+
+      <!-- Left: Complaints over time -->
+      <div class="card">
+        <h2 class="card-title">Complaints Over Time</h2>
+        <p class="card-subtitle">
+          Monthly volume of complaints for your department.
+        </p>
+
+        <div class="trend-bars">
+          <!-- Just change height % & value text later if you want -->
+          <div class="trend-bar" style="height: 55%;">
+            <span class="value">84</span>
+          </div>
+          <div class="trend-bar" style="height: 70%;">
+            <span class="value">101</span>
+          </div>
+          <div class="trend-bar" style="height: 82%;">
+            <span class="value">118</span>
+          </div>
+          <div class="trend-bar" style="height: 100%;">
+            <span class="value">132</span>
+          </div>
+        </div>
+
+        <div class="trend-labels">
+          <span>Jun</span>
+          <span>Jul</span>
+          <span>Aug</span>
+          <span>Sep</span>
+        </div>
+      </div>
+
+      <!-- Right: Breakdown by category -->
+      <aside class="card">
+        <h2 class="card-title">Top Complaint Categories</h2>
+        <p class="card-subtitle">
+          Share of complaints by type (current month).
+        </p>
+
+        <div class="category-list">
+
+          <div class="category-row">
+            <span class="category-name">HVAC / Temperature</span>
+            <div class="category-bar">
+              <div class="category-bar-fill" style="width: 72%;"></div>
+            </div>
+            <span class="category-value">32%</span>
+          </div>
+
+          <div class="category-row">
+            <span class="category-name">Plumbing / Leakage</span>
+            <div class="category-bar">
+              <div class="category-bar-fill" style="width: 54%;"></div>
+            </div>
+            <span class="category-value">24%</span>
+          </div>
+
+          <div class="category-row">
+            <span class="category-name">Cleaning / Housekeeping</span>
+            <div class="category-bar">
+              <div class="category-bar-fill" style="width: 38%;"></div>
+            </div>
+            <span class="category-value">17%</span>
+          </div>
+
+          <div class="category-row">
+            <span class="category-name">Electrical / Lighting</span>
+            <div class="category-bar">
+              <div class="category-bar-fill" style="width: 28%;"></div>
+            </div>
+            <span class="category-value">12%</span>
+          </div>
+
+          <div class="category-row">
+            <span class="category-name">Other</span>
+            <div class="category-bar">
+              <div class="category-bar-fill" style="width: 18%;"></div>
+            </div>
+            <span class="category-value">15%</span>
+          </div>
+
+        </div>
+      </aside>
+
+    </section>
+
+    <!-- BOTTOM: Monthly summary table -->
+    <section class="table-wrapper">
+      <h2 class="card-title">Monthly Trend Summary</h2>
+      <p class="card-subtitle">
+        Compare volumes and SLA performance month by month.
+      </p>
+
+      <table class="trends-table">
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th>Total Complaints</th>
+            <th>Resolved</th>
+            <th>Within SLA</th>
+            <th>Avg Response Time</th>
+            <th>Avg Resolve Time</th>
+            <th>SLA Performance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>June</td>
+            <td>84</td>
+            <td>79</td>
+            <td>88%</td>
+            <td>45 mins</td>
+            <td>2.1 days</td>
+            <td><span class="delta-negative">- 6%</span></td>
+          </tr>
+          <tr>
+            <td>July</td>
+            <td>101</td>
+            <td>95</td>
+            <td>90%</td>
+            <td>41 mins</td>
+            <td>1.9 days</td>
+            <td><span class="delta-positive">+ 20%</span></td>
+          </tr>
+          <tr>
+            <td>August</td>
+            <td>118</td>
+            <td>110</td>
+            <td>92%</td>
+            <td>39 mins</td>
+            <td>1.7 days</td>
+            <td><span class="delta-positive">+ 17%</span></td>
+          </tr>
+          <tr>
+            <td>September</td>
+            <td>132</td>
+            <td>124</td>
+            <td>91%</td>
+            <td>38 mins</td>
+            <td>1.6 days</td>
+            <td><span class="delta-positive">+ 12%</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+</div>
+</body>
+</html>

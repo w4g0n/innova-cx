@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Customer Dashboard – Nova</title>
+  <link rel="stylesheet" href="custdash.css" />
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- SIDEBAR – InnovaCX style -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="nova-logo.png" alt="Nova logo" class="logo-img">
+      <span class="logo-text">InnovaCX</span>
+    </div>
+
+    <nav class="sidebar-links">
+      <a href="#" class="sidebar-link">Notifications</a>
+      <a href="#" class="sidebar-link active">Dashboard</a>
+      <a href="#" class="sidebar-link">Chatbot</a>
+      <a href="#" class="sidebar-link">Track My Complaint</a>
+      <a href="#" class="sidebar-link">Raise a Complaint</a>
+    </nav>
+
+    <button class="settings-btn">
+      <span class="settings-icon">
+        <!-- gear icon -->
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 14.86 2h-3.72a.5.5 0 0 0-.49.41l-.36 2.54c-.6.23-1.14.54-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L3.84 8.47a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .61.22l2.39-.96c.49.4 1.03.72 1.63.94l.36 2.54a.5.5 0 0 0 .49.41h3.72a.5.5 0 0 0 .49-.41l.36-2.54c.6-.23 1.14-.54 1.63-.94l2.39.96a.5.5 0 0 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z" fill="#ffffff"/>
+        </svg>
+      </span>
+      <span>Settings</span>
+    </button>
+
+    <button class="logout-btn">
+      <span class="logout-icon">
+        <!-- logout icon -->
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M10 5v2h6.59L13 10.59 14.41 12 20 6.41 14.41 1 13 2.41 16.59 6H10z" fill="#ffffff"/>
+          <path d="M4 3h6v2H6v14h4v2H4a2 2 0 0 1 -2 -2V5a2 2 0 0 1 2 -2z" fill="#ffffff"/>
+        </svg>
+      </span>
+      <span>Logout</span>
+    </button>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+
+    <!-- HEADER -->
+    <header class="top-bar">
+      <div>
+        <h1 class="page-title">Customer Dashboard</h1>
+        <p class="page-subtitle">
+          Submit, track, and manage your complaints in one place.
+        </p>
+      </div>
+    </header>
+
+
+    <!-- QUICK ACTIONS -->
+    <section class="card quick-actions-card">
+      <h2 class="card-title">Quick Actions</h2>
+      <div class="quick-actions-grid">
+        <button class="quick-action">
+          <div class="qa-icon">🎙</div>
+          <div class="qa-text">
+            <h3>Raise Audio Complaint</h3>
+            <p>Record an audio description</p>
+          </div>
+        </button>
+
+        <button class="quick-action">
+          <div class="qa-icon">📝</div>
+          <div class="qa-text">
+            <h3>Raise Text Complaint</h3>
+            <p>Submit a formal written complaint</p>
+          </div>
+        </button>
+
+        <button class="quick-action">
+          <div class="qa-icon">📊</div>
+          <div class="qa-text">
+            <h3>Track Complaints</h3>
+            <p>View status and history</p>
+          </div>
+        </button>
+
+        <button class="quick-action">
+          <div class="qa-icon">💬</div>
+          <div class="qa-text">
+            <h3>Chat Assistant</h3>
+            <p>Get instant help from Nova</p>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <!-- MAIN CONTENT ROW: Complaints + Chat -->
+    <section class="content-row">
+
+      <!-- COMPLAINTS LIST -->
+      <section class="card complaints-card">
+        <div class="complaints-header">
+          <div>
+            <h2 class="card-title">Your Open Complaints</h2>
+            <p class="complaints-subtitle">
+              These complaints are currently in progress or pending review.
+            </p>
+          </div>
+          <div class="complaints-controls">
+            <div class="search-wrapper">
+              <span class="search-icon">🔍</span>
+              <input type="text" placeholder="Search..." class="search-input" />
+            </div>
+          </div>
+        </div>
+
+        <div class="complaints-list">
+
+          <!-- Complaint 1 -->
+          <article class="complaint-item">
+            <div class="complaint-main">
+              <div class="open-complaint-header">
+                <a href="#" class="ticket-id-link">CX-1122</a>
+                <span class="status-chip status-in-progress">In Progress</span>
+                <span class="priority-pill priority-high">Critical</span>
+              </div>
+              <h3 class="open-complaint-title">Air conditioning not working</h3>
+              <p class="open-complaint-meta">Submitted 2024-11-19</p>
+            </div>
+            <button class="more-btn">⋮</button>
+          </article>
+
+          <!-- Complaint 2 -->
+          <article class="complaint-item">
+            <div class="complaint-main">
+              <div class="open-complaint-header">
+                <a href="#" class="ticket-id-link">CX-3862</a>
+                <span class="status-chip status-pending">Overdue</span>
+                <span class="priority-pill priority-high">Critical</span>
+              </div>
+              <h3 class="open-complaint-title">Water leakage in pantry</h3>
+              <p class="open-complaint-meta">Submitted 2024-11-18</p>
+            </div>
+            <button class="more-btn">⋮</button>
+          </article>
+
+          <!-- Complaint 3 -->
+          <article class="complaint-item">
+            <div class="complaint-main">
+              <div class="open-complaint-header">
+                <a href="#" class="ticket-id-link">CX-4587</a>
+                <span class="status-chip status-in-progress">Escalated</span>
+                <span class="priority-pill priority-high">High</span>
+              </div>
+              <h3 class="open-complaint-title">Wi-Fi connection unstable</h3>
+              <p class="open-complaint-meta">Submitted 2024-11-19</p>
+            </div>
+            <button class="more-btn">⋮</button>
+          </article>
+
+          <!-- Complaint 4 -->
+          <article class="complaint-item">
+            <div class="complaint-main">
+              <div class="open-complaint-header">
+                <a href="#" class="ticket-id-link">CX-4630</a>
+                <span class="status-chip status-in-progress">Assigned</span>
+                <span class="priority-pill priority-high">High</span>
+              </div>
+              <h3 class="open-complaint-title">Lift stopping between floors</h3>
+              <p class="open-complaint-meta">Submitted 2024-11-18</p>
+            </div>
+            <button class="more-btn">⋮</button>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- EMBEDDED CHAT ASSISTANT -->
+      <section class="card chat-card">
+        <header class="chat-header">
+          <div class="chat-header-left">
+            <span class="chat-header-icon">💬</span>
+            <div>
+              <h3 class="chat-title">Chatbot</h3>
+              <p class="chat-subtitle">Complain to Nova.</p>
+            </div>
+          </div>
+        </header>
+
+        <div class="chat-body">
+          <div class="chat-bubble bot">
+            Hello! I’m Nova. I can help you check the status of your complaints or start a new one.
+          </div>
+          <div class="chat-bubble user">
+            I want to know if my refund request has been processed.
+          </div>
+          <div class="chat-bubble bot">
+            Sure. Your complaint <strong>CX-1122</strong> is currently marked as <strong>In Progress</strong>.
+          </div>
+        </div>
+
+        <footer class="chat-footer">
+          <input
+            type="text"
+            placeholder="Type your message"
+            class="chat-input"
+            disabled
+          />
+        </footer>
+      </section>
+
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>
