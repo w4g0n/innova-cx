@@ -1,0 +1,330 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Operator System Dashboard – Nova</title>
+  <link rel="stylesheet" href="operatorDash.css" />
+</head>
+<body>
+<div class="layout">
+
+  <!-- SIDEBAR (InnovaCX style) -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="nova-logo.png" class="logo-img" alt="InnovaCX logo" />
+      <span class="logo-text">InnovaCX</span>
+    </div>
+
+    <nav class="sidebar-links">
+      <a href="#" class="sidebar-link">Notifications</a>
+      <a href="model.html" class="sidebar-link active">Dashboard</a>
+      <a href="model.html" class="sidebar-link">Model Analysis</a>
+      <a href="chatbot.html" class="sidebar-link">Chatbot Analysis</a>
+    </nav>
+
+
+    <!-- SETTINGS (right above Logout) -->
+    <button class="settings-btn">
+      <span class="settings-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 14.86 2h-3.72a.5.5 0 0 0-.49.41l-.36 2.54c-.6.23-1.14.54-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L3.84 8.47a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .61.22l2.39-.96c.49.4 1.03.72 1.63.94l.36 2.54a.5.5 0 0 0 .49.41h3.72a.5.5 0 0 0 .49-.41l.36-2.54c.6-.23 1.14-.54 1.63-.94l2.39.96a.5.5 0 0 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"
+                fill="#ffffff"/>
+        </svg>
+      </span>
+      <span>Settings</span>
+    </button>
+
+    <!-- LOGOUT (bottom) -->
+    <button class="logout-btn">
+      <span class="logout-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M10 5v2h6.59L13 10.59 14.41 12 20 6.41 14.41 1 13 2.41 16.59 6H10z"
+                fill="#ffffff"/>
+          <path d="M4 3h6v2H6v14h4v2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"
+                fill="#ffffff"/>
+        </svg>
+      </span>
+      <span>Logout</span>
+    </button>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- TOP BAR -->
+    <header class="top-bar">
+      <div>
+        <h1 class="page-title">Operator System Dashboard</h1>
+        <p class="page-subtitle">
+          High-level health of the complaint-handling platform and AI services.
+        </p>
+      </div>
+
+      <div class="top-actions">
+        <div class="select-wrapper">
+          <select>
+            <option>Last 30 minutes</option>
+            <option selected>Last 1 hour</option>
+            <option>Today</option>
+            <option>Last 7 days</option>
+          </select>
+        </div>
+        <button class="export-btn">
+          <span class="export-icon">⭳</span>
+          Export
+        </button>
+      </div>
+    </header>
+
+    <!-- ROW 1: GLOBAL SYSTEM HEALTH -->
+    <section class="cards-row">
+      <article class="card">
+        <h2 class="card-title">Core Services Status</h2>
+        <p class="card-subtitle">Real-time health of critical components.</p>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <div class="status-label">Complaint Ingestion</div>
+            <span class="status-pill status-ok">Healthy</span>
+            <p class="status-note">No backlog detected.</p>
+          </div>
+
+          <div class="status-item">
+            <div class="status-label">Routing Engine (Model)</div>
+            <span class="status-pill status-ok">Running</span>
+            <p class="status-note">Latency within normal range.</p>
+          </div>
+
+          <div class="status-item">
+            <div class="status-label">Chatbot Service</div>
+            <span class="status-pill status-warning">Degraded</span>
+            <p class="status-note">Increased fallback to human agents.</p>
+          </div>
+
+          <div class="status-item">
+            <div class="status-label">Database & Storage</div>
+            <span class="status-pill status-ok">Connected</span>
+            <p class="status-note">Last backup completed at 03:00.</p>
+          </div>
+
+          <div class="status-item">
+            <div class="status-label">Notification Services</div>
+            <span class="status-pill status-ok">Operational</span>
+            <p class="status-note">Email & SMS queues processing normally.</p>
+          </div>
+
+          <div class="status-item">
+            <div class="status-label">User Credentials</div>
+            <span class="status-pill status-ok">Connected</span>
+            <p class="status-note">Connection is stable.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="card narrow-card">
+        <h2 class="card-title">Error & Fallback Overview</h2>
+        <p class="card-subtitle">Abnormal behaviour in the last hour.</p>
+
+        <div class="mini-kpi-column">
+          <div class="mini-kpi">
+            <span class="mini-kpi-label">System errors</span>
+            <span class="mini-kpi-value">3</span>
+            <span class="mini-kpi-trend mini-kpi-normal">Within normal range</span>
+          </div>
+
+          <div class="mini-kpi">
+            <span class="mini-kpi-label">Chatbot → Human fallbacks</span>
+            <span class="mini-kpi-value">7</span>
+            <span class="mini-kpi-trend mini-kpi-warning">Slightly elevated</span>
+          </div>
+
+          <div class="mini-kpi">
+            <span class="mini-kpi-label">Routing failures</span>
+            <span class="mini-kpi-value">1</span>
+            <span class="mini-kpi-trend mini-kpi-critical">Needs review</span>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- ROW 2: INTEGRATIONS & PIPELINE -->
+    <section class="cards-row">
+      <article class="card">
+        <h2 class="card-title">Integrations Status</h2>
+        <p class="card-subtitle">Connectivity to external systems.</p>
+
+        <ul class="integration-list">
+          <li class="integration-item">
+            <div>
+              <div class="integration-name">CRM / Ticketing</div>
+              <div class="integration-note">All events syncing correctly.</div>
+            </div>
+            <span class="status-pill status-ok">Connected</span>
+          </li>
+          <li class="integration-item">
+            <div>
+              <div class="integration-name">Identity / SSO</div>
+              <div class="integration-note">No failed logins due to provider issues.</div>
+            </div>
+            <span class="status-pill status-ok">OK</span>
+          </li>
+          <li class="integration-item">
+            <div>
+              <div class="integration-name">Audio Transcriber</div>
+              <div class="integration-note">Fully functional.</div>
+            </div>
+            <span class="status-pill status-ok">OK</span>
+          </li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2 class="card-title">Pipeline & Queue Health</h2>
+        <p class="card-subtitle">Flow of complaints through the system.</p>
+
+        <div class="queue-grid">
+          <div class="queue-item">
+            <div class="queue-label">Ingestion queue</div>
+            <div class="queue-value">0</div>
+            <div class="queue-note">No stuck records.</div>
+          </div>
+          <div class="queue-item">
+            <div class="queue-label">Model processing queue</div>
+            <div class="queue-value">3</div>
+            <div class="queue-note">Within expected range.</div>
+          </div>
+          <div class="queue-item">
+            <div class="queue-label">Notification queue</div>
+            <div class="queue-value">27</div>
+            <div class="queue-note queue-note-warning">Higher than typical; monitor.</div>
+          </div>
+          <div class="queue-item">
+            <div class="queue-label">Audit / logging pipeline</div>
+            <div class="queue-value">Healthy</div>
+            <div class="queue-note">All events captured.</div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- ROW 3: INCIDENT FEED -->
+    <section class="card full-width-card">
+      <h2 class="card-title">Incident & Event Feed</h2>
+      <p class="card-subtitle">Recent system-level events for operator awareness.</p>
+
+      <ul class="event-feed">
+        <li class="event-item event-critical">
+          <span class="event-dot"></span>
+          <div class="event-content">
+            <div class="event-header">
+              <span class="event-title">Chatbot service latency spike</span>
+              <span class="event-time">10:02</span>
+            </div>
+            <p class="event-description">
+              Response times exceeded threshold; temporary failover to human agents activated.
+            </p>
+          </div>
+        </li>
+
+        <li class="event-item event-warning">
+          <span class="event-dot"></span>
+          <div class="event-content">
+            <div class="event-header">
+              <span class="event-title">Routing error rate above baseline</span>
+              <span class="event-time">09:47</span>
+            </div>
+            <p class="event-description">
+              Error rate at 2.5% vs typical 0.5% for the last 15 minutes.
+            </p>
+          </div>
+        </li>
+
+        <li class="event-item event-info">
+          <span class="event-dot"></span>
+          <div class="event-content">
+            <div class="event-header">
+              <span class="event-title">Routing model v1.3 deployed</span>
+              <span class="event-time">09:30</span>
+            </div>
+            <p class="event-description">
+              New version activated for all departments; rollback to v1.2 available.
+            </p>
+          </div>
+        </li>
+
+        <li class="event-item event-info">
+          <span class="event-dot"></span>
+          <div class="event-content">
+            <div class="event-header">
+              <span class="event-title">Nightly database backup completed</span>
+              <span class="event-time">03:00</span>
+            </div>
+            <p class="event-description">
+              Backup finished successfully; restore point created for the last 24 hours.
+            </p>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ROW 4: VERSIONS & SAFETY -->
+    <section class="cards-row">
+      <article class="card">
+        <h2 class="card-title">AI & Chatbot Versions</h2>
+        <p class="card-subtitle">What is currently live in production.</p>
+
+        <ul class="version-list">
+          <li class="version-item">
+            <div>
+              <div class="version-name">Routing model</div>
+              <div class="version-meta">v1.3 · Deployed 24 Nov 2025</div>
+            </div>
+            <button class="link-btn">View details</button>
+          </li>
+          <li class="version-item">
+            <div>
+              <div class="version-name">Priority scoring model</div>
+              <div class="version-meta">v2.1 · Deployed 20 Nov 2025</div>
+            </div>
+            <button class="link-btn">View details</button>
+          </li>
+          <li class="version-item">
+            <div>
+              <div class="version-name">Chatbot NLU</div>
+              <div class="version-meta">build 5.4 · Deployed 22 Nov 2025</div>
+            </div>
+            <button class="link-btn">View details</button>
+          </li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2 class="card-title">Safety & Maintenance</h2>
+        <p class="card-subtitle">Configuration and scheduled jobs.</p>
+
+        <ul class="safety-list">
+          <li class="safety-item">
+            <span class="safety-label">PII anonymization</span>
+            <span class="status-pill status-ok">Enabled</span>
+          </li>
+          <li class="safety-item">
+            <span class="safety-label">Logging level</span>
+            <span class="config-pill">Standard</span>
+          </li>
+          <li class="safety-item">
+            <span class="safety-label">Admin-only changes</span>
+            <span class="status-pill status-ok">Enforced</span>
+          </li>
+          <li class="safety-item">
+            <span class="safety-label">Next maintenance window</span>
+            <span class="config-pill">Sunday · 02:00–03:00</span>
+          </li>
+        </ul>
+      </article>
+    </section>
+
+  </main>
+</div>
+</body>
+</html>
