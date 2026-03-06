@@ -3139,6 +3139,7 @@ def get_complaints(user: Dict[str, Any] = Depends(require_manager)):
 
         result.append({
             "id": t["ticket_id"],
+            "resolvedAt": t["resolved_at"].isoformat() if t.get("resolved_at") else None,
             "subject": t.get("subject") or "No description",
             "priority": (t.get("priority") or "").lower(),
             "priorityText": priority_text,
@@ -3576,8 +3577,8 @@ def get_departments(authorization: Optional[str] = Header(default=None)):
 def get_manager_kpis(user: Dict[str, Any] = Depends(require_manager)):
     row = fetch_one("""
         SELECT
-            COUNT(*) FILTER (WHERE status IN ('Unassigned', 'Assigned', 'Escalated'))  AS open_complaints,
-            COUNT(*) FILTER (WHERE status IN ('Assigned', 'In Progress'))               AS in_progress,
+            COUNT(*) FILTER (WHERE status <> 'Resolved')                                AS open_complaints,
+            COUNT(*) FILTER (WHERE status NOT IN ('Resolved', 'Unassigned'))           AS in_progress,
             COUNT(*) FILTER (WHERE resolved_at::date = CURRENT_DATE)           AS resolved_today,
             (SELECT COUNT(*) FROM users WHERE role = 'employee')               AS active_employees,
             (SELECT COUNT(*) FROM approval_requests WHERE status = 'Pending')  AS pending_approvals
