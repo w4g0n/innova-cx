@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { apiUrl } from "../config/apiBase";
 
 function getAuthToken() {
@@ -18,32 +18,38 @@ function getAuthToken() {
   );
 }
 
-/**
- * Returns the number of unread notifications for the given role.
- * Polls every `intervalMs` milliseconds (default 60 s).
- */
 export function useUnreadCount(role, intervalMs = 60_000) {
   const [count, setCount] = useState(0);
 
-  const fetch_ = useCallback(async () => {
-    const token = getAuthToken();
-    if (!token || !role) return;
-    try {
-      const res = await fetch(apiUrl(`/api/${role}/notifications`), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const notifications = data.notifications || [];
-      setCount(notifications.filter((n) => !n.read).length);
-    } catch { /* silently ignore */ }
-  }, [role]);
-
   useEffect(() => {
-    fetch_();
-    const id = setInterval(fetch_, intervalMs);
-    return () => clearInterval(id);
-  }, [fetch_, intervalMs]);
+    if (!role) return;
+
+    let cancelled = false;
+
+    const load = () => {
+      const token = getAuthToken();
+      if (!token) return;
+
+      fetch(apiUrl(`/api/${role}/notifications`), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (cancelled || !data) return;
+          const unread = (data.notifications || []).filter((n) => !n.read).length;
+          setCount(unread);
+        })
+        .catch(() => {});
+    };
+
+    const id = setInterval(load, intervalMs);
+    load();
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [role, intervalMs]);
 
   return [count, setCount];
 }

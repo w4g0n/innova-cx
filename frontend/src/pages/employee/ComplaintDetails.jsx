@@ -70,16 +70,17 @@ function TicketModal({
   rescoreReason, setRescoreReason,
   rescoreError, setRescoreError,
   // resolve
-  resolveDecision, setResolveDecision,
+  resolveReviewAction, setResolveReviewAction,
   resolutionSuggestion, suggestionBusy,
   finalResolution, setFinalResolution,
-  stepsTaken, setStepsTaken,
   resolveError, setResolveError,
   resolveFiles, setResolveFiles,
   resolveBusy, setResolveBusy,
   // shared
   closeModal, loadTicket, uploadAttachmentsOrThrow, onSuccess,
 }) {
+  const [confirming, setConfirming] = useState(false);
+
   if (!type || !ticket) return null;
 
   const titles = {
@@ -91,6 +92,86 @@ function TicketModal({
 
   const submitText =
     type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
+
+  // ── Confirmation summary for reroute / rescore ──
+  const renderConfirmation = () => {
+    if (type === "reroute") {
+      return (
+        <div className="modal-confirm-body">
+          <div className="modal-confirm-icon">↗</div>
+          <p className="modal-confirm-heading">Confirm Reroute Request</p>
+          <p className="modal-confirm-sub">
+            Please review the details below before submitting. This will be sent for manager approval.
+          </p>
+          <div className="modal-confirm-rows">
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">New Department</span>
+              <span className="modal-confirm-value">{rerouteDepartment}</span>
+            </div>
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">Reason</span>
+              <span className="modal-confirm-value modal-confirm-reason">{rerouteReason}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (type === "rescore") {
+      return (
+        <div className="modal-confirm-body">
+          <div className="modal-confirm-icon">⚖</div>
+          <p className="modal-confirm-heading">Confirm Rescore Request</p>
+          <p className="modal-confirm-sub">
+            Please review the details below before submitting. This will be sent for manager approval.
+          </p>
+          <div className="modal-confirm-rows">
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">Current Priority</span>
+              <span className="modal-confirm-value">{ticket.priority ?? "—"}</span>
+            </div>
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">New Priority</span>
+              <span className="modal-confirm-value">{rescoreNewPriority}</span>
+            </div>
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">Reason</span>
+              <span className="modal-confirm-value modal-confirm-reason">{rescoreReason}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (type === "resolve") {
+      return (
+        <div className="modal-confirm-body">
+          <div className="modal-confirm-icon">✓</div>
+          <p className="modal-confirm-heading">Confirm Resolution</p>
+          <p className="modal-confirm-sub">
+            Please review the details below before submitting. This action will mark the ticket as resolved.
+          </p>
+          <div className="modal-confirm-rows">
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">Resolution Decision</span>
+              <span className="modal-confirm-value">
+                {resolveReviewAction === "accepted" ? "AI Suggestion Accepted" : "Custom Resolution"}
+              </span>
+            </div>
+            <div className="modal-confirm-row">
+              <span className="modal-confirm-label">Final Resolution</span>
+              <span className="modal-confirm-value modal-confirm-reason">{finalResolution || "—"}</span>
+            </div>
+            {resolveFiles.length > 0 && (
+              <div className="modal-confirm-row">
+                <span className="modal-confirm-label">Attachments</span>
+                <span className="modal-confirm-value">{resolveFiles.length} file(s): {resolveFiles.map(f => f.name).join(", ")}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
 
   const renderBody = () => {
     switch (type) {
@@ -175,42 +256,62 @@ function TicketModal({
       case "resolve":
         return (
           <>
-            <label>Model Suggested Resolution (Flan-T5-Base)</label>
-            <div className="model-suggestion">
-              {suggestionBusy ? "Generating..." : (resolutionSuggestion || "No suggestion available.")}
-            </div>
+            <label>Suggested Resolution</label>
+            <div className="resolution-review-box">
+              <div className="resolution-review-box__hint">
+                Mark as correct, decline, or edit. Your action trains the model.
+              </div>
 
-            <label>Resolution Decision</label>
-            <div className="select-wrapper modal-dropdown">
-              <select
-                value={resolveDecision}
+              <textarea
+                className="modal-textarea resolution-review-box__textarea"
+                value={finalResolution}
                 onChange={(e) => {
                   const next = e.target.value;
-                  setResolveDecision(next);
-                  if (next === "accepted") setFinalResolution(resolutionSuggestion || "");
+                  setFinalResolution(next);
+                  if ((resolutionSuggestion || "").trim() !== next.trim()) {
+                    setResolveReviewAction("edited");
+                  }
                 }}
-              >
-                <option value="accepted">Accept Suggested Resolution</option>
-                <option value="declined_custom">Decline and Write My Own</option>
-              </select>
+                placeholder={suggestionBusy ? "Generating..." : "No suggestion available."}
+                disabled={suggestionBusy}
+              />
+
+              <div className="resolution-review-box__actions">
+                <button
+                  type="button"
+                  className={`resolution-icon-btn resolution-icon-btn--decline ${resolveReviewAction === "declined" ? "is-active" : ""}`}
+                  onClick={() => setResolveReviewAction("declined")}
+                  disabled={suggestionBusy}
+                  aria-label="Decline suggestion"
+                  title="Decline suggestion"
+                >
+                  ✕
+                </button>
+                <button
+                  type="button"
+                  className={`resolution-icon-btn resolution-icon-btn--accept ${resolveReviewAction === "accepted" ? "is-active" : ""}`}
+                  onClick={() => {
+                    setResolveReviewAction("accepted");
+                    setFinalResolution(resolutionSuggestion || "");
+                  }}
+                  disabled={suggestionBusy}
+                  aria-label="Accept suggestion"
+                  title="Accept suggestion"
+                >
+                  ✓
+                </button>
+                <button
+                  type="button"
+                  className={`resolution-icon-btn resolution-icon-btn--edit ${resolveReviewAction === "edited" ? "is-active" : ""}`}
+                  onClick={() => setResolveReviewAction("edited")}
+                  disabled={suggestionBusy}
+                  aria-label="Edit suggestion"
+                  title="Edit suggestion"
+                >
+                  ✎
+                </button>
+              </div>
             </div>
-
-            <label>Final Resolution</label>
-            <textarea
-              className="modal-textarea"
-              value={finalResolution}
-              onChange={(e) => setFinalResolution(e.target.value)}
-              placeholder="Describe the final resolution provided..."
-              disabled={resolveDecision === "accepted"}
-            />
-
-            <label>Steps Taken to Resolve</label>
-            <textarea
-              className="modal-textarea"
-              value={stepsTaken}
-              onChange={(e) => setStepsTaken(e.target.value)}
-              placeholder="List the steps taken to resolve this issue..."
-            />
 
             {resolveError && (
               <div style={{ color: "#b42318", marginTop: 8, whiteSpace: "pre-wrap" }}>
@@ -312,8 +413,16 @@ function TicketModal({
     // ── resolve ──
     const token = getAuthToken();
     if (!token) { setResolveError("Missing auth token. Please log in again."); return; }
-    if (resolveDecision === "declined_custom" && !finalResolution.trim()) {
-      setResolveError("Final Resolution is required when declining suggestion.");
+    const suggestedTrimmed = (resolutionSuggestion || "").trim();
+    const finalTrimmed = finalResolution.trim();
+
+    if (resolveReviewAction !== "accepted" && !finalTrimmed) {
+      setResolveError("Please provide an edited final resolution.");
+      return;
+    }
+
+    if (resolveReviewAction === "declined" && finalTrimmed === suggestedTrimmed) {
+      setResolveError("Please edit the resolution so the model can learn the correction.");
       return;
     }
 
@@ -322,10 +431,10 @@ function TicketModal({
     try {
       await uploadAttachmentsOrThrow({ ticketCode: id, token, files: resolveFiles });
 
+      const decision = resolveReviewAction === "accepted" ? "accepted" : "declined_custom";
       const payload = {
-        decision: resolveDecision,
-        final_resolution: resolveDecision === "declined_custom" ? finalResolution.trim() : undefined,
-        steps_taken: stepsTaken.trim() || undefined,
+        decision,
+        final_resolution: decision === "declined_custom" ? finalTrimmed : undefined,
       };
 
       const res = await fetch(
@@ -352,7 +461,7 @@ function TicketModal({
   return (
     <div className="modal-overlay" onClick={closeModal}>
       <div
-        className={`modal-card ${type === "escalate" ? "modal-red" : ""}`}
+        className={`modal-card ${type === "escalate" ? "modal-red" : ""} ${type === "resolve" ? "modal-card--resolve" : ""}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
@@ -360,17 +469,65 @@ function TicketModal({
           <span className="modal-close" onClick={closeModal}>✕</span>
         </div>
 
-        <div className="modal-body">{renderBody()}</div>
+        <div className="modal-body">
+          {confirming ? renderConfirmation() : renderBody()}
+        </div>
 
         <div className="modal-footer">
-          <button className="modal-btn cancel" onClick={closeModal}>Cancel</button>
-          <button
-            className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
-            onClick={handleSubmit}
-            disabled={resolveBusy || suggestionBusy}
-          >
-            {resolveBusy ? "Saving..." : submitText}
-          </button>
+          {confirming ? (
+            <>
+              <button className="modal-btn cancel" onClick={() => setConfirming(false)}>← Back</button>
+              <button
+                className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
+                onClick={handleSubmit}
+                disabled={resolveBusy || suggestionBusy}
+              >
+                {resolveBusy ? "Saving..." : type === "resolve" ? "Confirm & Resolve" : "Confirm & Submit"}
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="modal-btn cancel" onClick={closeModal}>Cancel</button>
+              <button
+                className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
+                onClick={() => {
+                  // reroute / rescore → show confirmation first
+                  if (type === "reroute") {
+                    if (!rerouteDepartment || !rerouteReason.trim()) {
+                      setRerouteError("Please select a department and provide a reason.");
+                      return;
+                    }
+                    setRerouteError("");
+                    setConfirming(true);
+                    return;
+                  }
+                  if (type === "rescore") {
+                    if (!rescoreNewPriority || !rescoreReason.trim()) {
+                      setRescoreError("Please select a priority and provide a reason.");
+                      return;
+                    }
+                    setRescoreError("");
+                    setConfirming(true);
+                    return;
+                  }
+                  if (type === "resolve") {
+                    if (resolveReviewAction !== "accepted" && !finalResolution.trim()) {
+                      setResolveError("Please provide an edited final resolution.");
+                      return;
+                    }
+                    setResolveError("");
+                    setConfirming(true);
+                    return;
+                  }
+                  // all other types submit directly
+                  handleSubmit();
+                }}
+                disabled={resolveBusy || suggestionBusy}
+              >
+                {resolveBusy ? "Saving..." : submitText}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -387,14 +544,13 @@ export default function ComplaintDetails() {
   const [error, setError] = useState("");
   const [modalType, setModalType] = useState(null);
 
-  const [resolveDecision, setResolveDecision] = useState("accepted");
+  const [resolveReviewAction, setResolveReviewAction] = useState("accepted");
   const [resolutionSuggestion, setResolutionSuggestion] = useState("");
   const [finalResolution, setFinalResolution] = useState("");
-  const [stepsTaken, setStepsTaken] = useState("");
   const [resolveBusy, setResolveBusy] = useState(false);
   const [resolveError, setResolveError] = useState("");
   const [resolveFiles, setResolveFiles] = useState([]);
-  const [suggestionBusy, setSuggestionBusy] = useState(false);
+  const suggestionBusy = false;
 
   const [rescoreNewPriority, setRescoreNewPriority] = useState("Medium");
   const [rescoreReason, setRescoreReason] = useState("");
@@ -418,37 +574,12 @@ export default function ComplaintDetails() {
 
   useEffect(() => {
     if (modalType !== "resolve") return;
-    setResolveDecision("accepted");
-    setFinalResolution("");
-    setStepsTaken("");
+    const preGenerated = (ticket?.suggestedResolution || "").trim();
+    setResolveReviewAction("accepted");
+    setResolutionSuggestion(preGenerated);
+    setFinalResolution(preGenerated);
     setResolveError("");
-  }, [modalType]);
-
-  useEffect(() => {
-    async function loadSuggestion() {
-      if (modalType !== "resolve" || !id) return;
-      const token = getAuthToken();
-      if (!token) return;
-      setResolveError("");
-      setSuggestionBusy(true);
-      try {
-        const res = await fetch(
-          `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/resolution-suggestion`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
-        const data = await res.json();
-        const suggestion = (data?.suggestedResolution || "").trim();
-        setResolutionSuggestion(suggestion);
-        setFinalResolution(suggestion);
-      } catch (e) {
-        setResolveError(e?.message || "Could not fetch suggested resolution.");
-      } finally {
-        setSuggestionBusy(false);
-      }
-    }
-    loadSuggestion();
-  }, [modalType, id]);
+  }, [modalType, ticket]);
 
   const loadTicket = useCallback(async () => {
     const token = getAuthToken();
@@ -518,8 +649,8 @@ export default function ComplaintDetails() {
           <div className="summary-grid">
             <div><span className="label">Issue Date:</span> {ticket.issueDate}</div>
             <div><span className="label">Ticket Source:</span> {formatTicketSource(ticket.ticketSource)}</div>
-            <div><span className="label">Mean Time To Respond:</span> {ticket.metrics?.meanTimeToRespond}</div>
-            <div><span className="label">Mean Time To Resolve:</span> {ticket.metrics?.meanTimeToResolve}</div>
+            <div><span className="label">Mean Time To Respond:</span> {ticket.metrics?.meanTimeToRespond || "—"}</div>
+            <div><span className="label">Mean Time To Resolve:</span> {ticket.metrics?.meanTimeToResolve || "—"}</div>
             <div><span className="label">Submitted By:</span> {ticket.submittedBy?.name}</div>
             <div><span className="label">Contact:</span> {ticket.submittedBy?.contact}</div>
             <div><span className="label">Location:</span> {ticket.submittedBy?.location}</div>
@@ -587,10 +718,9 @@ export default function ComplaintDetails() {
         rescoreNewPriority={rescoreNewPriority} setRescoreNewPriority={setRescoreNewPriority}
         rescoreReason={rescoreReason} setRescoreReason={setRescoreReason}
         rescoreError={rescoreError} setRescoreError={setRescoreError}
-        resolveDecision={resolveDecision} setResolveDecision={setResolveDecision}
+        resolveReviewAction={resolveReviewAction} setResolveReviewAction={setResolveReviewAction}
         resolutionSuggestion={resolutionSuggestion} suggestionBusy={suggestionBusy}
         finalResolution={finalResolution} setFinalResolution={setFinalResolution}
-        stepsTaken={stepsTaken} setStepsTaken={setStepsTaken}
         resolveError={resolveError} setResolveError={setResolveError}
         resolveFiles={resolveFiles} setResolveFiles={setResolveFiles}
         resolveBusy={resolveBusy} setResolveBusy={setResolveBusy}

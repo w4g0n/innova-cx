@@ -5,14 +5,27 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-MAX_NEW_TOKENS = int(os.environ.get("CHATBOT_MAX_NEW_TOKENS", "96"))
+# ── Configuration ────────────────────────────────────────────────────────────
+
+# Provider: "template" (default, no LLM) | "local" (transformers model)
+CHATBOT_LLM_PROVIDER = os.environ.get("CHATBOT_LLM_PROVIDER", "template").strip().lower()
+
+MAX_NEW_TOKENS = int(os.environ.get("CHATBOT_MAX_NEW_TOKENS", "128"))
 DO_SAMPLE = os.environ.get("CHATBOT_DO_SAMPLE", "true").lower() == "true"
 TEMPERATURE = float(os.environ.get("CHATBOT_TEMPERATURE", "0.7"))
 TOP_P = float(os.environ.get("CHATBOT_TOP_P", "0.9"))
-QUANTIZATION = os.environ.get("CHATBOT_QUANTIZATION", "none").strip().lower()
+QUANTIZATION = os.environ.get("CHATBOT_QUANTIZATION", "4bit").strip().lower()
 HF_TOKEN = os.environ.get("HF_TOKEN") or None
 
-CHATBOT_MODEL_PATH = os.environ.get("CHATBOT_MODEL_PATH", "").strip()
+CHATBOT_MODEL_PATH = os.environ.get(
+    "CHATBOT_MODEL_PATH", ""
+).strip()
+CHATBOT_MODEL_NAME = os.environ.get(
+    "CHATBOT_MODEL_NAME", "Qwen/Qwen2.5-0.5B-Instruct"
+).strip()
+CHATBOT_AUTO_DOWNLOAD = os.environ.get("CHATBOT_AUTO_DOWNLOAD", "true").lower() in {"1", "true", "yes"}
+
+# Legacy env var — now ignored in favour of CHATBOT_LLM_PROVIDER
 CHATBOT_USE_MOCK = os.environ.get("CHATBOT_USE_MOCK", "true").lower() in {"1", "true", "yes"}
 
 _tokenizer = None
@@ -20,21 +33,32 @@ _model = None
 _model_init_attempted = False
 
 
-def _model_enabled() -> bool:
-    return bool(CHATBOT_MODEL_PATH and (Path(CHATBOT_MODEL_PATH) / "config.json").exists())
+# ── Public helpers ───────────────────────────────────────────────────────────
+
+def llm_available() -> bool:
+    """Returns True if a real LLM is loaded and ready for inference."""
+    if CHATBOT_LLM_PROVIDER == "template":
+        return False
+    _init_model_once()
+    return _model is not None and _tokenizer is not None
 
 
 def get_llm_diagnostics() -> dict[str, Any]:
-    model_exists = _model_enabled()
-    mode = "model" if model_exists and not CHATBOT_USE_MOCK else "mock"
+    local_model_exists = bool(CHATBOT_MODEL_PATH and (Path(CHATBOT_MODEL_PATH) / "config.json").exists())
     return {
+        "chatbot_llm_provider": CHATBOT_LLM_PROVIDER,
         "chatbot_model_path": CHATBOT_MODEL_PATH or None,
-        "chatbot_model_exists": model_exists,
-        "chatbot_use_mock": CHATBOT_USE_MOCK,
-        "chatbot_mode": mode,
+        "chatbot_model_name": CHATBOT_MODEL_NAME or None,
+        "chatbot_auto_download": CHATBOT_AUTO_DOWNLOAD,
+        "chatbot_local_model_exists": local_model_exists,
         "chatbot_model_loaded": _model is not None and _tokenizer is not None,
+        "chatbot_quantization": QUANTIZATION,
+        "chatbot_max_new_tokens": MAX_NEW_TOKENS,
+        "chatbot_mode": "model" if (_model is not None and _tokenizer is not None) else "mock",
     }
 
+
+# ── Model loading ────────────────────────────────────────────────────────────
 
 def _init_model_once() -> None:
     global _tokenizer, _model, _model_init_attempted
@@ -43,36 +67,54 @@ def _init_model_once() -> None:
         return
     _model_init_attempted = True
 
-    if CHATBOT_USE_MOCK:
-        logger.info("chatbot_llm | CHATBOT_USE_MOCK=true, skipping heavy model load")
-        return
-    if not _model_enabled():
-        logger.info("chatbot_llm | no valid CHATBOT_MODEL_PATH, using mock responses")
+    if CHATBOT_LLM_PROVIDER == "template":
+        logger.info("chatbot_llm | provider=template, no model to load")
         return
 
-    import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    if not CHATBOT_MODEL_PATH:
+        logger.warning("chatbot_llm | CHATBOT_MODEL_PATH is empty, falling back to template mode")
+        return
 
-    model_name = CHATBOT_MODEL_PATH
-    logger.info("chatbot_llm | loading model from %s", model_name)
-    _tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN)
+    model_path = Path(CHATBOT_MODEL_PATH)
+    if not (model_path / "config.json").exists() and CHATBOT_AUTO_DOWNLOAD and CHATBOT_MODEL_NAME:
+        try:
+            from huggingface_hub import snapshot_download
 
-    use_cuda = torch.cuda.is_available()
-    model_kwargs = {
-        "token": HF_TOKEN,
-        "torch_dtype": torch.bfloat16 if use_cuda else torch.float32,
-    }
-
-    if QUANTIZATION in {"4bit", "8bit"}:
-        if not use_cuda:
-            logger.warning(
-                "chatbot_llm | quantization '%s' requested but CUDA unavailable; loading without quantization",
-                QUANTIZATION,
+            logger.info("chatbot_llm | downloading model=%s to %s", CHATBOT_MODEL_NAME, CHATBOT_MODEL_PATH)
+            snapshot_download(
+                repo_id=CHATBOT_MODEL_NAME,
+                local_dir=CHATBOT_MODEL_PATH,
+                token=HF_TOKEN,
             )
-        else:
+        except Exception as exc:
+            logger.warning("chatbot_llm | auto-download failed (%s), falling back to template mode", exc)
+
+    if not (model_path / "config.json").exists():
+        logger.warning(
+            "chatbot_llm | no local model found at %s (missing config.json), falling back to template mode",
+            CHATBOT_MODEL_PATH,
+        )
+        return
+
+    try:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        model_name = CHATBOT_MODEL_PATH
+        logger.info("chatbot_llm | loading local model %s (quantization=%s)", model_name, QUANTIZATION)
+
+        _tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN, trust_remote_code=True)
+
+        use_cuda = torch.cuda.is_available()
+        model_kwargs: dict[str, Any] = {
+            "token": HF_TOKEN,
+            "trust_remote_code": True,
+            "torch_dtype": torch.bfloat16 if use_cuda else torch.float32,
+        }
+
+        if QUANTIZATION in {"4bit", "8bit"} and use_cuda:
             try:
                 from transformers import BitsAndBytesConfig
-
                 if QUANTIZATION == "4bit":
                     model_kwargs["quantization_config"] = BitsAndBytesConfig(
                         load_in_4bit=True,
@@ -83,32 +125,83 @@ def _init_model_once() -> None:
                 else:
                     model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
                 model_kwargs["device_map"] = "auto"
-                logger.info("chatbot_llm | loading with quantization=%s", QUANTIZATION)
+                logger.info("chatbot_llm | quantization=%s enabled", QUANTIZATION)
             except Exception as exc:
-                logger.warning("chatbot_llm | quantization setup failed (%s), continuing without", exc)
+                logger.warning("chatbot_llm | quantization setup failed (%s), loading without", exc)
+        elif not use_cuda:
+            logger.info("chatbot_llm | CUDA unavailable, loading in float32 on CPU")
 
-    _model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
-    logger.info("chatbot_llm | model loaded")
+        _model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+        if not use_cuda and not hasattr(_model, "hf_device_map"):
+            _model = _model.to("cpu")
+
+        logger.info("chatbot_llm | model loaded successfully")
+
+    except Exception as exc:
+        logger.error("chatbot_llm | failed to load model: %s", exc)
+        _model = None
+        _tokenizer = None
 
 
-def _mock_response(messages: list[dict]) -> str:
-    user_msg = ""
-    for msg in reversed(messages or []):
-        if str(msg.get("role", "")).lower() == "user":
-            user_msg = str(msg.get("content", "")).strip()
-            break
-    if not user_msg:
-        return "I can help with that. Please share the key ticket details."
+# ── Template response ────────────────────────────────────────────────────────
+
+def _template_response(messages: list[dict]) -> str:
+    """
+    Generate a response without an LLM by extracting context from the system
+    prompt and formatting it as a helpful answer.
+    """
+    system_msg = ""
+    #user_msg = ""
+    for msg in messages:
+        role = str(msg.get("role", "")).lower()
+        content = str(msg.get("content", "")).strip()
+        if role == "system":
+            system_msg = content
+        elif role == "user":
+            pass
+            #user_msg = content  # last user message
+
+    # If system prompt contains KB context, use it as the answer
+    if "Context:" in system_msg:
+        context = system_msg.split("Context:")[-1].strip()
+        # Clean up the context for a natural response
+        lines = [ln.strip().lstrip("- ") for ln in context.split("\n") if ln.strip()]
+        if lines:
+            best = lines[0][:500]
+            return (
+                f"Based on our records: {best}\n\n"
+                "Is there anything else you would like to know?"
+            )
+
+    # If system prompt contains guidelines/context
+    if "Guidelines:" in system_msg:
+        return (
+            "I understand your frustration and I sincerely apologise for the inconvenience. "
+            "Your concern is important to us and I want to make sure it is addressed properly. "
+            "Could you please describe the issue in detail so I can create a support ticket for you?"
+        )
+
+    # De-escalation template
+    if "empathy" in system_msg.lower() or "acknowledge" in system_msg.lower():
+        return (
+            "I completely understand how frustrating this must be, and I am truly sorry "
+            "for the inconvenience you are experiencing. Your concern is valid and important "
+            "to us. I want to make sure we address this properly."
+        )
+
+    # Generic helpful response
     return (
-        "Mock mode is active (no local LLM model path configured). "
-        f"Captured request: {user_msg[:220]}"
+        "I understand your concern. Let me help you with that. "
+        "Could you provide more details so I can assist you better?"
     )
 
 
-def generate_response(messages: list[dict]) -> str:
+# ── Local model response ─────────────────────────────────────────────────────
+
+def _local_model_response(messages: list[dict]) -> str:
     _init_model_once()
     if _model is None or _tokenizer is None:
-        return _mock_response(messages)
+        return _template_response(messages)
 
     import torch
 
@@ -120,7 +213,7 @@ def generate_response(messages: list[dict]) -> str:
 
     inputs = _tokenizer([text], return_tensors="pt").to(_model.device)
     with torch.no_grad():
-        gen_kwargs = {
+        gen_kwargs: dict[str, Any] = {
             "max_new_tokens": MAX_NEW_TOKENS,
             "do_sample": DO_SAMPLE,
         }
@@ -129,6 +222,19 @@ def generate_response(messages: list[dict]) -> str:
             gen_kwargs["top_p"] = TOP_P
         output_ids = _model.generate(**inputs, **gen_kwargs)
 
-    generated_ids = output_ids[0][inputs["input_ids"].shape[1] :]
+    generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
     response = _tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
-    return response or _mock_response(messages)
+    return response or _template_response(messages)
+
+
+# ── Public API ───────────────────────────────────────────────────────────────
+
+def generate_response(messages: list[dict]) -> str:
+    """
+    Generate a chatbot response using the configured provider.
+    - template: fast rule-based/KB responses (~1ms)
+    - local: Qwen2.5-0.5B-Instruct or other HF model
+    """
+    if CHATBOT_LLM_PROVIDER == "local":
+        return _local_model_response(messages)
+    return _template_response(messages)

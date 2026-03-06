@@ -311,6 +311,7 @@ function PipelineDetail({ stage, onPrev, onNext, isFirst, isLast }) {
 }
 
 export default function AboutUs() {
+  const statsRef = useRef(null)
   const navigate = useNavigate();
 
   /* hero text cycle */
@@ -323,7 +324,6 @@ export default function AboutUs() {
   /* sections in-view */
   const [missionRef, missionInView] = useInView();
   const [pipelineRef, pipelineInView] = useInView();
-  const [statsRef, statsInView] = useInView();
   const [whyRef, whyInView] = useInView();
   const [teamRef, teamInView] = useInView();
 
@@ -740,21 +740,10 @@ export default function AboutUs() {
         </div>
       </section>
 
-      {/* ── Stats ── */}
       <section className="au-section au-stats-section" ref={statsRef}>
-        <div className="au-section-tag" style={{ textAlign: "center" }}>By the Numbers</div>
         <h2 className="au-section-title" style={{ textAlign: "center" }}>
           Real Impact, Real Results
         </h2>
-        <div className="au-stats-grid">
-          <StatCard value={40}  suffix="%" label="Reduction in Average Response Time" delay={0}   inView={statsInView} />
-          <StatCard value={3}   suffix="x"  label="Faster Critical Ticket Resolution"  delay={150} inView={statsInView} />
-          <StatCard value={87}  suffix="%"  label="Customer Satisfaction Score"        delay={300} inView={statsInView} />
-          <StatCard value={60}  suffix="%"  label="Decrease in Ticket Misrouting"      delay={450} inView={statsInView} />
-        </div>
-        <p className="au-stats-note">
-          * Figures based on internal pilot deployments and comparable AI-driven support platforms.
-        </p>
       </section>
 
       {/* ── Why choose / ROI ── */}
@@ -775,16 +764,6 @@ export default function AboutUs() {
               <li><span className="au-roi-bullet" />Faster responses and better prioritization lead to more consistent support experiences.</li>
               <li><span className="au-roi-bullet" />Handle growing ticket volumes without proportionally increasing support staff.</li>
             </ul>
-          </div>
-          <div className="au-roi-card">
-            <div className="au-roi-card-title">Estimated Annual Savings</div>
-            <div className="au-roi-figure">AED 2.4M+</div>
-            <div className="au-roi-card-sub">for a mid-size e-commerce operation (500 tickets/day)</div>
-            <div className="au-roi-breakdown">
-              <div className="au-roi-row"><span>Agent hours saved</span><strong>~18,000 hrs/yr</strong></div>
-              <div className="au-roi-row"><span>Churn reduction value</span><strong>~AED 1.1M</strong></div>
-              <div className="au-roi-row"><span>Escalation cost avoided</span><strong>~AED 640K</strong></div>
-            </div>
           </div>
         </div>
       </section>

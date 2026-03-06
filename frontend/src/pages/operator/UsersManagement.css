@@ -1,216 +1,124 @@
+/* ============================================================
+   UsersManagement — Refined Enterprise Theme
+   Clean, precise, professional. Every detail intentional.
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+
+/* ── Page shell ── */
 .umPage {
   width: 100%;
   max-width: none;
-  animation: fadeUp 0.4s var(--ease-out) both;
+  animation: umFadeUp 0.35s cubic-bezier(0.22,1,0.36,1) both;
+  font-family: "DM Sans", sans-serif;
+}
+@keyframes umFadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ---- Top header ---- */
-.umTop {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.umTitle {
-  margin: 0;
-  font-family: var(--font-heading);
-  font-size: clamp(22px, 3vw, 30px);
-  font-weight: 800;
-  color: var(--text-dark);
-  letter-spacing: -0.2px;
-}
-
-.umSub {
-  margin: 6px 0 0;
-  font-size: 14px;
-  color: rgba(17, 17, 17, 0.60);
-  max-width: 640px;
-}
-
-/* ---- Toast ---- */
+/* ── Toast ── */
 .umToast {
-  margin-top: 14px;
-  padding: 12px 16px;
-  border-radius: var(--radius-md);
-  font-weight: 700;
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 13px 18px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  animation: umFadeUp 0.2s ease both;
 }
 .umToast.success {
-  background: rgba(46, 204, 113, 0.12);
-  border: 1px solid rgba(46, 204, 113, 0.24);
-  color: #1f7a45;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
 }
 .umToast.error {
-  background: rgba(231, 76, 60, 0.10);
-  border: 1px solid rgba(231, 76, 60, 0.22);
-  color: #a7372b;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #9f1239;
 }
-
-/* ---- Buttons ---- */
-.umBtnPrimary {
-  background: var(--btn-primary);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-pill);
-  padding: 11px 22px;
-  font-weight: 800;
-  font-size: 14px;
-  font-family: inherit;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 3px 12px rgba(89, 36, 180, 0.25);
-  transition: filter var(--dur-fast);
-  white-space: nowrap;
+.umToast::before {
+  font-size: 15px;
+  flex-shrink: 0;
 }
-.umBtnPrimary:hover { filter: brightness(1.08); }
+.umToast.success::before { content: "✓"; }
+.umToast.error::before   { content: "!"; }
 
-.umBtnGhost {
-  background: rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: var(--radius-pill);
-  padding: 10px 16px;
-  font-weight: 700;
-  font-size: 13px;
-  font-family: inherit;
-  color: var(--text-dark);
-  cursor: pointer;
-  transition: background var(--dur-fast);
-}
-.umBtnGhost:hover { background: rgba(0, 0, 0, 0.09); }
-
-/* ---- KPI Grid — 5 cards, always one row ---- */
+/* ── KPI grid ── */
 .umKpis {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 28px;
-  margin-bottom: 28px;
+  gap: 14px;
+  margin-top: 26px;
+  margin-bottom: 26px;
 }
 
-/* ---- Search row ---- */
-.umSearchRow {
-  margin-bottom: 14px;
-}
+/* ── Search row ── */
+.umSearchRow { margin-bottom: 12px; }
 
+/* ── KPI card (legacy classes kept, override via specificity) ── */
 .umKpi {
-  background: #ffffff;
-  border-radius: var(--radius-lg);
-  padding: 18px 20px;
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  box-shadow: 0 4px 18px rgba(64, 28, 81, 0.09);
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px 22px;
+  border: 1px solid #e8e8ed;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03);
   position: relative;
   overflow: hidden;
-  transition: transform var(--dur-base), box-shadow var(--dur-base);
+  transition: box-shadow .2s, transform .2s;
 }
 .umKpi::before {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 3px;
-  background: var(--gradient-card-top);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  height: 2px;
+  background: linear-gradient(90deg, #6d28d9, #a855f7);
+  border-radius: 12px 12px 0 0;
 }
 .umKpi:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 28px rgba(64, 28, 81, 0.14);
+  box-shadow: 0 4px 20px rgba(109,40,217,.1);
 }
-
 .umKpiLabel {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(17, 17, 17, 0.52);
-  font-weight: 700;
+  letter-spacing: .09em;
+  color: #6b7280;
+  font-weight: 600;
+  font-family: "DM Mono", monospace;
 }
 .umKpiValue {
-  margin-top: 8px;
-  font-size: 28px;
-  font-weight: 900;
-  color: var(--btn-primary);
-  font-family: var(--font-heading);
+  margin-top: 10px;
+  font-size: 30px;
+  font-weight: 800;
+  color: #1a1a2e;
+  letter-spacing: -.02em;
+  line-height: 1;
 }
 
-/* ---- Search bar ---- */
-.umSearchBar {
-  margin-top: 20px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-radius: var(--radius-pill);
-  padding: 11px 16px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: #ffffff;
-  box-shadow: var(--shadow-sm);
-}
-.umSearchIcon {
-  color: rgba(17, 17, 17, 0.45);
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-.umSearchInput {
-  width: 100%;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--text-dark);
-  font-size: 14px;
-  font-family: inherit;
-}
-.umSearchClear {
-  background: none;
-  border: none;
-  color: rgba(17, 17, 17, 0.45);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 4px;
-  flex-shrink: 0;
-  transition: color var(--dur-fast);
-}
-.umSearchClear:hover { color: var(--text-dark); }
-
-/* ---- Filters row ---- */
+/* ── Filters row ── */
 .umFilters {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   margin-top: 10px;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.umSelect {
-  border-radius: var(--radius-pill);
-  padding: 10px 14px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: #ffffff;
-  color: var(--text-dark);
-  outline: none;
-  font-size: 13px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-}
-
-/* ---- Table card ---- */
+/* ── Table card ── */
 .umTableCard {
-  border-radius: var(--radius-lg);
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  background: #ffffff;
-  box-shadow: 0 6px 24px rgba(64, 28, 81, 0.08);
-  /* overflow: visible so 3-dot dropdowns aren't clipped */
+  border-radius: 14px;
+  border: 1px solid #e8e8ed;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.04);
   overflow: visible;
 }
 
-/* Inner scroll wrapper — clips table to border-radius */
 .umTableScroll {
   overflow-x: auto;
-  border-radius: var(--radius-lg);
+  border-radius: 14px;
   overflow-y: visible;
 }
 
@@ -223,86 +131,71 @@
   text-align: left;
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(17, 17, 17, 0.50);
-  font-weight: 700;
-  padding: 14px 14px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  background: rgba(0, 0, 0, 0.02);
+  letter-spacing: .09em;
+  color: #6b7280;
+  font-weight: 600;
+  font-family: "DM Mono", monospace;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f0f0f5;
+  background: #fafafa;
   white-space: nowrap;
 }
+.umTable thead th:first-child { border-radius: 14px 0 0 0; }
+.umTable thead th:last-child  { border-radius: 0 14px 0 0; }
 
 .umTable tbody td {
-  padding: 14px 14px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  padding: 14px 16px;
+  border-bottom: 1px solid #f5f5f8;
   vertical-align: middle;
-  font-size: 14px;
-  color: var(--text-dark);
+  font-size: 13.5px;
+  color: #1a1a2e;
 }
 .umTable tbody tr:last-child td { border-bottom: none; }
-.umTable tbody tr:hover          { background: rgba(89, 36, 180, 0.03); }
+.umTable tbody tr {
+  transition: background .15s;
+}
+.umTable tbody tr:hover { background: #faf8ff; }
 
 .umRight    { text-align: right; }
-.umNameCell { font-weight: 600; }
-.umMuted    { color: rgba(17, 17, 17, 0.60); font-size: 13px; }
+.umNameCell { font-weight: 600; color: #111827; }
+.umMuted    { color: #6b7280; font-size: 13px; }
 
 .umLinkish {
-  color: var(--btn-primary);
-  font-weight: 700;
+  color: #7c3aed;
+  font-weight: 600;
   font-size: 12px;
+  font-family: "DM Mono", monospace;
+  letter-spacing: .03em;
 }
 
 .umEmpty {
-  padding: 28px;
+  padding: 40px;
   text-align: center;
-  color: rgba(17, 17, 17, 0.45);
+  color: #9ca3af;
   font-size: 14px;
 }
 
-/* ---- Action buttons inside table rows ---- */
-.umActions {
+/* ── Role & Status pills ── */
+.umPill {
   display: inline-flex;
-  gap: 6px;
-  justify-content: flex-end;
-  flex-wrap: wrap;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 11.5px;
+  text-transform: capitalize;
+  letter-spacing: .01em;
 }
 
-.umBtnSmall {
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: var(--radius-md);
-  padding: 7px 12px;
-  background: rgba(0, 0, 0, 0.04);
-  cursor: pointer;
-  font-weight: 700;
-  font-size: 12px;
-  font-family: inherit;
-  color: var(--text-dark);
-  transition: background var(--dur-fast);
-}
-.umBtnSmall:hover { background: rgba(0, 0, 0, 0.09); }
+.role-customer { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+.role-employee { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+.role-manager  { background: #fffbeb; border: 1px solid #fde68a; color: #b45309; }
+.role-operator { background: #faf5ff; border: 1px solid #e9d5ff; color: #7c3aed; }
 
-.umBtnSmall.secondary {
-  background: rgba(89, 36, 180, 0.07);
-  border-color: rgba(89, 36, 180, 0.18);
-  color: var(--btn-primary);
-}
-.umBtnSmall.secondary:hover { background: rgba(89, 36, 180, 0.13); }
+.status-active   { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+.status-inactive { background: #fff1f2; border: 1px solid #fecdd3; color: #be123c; }
 
-.umBtnSmall.warning {
-  background: rgba(240, 180, 41, 0.09);
-  border-color: rgba(240, 180, 41, 0.25);
-  color: #7a5c00;
-}
-.umBtnSmall.warning:hover { background: rgba(240, 180, 41, 0.16); }
-
-.umBtnSmall.danger {
-  background: rgba(231, 76, 60, 0.08);
-  border-color: rgba(231, 76, 60, 0.22);
-  color: #a7372b;
-}
-.umBtnSmall.danger:hover { background: rgba(231, 76, 60, 0.14); }
-
-/* ---- 3-dot action menu ---- */
+/* ── 3-dot menu ── */
 .umMenuWrap {
   position: relative;
   display: inline-flex;
@@ -311,42 +204,46 @@
 }
 
 .umMenuBtn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.10);
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--text-dark);
-  font-size: 18px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #6b7280;
+  font-size: 16px;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background var(--dur-fast), border-color var(--dur-fast);
+  transition: background .15s, border-color .15s, color .15s;
   flex-shrink: 0;
 }
 .umMenuBtn:hover {
-  background: rgba(89, 36, 180, 0.08);
-  border-color: rgba(89, 36, 180, 0.22);
+  background: #faf5ff;
+  border-color: #d8b4fe;
+  color: #7c3aed;
 }
 
 .umMenuDropdown {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  min-width: 160px;
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.10);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 28px rgba(15, 10, 24, 0.14);
+  min-width: 156px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0,0,0,.05), 0 10px 30px rgba(0,0,0,.1);
   z-index: 200;
   overflow: hidden;
-  animation: scaleIn 0.15s var(--ease-spring) both;
+  animation: umDropIn 0.15s cubic-bezier(0.22,1,0.36,1) both;
   transform-origin: top right;
 }
+@keyframes umDropIn {
+  from { opacity: 0; transform: scale(.95) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
 
-/* Flip upward when near the bottom of the viewport */
 .umMenuDropdown--up {
   top: auto;
   bottom: calc(100% + 6px);
@@ -355,72 +252,99 @@
 
 .umMenuItem {
   width: 100%;
-  padding: 10px 14px;
+  padding: 9px 14px;
   background: none;
   border: none;
   text-align: left;
   font-size: 13px;
-  font-weight: 700;
-  font-family: inherit;
-  color: var(--text-dark);
+  font-weight: 600;
+  font-family: "DM Sans", sans-serif;
+  color: #374151;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
-  transition: background var(--dur-fast);
+  gap: 9px;
+  transition: background .12s;
 }
-.umMenuItem:hover { background: rgba(0, 0, 0, 0.05); }
-.umMenuItem + .umMenuItem { border-top: 1px solid rgba(0, 0, 0, 0.05); }
+.umMenuItem:hover { background: #f9fafb; }
+.umMenuItem + .umMenuItem { border-top: 1px solid #f3f4f6; }
 
-.umMenuItem.warning { color: #7a5c00; }
-.umMenuItem.warning:hover { background: rgba(240, 180, 41, 0.10); }
+.umMenuItem.warning        { color: #b45309; }
+.umMenuItem.warning:hover  { background: #fffbeb; }
+.umMenuItem.danger         { color: #be123c; }
+.umMenuItem.danger:hover   { background: #fff1f2; }
 
-.umMenuItem.danger { color: #a7372b; }
-.umMenuItem.danger:hover { background: rgba(231, 76, 60, 0.08); }
-
-/* ---- Role & Status pills ---- */
-.umPill {
+/* ── Buttons (shared) ── */
+.umBtnPrimary {
+  background: linear-gradient(135deg, #6d28d9, #7c3aed);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 700;
+  font-size: 13.5px;
+  font-family: "DM Sans", sans-serif;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
-  padding: 5px 11px;
-  border-radius: var(--radius-pill);
-  font-weight: 700;
-  font-size: 12px;
-  text-transform: capitalize;
+  gap: 7px;
+  box-shadow: 0 2px 8px rgba(109,40,217,.3);
+  transition: box-shadow .2s, transform .15s;
+  white-space: nowrap;
+}
+.umBtnPrimary:hover {
+  box-shadow: 0 4px 16px rgba(109,40,217,.4);
+  transform: translateY(-1px);
 }
 
-.role-customer { background: rgba( 52, 152, 219, 0.12); border: 1px solid rgba( 52, 152, 219, 0.22); color: #1a6fa0; }
-.role-employee { background: rgba( 46, 204, 113, 0.12); border: 1px solid rgba( 46, 204, 113, 0.22); color: #1a7a45; }
-.role-manager  { background: rgba(241, 196,  15, 0.13); border: 1px solid rgba(241, 196,  15, 0.26); color: #7a5c00; }
-.role-operator { background: rgba( 89,  36, 180, 0.11); border: 1px solid rgba( 89,  36, 180, 0.22); color: var(--btn-primary); }
+.umBtnGhost {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: 600;
+  font-size: 13.5px;
+  font-family: "DM Sans", sans-serif;
+  color: #374151;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.umBtnGhost:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
 
-.status-active   { background: rgba( 46, 204, 113, 0.12); border: 1px solid rgba( 46, 204, 113, 0.22); color: #1a7a45; }
-.status-inactive { background: rgba(231,  76,  60, 0.10); border: 1px solid rgba(231,  76,  60, 0.20); color: #a7372b; }
-
-/* ================================================
-   Modals
-   ================================================ */
-
+/* ── Modal overlay & card ── */
 .umModalOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 10, 24, 0.45);
+  background: rgba(17, 10, 38, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
-  z-index: 50;
-  overflow-y: auto;
+  z-index: 300;
+  animation: umFadeIn 0.18s ease both;
+}
+@keyframes umFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes umSlideUp {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .umModal {
-  width: min(860px, 100%);
-  border-radius: var(--radius-lg);
-  border: 1px solid rgba(0, 0, 0, 0.09);
-  background: #ffffff;
-  box-shadow: 0 24px 64px rgba(15, 10, 24, 0.20);
-  padding: 22px;
-  animation: scaleIn 0.2s var(--ease-spring);
+  width: min(840px, 100%);
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(17,10,38,.18), 0 4px 16px rgba(0,0,0,.08);
+  padding: 28px 28px 24px;
+  animation: umSlideUp 0.22s cubic-bezier(0.22,1,0.36,1) both;
   max-height: 90vh;
   overflow-y: auto;
 }
@@ -430,44 +354,46 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 4px;
 }
 
 .umModalTitle {
-  font-family: var(--font-heading);
-  font-size: 20px;
-  font-weight: 900;
-  color: var(--text-dark);
+  font-size: 18px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -.02em;
 }
 .umModalSub {
   margin-top: 4px;
-  color: rgba(17, 17, 17, 0.58);
+  color: #6b7280;
   font-size: 13px;
+  line-height: 1.5;
 }
 
 .umX {
-  background: rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(0, 0, 0, 0.10);
-  color: var(--text-dark);
-  border-radius: 50%;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
+  border-radius: 8px;
   width: 32px;
   height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   flex-shrink: 0;
-  transition: background var(--dur-fast);
+  transition: background .15s, color .15s;
 }
-.umX:hover { background: rgba(0, 0, 0, 0.10); }
+.umX:hover { background: #e5e7eb; color: #111827; }
 
 /* Modal form grid */
 .umModalGrid {
-  margin-top: 20px;
+  margin-top: 22px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px 18px;
+  gap: 16px 20px;
 }
 
 .umField {
@@ -478,28 +404,33 @@
 .umField label {
   font-size: 12px;
   font-weight: 700;
-  color: rgba(17, 17, 17, 0.72);
+  color: #374151;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  font-family: "DM Mono", monospace;
 }
 .umField input,
 .umField select {
-  border-radius: var(--radius-md);
-  padding: 11px 12px;
-  border: 1px solid rgba(0, 0, 0, 0.13);
-  background: rgba(0, 0, 0, 0.02);
-  color: var(--text-dark);
+  border-radius: 9px;
+  padding: 11px 14px;
+  border: 1.5px solid #e5e7eb;
+  background: #fafafa;
+  color: #111827;
   outline: none;
   font-size: 14px;
-  font-family: inherit;
-  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+  font-family: "DM Sans", sans-serif;
+  transition: border-color .2s, box-shadow .2s, background .2s;
 }
 .umField input:focus,
 .umField select:focus {
-  border-color: var(--btn-primary);
-  box-shadow: var(--shadow-glow);
+  border-color: #7c3aed;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(124,58,237,.1);
 }
+.umField input::placeholder { color: #9ca3af; }
 
 .umErr {
-  color: #a7372b;
+  color: #be123c;
   font-size: 12px;
   font-weight: 600;
 }
@@ -507,7 +438,7 @@
 .umDivider {
   grid-column: 1 / -1;
   height: 1px;
-  background: rgba(0, 0, 0, 0.07);
+  background: #f3f4f6;
   margin: 4px 0;
 }
 
@@ -515,14 +446,75 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid #f3f4f6;
 }
 
-/* ================================================
-   Responsive
-   ================================================ */
+/* ── Password toggle ── */
+.umPwdWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.umPwdWrap input {
+  width: 100%;
+  padding-right: 42px !important;
+}
+.umEyeBtn {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  transition: color .15s;
+}
+.umEyeBtn:hover { color: #7c3aed; }
+
+/* ── Phone input overrides ── */
+.umPhoneWrap .react-tel-input { width: 100%; }
+
+.umPhoneWrap .react-tel-input .form-control {
+  width: 100% !important;
+  height: auto !important;
+  border-radius: 9px !important;
+  padding: 11px 14px 11px 52px !important;
+  border: 1.5px solid #e5e7eb !important;
+  background: #fafafa !important;
+  color: #111827 !important;
+  font-size: 14px !important;
+  font-family: "DM Sans", sans-serif !important;
+  box-shadow: none !important;
+  transition: border-color .2s, box-shadow .2s !important;
+}
+.umPhoneWrap .react-tel-input .form-control:focus {
+  border-color: #7c3aed !important;
+  background: #fff !important;
+  box-shadow: 0 0 0 3px rgba(124,58,237,.1) !important;
+  outline: none !important;
+}
+.umPhoneWrap .react-tel-input .flag-dropdown {
+  border-radius: 9px 0 0 9px !important;
+  border: 1.5px solid #e5e7eb !important;
+  border-right: none !important;
+  background: #f3f4f6 !important;
+}
+.umPhoneWrap .react-tel-input .selected-flag {
+  border-radius: 9px 0 0 9px !important;
+  padding: 0 8px 0 10px !important;
+}
+.umPhoneWrap .react-tel-input .country-list {
+  border-radius: 10px !important;
+  box-shadow: 0 8px 30px rgba(0,0,0,.12) !important;
+  border: 1px solid #e5e7eb !important;
+  font-family: "DM Sans", sans-serif !important;
+}
+
+/* ── Responsive ── */
 @media (max-width: 1100px) {
   .umKpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -531,73 +523,6 @@
   .umModalGrid { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
-  .umPage { padding: 16px; }
   .umTable thead th,
-  .umTable tbody td { padding: 10px 10px; }
+  .umTable tbody td { padding: 10px 12px; }
 }
-
-/* ================================================
-   Phone input — match other fields exactly
-   ================================================ */
-.umPhoneWrap .react-tel-input {
-  width: 100%;
-}
-.umPhoneWrap .react-tel-input .form-control {
-  width: 100% !important;
-  height: auto !important;
-  border-radius: var(--radius-md) !important;
-  padding: 11px 12px 11px 52px !important;
-  border: 1px solid rgba(0, 0, 0, 0.13) !important;
-  background: rgba(0, 0, 0, 0.02) !important;
-  color: var(--text-dark) !important;
-  font-size: 14px !important;
-  font-family: inherit !important;
-  box-shadow: none !important;
-  transition: border-color var(--dur-fast), box-shadow var(--dur-fast) !important;
-}
-.umPhoneWrap .react-tel-input .form-control:focus {
-  border-color: var(--btn-primary) !important;
-  box-shadow: var(--shadow-glow) !important;
-  outline: none !important;
-}
-.umPhoneWrap .react-tel-input .flag-dropdown {
-  border-radius: var(--radius-md) 0 0 var(--radius-md) !important;
-  border: 1px solid rgba(0, 0, 0, 0.13) !important;
-  border-right: none !important;
-  background: rgba(0, 0, 0, 0.04) !important;
-}
-.umPhoneWrap .react-tel-input .selected-flag {
-  border-radius: var(--radius-md) 0 0 var(--radius-md) !important;
-  padding: 0 8px 0 10px !important;
-}
-.umPhoneWrap .react-tel-input .country-list {
-  border-radius: var(--radius-md) !important;
-  box-shadow: 0 8px 28px rgba(15, 10, 24, 0.14) !important;
-  border: 1px solid rgba(0,0,0,0.10) !important;
-}
-
-/* ================================================
-   Password eye toggle
-   ================================================ */
-.umPwdWrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.umPwdWrap input {
-  width: 100%;
-  padding-right: 40px !important;
-}
-.umEyeBtn {
-  position: absolute;
-  right: 10px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: rgba(17, 17, 17, 0.45);
-  display: flex;
-  align-items: center;
-  padding: 4px;
-  transition: color var(--dur-fast);
-}
-.umEyeBtn:hover { color: var(--text-dark); }

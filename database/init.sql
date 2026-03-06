@@ -21,11 +21,9 @@ DO $$ BEGIN
   CREATE TYPE ticket_status AS ENUM (
     'Open',
     'In Progress',
-    'Unassigned',
     'Assigned',
     'Escalated',
     'Overdue',
-    'Reopened',
     'Resolved'
   );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -159,7 +157,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   subject             TEXT NOT NULL,
   details             TEXT NOT NULL,
   ticket_type         ticket_type NOT NULL DEFAULT 'Complaint',
-  status              ticket_status NOT NULL DEFAULT 'Unassigned',
+  status              ticket_status NOT NULL DEFAULT 'Open',
   priority            ticket_priority NOT NULL DEFAULT 'Medium',
   department_id       UUID REFERENCES departments(id) ON DELETE SET NULL,
   created_by_user_id  UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
@@ -526,6 +524,26 @@ CREATE TABLE IF NOT EXISTS department_routing_feedback (
 
 CREATE INDEX IF NOT EXISTS idx_routing_feedback_predicted ON department_routing_feedback(predicted_department);
 CREATE INDEX IF NOT EXISTS idx_routing_feedback_created_at ON department_routing_feedback(created_at);
+
+CREATE TABLE IF NOT EXISTS department_routing (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  suggested_department TEXT NOT NULL,
+  confidence_score     NUMERIC(5,2) NOT NULL CHECK (confidence_score >= 0 AND confidence_score <= 100),
+  is_confident         BOOLEAN NOT NULL,
+  final_department     TEXT,
+  routed_by            TEXT CHECK (routed_by IN ('model', 'manager')),
+  manager_id           UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_department_routing_ticket
+  ON department_routing(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_department_routing_pending
+  ON department_routing(is_confident, final_department, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_department_routing_finalized
+  ON department_routing(final_department, routed_by, updated_at DESC);
 
 -- -------------------------
 -- Auto-notify manager on new approval requests
@@ -1195,7 +1213,7 @@ VALUES
   'Cleaning did not occur on scheduled time.',
   'Complaint',
   'Medium',
-  'Unassigned',
+  'Open',
   NULL,
   (SELECT id FROM cust),
   NULL,
@@ -1328,7 +1346,7 @@ ON CONFLICT (ticket_id, step_no) DO NOTHING;
 -- Placeholder tickets required for approvals linkage
 INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2011', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3101',
-       'Complaint','Medium','Unassigned',
+       'Complaint','Medium','Open',
        (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1),
        (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('18/11/2025','DD/MM/YYYY')
@@ -1336,7 +1354,7 @@ WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2011');
 
 INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2034', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3110',
-       'Complaint','Medium','Unassigned',
+       'Complaint','Medium','Open',
        (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1),
        (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('18/11/2025','DD/MM/YYYY')
@@ -1344,7 +1362,7 @@ WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2034');
 
 INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, status, department_id, created_by_user_id, created_at)
 SELECT 'CX-2078', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3125',
-       'Complaint','High','Unassigned',
+       'Complaint','High','Open',
        (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1),
        (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
        to_timestamp('17/11/2025','DD/MM/YYYY')
@@ -2598,7 +2616,7 @@ INSERT INTO tickets (
  -0.10,'Neutral'),
 
 ('CX-R10','Unassigned parking space dispute','Customer reporting their reserved bay is consistently occupied.',
- 'Complaint','Low','Unassigned',
+ 'Complaint','Low','Open',
  (SELECT id FROM sec),(SELECT id FROM cust),NULL,
  '2026-03-01 11:30:00+00',NULL,NULL,
  '2026-03-01 17:30:00+00','2026-03-04 11:30:00+00',
@@ -3232,7 +3250,7 @@ FROM (VALUES
   -- CX-R01 lifecycle
   ('CX-R01','operator@innova.cx','status_change',
    'Ticket created via chat escalation. Assigned to Ahmed Hassan.',
-   'Unassigned','Assigned',
+   'Open','Assigned',
    '{"source":"chat_escalation","chat_conv_id":"11111111-1111-1111-1111-000000000001"}',
    '2026-03-01 06:35:00+00'),
   ('CX-R01','ahmed@innova.cx','internal_note',
@@ -3243,7 +3261,7 @@ FROM (VALUES
   -- CX-R06 lifecycle
   ('CX-R06','operator@innova.cx','status_change',
    'Critical access control failure — all Gate 2 readers down. Omar dispatched.',
-   'Unassigned','In Progress',
+   'Open','In Progress',
    '{"affected_staff":15,"gate":"Gate 2"}',
    '2026-03-01 09:33:00+00'),
   -- CX-M41 resolution

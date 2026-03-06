@@ -74,9 +74,9 @@
   margin-top: 8px;
 }
 .ma-section-heading--purple { background: rgba(64,28,81,0.07); border: 1px solid rgba(64,28,81,0.13); color: var(--btn-primary); }
-.ma-section-heading--amber  { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.20); color: #7a5c00; }
-.ma-section-heading--blue   { background: rgba(59,130,246,0.07); border: 1px solid rgba(59,130,246,0.18); color: #1d4ed8; }
-.ma-section-heading__icon  { font-size: 18px; line-height: 1; }
+.ma-section-heading--amber  { background: rgba(107,58,138,0.08); border: 1px solid rgba(107,58,138,0.20); color: #6b3a8a; }
+.ma-section-heading--blue   { background: rgba(155,113,163,0.10); border: 1px solid rgba(155,113,163,0.25); color: #9b71a3; }
+.ma-section-heading__icon  { font-size: 18px; line-height: 1; display: flex; align-items: center; }
 .ma-section-heading__label { letter-spacing: -0.1px; }
 
 /* ---- KPI row ---- */
@@ -106,8 +106,8 @@
   background: linear-gradient(90deg, var(--btn-primary), rgba(155,113,163,0.5));
   border-radius: 18px 18px 0 0;
 }
-.ma-kpi--warn::before    { background: linear-gradient(90deg, #f59e0b, #fde68a); }
-.ma-kpi--danger::before  { background: linear-gradient(90deg, #ef4444, #fca5a5); }
+.ma-kpi--warn::before    { background: linear-gradient(90deg, #6b3a8a, #9b71a3); }
+.ma-kpi--danger::before  { background: linear-gradient(90deg, #401c51, #6b3a8a); }
 .ma-kpi--neutral::before { background: rgba(0,0,0,0.08); }
 .ma-kpi:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(64,28,81,0.15); }
 
@@ -115,8 +115,8 @@
 .ma-kpi__label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.10em; font-weight: 750; color: rgba(17,17,17,0.55); }
 .ma-kpi__pill  { font-size: 11px; padding: 3px 10px; border-radius: 999px; background: rgba(89,36,180,0.10); color: var(--btn-primary); font-weight: 650; white-space: nowrap; }
 .ma-kpi__value { font-size: 30px; font-weight: 900; color: var(--btn-primary); font-family: var(--font-heading); margin-top: 6px; }
-.ma-kpi--warn   .ma-kpi__value { color: #7a5c00; }
-.ma-kpi--danger .ma-kpi__value { color: #a7372b; }
+.ma-kpi--warn   .ma-kpi__value { color: #6b3a8a; }
+.ma-kpi--danger .ma-kpi__value { color: #401c51; }
 .ma-kpi--neutral .ma-kpi__value { color: rgba(17,17,17,0.65); }
 .ma-kpi__sub { font-size: 11.5px; color: rgba(17,17,17,0.55); line-height: 1.4; margin-top: 4px; }
 
@@ -182,7 +182,7 @@
   white-space: nowrap;
 }
 .qc-datepicker__btn:hover { border-color: var(--btn-primary); color: var(--btn-primary); background: rgba(89,36,180,0.04); }
-.qc-datepicker__icon { font-size: 15px; line-height: 1; }
+.qc-datepicker__icon { display: flex; align-items: center; line-height: 1; color: inherit; }
 .qc-datepicker__dropdown {
   position: absolute;
   top: calc(100% + 8px);

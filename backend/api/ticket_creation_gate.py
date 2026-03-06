@@ -94,14 +94,15 @@ def dispatch_ticket_to_orchestrator(
     orchestrator_url_local: str,
     ticket_type: Optional[str] = None,
     subject: Optional[str] = None,
-) -> None:
+) -> bool:
     """
     Best-effort dispatch to orchestrator post-submit pipeline.
     Never raises to caller.
+    Returns True when at least one orchestrator endpoint accepted the request.
     """
     text_value = (details or "").strip()
     if not ticket_code or not text_value:
-        return
+        return False
 
     type_value = (ticket_type or "complaint").strip().lower()
     if type_value not in {"complaint", "inquiry"}:
@@ -124,6 +125,7 @@ def dispatch_ticket_to_orchestrator(
             with httpx.Client(timeout=8.0) as client:
                 response = client.post(f"{base}/process/text", content=encoded, headers=headers)
                 response.raise_for_status()
-                return
+                return True
         except Exception:
             continue
+    return False

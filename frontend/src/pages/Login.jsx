@@ -1,17 +1,114 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import logo from "../assets/nova-logo.png";
 import { apiUrl } from "../config/apiBase";
 import "./Login.css";
 
+/* ── Starfield (same engine as PublicLanding) ── */
+function Starfield() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const c = ref.current; if (!c) return;
+    const ctx = c.getContext("2d");
+    let raf;
+    const resize = () => { c.width = window.innerWidth; c.height = window.innerHeight; };
+    resize();
+    const stars = Array.from({ length: 260 }, () => ({
+      x: Math.random(), y: Math.random(),
+      r: Math.random() * 1.4 + 0.2,
+      twinkle: Math.random() * Math.PI * 2,
+      speed: Math.random() * 0.016 + 0.004,
+      color: Math.random() > 0.8 ? "#c4b5fd" : Math.random() > 0.6 ? "#e9d5ff" : "#fff",
+    }));
+    const shooters = Array.from({ length: 4 }, () => ({
+      x: Math.random() * 0.5, y: Math.random() * 0.4,
+      len: Math.random() * 140 + 80,
+      speed: Math.random() * 5 + 3,
+      angle: Math.PI / 5.5,
+      active: false, timer: Math.random() * 300 + 80, alpha: 0,
+    }));
+    const draw = () => {
+      ctx.clearRect(0, 0, c.width, c.height);
+      stars.forEach(s => {
+        s.twinkle += s.speed;
+        ctx.globalAlpha = Math.max(0.05, 0.28 + Math.sin(s.twinkle) * 0.5);
+        ctx.fillStyle = s.color;
+        ctx.beginPath();
+        ctx.arc(s.x * c.width, s.y * c.height, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      shooters.forEach(s => {
+        s.timer--;
+        if (s.timer <= 0 && !s.active) { s.active = true; s.alpha = 1; }
+        if (s.active) {
+          s.x += Math.cos(s.angle) * s.speed / c.width;
+          s.y += Math.sin(s.angle) * s.speed / c.height;
+          s.alpha -= 0.018;
+          if (s.alpha <= 0 || s.x > 1) {
+            s.active = false;
+            s.x = Math.random() * 0.45; s.y = Math.random() * 0.35;
+            s.timer = Math.random() * 400 + 150;
+          }
+          ctx.save(); ctx.globalAlpha = s.alpha;
+          const g = ctx.createLinearGradient(
+            s.x * c.width, s.y * c.height,
+            (s.x - Math.cos(s.angle) * s.len / c.width) * c.width,
+            (s.y - Math.sin(s.angle) * s.len / c.height) * c.height
+          );
+          g.addColorStop(0, "#e9d5ff"); g.addColorStop(1, "transparent");
+          ctx.beginPath();
+          ctx.moveTo(s.x * c.width, s.y * c.height);
+          ctx.lineTo(
+            (s.x - Math.cos(s.angle) * s.len / c.width) * c.width,
+            (s.y - Math.sin(s.angle) * s.len / c.height) * c.height
+          );
+          ctx.strokeStyle = g; ctx.lineWidth = 1.8; ctx.stroke();
+          ctx.restore();
+        }
+      });
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    window.addEventListener("resize", resize);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, []);
+  return <canvas ref={ref} className="login-starfield" />;
+}
+
+/* ── Mouse-tracking glow on the card ── */
+function useCardGlow() {
+  const cardRef = useRef(null);
+  const handleMouseMove = (e) => {
+    const card = cardRef.current; if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width)  * 100;
+    const y = ((e.clientY - rect.top)  / rect.height) * 100;
+    card.style.setProperty("--gx", `${x}%`);
+    card.style.setProperty("--gy", `${y}%`);
+  };
+  const handleMouseLeave = () => {
+    const card = cardRef.current; if (!card) return;
+    card.style.setProperty("--gx", "50%");
+    card.style.setProperty("--gy", "50%");
+  };
+  return { cardRef, handleMouseMove, handleMouseLeave };
+}
+
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail]               = useState("");
+  const [password, setPassword]         = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loginError, setLoginError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError]     = useState("");
+  const [loading, setLoading]           = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(
+    searchParams.get("sessionExpired") === "1"
+  );
+
+  const { cardRef, handleMouseMove, handleMouseLeave } = useCardGlow();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,7 +116,6 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // Step 1: Login with email/password
       const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -38,10 +134,6 @@ export default function Login() {
 
       const data = await res.json();
 
-      // ✅ DEV FORCE-BYPASS MFA:
-      // If your backend has DISABLE_MFA=true (or you're testing locally),
-      // skip /verify and go straight to the dashboard.
-      // Re-enable MFA later by restoring the "MFA flow" block below.
       sessionStorage.removeItem("mfa_token");
       sessionStorage.removeItem("mfa_user");
 
@@ -58,55 +150,21 @@ export default function Login() {
       );
 
       const role = data.user?.role;
-      navigate(role === "customer" ? "/customer/dashboard" : `/${role}`, { replace: true });
-      return;
-
-      /*
-      ==========================
-      ✅ MFA flow (RESTORE LATER)
-      ==========================
-
-      // DISABLE_MFA bypass: backend returns token_type "bearer" when DISABLE_MFA=true in .env
-      if (data.token_type === "bearer") {
-        localStorage.setItem("access_token", data.access_token);
-        localStorage.setItem(
-          "user",
-          JSON.stringify({
-            id: data.user.id,
-            email: data.user.email,
-            role: data.user.role,
-            full_name: data.user.full_name,
-            token_type: data.token_type,
-          })
-        );
-
-        const role = data.user.role;
-        navigate(role === "customer" ? "/customer/dashboard" : `/${role}`, {
-          replace: true,
-        });
-        return;
-      }
-
-      // Step 2: Store a temporary token for MFA verification
-      // This is NOT the final JWT — only used for OTP verification
-      sessionStorage.setItem("mfa_token", data.access_token);
-      sessionStorage.setItem(
-        "mfa_user",
-        JSON.stringify({
-          id: data.user.id,
-          email: data.user.email,
-          role: data.user.role,
-          full_name: data.user.full_name,
-        })
+      const rawNext = searchParams.get("next");
+      const nextPath =
+        rawNext && decodeURIComponent(rawNext).startsWith("/")
+          ? decodeURIComponent(rawNext)
+          : null;
+      navigate(
+        nextPath ?? (role === "customer" ? "/customer/dashboard" : `/${role}`),
+        { replace: true }
       );
-
-      // Step 3: Redirect to MFA verification page
-      navigate("/verify");
-      */
     } catch (error) {
       const target = apiUrl("/api/auth/login");
       console.error("Login error:", error, "| target URL:", target);
-      setLoginError(`Cannot reach the server at ${target}. Make sure the backend is running on that address.`);
+      setLoginError(
+        `Cannot reach the server at ${target}. Make sure the backend is running.`
+      );
     } finally {
       setLoading(false);
     }
@@ -114,22 +172,66 @@ export default function Login() {
 
   return (
     <div className="loginBg">
-      <div className="loginWrapper">
+      {/* Full-page starfield */}
+      <Starfield />
+
+      {/* Nebula blobs */}
+      <div className="login-neb login-neb1" />
+      <div className="login-neb login-neb2" />
+      <div className="login-neb login-neb3" />
+
+      {/* Card */}
+      <div
+        className="loginWrapper"
+        ref={cardRef}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
+        {/* ── Left panel ── */}
         <section className="loginLeft">
           <div className="loginOverlay" />
           <div className="loginLeftContent">
-            <h1 className="welcomeTitle">Welcome back!</h1>
-            <p className="welcomeSub">Sign-in using your credentials.</p>
+            <h1 className="welcomeTitle">Welcome back.</h1>
+            <p className="welcomeSub">Sign in to access your dashboard.</p>
             <div className="markWrap">
-              <img src={logo} alt="InnovaCX logo" className="novaLogo" />
+              <img src={logo} alt="InnovaCX" className="novaLogo" />
             </div>
+
           </div>
         </section>
 
+        {/* ── Right panel ── */}
         <section className="loginRight">
           <div className="loginHeader">
-            <h2 className="loginTitle">Log In To InnovaCX</h2>
+            <div className="login-header-tag">InnovaCX · Dubai CommerCity</div>
+            <h2 className="loginTitle">Log In</h2>
           </div>
+
+          {sessionExpired && (
+            <div className="login-session-banner" role="alert">
+              <div className="login-session-banner__icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <div className="login-session-banner__body">
+                <span className="login-session-banner__title">Session Expired</span>
+                <span className="login-session-banner__text">For your security, please sign in again.</span>
+              </div>
+              <button
+                type="button"
+                className="login-session-banner__close"
+                aria-label="Dismiss"
+                onClick={() => setSessionExpired(false)}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          )}
 
           <form className="loginForm" onSubmit={handleSubmit}>
             <div className="field">
@@ -137,13 +239,11 @@ export default function Login() {
               <input
                 className="input"
                 type="email"
-                placeholder="Enter your Email here"
+                placeholder="you@company.com"
                 value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (loginError) setLoginError("");
-                }}
+                onChange={(e) => { setEmail(e.target.value); if (loginError) setLoginError(""); }}
                 required
+                autoComplete="email"
               />
             </div>
 
@@ -153,49 +253,28 @@ export default function Login() {
                 <input
                   className="input passwordInput"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Enter your Password here"
+                  placeholder="Enter your password"
                   value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (loginError) setLoginError("");
-                  }}
+                  onChange={(e) => { setPassword(e.target.value); if (loginError) setLoginError(""); }}
                   required
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
                   className="passwordToggleBtn"
-                  onClick={() => setShowPassword((prev) => !prev)}
+                  onClick={() => setShowPassword((p) => !p)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
                     <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path
-                        d="M3 3l18 18M10.58 10.59A2 2 0 0012 14a2 2 0 001.41-.58M9.88 5.09A9.77 9.77 0 0112 5c5 0 9 7 9 7a17.59 17.59 0 01-3.24 3.93M6.1 6.1A17.3 17.3 0 003 12s4 7 9 7a9.8 9.8 0 004.25-.95"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
+                      <path d="M3 3l18 18M10.58 10.59A2 2 0 0012 14a2 2 0 001.41-.58M9.88 5.09A9.77 9.77 0 0112 5c5 0 9 7 9 7a17.59 17.59 0 01-3.24 3.93M6.1 6.1A17.3 17.3 0 003 12s4 7 9 7a9.8 9.8 0 004.25-.95"
+                        fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   ) : (
                     <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path
-                        d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <circle
-                        cx="12"
-                        cy="12"
-                        r="3"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
+                      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"
+                        fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="2"/>
                     </svg>
                   )}
                 </button>
@@ -203,9 +282,7 @@ export default function Login() {
             </div>
 
             {loginError && (
-              <p className="loginError" role="alert">
-                {loginError}
-              </p>
+              <p className="loginError" role="alert">{loginError}</p>
             )}
 
             <button
@@ -217,7 +294,7 @@ export default function Login() {
             </button>
 
             <button type="submit" className="loginBtn" disabled={loading}>
-              {loading ? "Logging in..." : "Log In"}
+              {loading ? "Signing in…" : "Sign In →"}
             </button>
           </form>
         </section>

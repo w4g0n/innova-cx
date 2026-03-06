@@ -57,7 +57,8 @@
 .trendsTable {
   width: 100%;
   min-width: 860px;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13px;
   background: #fff;
 }
@@ -84,8 +85,32 @@
   background: rgba(64, 28, 81, 0.04);
 }
 
+.trendsTable tbody tr {
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  position: relative;
+}
+
 .trendsTable tbody tr:hover {
-  background: rgba(89, 36, 180, 0.1);
+  background: rgba(109, 40, 217, 0.08);
+}
+
+.approvalRow {
+  cursor: pointer;
+}
+
+.approvalRow:hover {
+  background: rgba(109, 40, 217, 0.08) !important;
+  box-shadow: 0 4px 16px rgba(109, 40, 217, 0.15);
+  transform: translateY(-1px);
+  z-index: 1;
+}
+
+.approvalRow td:first-child { border-radius: 8px 0 0 8px; }
+.approvalRow td:last-child  { border-radius: 0 8px 8px 0; }
+
+.approvalRow:focus-visible {
+  outline: 2px solid rgba(124, 58, 237, 0.6);
+  outline-offset: -2px;
 }
 
 .ticketLink {

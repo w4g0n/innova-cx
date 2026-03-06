@@ -59,10 +59,11 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
 
         else:
             response = (
-                "Hello! Welcome to support. I am here to help you today.\n"
-                "Would you like to:\n"
+                "Hi! I'm Nova, your AI support assistant. How can I help you today?\n\n"
+                "You can:\n"
                 "  1. Follow up on an existing ticket\n"
-                "  2. Create a new ticket"
+                "  2. Create a new ticket (complaint or inquiry)\n\n"
+                "Just describe what you need and I'll take it from there."
             )
             transition(session, "await_primary_intent")
             _log_and_save(session, response, "greeting")
