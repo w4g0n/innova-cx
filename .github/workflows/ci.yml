@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, prod-live]
 
 jobs:
   guard-no-prod-live-into-main:
@@ -47,6 +47,28 @@ jobs:
           if [ -n "$BLOCKED" ]; then
             echo "::error::This PR deletes protected main paths. If these should be prod-only deletions, target prod-live instead."
             echo "$BLOCKED"
+            exit 1
+          fi
+
+  guard-prod-live-no-dev-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Block protected dev paths in prod-live PRs
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "prod-live" ]; then
+            echo "Not a PR targeting prod-live."
+            exit 0
+          fi
+
+          PRESENT="$(git ls-tree -r --name-only "$HEAD_SHA" | grep -E '^(data/|docs/|Prototype/|postman/|CLOUD_README\.md$|README\.md$|deslop\.pdf$|test\.csv$)' || true)"
+          if [ -n "$PRESENT" ]; then
+            echo "::error::prod-live must not contain protected dev paths."
+            echo "$PRESENT"
             exit 1
           fi
 
