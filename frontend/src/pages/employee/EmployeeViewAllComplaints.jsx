@@ -76,6 +76,15 @@ function getStoredToken() {
   );
 }
 
+const STATUS_CLASS = {
+  "Open":        "ev-status-open",
+  "Assigned":    "ev-status-assigned",
+  "In Progress": "ev-status-inprogress",
+  "Escalated":   "ev-status-escalated",
+  "Overdue":     "ev-status-overdue",
+  "Resolved":    "ev-status-resolved",
+};
+
 export default function EmployeeViewAllComplaints() {
   const revealRef = useScrollReveal();
   const [tickets, setTickets] = useState([]);
@@ -376,7 +385,11 @@ export default function EmployeeViewAllComplaints() {
                     </td>
                     <td>{t.subject}</td>
                     <td><PriorityPill priority={t.priority} /></td>
-                    <td>{t.status}</td>
+                    <td>
+                      <span className={`ev-status-badge ${STATUS_CLASS[t.status] || "ev-status-assigned"}`}>
+                        {t.status}
+                      </span>
+                    </td>
                     <td>{t._ticketSourceRaw}</td>
                     <td>{t._issueDateRaw}</td>
                     <td>{t._responseTimeRaw || "—"}</td>

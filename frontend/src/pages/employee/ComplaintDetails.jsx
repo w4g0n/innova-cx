@@ -567,6 +567,18 @@ function TicketModal({
   );
 }
 
+function statusPillClass(status) {
+  switch ((status || "").toLowerCase().replace(/\s+/g, "")) {
+    case "open":       return "empStatusPill--open";
+    case "assigned":   return "empStatusPill--assigned";
+    case "inprogress": return "empStatusPill--inprogress";
+    case "escalated":  return "empStatusPill--escalated";
+    case "overdue":    return "empStatusPill--overdue";
+    case "resolved":   return "empStatusPill--resolved";
+    default:           return "";
+  }
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 export default function ComplaintDetails() {
   const { id } = useParams();
@@ -666,7 +678,7 @@ export default function ComplaintDetails() {
               <span className={`header-pill ${(ticket.priority || "").toLowerCase()}-pill`}>
                 {ticket.priority}
               </span>
-              <span className="header-pill empStatusPill">{ticket.status}</span>
+              <span className={`header-pill empStatusPill ${statusPillClass(ticket.status)}`}>{ticket.status}</span>
             </div>
           </div>
 
