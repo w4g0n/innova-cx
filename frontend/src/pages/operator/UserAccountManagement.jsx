@@ -6,20 +6,48 @@ import ConfirmDialog from "../../components/common/ConfirmDialog";
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
+import { apiUrl } from "../../config/apiBase";
 import "./UserAccountManagement.css";
 
-// ── Config ────────────────────────────────────────────────────────────────────
-const API_BASE = 'http://127.0.0.1:8000/api';
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-function authHeaders() {
-  const token = localStorage.getItem("access_token");
-  return {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+// ── API helpers (same pattern as QualityControl) ───────────────────────────────
+function getStoredToken() {
+  const direct =
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken");
+  if (direct) return direct;
+  try {
+    const u = JSON.parse(localStorage.getItem("user") || "{}");
+    return u?.access_token || "";
+  } catch {
+    return "";
+  }
 }
 
+async function apiFetch(path, options = {}) {
+  const token = getStoredToken();
+  const url = apiUrl(`/api${path}`);
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  });
+  if (res.status === 401 || res.status === 403) {
+    window.location.href = "/login";
+    throw new Error("Session expired.");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw Object.assign(new Error(data?.detail ?? `HTTP ${res.status}`), { status: res.status, data });
+  }
+  return data;
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
 const ROLE_OPTIONS = [
   { value: "customer", label: "Customer" },
   { value: "employee", label: "Employee" },
@@ -37,6 +65,7 @@ const DEPARTMENT_OPTIONS = [
   "IT",
 ];
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function isValidEmail(email) {
   return /^\S+@\S+\.\S+$/.test(email);
 }
@@ -45,6 +74,7 @@ function toPhoneInputValue(e164) {
   if (!e164) return "";
   return e164.startsWith("+") ? e164.slice(1) : e164;
 }
+
 function validateE164Phone(e164) {
   if (!e164) return "Phone is required.";
   const p = parsePhoneNumberFromString(e164);
@@ -89,16 +119,11 @@ export default function UserAccountManagement() {
 
   const onChange = (e) => {
     const { name, value } = e.target;
-
     if (name === "role" && value === "customer") {
       setForm((p) => ({ ...p, role: value, department: "" }));
-      setErrors((prev) => {
-        const { department: _department, ...rest } = prev;
-        return rest;
-      });
+      setErrors((prev) => { const { department: _d, ...rest } = prev; return rest; });
       return;
     }
-
     setForm((p) => ({ ...p, [name]: value }));
   };
 
@@ -107,26 +132,18 @@ export default function UserAccountManagement() {
     if (!form.fullName.trim()) e.fullName = "Full name is required.";
     if (!form.email.trim()) e.email = "Email is required.";
     if (form.email && !isValidEmail(form.email)) e.email = "Invalid email format.";
-
     const phoneErr = validateE164Phone(form.phoneE164);
     if (phoneErr) e.phone = phoneErr;
-
     if (!form.location.trim()) e.location = "Location is required.";
-
-    if (form.role !== "customer" && !form.department.trim()) {
-      e.department = "Department is required for non-customer roles.";
-    }
-
+    if (form.role !== "customer" && !form.department.trim()) e.department = "Department is required for non-customer roles.";
     if (!form.password) e.password = "Password is required.";
     if (form.password && form.password.length < 8) e.password = "Min 8 characters.";
     if (form.confirmPassword !== form.password) e.confirmPassword = "Passwords do not match.";
-
     return e;
   };
 
   const createUser = async () => {
     setToast({ type: "", message: "" });
-
     const e = validate();
     setErrors(e);
     if (Object.keys(e).length) {
@@ -145,25 +162,12 @@ export default function UserAccountManagement() {
     };
 
     try {
-      const res = await fetch(`${API_BASE}/operator/user-creation`, {
+      const data = await apiFetch("/operator/user-creation", {
         method: "POST",
-        headers: authHeaders(),
         body: JSON.stringify(payload),
       });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setToast({
-          type: "error",
-          message: data?.detail ?? `Failed to create user (HTTP ${res.status}).`,
-        });
-        return;
-      }
-
       setToast({ type: "success", message: data?.message ?? "User created successfully." });
-      setForm((p) => ({
-        ...p,
+      setForm({
         fullName: "",
         email: "",
         phoneE164: "",
@@ -173,9 +177,9 @@ export default function UserAccountManagement() {
         department: "",
         password: "",
         confirmPassword: "",
-      }));
-    } catch {
-      setToast({ type: "error", message: "Failed to create user. Check the backend and network." });
+      });
+    } catch (err) {
+      setToast({ type: "error", message: err.message || "Failed to create user. Check the backend and network." });
     }
   };
 
@@ -214,22 +218,19 @@ export default function UserAccountManagement() {
                   country={form.phoneCountry}
                   value={toPhoneInputValue(form.phoneE164)}
                   onChange={(digits, countryData) => {
-                  let cleanDigits = digits || "";
-                  const dialCode = countryData?.dialCode || "";
-                  if (cleanDigits.startsWith(dialCode + "0")) {
-                    cleanDigits = dialCode + cleanDigits.slice(dialCode.length + 1);
-                  }
-                  const e164 = cleanDigits ? `+${cleanDigits}` : "";
-                  setForm((p) => ({
-                    ...p,
-                    phoneE164: e164,
-                    phoneCountry: (countryData?.countryCode || "ae").toLowerCase(),
-                  }));
-                  setErrors((prev) => {
-                    const { phone: _phone, ...rest } = prev;
-                    return rest;
-                  });
-                }}
+                    let cleanDigits = digits || "";
+                    const dialCode = countryData?.dialCode || "";
+                    if (cleanDigits.startsWith(dialCode + "0")) {
+                      cleanDigits = dialCode + cleanDigits.slice(dialCode.length + 1);
+                    }
+                    const e164 = cleanDigits ? `+${cleanDigits}` : "";
+                    setForm((p) => ({
+                      ...p,
+                      phoneE164: e164,
+                      phoneCountry: (countryData?.countryCode || "ae").toLowerCase(),
+                    }));
+                    setErrors((prev) => { const { phone: _p, ...rest } = prev; return rest; });
+                  }}
                   enableSearch
                   autoFormat={false}
                   countryCodeEditable={false}
@@ -255,7 +256,6 @@ export default function UserAccountManagement() {
               />
             </div>
 
-            {/* Department only for non-customer */}
             {form.role !== "customer" && (
               <div className="uamField">
                 <label>Department *</label>
@@ -272,7 +272,13 @@ export default function UserAccountManagement() {
             <div className="uamField">
               <label>Password *</label>
               <div className="uamPwdWrap">
-                <input type={showPwd ? "text" : "password"} name="password" value={form.password} onChange={onChange} placeholder="Minimum 8 characters" />
+                <input
+                  type={showPwd ? "text" : "password"}
+                  name="password"
+                  value={form.password}
+                  onChange={onChange}
+                  placeholder="Minimum 8 characters"
+                />
                 <button type="button" className="uamEyeBtn" onClick={() => setShowPwd(v => !v)} tabIndex={-1}>
                   {showPwd
                     ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
