@@ -1,0 +1,70 @@
+========================================================================
+  CHATBOT LLM BENCHMARK COMPARISON REPORT
+  Generated: 2026-03-04 07:11:29 UTC
+========================================================================
+  Model A (current): /app/models/falcon3-1b-instruct  [mode=model]
+  Model B (qwen2.5-1.5b): /app/hf_cache/qwen2.5-1.5b-instruct  [mode=model]
+========================================================================
+
+  TIER 1 — LLM CLASSIFICATION BENCHMARK
+  Task                 current  qwen2.5-1.5b     Delta
+  --------------------------------------------------
+  primary_intent acc       78.8%       92.5%    ++13.7
+  secondary_intent acc       53.8%       86.2%    ++32.4
+  aggression acc         92.5%       90.0%      -2.5
+
+  primary_intent parse%      100.0%      100.0%     ++0.0
+  secondary_intent parse%      100.0%      100.0%     ++0.0
+  aggression parse%      100.0%      100.0%     ++0.0
+
+  primary_intent mean_ms       6584        7331     -746.2
+  secondary_intent mean_ms       6231        7352    -1120.9
+  aggression mean_ms       8889       10175    -1286.7
+
+  primary_intent p95_ms       6770       11395    -4625.5
+  secondary_intent p95_ms       6517        7436     -919.3
+  aggression p95_ms       9392       13953    -4560.4
+
+  Per-label accuracy:
+  primary_intent/create_ticket(n=35)       74.3%      100.0%    ++25.7
+  primary_intent/follow_up(n=30)       73.3%       86.7%    ++13.4
+  primary_intent/unknown(n=15)      100.0%       86.7%     -13.3
+  secondary_intent/complaint(n=35)       51.4%      100.0%    ++48.6
+  secondary_intent/inquiry(n=30)       56.7%       96.7%    ++40.0
+  secondary_intent/unknown(n=15)       53.3%       33.3%     -20.0
+========================================================================
+
+  TIER 2 — E2E CONVERSATION SMOKE SUITE
+  Metric                 current  qwen2.5-1.5b     Delta
+  ----------------------------------------------------
+  Completion               15/15        15/15   
+  Completion rate         100.0%      100.0%     ++0.0
+  Avg duration (s)         52.6        69.8      -17.2
+
+  Per-scenario results:
+  01. follow_up_fake_ticket_id                PASS( 49.8s)  PASS( 36.7s)
+  02. inquiry_confirmed_resolved              PASS( 60.9s)  PASS( 99.9s)
+  03. inquiry_second_attempt_resolved         PASS( 86.0s)  PASS(149.0s)
+  04. complaint_office_ticket_created         PASS( 65.0s)  PASS( 67.7s)
+  05. complaint_warehouse_ticket_created      PASS( 60.0s)  PASS( 83.3s)
+  06. complaint_retail_ticket_created         PASS( 88.2s)  PASS( 86.0s)
+  07. aggression_in_secondary_intent_state    PASS( 16.1s)  PASS( 17.0s)
+  08. unknown_then_inquiry_resolved           PASS( 53.9s)  PASS( 72.3s)
+  09. follow_up_cx_code_format                PASS( 16.5s)  PASS( 20.0s)
+  10. complaint_asset_type_reprompt_then_cre  PASS( 69.9s)  PASS( 69.9s)
+  11. inquiry_resolved_then_follow_up         PASS( 39.7s)  PASS(107.8s)
+  12. inquiry_long_text_stress_test           PASS( 37.4s)  PASS( 65.0s)
+  13. aggressive_first_message_complaint_flo  PASS( 61.0s)  PASS( 60.4s)
+  14. aggression_in_collecting_complaint_sta  PASS( 69.7s)  PASS( 76.6s)
+  15. sanity_baseline_init_and_create         PASS( 15.3s)  PASS( 35.8s)
+========================================================================
+
+  RECOMMENDATION
+  ------------------------------------------------------------
+  current             : avg_acc=75.0%  e2e_rate=100.0%  mean_lat=7235ms  score=66.3
+  qwen2.5-1.5b        : avg_acc=89.6%  e2e_rate=100.0%  mean_lat=8286ms  score=73.7
+
+  >>> SWITCH TO QWEN2.5-1.5B — qwen2.5-1.5b outscores current by 7.5 pts.
+
+  Note: This score is computed automatically. Review per-task accuracy deltas and qualitative responses before making a final decision.
+========================================================================

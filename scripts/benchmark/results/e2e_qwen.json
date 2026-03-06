@@ -1,0 +1,822 @@
+{
+  "meta": {
+    "base_url": "http://localhost:8001",
+    "user_id": "d53f5a66-b49f-4b26-96c6-e8bb03231b97",
+    "timestamp": "2026-03-04T07:11:29Z",
+    "timeout_s": 180,
+    "total_scenarios": 15,
+    "passed": 15,
+    "failed": 0,
+    "total_turns": 67,
+    "total_duration_s": 1047.31
+  },
+  "session_ids": [
+    "9083e7e3-0b7d-4127-bb88-bd6ecddf8bf7",
+    "e28dc7d5-0313-40f2-acb4-a367b1a3e5a9",
+    "647580cf-bcc4-47bf-96c6-162c0bdf6df8",
+    "20f514e2-9e2c-4812-87b6-369202c84589",
+    "c0821a3d-58d9-4157-a0c3-9d2dbf2f39ff",
+    "f8dcd2fd-f2fb-4805-a962-74cd5cfc7cbb",
+    "8dc482ad-5d58-419c-b201-227e0c957938",
+    "9e30e672-cc05-42ad-96d7-074e82744a55",
+    "0aa4b3eb-e341-4af9-b749-cd7f41b33792",
+    "7e5a3bef-91ba-44a3-8b71-266301e5bb69",
+    "4201ec4a-5e83-486a-9b28-8afb94e25f67",
+    "3af2d340-1bd6-4eda-bae4-5d800e8b074a",
+    "15d96b86-e90e-4485-9657-25cc56003169",
+    "3b9cddaf-2154-4f89-a20e-1436c2134275",
+    "23b143c2-2676-46fa-a1d2-eb7fc191f022"
+  ],
+  "scenarios": [
+    {
+      "scenario_id": 1,
+      "name": "follow_up_fake_ticket_id",
+      "session_id": "f8dcd2fd-f2fb-4805-a962-74cd5cfc7cbb",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 117.3,
+          "error": null
+        },
+        {
+          "message": "I would like to follow up on my existing ticket",
+          "status_code": 200,
+          "response": "Sure, I can help with that. Could you please provide your ticket ID? If you do not have it, just say so and I will look up your open tickets.",
+          "response_type": "prompt_ticket_id",
+          "show_buttons": [],
+          "elapsed_ms": 25938.5,
+          "error": null
+        },
+        {
+          "message": "CX-FAKEID0001",
+          "status_code": 200,
+          "response": "I could not find that ticket for your account. Please check the ticket ID and try again.",
+          "response_type": "ticket_lookup",
+          "show_buttons": [],
+          "elapsed_ms": 10615.7,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 36.67
+    },
+    {
+      "scenario_id": 2,
+      "name": "inquiry_confirmed_resolved",
+      "session_id": "15d96b86-e90e-4485-9657-25cc56003169",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 12.4,
+          "error": null
+        },
+        {
+          "message": "I have a question about building access",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 7834.9,
+          "error": null
+        },
+        {
+          "message": "How do I request a temporary visitor badge?",
+          "status_code": 200,
+          "response": "To request a temporary visitor badge, please follow these steps:\n\n  1. Go to the Visitor Access Management system.\n  2. Select \"Request Temporary Badge.\"\n  3. Enter your information and select the appropriate reason for requesting the badge.\n  4. Review and confirm the request.\n  5. Wait for approval from the designated personnel.\n  6. Once approved, collect the temporary badge at the designated location.\n\nPlease note that specific procedures may vary\n\nDid that answer your question? (Yes / No)",
+          "response_type": "inquiry_kb_answer",
+          "show_buttons": [],
+          "elapsed_ms": 80006.0,
+          "error": null
+        },
+        {
+          "message": "Yes that answered my question",
+          "status_code": 200,
+          "response": "I completely understand your frustration and I sincerely apologise for the inconvenience. Would you like me to immediately create a ticket or track an existing one for you? You can also continue chatting if you prefer.",
+          "response_type": "escalation",
+          "show_buttons": [
+            "create_ticket",
+            "track_ticket"
+          ],
+          "elapsed_ms": 12025.4,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 99.88
+    },
+    {
+      "scenario_id": 3,
+      "name": "inquiry_second_attempt_resolved",
+      "session_id": "0aa4b3eb-e341-4af9-b749-cd7f41b33792",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 12.8,
+          "error": null
+        },
+        {
+          "message": "I need some information",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 6969.3,
+          "error": null
+        },
+        {
+          "message": "What is the procedure for booking a meeting room?",
+          "status_code": 200,
+          "response": "To book a meeting room at our premises, please follow these steps:\n\n1. Visit our website and navigate to the \"Book Meeting Room\" section.\n2. Fill out the required form with your contact information and meeting details such as date, time, number of attendees, and purpose.\n3. Review the proposed meeting times and choose one that suits your needs.\n4. Pay the deposit online through our secure payment gateway.\n5. On the day of the meeting, present your proof\n\nDid that answer your question? (Yes / No)",
+          "response_type": "inquiry_kb_answer",
+          "show_buttons": [],
+          "elapsed_ms": 68585.7,
+          "error": null
+        },
+        {
+          "message": "No, I need more detail about booking for external guests",
+          "status_code": 200,
+          "response": "Booking a meeting room for external guests involves several additional steps beyond just selecting a time on our website. Here\u2019s how it typically works:\n\n1. **Contact Us**: Reach out directly by phone, email, or via our customer service platform. Provide your name, company, reason for booking, the number of people attending, and any special requirements.\n\n2. **Confirmation Request**: After receiving your request, confirm with them whether they accept the terms and conditions for guest bookings. If they\n\nDid that answer your question? (Yes / No)",
+          "response_type": "inquiry_kb_answer",
+          "show_buttons": [],
+          "elapsed_ms": 61413.6,
+          "error": null
+        },
+        {
+          "message": "Yes, thank you that is helpful",
+          "status_code": 200,
+          "response": "Great, glad I could help! Is there anything else I can assist you with?",
+          "response_type": "inquiry_resolved",
+          "show_buttons": [],
+          "elapsed_ms": 12063.2,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 149.04
+    },
+    {
+      "scenario_id": 4,
+      "name": "complaint_office_ticket_created",
+      "session_id": "3b9cddaf-2154-4f89-a20e-1436c2134275",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 14.4,
+          "error": null
+        },
+        {
+          "message": "I want to report a problem",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 6750.8,
+          "error": null
+        },
+        {
+          "message": "The lights in our section have not been working for two days",
+          "status_code": 200,
+          "response": "We understand that this has caused inconvenience. Could you please provide us with some details about your situation? This includes but isn't limited to when did the issues start, how many people were affected, and any other relevant information that might help us address the issue promptly.\n\nTo raise this as a complaint ticket, what type of asset is affected \u2014 Office, Warehouse, or Retail?",
+          "response_type": "complaint_deescalate",
+          "show_buttons": [],
+          "elapsed_ms": 39922.2,
+          "error": null
+        },
+        {
+          "message": "Office",
+          "status_code": 200,
+          "response": "Got it. Please describe the issue in as much detail as you can.",
+          "response_type": "prompt_description",
+          "show_buttons": [],
+          "elapsed_ms": 10476.8,
+          "error": null
+        },
+        {
+          "message": "Lighting failure on floor 2, eastern wing. Urgent repair needed. [benchmark]",
+          "status_code": 200,
+          "response": "Your ticket has been created successfully. Your ticket ID is CX-BADF3C6D55. A member of the team will be in touch shortly.",
+          "response_type": "ticket_created",
+          "show_buttons": [],
+          "elapsed_ms": 10485.2,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 67.65
+    },
+    {
+      "scenario_id": 5,
+      "name": "complaint_warehouse_ticket_created",
+      "session_id": "9e30e672-cc05-42ad-96d7-074e82744a55",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 10.7,
+          "error": null
+        },
+        {
+          "message": "I need to raise a complaint",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 7691.0,
+          "error": null
+        },
+        {
+          "message": "The loading bay door is stuck and cannot be closed",
+          "status_code": 200,
+          "response": "I'm sorry to hear that you're experiencing issues with your loading bay door. Could you please provide some additional information so we can assist you effectively? This might include:\n- When did you first notice the issue?\n- Have you tried any troubleshooting steps already?\n- Are there specific times when the problem occurs?\n\nOnce I understand more about what's happening, I'll do my best to help resolve the issue for you. Thank you for reaching out.\n\nTo raise this as a complaint ticket, what type of asset is affected \u2014 Office, Warehouse, or Retail?",
+          "response_type": "complaint_deescalate",
+          "show_buttons": [],
+          "elapsed_ms": 53880.6,
+          "error": null
+        },
+        {
+          "message": "Warehouse",
+          "status_code": 200,
+          "response": "Got it. Please describe the issue in as much detail as you can.",
+          "response_type": "prompt_description",
+          "show_buttons": [],
+          "elapsed_ms": 12018.0,
+          "error": null
+        },
+        {
+          "message": "Loading bay door mechanism failure, security risk. [benchmark]",
+          "status_code": 200,
+          "response": "I completely understand your frustration and I sincerely apologise for the inconvenience. Would you like me to immediately create a ticket or track an existing one for you? You can also continue chatting if you prefer.",
+          "response_type": "escalation",
+          "show_buttons": [
+            "create_ticket",
+            "track_ticket"
+          ],
+          "elapsed_ms": 9753.0,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 83.35
+    },
+    {
+      "scenario_id": 6,
+      "name": "complaint_retail_ticket_created",
+      "session_id": "20f514e2-9e2c-4812-87b6-369202c84589",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 12.8,
+          "error": null
+        },
+        {
+          "message": "I have a maintenance issue to report",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 7115.8,
+          "error": null
+        },
+        {
+          "message": "The air conditioning unit in the retail area has been broken for three days",
+          "status_code": 200,
+          "response": "Thank you for reaching out about your maintenance issue. We're sorry to hear that the air conditioning unit in the retail area has been broken for such a long time. Let me assist you further in understanding the situation and provide any necessary steps we can take to resolve this.\n\nCould you please tell us if there were any specific dates when you first noticed the issue? Also, did you try contacting the manufacturer or a service provider before reaching out to our team?\n\nAlso, could you describe\n\nTo raise this as a complaint ticket, what type of asset is affected \u2014 Office, Warehouse, or Retail?",
+          "response_type": "complaint_deescalate",
+          "show_buttons": [],
+          "elapsed_ms": 54144.0,
+          "error": null
+        },
+        {
+          "message": "Retail",
+          "status_code": 200,
+          "response": "Got it. Please describe the issue in as much detail as you can.",
+          "response_type": "prompt_description",
+          "show_buttons": [],
+          "elapsed_ms": 15035.0,
+          "error": null
+        },
+        {
+          "message": "AC unit failure in retail floor. Staff and customers affected. [benchmark]",
+          "status_code": 200,
+          "response": "I completely understand your frustration and I sincerely apologise for the inconvenience. Would you like me to immediately create a ticket or track an existing one for you? You can also continue chatting if you prefer.",
+          "response_type": "escalation",
+          "show_buttons": [
+            "create_ticket",
+            "track_ticket"
+          ],
+          "elapsed_ms": 9691.4,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 86.0
+    },
+    {
+      "scenario_id": 7,
+      "name": "aggression_in_secondary_intent_state",
+      "session_id": "9083e7e3-0b7d-4127-bb88-bd6ecddf8bf7",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 11.0,
+          "error": null
+        },
+        {
+          "message": "I need to report something",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 6950.3,
+          "error": null
+        },
+        {
+          "message": "This is absolutely unacceptable and I am furious, sort this out RIGHT NOW",
+          "status_code": 200,
+          "response": "I completely understand your frustration and I sincerely apologise for the inconvenience. Would you like me to immediately create a ticket or track an existing one for you? You can also continue chatting if you prefer.",
+          "response_type": "escalation",
+          "show_buttons": [
+            "create_ticket",
+            "track_ticket"
+          ],
+          "elapsed_ms": 10042.1,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 17.0
+    },
+    {
+      "scenario_id": 8,
+      "name": "unknown_then_inquiry_resolved",
+      "session_id": "c0821a3d-58d9-4157-a0c3-9d2dbf2f39ff",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 15.5,
+          "error": null
+        },
+        {
+          "message": "Hello",
+          "status_code": 200,
+          "response": "I did not quite catch that. Are you looking to follow up on an existing ticket, or would you like to create a new one?",
+          "response_type": "clarify",
+          "show_buttons": [],
+          "elapsed_ms": 6412.2,
+          "error": null
+        },
+        {
+          "message": "I need to submit a new issue",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 8254.1,
+          "error": null
+        },
+        {
+          "message": "How do I access the staff car park after hours?",
+          "status_code": 200,
+          "response": "Unfortunately, there doesn't seem to be enough information from the given context to answer your question directly. Could you provide more details or clarify if you're asking about parking rules or procedures at a specific workplace?\n\nDid that answer your question? (Yes / No)",
+          "response_type": "inquiry_kb_answer",
+          "show_buttons": [],
+          "elapsed_ms": 47113.6,
+          "error": null
+        },
+        {
+          "message": "Yes that helps, thank you",
+          "status_code": 200,
+          "response": "Great, glad I could help! Is there anything else I can assist you with?",
+          "response_type": "inquiry_resolved",
+          "show_buttons": [],
+          "elapsed_ms": 10485.9,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 72.28
+    },
+    {
+      "scenario_id": 9,
+      "name": "follow_up_cx_code_format",
+      "session_id": "8dc482ad-5d58-419c-b201-227e0c957938",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 15.6,
+          "error": null
+        },
+        {
+          "message": "Track my ticket",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 7064.1,
+          "error": null
+        },
+        {
+          "message": "CX-AA11BB22",
+          "status_code": 200,
+          "response": "I completely understand your frustration and I sincerely apologise for the inconvenience. Would you like me to immediately create a ticket or track an existing one for you? You can also continue chatting if you prefer.",
+          "response_type": "escalation",
+          "show_buttons": [
+            "create_ticket",
+            "track_ticket"
+          ],
+          "elapsed_ms": 12954.3,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 20.03
+    },
+    {
+      "scenario_id": 10,
+      "name": "complaint_asset_type_reprompt_then_created",
+      "session_id": "e28dc7d5-0313-40f2-acb4-a367b1a3e5a9",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 14.2,
+          "error": null
+        },
+        {
+          "message": "I want to make a complaint",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 12029.8,
+          "error": null
+        },
+        {
+          "message": "There is a burst pipe leaking water",
+          "status_code": 200,
+          "response": "I completely understand your frustration and I sincerely apologise for the inconvenience. Would you like me to immediately create a ticket or track an existing one for you? You can also continue chatting if you prefer.",
+          "response_type": "escalation",
+          "show_buttons": [
+            "create_ticket",
+            "track_ticket"
+          ],
+          "elapsed_ms": 10021.0,
+          "error": null
+        },
+        {
+          "message": "I am not sure which category",
+          "status_code": 200,
+          "response": "Could you clarify \u2014 is this a question you need answered, or are you reporting a problem or fault?",
+          "response_type": "clarify",
+          "show_buttons": [],
+          "elapsed_ms": 19198.3,
+          "error": null
+        },
+        {
+          "message": "Office",
+          "status_code": 200,
+          "response": "Could you clarify \u2014 is this a question you need answered, or are you reporting a problem or fault?",
+          "response_type": "clarify",
+          "show_buttons": [],
+          "elapsed_ms": 18286.7,
+          "error": null
+        },
+        {
+          "message": "Burst pipe in office bathroom, water on floor, slip hazard. [benchmark]",
+          "status_code": 200,
+          "response": "I completely understand your frustration and I sincerely apologise for the inconvenience. Would you like me to immediately create a ticket or track an existing one for you? You can also continue chatting if you prefer.",
+          "response_type": "escalation",
+          "show_buttons": [
+            "create_ticket",
+            "track_ticket"
+          ],
+          "elapsed_ms": 10322.4,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 69.87
+    },
+    {
+      "scenario_id": 11,
+      "name": "inquiry_resolved_then_follow_up",
+      "session_id": "7e5a3bef-91ba-44a3-8b71-266301e5bb69",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 10.6,
+          "error": null
+        },
+        {
+          "message": "I have a question",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 7691.0,
+          "error": null
+        },
+        {
+          "message": "What are the fire evacuation procedures?",
+          "status_code": 200,
+          "response": "The specific fire evacuation procedures may vary depending on the building's layout and regulations. However, generally, the following steps should be followed:\n\n  1. Identify safe exits such as stairwells and elevators.\n  2. Move away from any flammable materials and obstacles.\n  3. Use appropriate firefighting equipment if available.\n  4. Alert others nearby of the situation and direct them to safety.\n  5. Wait for emergency personnel to arrive and\n\nDid that answer your question? (Yes / No)",
+          "response_type": "inquiry_kb_answer",
+          "show_buttons": [],
+          "elapsed_ms": 69018.2,
+          "error": null
+        },
+        {
+          "message": "Yes that answered my question",
+          "status_code": 200,
+          "response": "Great, glad I could help! Is there anything else I can assist you with?",
+          "response_type": "inquiry_resolved",
+          "show_buttons": [],
+          "elapsed_ms": 11859.5,
+          "error": null
+        },
+        {
+          "message": "I want to check on a ticket I submitted",
+          "status_code": 200,
+          "response": "Sure, I can help with that. Could you please provide your ticket ID? If you do not have it, just say so and I will look up your open tickets.",
+          "response_type": "prompt_ticket_id",
+          "show_buttons": [],
+          "elapsed_ms": 9161.7,
+          "error": null
+        },
+        {
+          "message": "CX-NONE0000",
+          "status_code": 200,
+          "response": "I could not find that ticket for your account. Please check the ticket ID and try again.",
+          "response_type": "ticket_lookup",
+          "show_buttons": [],
+          "elapsed_ms": 10038.1,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 107.78
+    },
+    {
+      "scenario_id": 12,
+      "name": "inquiry_long_text_stress_test",
+      "session_id": "4201ec4a-5e83-486a-9b28-8afb94e25f67",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 12.2,
+          "error": null
+        },
+        {
+          "message": "I need some information about building policies",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 6888.3,
+          "error": null
+        },
+        {
+          "message": "I have a very detailed question about the building maintenance policy. Specifically I am trying to understand the escalation process when a maintenance request has been open for more than 14 days with no update. The policy document I received says requests are resolved within 5 working days for standard issues and 24 hours for safety-related issues, but I cannot find any information about what happens when these deadlines are missed. Is there an escalation path I can use? Who do I contact? Is there a formal complaints process beyond the ticketing system? I would appreciate a clear and detailed answer.",
+          "status_code": 200,
+          "response": "I completely understand your frustration and I sincerely apologise for the inconvenience. Would you like me to immediately create a ticket or track an existing one for you? You can also continue chatting if you prefer.",
+          "response_type": "escalation",
+          "show_buttons": [
+            "create_ticket",
+            "track_ticket"
+          ],
+          "elapsed_ms": 11878.7,
+          "error": null
+        },
+        {
+          "message": "Yes, that was helpful thank you",
+          "status_code": 200,
+          "response": "You're welcome! If you have any other questions, feel free to ask.\n\nDid that answer your question? (Yes / No)",
+          "response_type": "inquiry_kb_answer",
+          "show_buttons": [],
+          "elapsed_ms": 46184.8,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 64.96
+    },
+    {
+      "scenario_id": 13,
+      "name": "aggressive_first_message_complaint_flow",
+      "session_id": "647580cf-bcc4-47bf-96c6-162c0bdf6df8",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 12.4,
+          "error": null
+        },
+        {
+          "message": "Your system is a JOKE. I need to log a complaint right now",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 7634.1,
+          "error": null
+        },
+        {
+          "message": "The server room AC failed and it is critical",
+          "status_code": 200,
+          "response": "I completely understand your frustration and I sincerely apologise for the inconvenience. Would you like me to immediately create a ticket or track an existing one for you? You can also continue chatting if you prefer.",
+          "response_type": "escalation",
+          "show_buttons": [
+            "create_ticket",
+            "track_ticket"
+          ],
+          "elapsed_ms": 10144.0,
+          "error": null
+        },
+        {
+          "message": "Office",
+          "status_code": 200,
+          "response": "It seems there was some confusion earlier. Could you please provide more details on what specific action or information you need from our end regarding the office situation?\n\nTo raise this as a complaint ticket, what type of asset is affected \u2014 Office, Warehouse, or Retail?",
+          "response_type": "complaint_deescalate",
+          "show_buttons": [],
+          "elapsed_ms": 32212.4,
+          "error": null
+        },
+        {
+          "message": "Server room AC failure, temperature critical, equipment at risk. [benchmark]",
+          "status_code": 200,
+          "response": "Please specify the asset type: Office, Warehouse, or Retail.",
+          "response_type": "prompt_description",
+          "show_buttons": [],
+          "elapsed_ms": 10411.0,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 60.41
+    },
+    {
+      "scenario_id": 14,
+      "name": "aggression_in_collecting_complaint_state",
+      "session_id": "23b143c2-2676-46fa-a1d2-eb7fc191f022",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 13.1,
+          "error": null
+        },
+        {
+          "message": "Report a problem with the building",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 6836.4,
+          "error": null
+        },
+        {
+          "message": "The roof has been leaking for two months",
+          "status_code": 200,
+          "response": "I completely understand your frustration and I sincerely apologise for the inconvenience. Would you like me to immediately create a ticket or track an existing one for you? You can also continue chatting if you prefer.",
+          "response_type": "escalation",
+          "show_buttons": [
+            "create_ticket",
+            "track_ticket"
+          ],
+          "elapsed_ms": 10301.9,
+          "error": null
+        },
+        {
+          "message": "Office",
+          "status_code": 200,
+          "response": "It sounds like you're in need of assistance related to your office environment. Could you please provide more details about what kind of issues you're facing regarding the roof? Are there specific concerns such as damage, maintenance needs, or any other problems that you'd like to discuss? Sharing these details would help us address the situation effectively.\n\nTo raise this as a complaint ticket, what type of asset is affected \u2014 Office, Warehouse, or Retail?",
+          "response_type": "complaint_deescalate",
+          "show_buttons": [],
+          "elapsed_ms": 48171.5,
+          "error": null
+        },
+        {
+          "message": "You people are completely useless, why has nothing been done, I am going to HR",
+          "status_code": 200,
+          "response": "I completely understand your frustration and I sincerely apologise for the inconvenience. Would you like me to immediately create a ticket or track an existing one for you? You can also continue chatting if you prefer.",
+          "response_type": "escalation",
+          "show_buttons": [
+            "create_ticket",
+            "track_ticket"
+          ],
+          "elapsed_ms": 11296.8,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 76.62
+    },
+    {
+      "scenario_id": 15,
+      "name": "sanity_baseline_init_and_create",
+      "session_id": "3af2d340-1bd6-4eda-bae4-5d800e8b074a",
+      "turns": [
+        {
+          "message": null,
+          "status_code": 200,
+          "response": "Hello! Welcome to support. I am here to help you today.\nWould you like to:\n  1. Follow up on an existing ticket\n  2. Create a new ticket",
+          "response_type": "greeting",
+          "show_buttons": [],
+          "elapsed_ms": 11.6,
+          "error": null
+        },
+        {
+          "message": "Hello I need help",
+          "status_code": 200,
+          "response": "Of course. To help you better, is this an inquiry (you have a question) or a complaint (you are reporting a problem or fault)?",
+          "response_type": "prompt_ticket_type",
+          "show_buttons": [],
+          "elapsed_ms": 6939.0,
+          "error": null
+        },
+        {
+          "message": "I need to create a new support request",
+          "status_code": 200,
+          "response": "Sure thing! Let me know what kind of assistance you're seeking so we can get started.\n\nTo raise this as a complaint ticket, what type of asset is affected \u2014 Office, Warehouse, or Retail?",
+          "response_type": "complaint_deescalate",
+          "show_buttons": [],
+          "elapsed_ms": 28814.9,
+          "error": null
+        }
+      ],
+      "success": true,
+      "error": null,
+      "duration_s": 35.77
+    }
+  ],
+  "summary": {
+    "completion_rate_pct": 100.0,
+    "avg_scenario_duration_s": 69.82
+  }
+}
