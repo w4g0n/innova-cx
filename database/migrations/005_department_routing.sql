@@ -1,6 +1,7 @@
 -- ============================================================
--- Migration 004: department_routing
+-- Migration 005: department_routing
 -- Logs every routing decision (confident and non-confident)
+-- Also creates department_routing_feedback for model training
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS department_routing (
@@ -22,3 +23,15 @@ CREATE INDEX IF NOT EXISTS idx_department_routing_pending
   ON department_routing(is_confident, final_department, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_department_routing_finalized
   ON department_routing(final_department, routed_by, updated_at DESC);
+
+-- Feedback table used to log manager decisions back for model retraining
+CREATE TABLE IF NOT EXISTS department_routing_feedback (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  predicted_department TEXT NOT NULL,
+  approved_department  TEXT NOT NULL,
+  confidence_score     NUMERIC(5,4),
+  model_name           TEXT,
+  approved_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);

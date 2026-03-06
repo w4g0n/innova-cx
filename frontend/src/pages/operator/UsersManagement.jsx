@@ -9,21 +9,48 @@ import ConfirmDialog from "../../components/common/ConfirmDialog";
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
+import { apiUrl } from "../../config/apiBase";
 import "./UsersManagement.css";
 
-// ── Config ────────────────────────────────────────────────────────────────────
-// Support both env names (your env uses VITE_API_BASE_URL)
-const API_BASE = 'http://127.0.0.1:8000/api';
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-function authHeaders() {
-  const token = localStorage.getItem("access_token");
-  return {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+// ── API helpers (same pattern as QualityControl) ───────────────────────────────
+function getStoredToken() {
+  const direct =
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken");
+  if (direct) return direct;
+  try {
+    const u = JSON.parse(localStorage.getItem("user") || "{}");
+    return u?.access_token || "";
+  } catch {
+    return "";
+  }
 }
 
+async function apiFetch(path, options = {}) {
+  const token = getStoredToken();
+  const url = apiUrl(`/api${path}`);
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  });
+  if (res.status === 401 || res.status === 403) {
+    window.location.href = "/login";
+    throw new Error("Session expired.");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw Object.assign(new Error(data?.detail ?? `HTTP ${res.status}`), { status: res.status, data });
+  }
+  return data;
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
 const ROLE_OPTIONS = ["Customer", "Employee", "Manager", "Operator"];
 
 const DEPARTMENT_OPTIONS = [
@@ -36,6 +63,7 @@ const DEPARTMENT_OPTIONS = [
   "IT",
 ];
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function matchesQuery(user, q) {
   const s = q.trim().toLowerCase();
   if (!s) return true;
@@ -54,7 +82,6 @@ function isValidEmail(email) {
   return /^\S+@\S+\.\S+$/.test(email);
 }
 
-// react-phone-input-2 stores digits without '+'
 function toPhoneInputValue(e164) {
   if (!e164) return "";
   return e164.startsWith("+") ? e164.slice(1) : e164;
@@ -139,7 +166,7 @@ export default function UsersManagement() {
   });
   const closeConfirm = () => setConfirm((c) => ({ ...c, open: false }));
 
-  // Auto-dismiss toast after 4 seconds
+  // Auto-dismiss toast
   useEffect(() => {
     if (!toast.message) return;
     const t = setTimeout(() => setToast({ type: "", message: "" }), 4000);
@@ -149,9 +176,7 @@ export default function UsersManagement() {
   // Close 3-dot menu on outside click
   useEffect(() => {
     const handler = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setOpenMenuId(null);
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpenMenuId(null);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -164,20 +189,7 @@ export default function UsersManagement() {
     setLoadingUsers(true);
     setUsersError("");
     try {
-      const res = await fetch(`${API_BASE}/operator/users`, {
-        method: "GET",
-        headers: authHeaders(),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        const msg = data?.detail ?? `Failed to load users (HTTP ${res.status}).`;
-        setUsersError(msg);
-        setUsers([]);
-        return;
-      }
-
+      const data = await apiFetch("/operator/users");
       const list = Array.isArray(data) ? data : [];
       const normalized = list.map((u) => ({
         id: u.id ?? u.userId ?? u.user_id ?? "",
@@ -192,17 +204,15 @@ export default function UsersManagement() {
         lastLogin: u.lastLogin ?? u.last_login ?? "—",
       }));
       setUsers(normalized);
-    } catch {
-      setUsersError("Failed to load users. Check the backend and network.");
+    } catch (err) {
+      setUsersError(err.message || "Failed to load users. Check the backend and network.");
       setUsers([]);
     } finally {
       setLoadingUsers(false);
     }
   };
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  useEffect(() => { fetchUsers(); }, []);
 
   // -------------------------
   // DERIVED DATA
@@ -238,7 +248,6 @@ export default function UsersManagement() {
     setToast({ type: "", message: "" });
     setErrors({});
     setSelectedId(user.id);
-
     const existingPhone = user.phone ?? "";
     setEdit({
       fullName: user.fullName ?? "",
@@ -252,29 +261,19 @@ export default function UsersManagement() {
       password: "",
       confirmPassword: "",
     });
-
     setOpenManageModal(true);
     setOpenCreateModal(false);
   };
 
-  const closeManage = () => {
-    setOpenManageModal(false);
-    setSelectedId(null);
-  };
+  const closeManage = () => { setOpenManageModal(false); setSelectedId(null); };
 
   const onEditChange = (e) => {
     const { name, value } = e.target;
-
-    // If role becomes customer, clear department automatically
     if (name === "role" && value === "customer") {
       setEdit((p) => ({ ...p, role: value, department: "" }));
-      setErrors((prev) => {
-        const { department: _department, ...rest } = prev;
-        return rest;
-      });
+      setErrors((prev) => { const { department: _d, ...rest } = prev; return rest; });
       return;
     }
-
     setEdit((p) => ({ ...p, [name]: value }));
   };
 
@@ -283,65 +282,41 @@ export default function UsersManagement() {
     if (!edit.fullName.trim()) e.fullName = "Full name is required.";
     if (!edit.email.trim()) e.email = "Email is required.";
     if (edit.email && !isValidEmail(edit.email)) e.email = "Invalid email format.";
-
     const phoneErr = validateE164Phone(edit.phoneE164);
     if (phoneErr) e.phone = phoneErr;
-
     if (!edit.location.trim()) e.location = "Location is required.";
-
-    if (edit.role !== "customer" && !edit.department.trim()) {
-      e.department = "Department is required for non-customer roles.";
-    }
-
+    if (edit.role !== "customer" && !edit.department.trim()) e.department = "Department is required for non-customer roles.";
     if (edit.password || edit.confirmPassword) {
       if (!edit.password) e.password = "Password is required.";
       if (edit.password && edit.password.length < 8) e.password = "Min 8 characters.";
       if (edit.confirmPassword !== edit.password) e.confirmPassword = "Passwords do not match.";
     }
-
     return e;
   };
 
   const saveChanges = async () => {
     const e = validateEdit();
     setErrors(e);
-    if (Object.keys(e).length) {
-      setToast({ type: "error", message: "Fix the highlighted fields." });
-      return;
-    }
+    if (Object.keys(e).length) { setToast({ type: "error", message: "Fix the highlighted fields." }); return; }
 
     const payload = {
       fullName: edit.fullName.trim(),
       email: edit.email.trim(),
-      phone: edit.phoneE164, // E.164
+      phone: edit.phoneE164,
       location: edit.location.trim(),
       role: edit.role,
       status: edit.status,
+      ...(edit.role !== "customer" ? { department: edit.department.trim() } : {}),
+      ...(edit.password ? { password: edit.password } : {}),
     };
 
-    if (edit.role !== "customer") payload.department = edit.department.trim();
-    if (edit.password) payload.password = edit.password;
-
     try {
-      const res = await fetch(`${API_BASE}/operator/users/${selectedId}`, {
-        method: "PUT",
-        headers: authHeaders(),
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        const msg = data?.detail ?? `Failed to update user (HTTP ${res.status}).`;
-        setToast({ type: "error", message: msg });
-        return;
-      }
-
+      const data = await apiFetch(`/operator/users/${selectedId}`, { method: "PUT", body: JSON.stringify(payload) });
       setToast({ type: "success", message: data?.message ?? "User updated successfully." });
       closeManage();
       await fetchUsers();
-    } catch {
-      setToast({ type: "error", message: "Failed to update user. Check the backend and network." });
+    } catch (err) {
+      setToast({ type: "error", message: err.message || "Failed to update user. Check the backend and network." });
     }
   };
 
@@ -351,18 +326,7 @@ export default function UsersManagement() {
   const openCreate = () => {
     setToast({ type: "", message: "" });
     setErrors({});
-    setCreate({
-      fullName: "",
-      email: "",
-      phoneE164: "",
-      phoneCountry: "ae",
-      location: "",
-      department: "",
-      role: "customer",
-      status: "active",
-      password: "",
-      confirmPassword: "",
-    });
+    setCreate({ fullName: "", email: "", phoneE164: "", phoneCountry: "ae", location: "", department: "", role: "customer", status: "active", password: "", confirmPassword: "" });
     setOpenCreateModal(true);
     setOpenManageModal(false);
   };
@@ -371,17 +335,11 @@ export default function UsersManagement() {
 
   const onCreateChange = (e) => {
     const { name, value } = e.target;
-
-    // If role becomes customer, clear department automatically
     if (name === "role" && value === "customer") {
       setCreate((p) => ({ ...p, role: value, department: "" }));
-      setErrors((prev) => {
-        const { department: _department, ...rest } = prev;
-        return rest;
-      });
+      setErrors((prev) => { const { department: _d, ...rest } = prev; return rest; });
       return;
     }
-
     setCreate((p) => ({ ...p, [name]: value }));
   };
 
@@ -390,35 +348,25 @@ export default function UsersManagement() {
     if (!create.fullName.trim()) e.fullName = "Full name is required.";
     if (!create.email.trim()) e.email = "Email is required.";
     if (create.email && !isValidEmail(create.email)) e.email = "Invalid email format.";
-
     const phoneErr = validateE164Phone(create.phoneE164);
     if (phoneErr) e.phone = phoneErr;
-
     if (!create.location.trim()) e.location = "Location is required.";
-
-    if (create.role !== "customer" && !create.department.trim()) {
-      e.department = "Department is required for non-customer roles.";
-    }
-
+    if (create.role !== "customer" && !create.department.trim()) e.department = "Department is required for non-customer roles.";
     if (!create.password) e.password = "Password is required.";
     if (create.password && create.password.length < 8) e.password = "Min 8 characters.";
     if (create.confirmPassword !== create.password) e.confirmPassword = "Passwords do not match.";
-
     return e;
   };
 
   const createUser = async () => {
     const e = validateCreate();
     setErrors(e);
-    if (Object.keys(e).length) {
-      setToast({ type: "error", message: "Fix the highlighted fields." });
-      return;
-    }
+    if (Object.keys(e).length) { setToast({ type: "error", message: "Fix the highlighted fields." }); return; }
 
     const payload = {
       fullName: create.fullName.trim(),
       email: create.email.trim(),
-      phone: create.phoneE164, // E.164
+      phone: create.phoneE164,
       location: create.location.trim(),
       password: create.password,
       role: create.role,
@@ -427,39 +375,24 @@ export default function UsersManagement() {
     };
 
     try {
-      const res = await fetch(`${API_BASE}/operator/user-creation`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        const msg =
-          data?.detail ??
-          (res.status === 409
-            ? "A user with that email already exists."
-            : `Failed to create user (HTTP ${res.status}).`);
-        setToast({ type: "error", message: msg });
-        return;
-      }
-
+      const data = await apiFetch("/operator/user-creation", { method: "POST", body: JSON.stringify(payload) });
       setToast({ type: "success", message: data?.message ?? "User created successfully." });
       closeCreate();
       await fetchUsers();
-    } catch {
-      setToast({ type: "error", message: "Failed to create user. Check the backend and network." });
+    } catch (err) {
+      const msg = err.status === 409
+        ? "A user with that email already exists."
+        : err.message || "Failed to create user. Check the backend and network.";
+      setToast({ type: "error", message: msg });
     }
   };
 
   // -------------------------
-  // ACTIVATE / DEACTIVATE (API)
+  // ACTIVATE / DEACTIVATE
   // -------------------------
   const toggleActive = (id) => {
     const user = users.find((u) => u.id === id);
     const isActive = user?.status === "active";
-
     setConfirm({
       open: true,
       icon: isActive ? "⚠️" : "✅",
@@ -470,28 +403,15 @@ export default function UsersManagement() {
       variant: isActive ? "warning" : "success",
       onConfirm: async () => {
         try {
-          const res = await fetch(`${API_BASE}/operator/users/${id}/status`, {
+          const data = await apiFetch(`/operator/users/${id}/status`, {
             method: "PATCH",
-            headers: authHeaders(),
             body: JSON.stringify({ status: isActive ? "inactive" : "active" }),
           });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            setToast({
-              type: "error",
-              message: data?.detail ?? `Failed to update status (HTTP ${res.status}).`,
-            });
-            closeConfirm();
-            return;
-          }
-          setToast({
-            type: "success",
-            message: data?.message ?? `User ${isActive ? "deactivated" : "activated"}.`,
-          });
+          setToast({ type: "success", message: data?.message ?? `User ${isActive ? "deactivated" : "activated"}.` });
           closeConfirm();
           await fetchUsers();
-        } catch {
-          setToast({ type: "error", message: "Failed to update user status. Check backend/network." });
+        } catch (err) {
+          setToast({ type: "error", message: err.message || "Failed to update user status. Check backend/network." });
           closeConfirm();
         }
       },
@@ -499,11 +419,10 @@ export default function UsersManagement() {
   };
 
   // -------------------------
-  // DELETE (API)
+  // DELETE
   // -------------------------
   const deleteUser = (id) => {
     const user = users.find((u) => u.id === id);
-
     setConfirm({
       open: true,
       icon: "🗑️",
@@ -512,24 +431,12 @@ export default function UsersManagement() {
       variant: "danger",
       onConfirm: async () => {
         try {
-          const res = await fetch(`${API_BASE}/operator/users/${id}`, {
-            method: "DELETE",
-            headers: authHeaders(),
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            setToast({
-              type: "error",
-              message: data?.detail ?? `Failed to delete user (HTTP ${res.status}).`,
-            });
-            closeConfirm();
-            return;
-          }
+          const data = await apiFetch(`/operator/users/${id}`, { method: "DELETE" });
           setToast({ type: "success", message: data?.message ?? "User deleted." });
           closeConfirm();
           await fetchUsers();
-        } catch {
-          setToast({ type: "error", message: "Failed to delete user. Check backend/network." });
+        } catch (err) {
+          setToast({ type: "error", message: err.message || "Failed to delete user. Check backend/network." });
           closeConfirm();
         }
       },
@@ -577,7 +484,7 @@ export default function UsersManagement() {
           </div>
         )}
 
-        {/* KPI Cards — 5 KPIs */}
+        {/* KPI Cards */}
         <section className="umKpis">
           <KpiCard label="Total Users" value={stats.total} />
           <KpiCard label="Active" value={stats.active} />
@@ -639,25 +546,18 @@ export default function UsersManagement() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="umEmpty">
-                      No users match your current filters.
-                    </td>
+                    <td colSpan={7} className="umEmpty">No users match your current filters.</td>
                   </tr>
                 ) : (
                   filtered.map((u) => (
                     <tr key={u.id}>
                       <td className="umNameCell">{u.fullName}</td>
                       <td className="umMuted">{u.email}</td>
-                      <td>
-                        <span className={`umPill role-${u.role}`}>{u.role}</span>
-                      </td>
-                      <td>
-                        <span className={`umPill status-${u.status}`}>{u.status}</span>
-                      </td>
+                      <td><span className={`umPill role-${u.role}`}>{u.role}</span></td>
+                      <td><span className={`umPill status-${u.status}`}>{u.status}</span></td>
                       <td className="umMuted">{u.department || "—"}</td>
                       <td className="umMuted">{u.location}</td>
                       <td className="umRight">
-                        {/* 3-dot dropdown menu */}
                         <div className="umMenuWrap" ref={openMenuId === u.id ? menuRef : null}>
                           <button
                             className="umMenuBtn"
@@ -672,41 +572,20 @@ export default function UsersManagement() {
                           >
                             ⋮
                           </button>
-
                           {openMenuId === u.id && (
                             <div className={`umMenuDropdown${menuDropUp ? " umMenuDropdown--up" : ""}`}>
-                              <button
-                                className="umMenuItem"
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  openManage(u);
-                                }}
-                              >
+                              <button className="umMenuItem" onClick={() => { setOpenMenuId(null); openManage(u); }}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                 Manage
                               </button>
-
-                              <button
-                                className={`umMenuItem ${u.status === "active" ? "warning" : ""}`}
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  toggleActive(u.id);
-                                }}
-                              >
+                              <button className={`umMenuItem ${u.status === "active" ? "warning" : ""}`} onClick={() => { setOpenMenuId(null); toggleActive(u.id); }}>
                                 {u.status === "active"
                                   ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                                   : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                                 }
                                 {u.status === "active" ? "Deactivate" : "Activate"}
                               </button>
-
-                              <button
-                                className="umMenuItem danger"
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  deleteUser(u.id);
-                                }}
-                              >
+                              <button className="umMenuItem danger" onClick={() => { setOpenMenuId(null); deleteUser(u.id); }}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                                 Delete
                               </button>
@@ -723,8 +602,7 @@ export default function UsersManagement() {
         </div>
       </div>
 
-
-      {/* CREATE MODAL — rendered outside umPage so overlay is fixed to viewport */}
+      {/* CREATE MODAL */}
       {openCreateModal && (
         <div className="umModalOverlay" onMouseDown={closeCreate}>
           <div className="umModal" onMouseDown={(e) => e.stopPropagation()}>
@@ -755,9 +633,7 @@ export default function UsersManagement() {
                     onChange={(digits, countryData) => {
                       let cleanDigits = digits || "";
                       const dialCode = countryData?.dialCode || "";
-                      if (cleanDigits.startsWith(dialCode + "0")) {
-                        cleanDigits = dialCode + cleanDigits.slice(dialCode.length + 1);
-                      }
+                      if (cleanDigits.startsWith(dialCode + "0")) cleanDigits = dialCode + cleanDigits.slice(dialCode.length + 1);
                       const e164 = cleanDigits ? `+${cleanDigits}` : "";
                       setCreate((p) => ({ ...p, phoneE164: e164, phoneCountry: (countryData?.countryCode || "ae").toLowerCase() }));
                       setErrors((prev) => { const { phone: _p, ...rest } = prev; return rest; });
@@ -823,7 +699,7 @@ export default function UsersManagement() {
         </div>
       )}
 
-      {/* MANAGE MODAL — rendered outside umPage so overlay is fixed to viewport */}
+      {/* MANAGE MODAL */}
       {openManageModal && (
         <div className="umModalOverlay" onMouseDown={closeManage}>
           <div className="umModal" onMouseDown={(e) => e.stopPropagation()}>
@@ -924,7 +800,7 @@ export default function UsersManagement() {
         </div>
       )}
 
-      {/* CONFIRM DIALOG — outside umPage so it stays fixed to viewport */}
+      {/* CONFIRM DIALOG */}
       <ConfirmDialog
         open={confirm.open}
         icon={confirm.icon}

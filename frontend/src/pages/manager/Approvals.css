@@ -48,7 +48,7 @@
 }
 
 .trendsTableWrap {
-  overflow: auto;
+  overflow: visible;
   border-radius: 14px;
   border: 1px solid rgba(0, 0, 0, 0.06);
   margin-top: 10px;
@@ -68,6 +68,10 @@
   padding: 10px 10px;
   text-align: left;
   white-space: nowrap;
+  vertical-align: middle;
+}
+
+.trendsTable tbody td {
   vertical-align: middle;
 }
 
@@ -192,7 +196,9 @@
 .actionsCell {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
+  height: 100%;
 }
 
 .deptSelectWrap {
@@ -400,4 +406,479 @@
 .statusPill--overridden {
   background: rgba(99,102,241,0.14);
   color: #3730a3;
+}
+/* ══════════════════════════════════════════════════════════════
+   TABS
+══════════════════════════════════════════════════════════════ */
+.apr-tabBar {
+  display: flex;
+  gap: 8px;
+  margin: 20px 0 0;
+  border-bottom: 2px solid rgba(89, 36, 180, 0.1);
+  padding-bottom: 0;
+}
+
+.apr-tab {
+  position: relative;
+  padding: 11px 22px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(17, 17, 17, 0.45);
+  cursor: pointer;
+  border-radius: 10px 10px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.18s, background 0.18s;
+  margin-bottom: -2px;
+}
+
+.apr-tab:hover {
+  color: #5b21b6;
+  background: rgba(89, 36, 180, 0.05);
+}
+
+.apr-tab--active {
+  color: #5b21b6;
+  background: #fff;
+  border: 2px solid rgba(89, 36, 180, 0.1);
+  border-bottom: 2px solid #fff;
+}
+
+.apr-tabBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e8445a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.apr-tabContent {
+  animation: apr-fadeUp 0.25s ease both;
+}
+
+@keyframes apr-fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RESULT COUNT
+══════════════════════════════════════════════════════════════ */
+.apr-resultCount {
+  margin-left: auto;
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+  align-self: center;
+}
+.apr-resultCount strong { color: #111827; font-weight: 700; }
+.apr-resultCount__kpi  { font-weight: 700; color: #5b21b6; }
+
+/* ══════════════════════════════════════════════════════════════
+   KPI WRAP (click-to-filter)
+══════════════════════════════════════════════════════════════ */
+.apr-kpiWrap {
+  cursor: pointer;
+  border-radius: 18px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, outline 0.15s ease;
+  outline: 2px solid transparent;
+}
+.apr-kpiWrap:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(89, 36, 180, 0.13);
+}
+.apr-kpiWrap--active {
+  outline: 2px solid rgba(89, 36, 180, 0.55);
+  box-shadow: 0 4px 18px rgba(89, 36, 180, 0.18);
+  transform: translateY(-1px);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   REQUEST TYPE PILL
+══════════════════════════════════════════════════════════════ */
+.apr-typePill {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+.apr-typePill--rescoring {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.28);
+  color: #1d4ed8;
+}
+.apr-typePill--rerouting {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #b45309;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RRQ HERO BANNER
+══════════════════════════════════════════════════════════════ */
+.rrq-heroBanner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin: 24px 0 20px;
+  padding: 24px 28px;
+  background: linear-gradient(125deg, #1e0a3c 0%, #3b0f6e 45%, #5b21b6 100%);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(91, 33, 182, 0.3);
+}
+
+.rrq-heroBannerGlow {
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.25) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.rrq-heroLeft {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 1;
+}
+
+.rrq-heroIcon {
+  font-size: 30px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rrq-heroTitle {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+
+.rrq-heroSubtitle {
+  font-size: 12px;
+  color: rgba(233, 213, 255, 0.75);
+  margin: 0;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.rrq-heroKpis {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  overflow: hidden;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.rrq-heroKpiGroup {
+  display: flex;
+  align-items: center;
+}
+
+.rrq-heroKpiChip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 24px;
+  gap: 3px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.rrq-heroKpiChip:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rrq-heroKpiChip--active {
+  background: rgba(255, 255, 255, 0.18);
+  outline: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LOW CONFIDENCE ROW HIGHLIGHT
+══════════════════════════════════════════════════════════════ */
+.rrq-row--lowConf {
+  background: rgba(220, 38, 38, 0.04) !important;
+  border-left: 3px solid rgba(220, 38, 38, 0.5);
+}
+.rrq-row--lowConf:hover {
+  background: rgba(220, 38, 38, 0.08) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TOAST
+══════════════════════════════════════════════════════════════ */
+.apr-toastStack {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.apr-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  animation: apr-toastIn 0.25s ease;
+  min-width: 260px;
+  max-width: 360px;
+}
+
+.apr-toast--success {
+  background: #ecfdf5;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #065f46;
+}
+
+.apr-toast--error {
+  background: #fef2f2;
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: #991b1b;
+}
+
+.apr-toastIcon { font-weight: 900; font-size: 14px; flex-shrink: 0; }
+
+@keyframes apr-toastIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Current / Requested value pills ─────────────────────── */
+.apr-valuePill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  min-width: 110px;
+  text-align: center;
+}
+.apr-valuePill--current {
+  background: rgba(107, 114, 128, 0.1);
+  border-color: rgba(107, 114, 128, 0.2);
+  color: #374151;
+}
+.apr-valuePill--requested {
+  background: rgba(89, 36, 180, 0.08);
+  border-color: rgba(89, 36, 180, 0.2);
+  color: #5b21b6;
+}
+
+/* ── Department pills ────────────────────────────────────── */
+.apr-deptPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  color: #1d4ed8;
+  white-space: nowrap;
+}
+.apr-deptPill--current {
+  background: rgba(107, 114, 128, 0.08);
+  border-color: rgba(107, 114, 128, 0.2);
+  color: #374151;
+}
+
+/* ── RRQ hero icon (text instead of emoji) ───────────────── */
+.rrq-heroIcon {
+  font-size: 13px !important;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: rgba(255,255,255,0.9);
+}
+
+/* ── Change cell (current → requested) ───────────────────── */
+.apr-changeCell {
+  display: grid;
+  grid-template-columns: 150px auto 150px;
+  align-items: center;
+  gap: 8px;
+  width: 330px;
+}
+
+.apr-changeCell > :first-child {
+  justify-self: end;
+}
+
+.apr-changeCell > :last-child {
+  justify-self: start;
+}
+
+.apr-changeArrow {
+  font-size: 18px;
+  font-weight: 900;
+  color: rgba(89, 36, 180, 0.65);
+  flex-shrink: 0;
+  transition: color 0.2s;
+  line-height: 1;
+  filter: drop-shadow(0 0 3px rgba(89, 36, 180, 0.25));
+}
+
+/* Pending rows: pulsing animated arrow */
+.apr-changeArrow--animated {
+  color: #7c3aed;
+  filter: drop-shadow(0 0 5px rgba(124, 58, 237, 0.55));
+  animation: apr-arrowPulse 1s ease-in-out infinite;
+}
+
+@keyframes apr-arrowPulse {
+  0%   { opacity: 0.4; transform: translateX(-4px); color: #a78bfa; }
+  50%  { opacity: 1;   transform: translateX(4px);  color: #7c3aed; }
+  100% { opacity: 0.4; transform: translateX(-4px); color: #a78bfa; }
+}
+/* ══════════════════════════════════════════════════════════════
+   APPROVAL ROW OVERRIDE POPUP
+══════════════════════════════════════════════════════════════ */
+.apr-overrideWrap {
+  position: relative;
+}
+
+.apr-overrideMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 210px;
+  background: #fff;
+  border: 1px solid rgba(89,36,180,0.18);
+  border-radius: 12px;
+  padding: 6px;
+  z-index: 500;
+  box-shadow: 0 8px 32px rgba(89,36,180,0.14), 0 2px 8px rgba(0,0,0,0.08);
+  animation: apr-menuIn 0.15s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+@keyframes apr-menuIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+.apr-overrideMenuTitle {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(17,17,17,0.4);
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  margin-bottom: 4px;
+}
+
+.apr-overrideMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  color: #111;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.apr-overrideMenuItem:hover {
+  background: rgba(89,36,180,0.07);
+  color: #5b21b6;
+}
+
+/* Default dot */
+.apr-overrideMenuDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(89,36,180,0.45);
+  flex-shrink: 0;
+}
+
+/* Priority-coloured dots */
+.apr-overrideMenuDot--low      { background: #16a34a; }
+.apr-overrideMenuDot--medium   { background: #d97706; }
+.apr-overrideMenuDot--high     { background: #ea580c; }
+.apr-overrideMenuDot--critical { background: #dc2626; }
+
+/* "requested" / "AI pick" badge inside menu items */
+.apr-overrideMenuAiBadge {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #7c3aed;
+  background: rgba(124,58,237,0.1);
+  border: 1px solid rgba(124,58,237,0.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
+/* "current" badge in override popup */
+.apr-overrideMenuCurrentBadge {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #374151;
+  background: rgba(107,114,128,0.12);
+  border: 1px solid rgba(107,114,128,0.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
+/* When both current + requested badges appear on same row, space them */
+.apr-overrideMenuItem .apr-overrideMenuCurrentBadge + .apr-overrideMenuAiBadge {
+  margin-left: 4px;
 }

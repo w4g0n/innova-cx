@@ -179,69 +179,6 @@ def _ensure_runtime_schema_compatibility() -> None:
                     );
                     """
                 )
-                cur.execute(
-                    """
-                    DO $$ BEGIN
-                      CREATE TYPE routing_review_status AS ENUM ('Pending', 'Approved', 'Overridden');
-                    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-                    """
-                )
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS routing_review_queue (
-                      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                      ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-                      predicted_department TEXT NOT NULL,
-                      confidence_score     NUMERIC(5,4) NOT NULL,
-                      status               routing_review_status NOT NULL DEFAULT 'Pending',
-                      approved_department  TEXT,
-                      decided_by_user_id   UUID REFERENCES users(id) ON DELETE SET NULL,
-                      decided_at           TIMESTAMPTZ,
-                      decision_notes       TEXT,
-                      created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
-                    );
-                    """
-                )
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS department_routing_feedback (
-                      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                      ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-                      predicted_department TEXT NOT NULL,
-                      approved_department  TEXT NOT NULL,
-                      confidence_score     NUMERIC(5,4),
-                      model_name           TEXT,
-                      approved_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
-                      created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
-                    );
-                    """
-                )
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS department_routing (
-                      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                      ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-                      suggested_department TEXT NOT NULL,
-                      confidence_score     NUMERIC(5,2) NOT NULL CHECK (confidence_score >= 0 AND confidence_score <= 100),
-                      is_confident         BOOLEAN NOT NULL,
-                      final_department     TEXT,
-                      routed_by            TEXT CHECK (routed_by IN ('model', 'manager')),
-                      manager_id           UUID REFERENCES users(id) ON DELETE SET NULL,
-                      created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
-                      updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
-                    );
-                    """
-                )
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_department_routing_ticket ON department_routing(ticket_id);")
-                cur.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_department_routing_pending ON department_routing(is_confident, final_department, created_at DESC);"
-                )
-                cur.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_department_routing_finalized ON department_routing(final_department, routed_by, updated_at DESC);"
-                )
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_rrq_ticket ON routing_review_queue(ticket_id);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_rrq_status ON routing_review_queue(status);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_rrq_created ON routing_review_queue(created_at DESC);")
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
@@ -3578,7 +3515,7 @@ def get_manager_kpis(user: Dict[str, Any] = Depends(require_manager)):
     row = fetch_one("""
         SELECT
             COUNT(*) FILTER (WHERE status <> 'Resolved')                                AS open_complaints,
-            COUNT(*) FILTER (WHERE status NOT IN ('Resolved', 'Unassigned'))           AS in_progress,
+            COUNT(*) FILTER (WHERE status NOT IN ('Resolved'::ticket_status, 'Open'::ticket_status))  AS in_progress,
             COUNT(*) FILTER (WHERE resolved_at::date = CURRENT_DATE)           AS resolved_today,
             (SELECT COUNT(*) FROM users WHERE role = 'employee')               AS active_employees,
             (SELECT COUNT(*) FROM approval_requests WHERE status = 'Pending')  AS pending_approvals
@@ -3648,8 +3585,9 @@ ORDER BY ar.submitted_at DESC;
 # =========================================================
 
 class ApprovalDecisionRequest(BaseModel):
-    decision: str          # "Approved" or "Rejected"
+    decision: str                      # "Approved" or "Rejected"
     decision_notes: Optional[str] = None
+    override_value: Optional[str] = None   # Manager override: priority name OR department name
 
 @api.patch("/manager/approvals/{request_id}")
 def decide_approval(
@@ -3700,13 +3638,20 @@ def decide_approval(
             )
 
             # 2. If approved, apply the change to the ticket
+            #    If override_value is provided, the manager chose a different value
+            #    than what the employee requested — use that instead.
             if decision == "Approved":
                 req_type  = ar["request_type"]
                 requested = ar["requested_value"] or ""
                 ticket_id = ar["ticket_id"]
+                override  = (body.override_value or "").strip()
 
                 if req_type == "Rescoring":
-                    new_priority = requested.replace("Priority:", "").strip()
+                    # Use override priority if provided, otherwise use requested
+                    if override:
+                        new_priority = override
+                    else:
+                        new_priority = requested.replace("Priority:", "").strip()
                     allowed = {"Low", "Medium", "High", "Critical"}
                     if new_priority in allowed:
                         cur.execute(
@@ -3717,7 +3662,11 @@ def decide_approval(
                         relearn_priority = new_priority
 
                 elif req_type == "Rerouting":
-                    new_dept_name = requested.replace("Dept:", "").strip()
+                    # Use override department if provided, otherwise use requested
+                    if override:
+                        new_dept_name = override
+                    else:
+                        new_dept_name = requested.replace("Dept:", "").strip()
                     cur.execute(
                         "SELECT id FROM departments WHERE name = %s LIMIT 1;",
                         (new_dept_name,),
@@ -4158,6 +4107,54 @@ class RoutingReviewDecisionRequest(BaseModel):
     decision:            Optional[str] = None
     approved_department: Optional[str] = None
 
+
+
+@api.get("/manager/routing-review/{review_id}")
+def get_routing_review_item(
+    review_id: str,
+    user: Dict[str, Any] = Depends(require_manager),
+):
+    """Fetch a single routing review item by its UUID."""
+    row = fetch_one(
+        """
+        SELECT
+          dr.id::text                          AS "reviewId",
+          CASE
+            WHEN dr.final_department IS NULL THEN 'Pending'
+            WHEN dr.routed_by = 'manager' THEN 'Overridden'
+            ELSE 'Approved'
+          END                                  AS "status",
+          dr.suggested_department              AS "predictedDepartment",
+          ROUND(dr.confidence_score, 2)        AS "confidencePct",
+          dr.final_department                  AS "approvedDepartment",
+          NULL::text                           AS "decisionNotes",
+          dr.updated_at                        AS "decidedAt",
+          dr.created_at                        AS "createdAt",
+          t.ticket_code                        AS "ticketCode",
+          t.subject                            AS "subject",
+          t.priority::text                     AS "priority",
+          t.status::text                       AS "ticketStatus",
+          d.name                               AS "currentDepartment",
+          up.full_name                         AS "decidedBy"
+        FROM department_routing dr
+        JOIN tickets t ON t.id = dr.ticket_id
+        LEFT JOIN departments d ON d.id = t.department_id
+        LEFT JOIN user_profiles up ON up.user_id = dr.manager_id
+        WHERE dr.id::text = %s AND dr.is_confident = FALSE
+        LIMIT 1
+        """,
+        (review_id,),
+    )
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Routing review item not found")
+
+    return {
+        **{k: v for k, v in row.items() if k not in ("decidedAt", "createdAt", "confidencePct")},
+        "confidencePct": float(row.get("confidencePct") or 0),
+        "decidedAt":     row["decidedAt"].isoformat() if row.get("decidedAt") else None,
+        "createdAt":     row["createdAt"].isoformat() if row.get("createdAt") else None,
+    }
 
 @api.patch("/manager/routing-review/{review_id}")
 def decide_routing_review(
