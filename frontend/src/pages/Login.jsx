@@ -150,6 +150,22 @@ export default function Login() {
       );
 
       const role = data.user?.role;
+      const staffRoles = ["employee", "manager", "operator"];
+      const onStaffDomain = window.location.hostname.startsWith("staff.");
+
+      if (onStaffDomain && role === "customer") {
+        setLoginError("This portal is for staff only. Please visit innovacx.net.");
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("user");
+        return;
+      }
+      if (!onStaffDomain && staffRoles.includes(role)) {
+        setLoginError("Staff must log in at staff.innovacx.net.");
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("user");
+        return;
+      }
+
       const rawNext = searchParams.get("next");
       const nextPath =
         rawNext && decodeURIComponent(rawNext).startsWith("/")
