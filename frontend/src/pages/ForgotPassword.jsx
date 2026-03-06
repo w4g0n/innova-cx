@@ -199,7 +199,13 @@ export default function ForgotPassword() {
           {/* ── SUCCESS ── */}
           {resetDone ? (
             <div className="fp-success">
-              <div className="fp-success-icon">✅</div>
+              <div className="fp-success-icon">
+                <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="32" cy="32" r="32" fill="rgba(147,51,234,0.18)" />
+                  <circle cx="32" cy="32" r="26" fill="rgba(147,51,234,0.22)" stroke="rgba(168,85,247,0.55)" strokeWidth="1.5" />
+                  <path d="M20 33l8 8 16-16" stroke="#c084fc" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
               <h1 className="fpTitle">Password Reset!</h1>
               <p className="fpSubtitle">Your password has been updated successfully.</p>
               <button className="fpBtn" onClick={() => navigate("/")}>Back to Login</button>

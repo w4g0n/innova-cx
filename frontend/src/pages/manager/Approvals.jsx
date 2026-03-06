@@ -274,7 +274,6 @@ export default function Approvals() {
             <table className="trendsTable">
               <thead>
                 <tr>
-                  <th>Request ID</th>
                   <th>Ticket ID</th>
                   <th>Request Type</th>
                   <th>Source</th>
@@ -289,18 +288,17 @@ export default function Approvals() {
               <tbody>
                 {loading && (
                   <tr>
-                    <td className="emptyRow" colSpan={10} style={{ textAlign: "center", color: "rgba(17,17,17,0.45)" }}>
+                    <td className="emptyRow" colSpan={9} style={{ textAlign: "center", color: "rgba(17,17,17,0.45)" }}>
                       Loading requests…
                     </td>
                   </tr>
                 )}
                 {!loading && filtered.map((r) => (
-                  <tr key={r.requestId}>
-                    <td>
-                      <span className="requestIdLink" onClick={() => navigate(`/manager/approvals/${r.requestId}`)}>
-                        {r.requestId}
-                      </span>
-                    </td>
+                  <tr
+                    key={r.requestId}
+                    className="approvalRow"
+                    onClick={() => navigate(`/manager/approvals/${r.requestId}`)}
+                  >
                     <td>{r.ticketId}</td>
                     <td>{r.type}</td>
                     <td>
@@ -321,7 +319,7 @@ export default function Approvals() {
                         {r.status}
                       </span>
                     </td>
-                    <td className="actionsCell">
+                    <td className="actionsCell" onClick={(e) => e.stopPropagation()}>
                       {r.type === "Rerouting" && r.status === "Pending" && (
                         <div className="deptSelectWrap">
                           <select
@@ -341,11 +339,11 @@ export default function Approvals() {
                       <button
                         className="actionBtn actionBtn--primary"
                         type="button"
-                        onClick={() => confirmDecide(
+                        onClick={(e) => { e.stopPropagation(); confirmDecide(
                           r.requestId, "Approved",
                           selectedDepartments[r.requestId] ||
                             (r.type === "Rerouting" ? String(r.requested || "").replace("Dept:", "").trim() : undefined)
-                        )}
+                        );}}
                         disabled={r.status !== "Pending"}
                       >
                         Approve
@@ -353,7 +351,7 @@ export default function Approvals() {
                       <button
                         className="actionBtn"
                         type="button"
-                        onClick={() => confirmDecide(r.requestId, "Rejected")}
+                        onClick={(e) => { e.stopPropagation(); confirmDecide(r.requestId, "Rejected"); }}
                         disabled={r.status !== "Pending"}
                       >
                         Reject
@@ -363,7 +361,7 @@ export default function Approvals() {
                 ))}
                 {!loading && filtered.length === 0 && (
                   <tr>
-                    <td className="emptyRow" colSpan={10}>No approval requests match your filters.</td>
+                    <td className="emptyRow" colSpan={9}>No approval requests match your filters.</td>
                   </tr>
                 )}
               </tbody>
