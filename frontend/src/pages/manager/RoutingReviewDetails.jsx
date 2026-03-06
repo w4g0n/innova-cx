@@ -495,7 +495,7 @@ export default function RoutingReviewDetails() {
                     : item.status === "Overridden"
                     ? { color: "#818cf8", title: "Routing Overridden", sub: `→ ${item.approvedDepartment}`, done: true }
                     : { color: "#d97706", title: "Awaiting Decision", sub: "Pending manager review", done: false, pending: true },
-                ].map((step, i, arr) => (
+                ].map((step, i) => (
                   <div key={i} className="rrd-stepItem">
                     {/* connector line before (skip first) */}
                     {i > 0 && <div className={`rrd-stepLine ${step.done ? "rrd-stepLine--done" : "rrd-stepLine--pending"}`} />}
