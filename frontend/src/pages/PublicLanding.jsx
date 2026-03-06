@@ -180,6 +180,18 @@ function Starfield() {
   return <canvas ref={ref} className="pl-starfield" />;
 }
 
+// Larger planets, wider orbits, much slower speeds
+const PLANET_CFG = [
+  { color: "#c084fc", size: 15, orbitRx: 95,  orbitRy: 38,  speed: 0.012 },
+  { color: "#818cf8", size: 18, orbitRx: 148, orbitRy: 59,  speed: 0.009 },
+  { color: "#a78bfa", size: 20, orbitRx: 198, orbitRy: 79,  speed: 0.007 },
+  { color: "#e879f9", size: 18, orbitRx: 248, orbitRy: 99,  speed: 0.006 },
+  { color: "#f0abfc", size: 30, orbitRx: 295, orbitRy: 118, speed: 0.005 },
+  { color: "#c026d3", size: 25, orbitRx: 342, orbitRy: 137, speed: 0.0042 },
+  { color: "#d946ef", size: 28, orbitRx: 386, orbitRy: 154, speed: 0.0036 },
+  { color: "#a855f7", size: 23, orbitRx: 428, orbitRy: 171, speed: 0.003 },
+];
+
 /* ══ SOLAR SYSTEM — wider, slower, larger planets ══ */
 function SolarSystem() {
   const ref = useRef(null);
@@ -187,18 +199,6 @@ function SolarSystem() {
   const hoverRef = useRef(-1);
   const [hovered, setHovered] = useState(null);
   const tRef = useRef(0);
-
-  // Larger planets, wider orbits, much slower speeds
-  const PLANET_CFG = [
-    { color: "#c084fc", size: 15, orbitRx: 95,  orbitRy: 38,  speed: 0.012 },
-    { color: "#818cf8", size: 18, orbitRx: 148, orbitRy: 59,  speed: 0.009 },
-    { color: "#a78bfa", size: 20, orbitRx: 198, orbitRy: 79,  speed: 0.007 },
-    { color: "#e879f9", size: 18, orbitRx: 248, orbitRy: 99,  speed: 0.006 },
-    { color: "#f0abfc", size: 30, orbitRx: 295, orbitRy: 118, speed: 0.005 },
-    { color: "#c026d3", size: 25, orbitRx: 342, orbitRy: 137, speed: 0.0042 },
-    { color: "#d946ef", size: 28, orbitRx: 386, orbitRy: 154, speed: 0.0036 },
-    { color: "#a855f7", size: 23, orbitRx: 428, orbitRy: 171, speed: 0.003 },
-  ];
 
   useEffect(() => {
     const c = ref.current; if (!c) return;

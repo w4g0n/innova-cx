@@ -10,8 +10,6 @@
 import { useState, useEffect } from "react";
 import { getStoredTheme, applyTheme } from "./customerThemeUtils";
 
-export { getStoredTheme, applyTheme };
-
 /** Drop-in hook: returns [theme, toggleFn] and keeps <html> in sync. */
 export function useTheme() {
   const [theme, setTheme] = useState(getStoredTheme);

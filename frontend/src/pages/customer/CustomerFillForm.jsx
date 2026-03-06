@@ -184,7 +184,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     cancelRecordingRef.current = true;
     try {
       if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
-    } catch (_err) {
+    } catch {
       setIsRecording(false); cleanupStream(); setVoiceStage("idle");
     }
   };
@@ -194,7 +194,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     cancelRecordingRef.current = false;
     try {
       if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
-    } catch (_err) {
+    } catch {
       setIsRecording(false); cleanupStream(); setVoiceStage("idle");
     }
   };

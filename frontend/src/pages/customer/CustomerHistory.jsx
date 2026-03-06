@@ -94,7 +94,7 @@ export default function CustomerMyTickets() {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) setNotifications((await res.json()).notifications || []);
-      } catch (_err) {
+      } catch {
         // ignore notification fetch errors (non-critical)
       }
     }

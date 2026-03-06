@@ -4393,7 +4393,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     )
                     department_id = cur.fetchone()[0]
 
-if not incoming_ticket_code:
+            if not incoming_ticket_code:
                 # ── No ticket_id supplied → create a new ticket ──
                 from api.ticket_creation_gate import create_ticket_via_gate
                 created = create_ticket_via_gate(
@@ -4426,23 +4426,6 @@ if not incoming_ticket_code:
             # ── ticket_id supplied → update existing ticket ──
             cur.execute(
                 "SELECT id, priority_assigned_at, department_id FROM tickets WHERE ticket_code = %s LIMIT 1",
-                (incoming_ticket_code,),
-            )
-                )
-                return {
-                    "ticket_id":   created["ticket_code"],
-                    "status":      created["status"],
-                    "priority":    created["priority"],
-                    "asset_type":  None,
-                    "department":  requested_department,
-                    "priority_assigned_at": created["priority_assigned_at"].isoformat() if created.get("priority_assigned_at") else None,
-                    "respond_due_at":       created["respond_due_at"].isoformat() if created.get("respond_due_at") else None,
-                    "resolve_due_at":       created["resolve_due_at"].isoformat() if created.get("resolve_due_at") else None,
-                }
-
-            # ── ticket_id supplied → update existing ticket ──
-            cur.execute(
-                "SELECT id, priority_assigned_at FROM tickets WHERE ticket_code = %s LIMIT 1",
                 (incoming_ticket_code,),
             )
             existing = cur.fetchone()

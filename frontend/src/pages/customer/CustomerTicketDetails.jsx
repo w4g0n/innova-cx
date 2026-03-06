@@ -90,7 +90,7 @@ export default function CustomerTicketDetails() {
             author:  u.author || "System",
           })),
         });
-      } catch (_err) {
+      } catch {
         if (mounted) setTicket(null);
       } finally {
         if (!silent && mounted) setLoading(false);

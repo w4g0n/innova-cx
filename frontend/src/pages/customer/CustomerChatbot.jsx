@@ -26,7 +26,7 @@ export default function CustomerChatbot() {
   const user = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("user") || "{}");
-    } catch (_err) {
+    } catch {
       // If localStorage has bad JSON / is unavailable, fall back safely
       return {};
     }
@@ -52,7 +52,7 @@ export default function CustomerChatbot() {
   const [chatSessionId, setChatSessionId] = useState(() => {
     try {
       return localStorage.getItem(SESSION_KEY) || null;
-    } catch (_err) {
+    } catch {
       // localStorage may be blocked/unavailable in some browsers or privacy modes
       return null;
     }
@@ -62,7 +62,7 @@ export default function CustomerChatbot() {
     try {
       if (chatSessionId) localStorage.setItem(SESSION_KEY, chatSessionId);
       else localStorage.removeItem(SESSION_KEY);
-    } catch (_err) {
+    } catch {
       // ignore storage write errors (e.g., blocked storage)
     }
   }, [chatSessionId]);

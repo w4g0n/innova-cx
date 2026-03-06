@@ -4,10 +4,10 @@
  */
 
 export function getStoredTheme() {
-  try { return localStorage.getItem("cl_theme") || "dark"; } catch (_err) { return "dark"; }
+  try { return localStorage.getItem("cl_theme") || "dark"; } catch { return "dark"; }
 }
 
 export function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
-  try { localStorage.setItem("cl_theme", theme); } catch (_err) { /* ignore */ }
+  try { localStorage.setItem("cl_theme", theme); } catch { /* ignore */ }
 }

@@ -16,7 +16,7 @@ function applyStoredTheme() {
   try {
     const t = localStorage.getItem("cl_theme") || "dark";
     document.documentElement.setAttribute("data-theme", t);
-  } catch {}
+  } catch { /* ignore localStorage errors */ }
 }
 
 export default function CustomerSettings() {
