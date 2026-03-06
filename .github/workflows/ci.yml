@@ -7,6 +7,49 @@ on:
     branches: [main]
 
 jobs:
+  guard-no-prod-live-into-main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block prod-live as PR source into main
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Not a pull_request event."
+            exit 0
+          fi
+          echo "base=${{ github.base_ref }} head=${{ github.head_ref }}"
+          if [ "${{ github.base_ref }}" = "main" ] && [ "${{ github.head_ref }}" = "prod-live" ]; then
+            echo "::error::PRs from prod-live into main are blocked. Merge main into prod-live only."
+            exit 1
+          fi
+
+  guard-protected-main-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Block deletion of protected paths from main
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "main" ]; then
+            echo "Not a PR targeting main."
+            exit 0
+          fi
+          DELETED="$(git diff --name-status "$BASE_SHA" "$HEAD_SHA" | awk '$1=="D"{print $2}')"
+          if [ -z "$DELETED" ]; then
+            echo "No deleted files in PR."
+            exit 0
+          fi
+
+          BLOCKED="$(printf "%s\n" "$DELETED" | grep -E '^(data/|docs/|Prototype/|postman/|CLOUD_README\.md$|README\.md$|deslop\.pdf$|test\.csv$)' || true)"
+          if [ -n "$BLOCKED" ]; then
+            echo "::error::This PR deletes protected main paths. If these should be prod-only deletions, target prod-live instead."
+            echo "$BLOCKED"
+            exit 1
+          fi
+
   lint-frontend:
     runs-on: ubuntu-latest
     defaults:
