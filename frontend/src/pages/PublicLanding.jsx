@@ -716,57 +716,6 @@ export default function PublicLanding() {
         <PipelineFlow />
       </section>
 
-      {/* ══ FEATURES ══ */}
-      <section className="pl-features" ref={featRef}>
-        <div className="pl-feat-nebula" />
-        <div className="pl-section-tag">Capabilities</div>
-        <h2 className="pl-section-h light">Powered by 8 AI Agents</h2>
-        <p className="pl-section-p light">Each agent a specialist. Together unstoppable.</p>
-        <div className="pl-feat-grid">
-          {[
-            {icon:"🧠",title:"Sentiment Analysis",desc:"RoBERTa reads emotional tone in text. Librosa analyses voice recordings. A combiner merges both into one unified Sentiment_Score used for priority scoring.",stat:"99.2%",sl:"Accuracy"},
-            {icon:"🎙️",title:"Audio Intelligence",desc:"Whisper transcribes voice complaints in real time. Librosa analyses the audio waveform for tone and stress. The audio log is discarded after processing to protect privacy.",stat:"<2s",sl:"Latency"},
-            {icon:"⚖️",title:"Fuzzy Prioritisation",desc:"Takes 7 signals — ticket type, recurrence, business impact, safety concern, sentiment, severity, and urgency — and outputs one of four Priority levels using fuzzy logic rules.",stat:"7",sl:"Input Signals"},
-            {icon:"🏢",title:"Smart Routing",desc:"DeBERTa assigns tickets to Facilities, Legal, Safety, HR, Leasing, Maintenance, or IT with a 0.7 confidence threshold. Below threshold, the ticket escalates to management.",stat:"0.7",sl:"Threshold"},
-            {icon:"💡",title:"Resolution Engine",desc:"Flan-T5 generates suggested resolutions instantly. A relearning loop retrains the model on every real employee resolution, making it smarter with every ticket closed.",stat:"∞",sl:"Relearning"},
-            {icon:"📋",title:"SLA Automation",desc:"Tickets automatically escalate as SLA deadlines approach. Status flows: Open → In Progress → Escalated → Overdue. Priority auto-increases when response time is breached.",stat:"0",sl:"Missed SLAs"},
-          ].map((f,i) => (
-            <div key={i} className={`pl-feat-card ${featVis?"is-vis":""}`} style={{"--d":`${i*0.1}s`}}>
-              <div className="pl-feat-glow" />
-              <div className="pl-feat-top">
-                <span className="pl-feat-icon">{f.icon}</span>
-                <div className="pl-feat-stat">
-                  <span className="pl-feat-stat-n">{f.stat}</span>
-                  <span className="pl-feat-stat-l">{f.sl}</span>
-                </div>
-              </div>
-              <h3 className="pl-feat-title">{f.title}</h3>
-              <p className="pl-feat-desc">{f.desc}</p>
-              <div className="pl-feat-bar"><div className={`pl-feat-bar-fill ${featVis?"is-full":""}`} style={{transitionDelay:`${i*0.1+0.5}s`}}/></div>
-            </div>
-          ))}
-        </div>
-        <div className="pl-stat-row">
-          {[["40","%","Faster Resolution"],["3","×","Complaint Throughput"],["98","%","Triage Accuracy"]].map(([n,s,l]) => (
-            <div className="pl-stat-block" key={l}>
-              <div className="pl-stat-n"><Counter end={n} suffix={s} /></div>
-              <div className="pl-stat-l">{l}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ══ AGENTS — new immersive showcase ══ */}
-      <section className="pl-agents-section">
-        <div className="pl-agents-section-bg" />
-        <div className="pl-agents-section-inner">
-          <div className="pl-section-tag" style={{color:"#c084fc"}}>The Eight Agents</div>
-          <h2 className="pl-section-h light">Each one a specialist</h2>
-          <p className="pl-section-p light">Click any agent card to dive deep into how it works.</p>
-          <AgentsShowcase />
-        </div>
-      </section>
-
       {/* ══ CTA ══ */}
       <section className="pl-cta">
         <Starfield />
