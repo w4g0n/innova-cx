@@ -66,29 +66,6 @@ If you add model files under protected directories (for example under `data/`), 
 
 Always verify runtime env vars and model paths after deployment.
 
-## Chatbot Env for Production
-Set these variables on the production server/runtime (not local dev `.env`) before starting containers:
-
-```env
-HF_TOKEN=<your_huggingface_token>
-CHATBOT_LLM_PROVIDER=local
-CHATBOT_MODEL_NAME=Qwen/Qwen2.5-0.5B-Instruct
-CHATBOT_MODEL_PATH=/app/hf_cache/qwen2.5-0.5b-instruct
-CHATBOT_AUTO_DOWNLOAD=true
-CHATBOT_QUANTIZATION=none
-CHATBOT_MAX_NEW_TOKENS=96
-```
-
-Apply on server (example):
-
-```bash
-cd /opt/innova-cx
-# edit the production env source used by docker compose
-# then restart chatbot service
-docker compose --profile dev up -d chatbot --no-deps
-docker logs --tail 200 innovacx-chatbot
-```
-
 ## Quick Verification Commands
 
 ```bash

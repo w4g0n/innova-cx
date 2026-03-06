@@ -26,7 +26,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
   // Validation state
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(null);
-  const [showConfirm, setShowConfirm] = useState(false);
 
   // ── File helpers ────────────────────────────────────────────────────────
   const BYTES_PER_KB = 1024;
@@ -100,29 +99,26 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
   };
 
   // ── Submit ──────────────────────────────────────────────────────────────
-  // Step 1: validate → show confirm dialog
-  const handleSubmitClick = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
-    setShowConfirm(true);
-  };
 
-  // Step 2: user confirmed → actually call the API
-  const doActualSubmit = async () => {
-    setShowConfirm(false);
     const details = (message || "").trim();
     const wasAudio = mode === "Audio";
+
     try {
       const orchestratorResult = await submitTextComplaint(details, {
         ticket_type: initialType ? initialType.toLowerCase() : null,
         has_audio: wasAudio,
         audio_features: wasAudio ? latestAudioFeatures : null,
       });
+
       const isInquiry = !orchestratorResult?.ticket_id;
       const ticketId = orchestratorResult?.ticket_id ?? null;
       const replyText = isInquiry
         ? (orchestratorResult?.chatbot_response || "Your inquiry has been received. Our team will respond shortly.")
-        : `Your request has been successfully submitted. Ticket ID: ${ticketId}. Our team will review and respond as soon as possible.`;
+        : `Your request has been successfully submitted to the agent pipeline. Ticket ID: ${ticketId}. Our team will review and respond as soon as possible.`;
+
       resetForm();
       setSubmitted({ ticketId, isInquiry, replyText, wasAudio });
     } catch (err) {
@@ -257,12 +253,12 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     <div className={`custFormPage ${embedded ? "custFormPage--embedded" : ""}`}>
       {!embedded && (
         <PageHeader
-          title="Fill a Form"
+          title="Agent Pipeline"
           subtitle="Submit your request and our agents will respond promptly."
         />
       )}
 
-      <form className="custFormCard" onSubmit={handleSubmitClick} noValidate>
+      <form className="custFormCard" onSubmit={submit} noValidate>
         <div className="custFormGrid">
 
           {/* ── Input Method ───────────────────────────────────── */}
@@ -446,32 +442,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
           </button>
         </div>
       </form>
-
-      {/* ── Confirmation modal ─────────────────────────────────────────── */}
-      {showConfirm && (
-        <div className="custConfirmOverlay" onClick={() => setShowConfirm(false)} role="dialog" aria-modal="true" aria-label="Confirm submission">
-          <div className="custConfirmModal" onClick={(e) => e.stopPropagation()}>
-            <div className="custConfirmIconWrap" aria-hidden="true">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.8" opacity=".25"/>
-                <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <h3 className="custConfirmTitle">Submit your request?</h3>
-            <p className="custConfirmBody">
-              Once submitted, our agents will review and respond as soon as possible. This cannot be undone.
-            </p>
-            <div className="custConfirmActions">
-              <button type="button" className="softPillBtn" onClick={() => setShowConfirm(false)}>
-                Cancel
-              </button>
-              <button type="button" className="primaryPillBtn" onClick={doActualSubmit}>
-                Yes, submit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 

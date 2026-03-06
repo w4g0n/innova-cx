@@ -6,7 +6,7 @@
 
 .ctd-page {
   min-height: 100dvh;
-  background: var(--void);
+  background: var(--bg);
   color: var(--text);
   display: flex; flex-direction: column;
   font-family: "Outfit", sans-serif;
@@ -165,7 +165,7 @@
   justify-content: center; text-align: center;
   padding: 80px 24px; gap: 12px; flex: 1;
 }
-.ctd-not-found-icon { opacity: .4; display: flex; align-items: center; justify-content: center; }
+.ctd-not-found-icon { font-size: 48px; opacity: .4; }
 .ctd-not-found h3 { font-size: 20px; font-weight: 800; color: var(--text); margin: 0; }
 .ctd-not-found p  { font-size: 14px; color: var(--muted); margin: 0; }
 
