@@ -4,11 +4,11 @@
  *
  * Usage:
  *   import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
- *   import { getStoredTheme, applyTheme } from "./customerThemeUtils";
+ *   import { getStoredTheme, applyTheme } from "./custometThemeUtils";
  */
 
 import { useState, useEffect } from "react";
-import { getStoredTheme, applyTheme } from "./customerThemeUtils";
+import { getStoredTheme, applyTheme } from "./custometThemeUtils";
 
 /** Drop-in hook: returns [theme, toggleFn] and keeps <html> in sync. */
 export function useTheme() {
