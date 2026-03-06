@@ -627,7 +627,6 @@ export default function UsersManagement() {
             <table className="umTable">
               <thead>
                 <tr>
-                  <th>User ID</th>
                   <th>Name</th>
                   <th>Email</th>
                   <th>Role</th>
@@ -640,14 +639,13 @@ export default function UsersManagement() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="umEmpty">
+                    <td colSpan={7} className="umEmpty">
                       No users match your current filters.
                     </td>
                   </tr>
                 ) : (
                   filtered.map((u) => (
                     <tr key={u.id}>
-                      <td className="umLinkish">{u.id}</td>
                       <td className="umNameCell">{u.fullName}</td>
                       <td className="umMuted">{u.email}</td>
                       <td>
