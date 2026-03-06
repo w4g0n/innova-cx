@@ -3595,6 +3595,51 @@ WHERE NOT EXISTS (
   WHERE trf.ticket_id=t.id AND trf.employee_user_id=u.id
 );
 
+
+-- ---------------------------------------------------------------------------
+-- Department routing demo data (AI Routing Review Queue)
+-- ---------------------------------------------------------------------------
+
+-- Clear any pre-assigned department on tickets that are meant to be
+-- "unrouted" (awaiting AI routing review), so they show no previous dept.
+UPDATE tickets
+SET department_id = NULL
+WHERE ticket_code IN ('CX-M54', 'CX-M52', 'CX-4725', 'CX-4630', 'CX-2011');
+DO $$
+DECLARE
+  t_m54   UUID := (SELECT id FROM tickets WHERE ticket_code = 'CX-M54'  LIMIT 1);
+  t_m52   UUID := (SELECT id FROM tickets WHERE ticket_code = 'CX-M52'  LIMIT 1);
+  t_m53   UUID := (SELECT id FROM tickets WHERE ticket_code = 'CX-M53'  LIMIT 1);
+  t_m51   UUID := (SELECT id FROM tickets WHERE ticket_code = 'CX-M51'  LIMIT 1);
+  t_4725  UUID := (SELECT id FROM tickets WHERE ticket_code = 'CX-4725' LIMIT 1);
+  t_4630  UUID := (SELECT id FROM tickets WHERE ticket_code = 'CX-4630' LIMIT 1);
+  t_4780  UUID := (SELECT id FROM tickets WHERE ticket_code = 'CX-4780' LIMIT 1);
+  t_3862  UUID := (SELECT id FROM tickets WHERE ticket_code = 'CX-3862' LIMIT 1);
+  t_2011  UUID := (SELECT id FROM tickets WHERE ticket_code = 'CX-2011' LIMIT 1);
+  mgr     UUID := (SELECT u.id FROM users u WHERE u.role = 'manager' ORDER BY u.created_at LIMIT 1);
+BEGIN
+  -- Pending: low confidence, awaiting manager decision
+  INSERT INTO department_routing (ticket_id, suggested_department, confidence_score, is_confident, final_department, routed_by, manager_id)
+  VALUES
+    (t_m54,  'Facilities Management', 42.30, FALSE, NULL, NULL, NULL),
+    (t_m52,  'Safety & Security',     38.10, FALSE, NULL, NULL, NULL),
+    (t_4725, 'IT',                    55.80, FALSE, NULL, NULL, NULL),
+    (t_4630, 'Legal & Compliance',    48.60, FALSE, NULL, NULL, NULL),
+    (t_2011, 'HR',                    61.20, FALSE, NULL, NULL, NULL);
+
+  -- Confirmed: manager agreed with AI suggestion
+  INSERT INTO department_routing (ticket_id, suggested_department, confidence_score, is_confident, final_department, routed_by, manager_id, updated_at)
+  VALUES
+    (t_m51,  'Maintenance', 44.90, FALSE, 'Maintenance', 'manager', mgr, now() - INTERVAL '2 hours'),
+    (t_4780, 'IT',          58.30, FALSE, 'IT',          'manager', mgr, now() - INTERVAL '6 hours');
+
+  -- Overridden: manager picked a different department
+  INSERT INTO department_routing (ticket_id, suggested_department, confidence_score, is_confident, final_department, routed_by, manager_id, updated_at)
+  VALUES
+    (t_m53,  'Maintenance', 52.40, FALSE, 'Facilities Management', 'manager', mgr, now() - INTERVAL '5 hours'),
+    (t_3862, 'HR',          45.00, FALSE, 'Legal & Compliance',    'manager', mgr, now() - INTERVAL '1 day');
+END $$;
+
 -- ---------------------------------------------------------------------------
 -- NOTE: Analytics materialized views are created and refreshed by
 -- zzz_analytics_mvs.sh, which runs after this file in the Docker init

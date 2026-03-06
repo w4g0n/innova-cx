@@ -162,13 +162,16 @@ export default function Approvals() {
   // ── Approval requests state ────────────────────────────────────────────────
   const [query, setQuery]           = useState("");
   const [requestType, setRequestType] = useState("All Request Types");
-  const [status, setStatus]         = useState("All Status");
+  const [status, setStatus]         = useState("Pending");
   const [activeKpi, setActiveKpi]   = useState(null);
   const [rows, setRows]             = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [confirm, setConfirm]       = useState({ open: false, requestId: null, decision: null, selectedDepartment: undefined });
   const closeConfirm = () => setConfirm({ open: false, requestId: null, decision: null, selectedDepartment: undefined });
+  const [aprOverride, setAprOverride] = useState({ open: false, requestId: null, type: null, overrideValue: "" });
+  const closeAprOverride = () => setAprOverride({ open: false, requestId: null, type: null, overrideValue: "" });
+  const [openAprOverrideFor, setOpenAprOverrideFor] = useState(null); // requestId with open popup
 
   const aprSort = useSort("submittedOn", "desc");
 
@@ -178,9 +181,14 @@ export default function Approvals() {
   const [rrqQuery, setRrqQuery]         = useState("");
   const [rrqStatus, setRrqStatus]       = useState("Pending");
   const [rrqActiveKpi, setRrqActiveKpi] = useState(null);
-  const [rrqOverrides, setRrqOverrides] = useState({});
   const [rrqConfirm, setRrqConfirm]     = useState({ open: false, reviewId: null, decision: null, department: null });
   const closeRrqConfirm = () => setRrqConfirm({ open: false, reviewId: null, decision: null, department: null });
+  const [openOverrideFor, setOpenOverrideFor] = useState(null); // reviewId of open popup
+
+  const DEPT_FALLBACK = [
+    'Facilities Management', 'Legal & Compliance', 'Safety & Security',
+    'HR', 'Leasing', 'Maintenance', 'IT'
+  ];
 
   const rrqSort = useSort("createdAt", "desc");
 
@@ -214,8 +222,11 @@ export default function Approvals() {
 
     fetch(apiUrl("/api/manager/departments"), { headers })
       .then((res) => res.json())
-      .then((data) => setDepartments(Array.isArray(data) ? data : []))
-      .catch(() => setDepartments([]));
+      .then((data) => {
+        const list = Array.isArray(data) && data.length > 0 ? data : DEPT_FALLBACK;
+        setDepartments(list);
+      })
+      .catch(() => setDepartments(DEPT_FALLBACK));
   }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchRrq = useCallback(() => {
@@ -262,7 +273,11 @@ export default function Approvals() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
-      const matchesQuery  = !q || String(r.requestId).toLowerCase().includes(q) || String(r.ticketId).toLowerCase().includes(q) || String(r.submittedBy).toLowerCase().includes(q);
+      const matchesQuery  = !q ||
+        String(r.requestId  || "").toLowerCase().includes(q) ||
+        String(r.ticketId   || "").toLowerCase().includes(q) ||
+        String(r.ticketUuid || "").toLowerCase().includes(q) ||
+        String(r.submittedBy || "").toLowerCase().includes(q);
       const matchesType   = requestType === "All Request Types" || r.type === requestType;
       const matchesStatus = activeKpi
         ? (activeKpi === "Total Requests" ? true : r.status === activeKpi)
@@ -293,9 +308,11 @@ export default function Approvals() {
         case "source":       av = a.source || "";       bv = b.source || "";       break;
         case "current":      av = a.current || "";      bv = b.current || "";      break;
         case "requested":    av = a.requested || "";    bv = b.requested || "";    break;
+        case "change":       av = a.requested || "";    bv = b.requested || "";    break;
         case "submittedBy":  av = a.submittedBy || "";  bv = b.submittedBy || "";  break;
         case "submittedOn":  av = a.submittedOnRaw || 0; bv = b.submittedOnRaw || 0; break;
         case "status":       av = a.status || "";       bv = b.status || "";       break;
+        case "actions":      av = a.status || "";       bv = b.status || "";       break;
         default: return 0;
       }
       if (typeof av === "number") return aprSort.sortDir === "asc" ? av - bv : bv - av;
@@ -313,7 +330,6 @@ export default function Approvals() {
         case "subject":              av = a.subject || "";              bv = b.subject || "";              break;
         case "predictedDepartment":  av = a.predictedDepartment || "";  bv = b.predictedDepartment || "";  break;
         case "confidencePct":        av = a.confidencePct ?? 0;         bv = b.confidencePct ?? 0;         break;
-        case "currentDepartment":    av = a.currentDepartment || "";    bv = b.currentDepartment || "";    break;
         case "status":               av = a.status || "";               bv = b.status || "";               break;
         case "createdAt":            av = a.createdAt ? new Date(a.createdAt).getTime() : 0; bv = b.createdAt ? new Date(b.createdAt).getTime() : 0; break;
         default: return 0;
@@ -325,18 +341,46 @@ export default function Approvals() {
   }, [rrqFiltered, rrqSort.sortCol, rrqSort.sortDir]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
-  const decide = async (requestId, decision, selectedDepartment = undefined) => {
+  const decide = async (requestId, decision, selectedDepartment = undefined, overrideValue = undefined) => {
     if (!token) { navigate("/login"); return; }
-    setRows((prev) => prev.map((r) => (r.requestId === requestId ? { ...r, status: decision } : r)));
+
+    // Optimistically update UI
+    setRows((prev) => prev.map((r) => {
+      if (r.requestId !== requestId) return r;
+      if (overrideValue) return { ...r, status: "Overridden", overriddenValue: overrideValue };
+      return { ...r, status: decision };
+    }));
+
     try {
+      const body = { decision: "Approved" }; // override is still an Approved action on the backend
+      if (overrideValue) {
+        // Manager chose a different value — backend uses override_value instead of requested_value
+        body.override_value = overrideValue;
+      } else if (decision === "Rejected") {
+        body.decision = "Rejected";
+      } else if (selectedDepartment) {
+        // Normal reroute approve — pass the requested dept so backend can look it up
+        // (backend reads requested_value from DB anyway, selectedDepartment is redundant but harmless)
+      }
+
       const res = await fetch(apiUrl(`/api/manager/approvals/${requestId}`), {
         method: "PATCH", headers,
-        body: JSON.stringify({ decision, selected_department: selectedDepartment }),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || `Failed (${res.status})`); }
-      pushToast(decision === "Approved" ? "Request approved ✓" : "Request rejected", decision === "Approved" ? "success" : "error");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Failed (${res.status})`);
+      }
+      pushToast(
+        overrideValue
+          ? `Overridden → ${overrideValue} ✓`
+          : decision === "Approved" ? "Request approved ✓" : "Request rejected",
+        decision === "Rejected" ? "error" : "success"
+      );
     } catch (e) {
-      setRows((prev) => prev.map((r) => (r.requestId === requestId ? { ...r, status: "Pending" } : r)));
+      setRows((prev) => prev.map((r) =>
+        r.requestId === requestId ? { ...r, status: "Pending", overriddenValue: undefined } : r
+      ));
       pushToast(e.message || "Failed to save decision.", "error");
     }
   };
@@ -356,7 +400,7 @@ export default function Approvals() {
     }
   };
 
-  const handleReset    = () => { setQuery(""); setRequestType("All Request Types"); setStatus("All Status"); setActiveKpi(null); };
+  const handleReset    = () => { setQuery(""); setRequestType("All Request Types"); setStatus("Pending"); setActiveKpi(null); };
   const handleRrqReset = () => { setRrqQuery(""); setRrqStatus("Pending"); setRrqActiveKpi(null); };
 
   const shApr = { sortCol: aprSort.sortCol, sortDir: aprSort.sortDir, onSort: aprSort.handleSort };
@@ -366,7 +410,7 @@ export default function Approvals() {
   return (
     <Layout role="manager">
       <ToastStack toasts={toasts} />
-      <div className="mgrApprovals" ref={revealRef}>
+      <div className="mgrApprovals" ref={revealRef} onClick={() => { setOpenOverrideFor(null); setOpenAprOverrideFor(null); }}>
 
         <PageHeader
           title="Approvals"
@@ -404,7 +448,7 @@ export default function Approvals() {
             </section>
 
             <section className="searchSection">
-              <PillSearch value={query} onChange={setQuery} placeholder="Search by ID, ticket, or employee…" />
+              <PillSearch value={query} onChange={setQuery} placeholder="Search by request ID, ticket code, or employee…" />
             </section>
 
             <section className="filtersRow">
@@ -443,11 +487,11 @@ export default function Approvals() {
                     <tr>
                       <SortableHeader label="Ticket ID"       col="ticketId"    {...shApr} />
                       <SortableHeader label="Request Type"    col="type"        {...shApr} />
-                      <th style={{ whiteSpace: "nowrap", textAlign: "center" }}>Change</th>
+                      <SortableHeader label="Change"          col="change"      {...shApr} style={{ textAlign: "center" }} />
                       <SortableHeader label="Submitted By"    col="submittedBy" {...shApr} />
                       <SortableHeader label="Submitted On"    col="submittedOn" {...shApr} />
                       <SortableHeader label="Status"          col="status"      {...shApr} />
-                      <th>Actions</th>
+                      <SortableHeader label="Actions"         col="actions"     {...shApr} />
                     </tr>
                   </thead>
                   <tbody>
@@ -472,20 +516,84 @@ export default function Approvals() {
                         <td>{r.submittedBy}</td>
                         <td style={{ fontSize: 12, color: "rgba(17,17,17,0.6)" }}>{r.submittedOn}</td>
                         <td>
-                          <span className={`statusPill ${r.status === "Approved" ? "statusPill--approved" : r.status === "Rejected" ? "statusPill--rejected" : "statusPill--pending"}`}>
+                          <span className={`statusPill ${
+                            r.status === "Approved"   ? "statusPill--approved"   :
+                            r.status === "Rejected"   ? "statusPill--rejected"   :
+                            r.status === "Overridden" ? "statusPill--overridden" :
+                            "statusPill--pending"
+                          }`}>
                             {r.status}
                           </span>
                         </td>
                         <td className="actionsCell" onClick={(e) => e.stopPropagation()}>
-
-                          <button className="actionBtn actionBtn--primary" type="button" disabled={r.status !== "Pending"}
-                            onClick={(e) => { e.stopPropagation(); setConfirm({ open: true, requestId: r.requestId, decision: "Approved", selectedDepartment: r.type === "Rerouting" ? String(r.requested || "").replace("Dept:", "").trim() : undefined }); }}>
-                            Approve
-                          </button>
-                          <button className="actionBtn" type="button" disabled={r.status !== "Pending"}
-                            onClick={(e) => { e.stopPropagation(); setConfirm({ open: true, requestId: r.requestId, decision: "Rejected", selectedDepartment: undefined }); }}>
-                            Reject
-                          </button>
+                          {r.status !== "Pending" ? (
+                            <span className={`statusPill ${
+                              r.status === "Approved"   ? "statusPill--approved"   :
+                              r.status === "Rejected"   ? "statusPill--rejected"   :
+                              r.status === "Overridden" ? "statusPill--overridden" :
+                              "statusPill--pending"
+                            }`}>
+                              {r.status}{r.overriddenValue ? ` → ${r.overriddenValue}` : ""}
+                            </span>
+                          ) : (
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <button className="actionBtn actionBtn--primary" type="button"
+                                onClick={(e) => { e.stopPropagation(); setConfirm({ open: true, requestId: r.requestId, decision: "Approved", selectedDepartment: r.type === "Rerouting" ? String(r.requested || "").replace(/^Dept:\s*/i, "").trim() : undefined }); }}>
+                                ✓ Approve
+                              </button>
+                              <div className="apr-overrideWrap">
+                                <button className="actionBtn" type="button"
+                                  onClick={(e) => { e.stopPropagation(); setOpenAprOverrideFor((prev) => prev === r.requestId ? null : r.requestId); }}>
+                                  ↺ Override
+                                </button>
+                                {openAprOverrideFor === r.requestId && (
+                                  <div className="apr-overrideMenu" onClick={(e) => e.stopPropagation()}>
+                                    {r.type === "Rescoring" ? (
+                                      <>
+                                        <div className="apr-overrideMenuTitle">Override priority to</div>
+                                        {["Low", "Medium", "High", "Critical"].map((p) => {
+                                          const currentVal = String(r.current || "").replace(/^Priority:\s*/i, "").trim();
+                                          const requestedVal = String(r.requested || "").replace(/^Priority:\s*/i, "").trim();
+                                          return (
+                                            <button key={p} type="button" className="apr-overrideMenuItem"
+                                              onClick={() => {
+                                                setOpenAprOverrideFor(null);
+                                                setAprOverride({ open: true, requestId: r.requestId, type: "Rescoring", overrideValue: p });
+                                              }}>
+                                              <span className={`apr-overrideMenuDot apr-overrideMenuDot--${p.toLowerCase()}`} />
+                                              {p}
+                                              {p === currentVal && <span className="apr-overrideMenuCurrentBadge">current</span>}
+                                              {p === requestedVal && <span className="apr-overrideMenuAiBadge">requested</span>}
+                                            </button>
+                                          );
+                                        })}
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="apr-overrideMenuTitle">Override department to</div>
+                                        {(departments.length > 0 ? departments : DEPT_FALLBACK).map((d) => {
+                                          const currentVal = String(r.current || "").replace(/^Dept:\s*/i, "").trim();
+                                          const requestedVal = String(r.requested || "").replace(/^Dept:\s*/i, "").trim();
+                                          return (
+                                            <button key={d} type="button" className="apr-overrideMenuItem"
+                                              onClick={() => {
+                                                setOpenAprOverrideFor(null);
+                                                setAprOverride({ open: true, requestId: r.requestId, type: "Rerouting", overrideValue: d });
+                                              }}>
+                                              <span className="apr-overrideMenuDot" />
+                                              {d}
+                                              {d === currentVal && <span className="apr-overrideMenuCurrentBadge">current</span>}
+                                              {d === requestedVal && <span className="apr-overrideMenuAiBadge">requested</span>}
+                                            </button>
+                                          );
+                                        })}
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -569,12 +677,10 @@ export default function Approvals() {
                 <table className="trendsTable">
                   <thead>
                     <tr>
-                      <SortableHeader label="Review ID"       col="reviewId"            {...shRrq} />
                       <SortableHeader label="Ticket"          col="ticketCode"           {...shRrq} />
                       <SortableHeader label="Subject"         col="subject"              {...shRrq} />
                       <SortableHeader label="AI Suggested"    col="predictedDepartment"  {...shRrq} />
                       <SortableHeader label="Confidence"      col="confidencePct"        {...shRrq} />
-                      <SortableHeader label="Current Dept"    col="currentDepartment"    {...shRrq} />
                       <SortableHeader label="Status"          col="status"               {...shRrq} />
                       <SortableHeader label="Submitted"       col="createdAt"            {...shRrq} />
                       <th>Actions</th>
@@ -582,26 +688,17 @@ export default function Approvals() {
                   </thead>
                   <tbody>
                     {rrqLoading && (
-                      <tr><td className="emptyRow" colSpan={9} style={{ textAlign: "center", color: "rgba(17,17,17,0.45)" }}>Loading…</td></tr>
+                      <tr><td className="emptyRow" colSpan={6} style={{ textAlign: "center", color: "rgba(17,17,17,0.45)" }}>Loading…</td></tr>
                     )}
                     {!rrqLoading && sortedRrq.map((r) => {
                       const isLowConf = r.confidencePct < 50;
                       return (
-                        <tr key={r.reviewId} className={`approvalRow ${isLowConf && r.status === "Pending" ? "rrq-row--lowConf" : ""}`}>
-                          <td>
-                            <span className="requestIdLink" onClick={() => navigate(`/manager/routing-review/${r.reviewId}`)}>
-                              {String(r.reviewId).slice(0, 8)}…
-                            </span>
-                          </td>
-                          <td>
-                            <span className="requestIdLink" onClick={() => navigate(`/manager/complaints/${r.ticketCode}`)}>
-                              {r.ticketCode}
-                            </span>
-                          </td>
+                        <tr key={r.reviewId} className={`approvalRow ${isLowConf && r.status === "Pending" ? "rrq-row--lowConf" : ""}`}
+                          onClick={() => navigate(`/manager/routing-review/${r.reviewId}`)}>
+                          <td style={{ fontWeight: 700, color: "#374151" }}>{r.ticketCode}</td>
                           <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.subject}</td>
                           <td><span className="apr-deptPill">{r.predictedDepartment}</span></td>
                           <td><ConfidenceBar pct={r.confidencePct} /></td>
-                          <td>{r.currentDepartment ? <span className="apr-deptPill apr-deptPill--current">{r.currentDepartment}</span> : <span style={{color:"rgba(17,17,17,0.35)"}}>—</span>}</td>
                           <td>
                             <span className={`statusPill ${r.status === "Approved" ? "statusPill--approved" : r.status === "Overridden" ? "statusPill--overridden" : "statusPill--pending"}`}>
                               {r.status === "Approved" ? "Confirmed" : r.status}
@@ -610,27 +707,38 @@ export default function Approvals() {
                           <td style={{ fontSize: 12, color: "rgba(17,17,17,0.55)" }}>
                             {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}
                           </td>
-                          <td className="actionsCell">
-                            {r.status === "Pending" ? (
-                              <>
-                                <div className="deptSelectWrap" style={{ marginBottom: 6 }}>
-                                  <select className="deptSelect" value={rrqOverrides[r.reviewId] || ""}
-                                    onChange={(e) => setRrqOverrides((prev) => ({ ...prev, [r.reviewId]: e.target.value }))}>
-                                    <option value="">Override dept…</option>
-                                    {departments.map((d) => <option key={d} value={d}>{d}</option>)}
-                                  </select>
-                                </div>
-                                <div style={{ display: "flex", gap: 6 }}>
-                                  <button className="actionBtn actionBtn--primary" type="button"
-                                    onClick={() => setRrqConfirm({ open: true, reviewId: r.reviewId, decision: "Approved", department: r.predictedDepartment })}>
-                                    ✓ Confirm
-                                  </button>
-                                  <button className="actionBtn" type="button" disabled={!rrqOverrides[r.reviewId]}
-                                    onClick={() => setRrqConfirm({ open: true, reviewId: r.reviewId, decision: "Overridden", department: rrqOverrides[r.reviewId] })}>
+                          <td className="actionsCell" onClick={(e) => e.stopPropagation()}>
+                          {r.status === "Pending" ? (
+                              <div style={{ display: "flex", gap: 6, position: "relative" }} onClick={(e) => e.stopPropagation()}>
+                                <button className="actionBtn actionBtn--primary" type="button"
+                                  onClick={() => setRrqConfirm({ open: true, reviewId: r.reviewId, decision: "Approved", department: r.predictedDepartment })}>
+                                  ✓ Confirm
+                                </button>
+                                <div className="apr-overrideWrap">
+                                  <button className="actionBtn" type="button"
+                                    onClick={(e) => { e.stopPropagation(); setOpenOverrideFor((prev) => prev === r.reviewId ? null : r.reviewId); }}>
                                     ↺ Override
                                   </button>
+                                  {openOverrideFor === r.reviewId && (
+                                    <div className="apr-overrideMenu" onClick={(e) => e.stopPropagation()}>
+                                      <div className="apr-overrideMenuTitle">Override to department</div>
+                                      {(departments.length > 0 ? departments : DEPT_FALLBACK).map((d) => (
+                                        <button key={d} type="button" className="apr-overrideMenuItem"
+                                          onClick={() => {
+                                            setOpenOverrideFor(null);
+                                            setRrqConfirm({ open: true, reviewId: r.reviewId, decision: "Overridden", department: d });
+                                          }}>
+                                          <span className="apr-overrideMenuDot" />
+                                          {d}
+                                          {d === r.predictedDepartment && (
+                                            <span className="apr-overrideMenuAiBadge">AI pick</span>
+                                          )}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
-                              </>
+                              </div>
                             ) : (
                               <span style={{ fontSize: 12, color: "rgba(17,17,17,0.5)", fontStyle: "italic" }}>
                                 {r.status === "Approved" ? `→ ${r.approvedDepartment || r.predictedDepartment}` : `↺ ${r.approvedDepartment}`}
@@ -642,7 +750,7 @@ export default function Approvals() {
                     })}
                     {!rrqLoading && sortedRrq.length === 0 && (
                       <tr>
-                        <td className="emptyRow" colSpan={9}>
+                        <td className="emptyRow" colSpan={6}>
                           {rrqStatus === "Pending"
                             ? "No pending routing reviews — all AI decisions are above the confidence threshold."
                             : "No items match your filters."}
@@ -668,6 +776,21 @@ export default function Approvals() {
         confirmLabel={confirm.decision === "Approved" ? "Yes, Approve" : "Yes, Reject"}
         onConfirm={() => { const { requestId, decision, selectedDepartment } = confirm; closeConfirm(); decide(requestId, decision, selectedDepartment); }}
         onCancel={closeConfirm}
+      />
+      <ConfirmDialog
+        open={aprOverride.open}
+        title={aprOverride.type === "Rescoring" ? "Override Priority" : "Override Department"}
+        message={aprOverride.type === "Rescoring"
+          ? `Override the requested priority and set it to "${aprOverride.overrideValue}"?`
+          : `Override the requested department and assign to "${aprOverride.overrideValue}"?`}
+        variant="danger"
+        confirmLabel="Yes, Override"
+        onConfirm={() => {
+          const { requestId, overrideValue } = aprOverride;
+          closeAprOverride();
+          decide(requestId, "Approved", undefined, overrideValue);
+        }}
+        onCancel={closeAprOverride}
       />
       <ConfirmDialog
         open={rrqConfirm.open}

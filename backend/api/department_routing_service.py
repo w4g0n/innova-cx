@@ -167,12 +167,11 @@ def get_routing_review_payload(
           t.status::text                       AS "ticketStatus",
           d.name                               AS "currentDepartment",
           up.full_name                         AS "decidedBy",
-          ro.reasoning                         AS "modelReasoning"
+          NULL::text                           AS "modelReasoning"
         FROM department_routing dr
         JOIN tickets t ON t.id = dr.ticket_id
         LEFT JOIN departments d ON d.id = t.department_id
         LEFT JOIN user_profiles up ON up.user_id = dr.manager_id
-        LEFT JOIN routing_outputs ro ON ro.ticket_id = t.id AND ro.is_current = TRUE
         {where}
         ORDER BY dr.created_at DESC
         LIMIT 500;
