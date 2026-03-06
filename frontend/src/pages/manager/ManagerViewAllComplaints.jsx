@@ -247,7 +247,7 @@ export default function ManagerViewComplaints() {
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
-      const matchesSearch   = q === "" || r.id.toLowerCase().includes(q) || r.subject.toLowerCase().includes(q);
+      const matchesSearch   = q === "" || r.id.toLowerCase().includes(q) || r.ticket_code?.toLowerCase().includes(q) || r.subject.toLowerCase().includes(q);
       const matchesStatus   = statusFilter === "All Status" || r.status === statusFilter;
       const matchesPriority = priorityFilter === "All Priorities" || r.priorityText === priorityFilter;
       // "In Progress" KPI = not resolved and not unassigned

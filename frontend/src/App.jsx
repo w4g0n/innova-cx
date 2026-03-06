@@ -73,12 +73,10 @@ const TicketReviewDetail = lazy(() =>
 const isStaffHost = () => window.location.hostname.startsWith("staff.");
 
 function RootGate() {
-  // "/" entry behavior differs by host
   return isStaffHost() ? <Navigate to="/login" replace /> : <PublicLanding />;
 }
 
 function PublicOnly({ children }) {
-  // block customer public pages on staff subdomain
   if (isStaffHost()) return <Navigate to="/login" replace />;
   return children;
 }
@@ -131,11 +129,10 @@ export default function App() {
             }
           />
 
-          {/* Login should work on staff; you can still allow it on customer if you want */}
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
 
-          {/* Customer protected routes */}
+          {/* Customer */}
           <Route
             path="/customer"
             element={
@@ -144,12 +141,10 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/customer/dashboard"
             element={<Navigate to="/customer" replace />}
           />
-
           <Route
             path="/customer/notifications"
             element={
@@ -322,14 +317,21 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          {/* Routing review list — no param, redirects to approvals RRQ tab */}
           <Route
             path="/manager/routing-review"
+            element={<Navigate to="/manager/approvals" replace />}
+          />
+          {/* Routing review detail — with reviewId param */}
+          <Route
+            path="/manager/routing-review/:reviewId"
             element={
               <ProtectedRoute role="manager">
                 <ManagerRoutingReview />
               </ProtectedRoute>
             }
           />
+
           {/* Operator */}
           <Route
             path="/operator"
@@ -363,8 +365,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          {/*  Added to match route */}
           <Route
             path="/operator/complaints/:ticketId"
             element={
@@ -373,7 +373,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/operator/users"
             element={
