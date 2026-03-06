@@ -6,17 +6,6 @@ import "./PublicLanding.css";
 /* ── Agents with full doc details ── */
 const AGENTS_DATA = [
   {
-    name: "Chatbot",
-    role: "Resolves & Routes",
-    model: "Falcon 1B Instruct",
-    color: "#c084fc",
-    icon: "settings",
-    details: "The front-line agent users interact with directly. Uses intent classification to determine if a user has an inquiry or a complaint. Can create tickets, track existing tickets, and resolve inquiries using a connected knowledge base. If unresolved, it redirects users into the complaint pipeline. Also auto-generates a subject line if the user doesn't provide one.",
-    inputs: ["User message", "Audio or Text"],
-    outputs: ["Ticket creation", "Inquiry resolution", "Subject generation"],
-    stat: "98%", statLabel: "Accuracy",
-  },
-  {
     name: "Transcriber",
     role: "Audio → Text",
     model: "OpenAI Whisper",
@@ -26,6 +15,17 @@ const AGENTS_DATA = [
     inputs: ["Audio_Log"],
     outputs: ["Transcribed text (Details)"],
     stat: "<2s", statLabel: "Latency",
+  },
+  {
+    name: "Chatbot",
+    role: "Resolves & Routes",
+    model: "Falcon 1B Instruct",
+    color: "#c084fc",
+    icon: "settings",
+    details: "The front-line agent users interact with directly. Uses intent classification to determine if a user has an inquiry or a complaint. Can create tickets, track existing tickets, and resolve inquiries using a connected knowledge base. If unresolved, it redirects users into the complaint pipeline. Also auto-generates a subject line if the user doesn't provide one.",
+    inputs: ["User message", "Audio or Text"],
+    outputs: ["Ticket creation", "Inquiry resolution", "Subject generation"],
+    stat: "98%", statLabel: "Accuracy",
   },
   {
     name: "Classifier",
@@ -96,8 +96,9 @@ const AGENTS_DATA = [
 ];
 
 const PIPELINE = [
-  { icon: "inbox",     label: "Ticket Submitted", sub: "Text or Audio",           color: "#c084fc", step: 0 },
-  { icon: "mic",       label: "Transcribe",        sub: "Whisper (if audio)",      color: "#818cf8", step: 1 },
+  
+  { icon: "mic",       label: "Transcribe",        sub: "Whisper (if audio)",      color: "#818cf8", step: 0 },
+  { icon: "inbox",     label: "Ticket Submitted",  sub: "Text or Audio",           color: "#c084fc", step: 1 },
   { icon: "tag",       label: "Classify",          sub: "Complaint / Inquiry",     color: "#a78bfa", step: 2 },
   { icon: "heart",     label: "Sentiment",         sub: "RoBERTa + Librosa",       color: "#e879f9", step: 3 },
   { icon: "settings",  label: "Feature Eng.",      sub: "Urgency · Impact · Risk", color: "#f0abfc", step: 4 },
@@ -705,7 +706,8 @@ export default function PublicLanding() {
             </svg>
           </a>
         </div>
-        <p className="pl-footer-copy">© 2026 InnovaAI · Dubai CommerCity. All rights reserved.</p>
+        <p className="pl-footer-copy">© 2026 InnovaAI · All rights reserved.</p>
+        <p className="pl-footer-copy">Sponsored By Dubai CommerCity</p>
       </footer>
     </div>
   );
