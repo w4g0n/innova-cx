@@ -22,7 +22,9 @@ export default function useNovaChatbot() {
       return {};
     }
   })();
-  const userId = user?.id || "";
+  // Support legacy/new user object shapes so chatbot always uses
+  // the same identity that ticket APIs expect.
+  const userId = user?.id || user?.user_id || user?.userId || "";
 
   const resetSession = () => {
     setText("");
@@ -38,6 +40,9 @@ export default function useNovaChatbot() {
   };
 
   const sendToChatbot = async (message) => {
+    if (!userId) {
+      throw new Error("Missing authenticated user id for chatbot session");
+    }
     let sid = sessionId;
     if (!sid) {
       const initData = await sendChatMessage("__init__", {

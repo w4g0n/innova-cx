@@ -31,7 +31,7 @@ DEPARTMENT_LABELS = [
     "IT",
 ]
 
-ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("DEPARTMENT_ROUTING_THRESHOLD", "0.7"))
+ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("DEPARTMENT_ROUTING_THRESHOLD", "0.35"))
 ROUTER_MODEL_PATH = os.getenv(
     "DEPARTMENT_ROUTER_MODEL_PATH",
     "/app/models/classifier/deberta-v3-base-mnli-fever-anli",
@@ -42,7 +42,7 @@ ROUTER_MODEL_NAME = os.getenv(
 ).strip()
 ROUTER_AUTO_DOWNLOAD = os.getenv("DEPARTMENT_ROUTER_AUTO_DOWNLOAD", "true").lower() in {"1", "true", "yes"}
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip() or None
-CALIBRATION_WEIGHT = float(os.getenv("DEPARTMENT_ROUTER_CALIBRATION_WEIGHT", "0.12"))
+CALIBRATION_WEIGHT = float(os.getenv("DEPARTMENT_ROUTER_CALIBRATION_WEIGHT", "0.0"))
 
 
 @lru_cache(maxsize=1)
