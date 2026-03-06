@@ -4175,7 +4175,6 @@ def decide_routing_review(
         insert_notification=_insert_notification,
         logger=logger,
     )
-    return {"ok": True, "reviewId": review_id, "decision": decision, "finalDepartment": final_dept}
 
 # =========================================================
 # Operator Notifications
