@@ -1,16 +1,15 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * CustomerTheme.jsx — React components only (useTheme hook + ThemeToggleBtn).
  * Pure utility functions (getStoredTheme, applyTheme) live in customerThemeUtils.js.
  *
  * Usage:
  *   import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
- *   import { getStoredTheme, applyTheme } from "./customerThemeUtils";
+ *   import { getStoredTheme, applyTheme } from "./custometThemeUtils";
  */
 
 import { useState, useEffect } from "react";
-import { getStoredTheme, applyTheme } from "./customerThemeUtils";
-
-export { getStoredTheme, applyTheme };
+import { getStoredTheme, applyTheme } from "./custometThemeUtils";
 
 /** Drop-in hook: returns [theme, toggleFn] and keeps <html> in sync. */
 export function useTheme() {

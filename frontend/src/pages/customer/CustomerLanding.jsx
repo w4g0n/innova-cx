@@ -101,7 +101,7 @@ const QUICK_ACTIONS = [
   const [user] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("user")) || {};
-    } catch (_err) {
+    } catch {
       return {};
     }
   });
@@ -124,7 +124,7 @@ const QUICK_ACTIONS = [
           );
           setRecentTicket(sorted[0] || null);
         }
-      } catch (_err) {
+      } catch {
         setRecentTicket(null);
       } finally {
         setTicketLoading(false);
@@ -146,7 +146,7 @@ const QUICK_ACTIONS = [
         } else {
           setNotifications([]);
         }
-      } catch (_err) {
+      } catch {
         setNotifications([]);
       }
     }
@@ -308,7 +308,7 @@ const QUICK_ACTIONS = [
     try { rec.start(); } catch (err) { console.debug(err); }
   };
   const cancelVoice = () => {
-    try { speechRef.current?.stop?.(); } catch (_err) { /* ignore */ }
+    try { speechRef.current?.stop?.(); } catch { /* ignore */ }
     setVoiceActive(false); setVoiceBusy(false); setVoiceDraft("");
   };
   const confirmVoice = () => {
