@@ -27,7 +27,7 @@ const validators = {
     if (email) {
       const pw = val.toLowerCase();
       const local = email.toLowerCase().split("@")[0];
-      const letters = local.replace(/[\.\-\_\+\d]+/g, "");
+      const letters = local.replace(/[._+\-\d]+/g, "");
       if (letters.length >= 4) {
         for (let i = 0; i <= letters.length - 4; i++) {
           if (pw.includes(letters.slice(i, i + 4)))
@@ -56,9 +56,7 @@ const PW_RULES = [
       if (!email) return true;
       const pw = v.toLowerCase();
       const local = email.toLowerCase().split("@")[0];
-      // Strip separators and digits to get the pure letter string
-      // e.g. "customer1" → "customer", "john.doe99" → "johndoe"
-      const letters = local.replace(/[\.\-\_\+\d]+/g, "");
+      const letters = local.replace(/[._+\-\d]+/g, "");
       if (letters.length < 4) return true;
       // Slide a 4-char window across the letter string
       // Any 4+ consecutive chars from the email found in the password = fail
