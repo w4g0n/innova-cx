@@ -82,7 +82,14 @@ except Exception as _analytics_import_err:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
-ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.70"))
+# Keep backward compatibility with ROUTING_CONFIDENCE_THRESHOLD while standardizing on
+# DEPARTMENT_ROUTING_THRESHOLD used by orchestrator/.env.
+ROUTING_CONFIDENCE_THRESHOLD = float(
+    os.getenv(
+        "DEPARTMENT_ROUTING_THRESHOLD",
+        os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.35"),
+    )
+)
 CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "30"))
 ANALYTICS_REFRESH_INTERVAL_SECONDS = int(os.getenv("ANALYTICS_REFRESH_INTERVAL_HOURS", "12")) * 3600
 _sla_heartbeat_task: Optional[asyncio.Task] = None
@@ -5140,6 +5147,8 @@ def get_operator_complaint_detail(
             t.model_confidence                      AS priority_confidence,
             t.sentiment_label,
             t.sentiment_score,
+            t.suggested_resolution,
+            t.suggested_resolution_model,
             t.created_at,
             t.first_response_at,
             t.resolved_at,
@@ -5258,6 +5267,13 @@ def get_operator_complaint_detail(
         """,
         (tid,),
     )
+    # Some flows persist directly on tickets table without a current
+    # resolution_outputs row. Fall back so the UI can still show suggestions.
+    if not str((resolution or {}).get("suggested_resolution") or "").strip():
+        resolution = {
+            "suggested_resolution": ticket.get("suggested_resolution"),
+            "suggested_resolution_model": ticket.get("suggested_resolution_model"),
+        }
     routing = fetch_one(
         """
         SELECT confidence_score AS routing_confidence,

@@ -25,6 +25,14 @@ def _format_ts(value):
     return str(value) if value is not None else "-"
 
 
+def _clean_subject(value) -> str:
+    subject = str(value or "No subject").strip()
+    # Keep response layout stable and one ticket per row.
+    subject = re.sub(r"\s+", " ", subject)
+    subject = subject.replace("|", "/")
+    return subject or "No subject"
+
+
 def _fetch_open_ticket_rows(user_id: str):
     query = (
         "SELECT ticket_code, subject, status, created_at "
@@ -92,12 +100,12 @@ def get_open_tickets(user_id: str) -> dict:
             }
 
         lines = []
-        for i, row in enumerate(rows, start=1):
-            subject = (row.subject or "No subject").strip()
-            status = (row.status or "Unknown").strip()
-            lines.append(
-                f"{i}. {row.ticket_code} - {subject} ({status})"
-            )
+        for row in rows:
+            ticket_code = (row.ticket_code or "").strip() or "-"
+            subject = _clean_subject(row.subject)
+            created_at = _format_ts(row.created_at)
+            status = (row.status or "Unknown").strip() or "Unknown"
+            lines.append(f"{ticket_code} | {subject} | {created_at} | {status}")
 
         return {"found": True, "raw": "\n".join(lines), "query": query}
     except Exception as e:
