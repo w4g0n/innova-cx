@@ -67,7 +67,9 @@ try:
         try:
             return _orig_get_expanded(self, all_submodels)
         except AttributeError:
-            return set()
+            # Return empty dict — callers like mark_tied_weights_as_initialized
+            # call .keys() on the result, so {} is required (not set()).
+            return {}
 
     _mu.PreTrainedModel.get_expanded_tied_weights_keys = _patched_get_expanded
 except Exception:
