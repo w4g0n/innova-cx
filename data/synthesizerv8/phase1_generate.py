@@ -503,22 +503,19 @@ def generate_complaint(
             with torch.no_grad():
                 if isinstance(chat_inputs, torch.Tensor):
                     inputs     = chat_inputs.to(model.device)
-                    attn_mask  = torch.ones_like(inputs)
                     prompt_len = inputs.shape[-1]
                     output_ids = model.generate(
                         inputs,
-                        attention_mask=attn_mask,
                         max_new_tokens=current_max,
                         do_sample=True,
                         temperature=temperature,
                         top_p=top_p,
+                        use_cache=False,
                         repetition_penalty=1.1,
                         pad_token_id=tokenizer.eos_token_id,
                     )
                 else:
                     inputs = chat_inputs.to(model.device)
-                    if "attention_mask" not in inputs:
-                        inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
                     prompt_len = inputs["input_ids"].shape[-1]
                     output_ids = model.generate(
                         **inputs,
@@ -526,6 +523,7 @@ def generate_complaint(
                         do_sample=True,
                         temperature=temperature,
                         top_p=top_p,
+                        use_cache=False,
                         repetition_penalty=1.1,
                         pad_token_id=tokenizer.eos_token_id,
                     )
