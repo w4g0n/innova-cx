@@ -368,6 +368,15 @@ def main() -> None:
         df = df.head(10).copy()
         print(f"[DRY RUN] Labeling {len(df)} rows")
 
+    # ── Integrated mode: labels already generated in Phase 1 ──────────────────
+    if all(col in df.columns for col in LABEL_COLS):
+        print("Detected label columns in input. Skipping model labeling (integrated in Phase 1).")
+        df.to_csv(CHECKPOINT_PATH, index=False)
+        df.to_csv(COMPLETE_PATH, index=False)
+        print_distribution(df)
+        print(f"\nSaved : {COMPLETE_PATH}")
+        return
+
     # ── Resume: load checkpoint and find unlabeled rows ───────────────────────
     labeled_rows: list[dict]   = []
     already_labeled_ids: set   = set()

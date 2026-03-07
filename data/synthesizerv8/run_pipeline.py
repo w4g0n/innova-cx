@@ -3,15 +3,15 @@ run_pipeline.py — V8 Synthesizer Orchestrator
 ==============================================
 Runs all 4 phases in sequence:
 
-  Phase 1  Generate     Phi-4-mini complaint generation (10,000 rows)
+  Phase 1  Generate     Phi-4-mini complaint+label generation (10,000 rows)
   Phase 2  Deduplicate  TF-IDF near-duplicate removal
-  Phase 3  Label        Phi-4-mini few-shot labeling (4 labels)
+  Phase 3  Label        Pass-through if labels already exist (fallback: model labeling)
   Phase 4  Validate     Class balance check + final_dataset.csv
 
 Usage:
     python run_pipeline.py                      # Full run from scratch
     python run_pipeline.py --resume             # Resume any incomplete phase
-    python run_pipeline.py --dry-run            # Quick test: 50 complaints, 10 labeled
+    python run_pipeline.py --dry-run            # Quick test: 50 complaints (with labels)
     python run_pipeline.py --start-phase 3      # Start from phase 3
     python run_pipeline.py --skip-phase 2       # Skip phase 2 (use existing output)
     python run_pipeline.py --complaints 11000   # Override complaint count
@@ -48,7 +48,7 @@ PHASE_SCRIPTS: dict[int, Path] = {
 PHASE_NAMES: dict[int, str] = {
     1: "Generate",
     2: "Deduplicate",
-    3: "Label",
+    3: "Label/Pass-through",
     4: "Validate",
 }
 
@@ -56,7 +56,7 @@ PHASE_NAMES: dict[int, str] = {
 PHASE_TIME_ESTIMATES: dict[int, str] = {
     1: "~3.5 hrs",
     2: "~2 mins",
-    3: "~4.5 hrs",
+    3: "~10 secs if integrated",
     4: "~30 secs",
 }
 
@@ -108,7 +108,7 @@ def main() -> None:
 Examples:
   python run_pipeline.py                    Full run from scratch
   python run_pipeline.py --resume           Resume any incomplete phase
-  python run_pipeline.py --dry-run          Quick test (50 generated, 10 labeled)
+  python run_pipeline.py --dry-run          Quick test (50 generated with labels)
   python run_pipeline.py --start-phase 3   Start from Phase 3
   python run_pipeline.py --skip-phase 2    Skip dedup (use existing phase1 output)
         """,
@@ -121,7 +121,7 @@ Examples:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Quick sanity check: 50 complaints generated, 10 labeled",
+        help="Quick sanity check: 50 complaints generated with labels",
     )
     parser.add_argument(
         "--start-phase",

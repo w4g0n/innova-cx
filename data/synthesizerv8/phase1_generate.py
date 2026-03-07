@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import collections
 import importlib
 import json
 import random
@@ -88,6 +89,19 @@ CHECKPOINT_EVERY     = 100
 SAFETY_OVERSAMPLE_RATE = 0.08  # 8% of rows get explicit safety-scenario hints
 MIN_SUBJECT_LEN      = 3
 MIN_TEXT_LEN         = 20
+LABEL_COLS           = ["issue_severity", "issue_urgency", "safety_concern", "business_impact"]
+LEVEL_VALUES         = {"low", "medium", "high"}
+MAX_RECENT_TEXTS     = 250
+MAX_JACCARD_SIMILARITY = 0.75
+DEPARTMENTS = [
+    "Facilities Management",
+    "Legal & Compliance",
+    "Safety & Security",
+    "HR",
+    "Leasing",
+    "Maintenance",
+    "IT",
+]
 
 # Version checks (Phi-4 mini requires recent transformers)
 MIN_TRANSFORMERS = (4, 55, 0)
@@ -180,41 +194,102 @@ SAFETY_ISSUES: list[str] = [
 ]
 
 
-# ── System prompt ──────────────────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are a data generation assistant creating realistic customer complaint tickets.
+# ── Few-shot labeling guidance (same logic used in Phase 3 labeling) ──────────
+FEW_SHOT_EXAMPLES = [
+    {
+        "text": "The bin in the kitchen hasn't been emptied in three days. It's starting to smell.",
+        "labels": {"issue_severity": "low", "issue_urgency": "low", "safety_concern": False, "business_impact": "low"},
+    },
+    {
+        "text": "Our office HVAC has been broken for two days. It's 32 degrees in here and staff are struggling to concentrate. We need this fixed today.",
+        "labels": {"issue_severity": "high", "issue_urgency": "high", "safety_concern": True, "business_impact": "high"},
+    },
+    {
+        "text": "The projector in meeting room 3B stopped working this morning. We have client presentations scheduled all week and cannot use that room.",
+        "labels": {"issue_severity": "medium", "issue_urgency": "medium", "safety_concern": False, "business_impact": "medium"},
+    },
+    {
+        "text": "There is a water leak coming through the ceiling above our server room. Water is dripping onto equipment right now.",
+        "labels": {"issue_severity": "high", "issue_urgency": "high", "safety_concern": True, "business_impact": "high"},
+    },
+]
+
+
+def build_system_prompt() -> str:
+    examples_block = ""
+    for ex in FEW_SHOT_EXAMPLES:
+        examples_block += f'Text: "{ex["text"]}"\n'
+        examples_block += f'Labels: {json.dumps(ex["labels"])}\n\n'
+
+    return f"""You are a data generation assistant creating realistic customer complaint tickets.
 
 YOUR TASK:
 Generate ONE original customer complaint for an office leasing and property management system.
-A complaint is a report of a problem, failure, or bad experience.
+Generate complaint text and labels together so labels match the text exactly.
 
 IMPORTANT RULES:
 - Generate a COMPLAINT only. Do NOT generate questions, inquiries, or requests for information.
 - The complaint must sound like a real office tenant wrote it — frustrated, specific, and human.
-- Do NOT use generic filler like "I hope this message finds you well" or "I am writing to inform you".
-- Do NOT include category labels, metadata, or structured fields inside the complaint text itself.
+- Do NOT include category labels or metadata inside the complaint text.
+- Do NOT copy wording from the examples; use fresh phrasing every time.
 - Be specific about the problem — vague complaints are useless training data.
 
-OUTPUT FORMAT:
+LABEL DEFINITIONS:
+- issue_severity: low | medium | high
+  low = cosmetic/minor issue, medium = one system affected, high = critical failure
+- issue_urgency: low | medium | high
+  low = no time pressure, medium = within days, high = immediate/same-day
+- safety_concern: true | false
+  true only for explicit physical hazard (fire/electrical/flood/structural/injury risk)
+- business_impact: low | medium | high
+  low = minimal productivity impact, medium = partial disruption, high = major outage/blocked operations
+
+EXAMPLES:
+{examples_block}OUTPUT FORMAT:
 Respond with a single valid JSON object only. No markdown, no code fences, no extra text.
-Start with '{' and end with '}'.
+Start with '{{' and end with '}}'.
 
-{
+{{
   "subject": "<3 to 8 word summary of the specific problem>",
-  "text": "<the full complaint text>"
-}"""
+  "text": "<the full complaint text>",
+  "department": "Facilities Management|Legal & Compliance|Safety & Security|HR|Leasing|Maintenance|IT",
+  "issue_severity": "low|medium|high",
+  "issue_urgency": "low|medium|high",
+  "safety_concern": true|false,
+  "business_impact": "low|medium|high"
+}}"""
 
 
-def build_user_prompt(domain: str, style: str, issue_hint: str | None, length_hint: str) -> str:
+SYSTEM_PROMPT = build_system_prompt()
+
+
+def build_user_prompt(
+    domain: str,
+    style: str,
+    issue_hint: str | None,
+    length_hint: str,
+    target_labels: dict,
+) -> str:
     hint_line = f"- The complaint must be about: {issue_hint}\n" if issue_hint else ""
+    label_line = (
+        "- Label targets to enforce:\n"
+        f"  - department: {target_labels['department']}\n"
+        f"  - issue_severity: {target_labels['issue_severity']}\n"
+        f"  - issue_urgency: {target_labels['issue_urgency']}\n"
+        f"  - safety_concern: {str(target_labels['safety_concern']).lower()}\n"
+        f"  - business_impact: {target_labels['business_impact']}\n"
+    )
     return (
         f"Generate a customer complaint for the domain: {domain}\n\n"
         f"Requirements:\n"
         f"- Writing style: {style}\n"
         f"- {length_hint}\n"
         f"{hint_line}"
+        f"{label_line}"
         f"- Subject: 3-8 words describing the specific problem\n"
         f"- Text: must sound like a real frustrated tenant, not an AI\n\n"
-        f"Respond with JSON only."
+        f"- Use wording that is distinct from common template/example phrasing\n"
+        f"Respond with JSON only and ensure labels are consistent with the complaint text."
     )
 
 
@@ -283,13 +358,43 @@ def load_model(model_name: str) -> tuple:
     if torch.cuda.is_available():
         print(f"Model on device: {next(model.parameters()).device} | "
               f"VRAM: {torch.cuda.memory_allocated() / 1e9:.1f}GB")
+    _repair_phi_meta_buffers(model)
     return tokenizer, model
 
 
 # ── JSON parsing ───────────────────────────────────────────────────────────────
 
-def _unescape_json_string(value: str) -> str:
-    return json.loads(f'"{value}"')
+
+def _parse_bool(value) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    v = str(value).strip().lower()
+    if v in ("true", "1", "yes"):
+        return True
+    if v in ("false", "0", "no"):
+        return False
+    return None
+
+
+def _extract_labels(parsed: dict) -> dict | None:
+    dept = str(parsed.get("department", "")).strip()
+    sev = str(parsed.get("issue_severity", "")).strip().lower()
+    urg = str(parsed.get("issue_urgency", "")).strip().lower()
+    imp = str(parsed.get("business_impact", "")).strip().lower()
+    saf = _parse_bool(parsed.get("safety_concern"))
+    if dept not in DEPARTMENTS:
+        return None
+    if sev not in LEVEL_VALUES or urg not in LEVEL_VALUES or imp not in LEVEL_VALUES:
+        return None
+    if saf is None:
+        return None
+    return {
+        "department": dept,
+        "issue_severity": sev,
+        "issue_urgency": urg,
+        "safety_concern": saf,
+        "business_impact": imp,
+    }
 
 
 def parse_json_response(raw: str) -> dict | None:
@@ -302,21 +407,10 @@ def parse_json_response(raw: str) -> dict | None:
             parsed  = json.loads(m.group(0))
             subject = str(parsed.get("subject", "")).strip()
             text    = str(parsed.get("text", "")).strip()
-            if len(subject) >= MIN_SUBJECT_LEN and len(text) >= MIN_TEXT_LEN:
-                return {"subject": subject, "text": text}
+            labels  = _extract_labels(parsed)
+            if labels and len(subject) >= MIN_SUBJECT_LEN and len(text) >= MIN_TEXT_LEN:
+                return {"subject": subject, "text": text, **labels}
         except json.JSONDecodeError:
-            pass
-
-    # Fallback: field-level regex (handles partially malformed JSON)
-    sm = re.search(r'"subject"\s*:\s*"((?:[^"\\]|\\.)*)"', cleaned, re.DOTALL)
-    tm = re.search(r'"text"\s*:\s*"((?:[^"\\]|\\.)*)"', cleaned, re.DOTALL)
-    if sm and tm:
-        try:
-            subject = _unescape_json_string(sm.group(1)).strip()
-            text    = _unescape_json_string(tm.group(1)).strip()
-            if len(subject) >= MIN_SUBJECT_LEN and len(text) >= MIN_TEXT_LEN:
-                return {"subject": subject, "text": text}
-        except Exception:
             pass
 
     return None
@@ -327,12 +421,66 @@ def _looks_like_json(value: str) -> bool:
     return v.startswith("{") or ('"subject"' in v and '"text"' in v)
 
 
+def _normalized_tokens(text: str) -> set[str]:
+    cleaned = re.sub(r"[^a-z0-9\s]", " ", str(text).lower())
+    return {t for t in cleaned.split() if len(t) > 2}
+
+
+def _jaccard_similarity(a: str, b: str) -> float:
+    ta = _normalized_tokens(a)
+    tb = _normalized_tokens(b)
+    if not ta or not tb:
+        return 0.0
+    inter = len(ta & tb)
+    union = len(ta | tb)
+    return inter / union if union else 0.0
+
+
+def _is_too_similar(text: str, references: list[str], threshold: float = MAX_JACCARD_SIMILARITY) -> bool:
+    return any(_jaccard_similarity(text, ref) >= threshold for ref in references)
+
+
+def _repair_phi_meta_buffers(model) -> int:
+    """
+    Phi-4 remote code can leave rotary buffers (original_inv_freq) on meta
+    tensors in some torch/transformers combinations. Materialize them from
+    inv_freq so generation can run.
+    """
+    repaired = 0
+    try:
+        device = next(model.parameters()).device
+    except Exception:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    for module in model.modules():
+        if not hasattr(module, "original_inv_freq"):
+            continue
+        original = getattr(module, "original_inv_freq", None)
+        if not (torch.is_tensor(original) and getattr(original, "is_meta", False)):
+            continue
+
+        inv = getattr(module, "inv_freq", None)
+        if torch.is_tensor(inv) and not getattr(inv, "is_meta", False):
+            restored = inv.detach().clone().to(device)
+            try:
+                module.register_buffer("original_inv_freq", restored, persistent=False)
+            except Exception:
+                setattr(module, "original_inv_freq", restored)
+            repaired += 1
+
+    if repaired:
+        print(f"[PATCH] Repaired {repaired} meta rotary buffer(s) for Phi-4 compatibility")
+    return repaired
+
+
 # ── Single complaint generation ────────────────────────────────────────────────
 
 def generate_complaint(
     tokenizer,
     model,
     user_prompt: str,
+    expected_labels: dict | None = None,
+    recent_texts: list[str] | None = None,
     max_new_tokens: int = 256,
     retries: int = 3,
     temperature: float = 0.7,
@@ -396,8 +544,16 @@ def generate_complaint(
                 raise ValueError("Contaminated output — JSON leaked into text fields")
             if len(subject) < MIN_SUBJECT_LEN or len(text) < MIN_TEXT_LEN:
                 raise ValueError("Generated fields are too short")
+            if _is_too_similar(text, [ex["text"] for ex in FEW_SHOT_EXAMPLES]):
+                raise ValueError("Generated text too close to few-shot examples")
+            if recent_texts and _is_too_similar(text, recent_texts):
+                raise ValueError("Generated text too similar to recent outputs")
+            if expected_labels:
+                for key, expected_value in expected_labels.items():
+                    if parsed.get(key) != expected_value:
+                        raise ValueError(f"{key} mismatch: got={parsed.get(key)!r}, expected={expected_value!r}")
 
-            return {"subject": subject, "text": text}
+            return {"subject": subject, "text": text, **{k: parsed[k] for k in ["department", *LABEL_COLS]}}
 
         except (json.JSONDecodeError, ValueError) as e:
             if attempt < retries - 1:
@@ -416,6 +572,12 @@ def generate_complaint(
                 continue
             print("  [WARN] CUDA OOM — skipping this row")
             return None
+        except NotImplementedError as e:
+            if "meta tensor" in str(e).lower() and attempt < retries - 1:
+                _repair_phi_meta_buffers(model)
+                time.sleep(0.2)
+                continue
+            raise
 
     return None
 
@@ -466,6 +628,30 @@ def build_plan(n: int) -> list[dict]:
         plan[idx]["safety_override"] = True
 
     random.shuffle(plan)
+
+    # Attach balanced label targets, including equal department spread.
+    dept_sampler = _RoundRobinSampler(DEPARTMENTS)
+    sev_sampler = _RoundRobinSampler(["low", "medium", "high"])
+    urg_sampler = _RoundRobinSampler(["low", "medium", "high"])
+    imp_sampler = _RoundRobinSampler(["low", "medium", "high"])
+
+    safety_true_target = max(1, round(0.50 * n))
+    safety_flags = [True] * safety_true_target + [False] * max(0, n - safety_true_target)
+    random.shuffle(safety_flags)
+
+    for i, item in enumerate(plan):
+        item["target_department"] = dept_sampler.next()
+        item["target_issue_severity"] = sev_sampler.next()
+        item["target_issue_urgency"] = urg_sampler.next()
+        item["target_business_impact"] = imp_sampler.next()
+        item["target_safety_concern"] = bool(safety_flags[i]) if i < len(safety_flags) else False
+        if item.get("safety_override", False):
+            item["target_safety_concern"] = True
+            # Keep safety rows coherent with higher urgency/severity by default.
+            item["target_issue_severity"] = random.choice(["medium", "high"])
+            item["target_issue_urgency"] = random.choice(["medium", "high"])
+            item["target_business_impact"] = random.choice(["medium", "high"])
+
     return plan
 
 
@@ -515,6 +701,7 @@ def main() -> None:
     safety_sampler   = _RoundRobinSampler(SAFETY_ISSUES)
 
     stats = {"accepted": 0, "failed": 0}
+    recent_texts = collections.deque(maxlen=MAX_RECENT_TEXTS)
 
     for item in tqdm(plan, desc="Generating complaints"):
         domain          = item["domain"]
@@ -522,17 +709,26 @@ def main() -> None:
         length_hint     = random.choice(LENGTH_HINTS)
         safety_override = item.get("safety_override", False)
 
-        if safety_override:
+        if item["target_safety_concern"]:
             issue_hint = safety_sampler.next()
         elif domain == PRIMARY_DOMAIN:
             issue_hint = leasing_sampler.next()
         else:
             issue_hint = None
 
-        user_prompt = build_user_prompt(domain, style, issue_hint, length_hint)
+        target_labels = {
+            "department": item["target_department"],
+            "issue_severity": item["target_issue_severity"],
+            "issue_urgency": item["target_issue_urgency"],
+            "safety_concern": item["target_safety_concern"],
+            "business_impact": item["target_business_impact"],
+        }
+        user_prompt = build_user_prompt(domain, style, issue_hint, length_hint, target_labels)
 
         result = generate_complaint(
             tokenizer, model, user_prompt,
+            expected_labels=target_labels,
+            recent_texts=list(recent_texts),
             max_new_tokens=args.max_new_tokens,
             retries=args.retries,
             temperature=args.temperature,
@@ -548,7 +744,13 @@ def main() -> None:
                 "domain":     domain,
                 "style":      style,
                 "issue_hint": issue_hint or "",
+                "department": result["department"],
+                "issue_severity": result["issue_severity"],
+                "issue_urgency": result["issue_urgency"],
+                "safety_concern": result["safety_concern"],
+                "business_impact": result["business_impact"],
             })
+            recent_texts.append(result["text"])
             stats["accepted"] += 1
         else:
             stats["failed"] += 1
@@ -570,6 +772,8 @@ def main() -> None:
     print(f"  Saved to  : {COMPLETE_PATH}")
     print(f"\nDomain breakdown:")
     print(df.groupby("domain").size().sort_values(ascending=False).to_string())
+    print(f"\nDepartment breakdown:")
+    print(df.groupby("department").size().sort_values(ascending=False).to_string())
     safety_rows = df[df["issue_hint"].isin(SAFETY_ISSUES)]
     print(f"\nSafety-seeded rows: {len(safety_rows)} ({len(safety_rows)/len(df)*100:.1f}%)")
 
