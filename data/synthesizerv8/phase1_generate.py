@@ -50,6 +50,23 @@ try:
 except Exception:
     pass
 
+# Patch: some transformers releases pass a list into get_expanded_tied_weights_keys
+# which calls .keys() expecting a dict — crashes with AttributeError on 'list'.
+# This affects Phi-4-mini on transformers versions where tied_weights_keys is a list.
+try:
+    from transformers import modeling_utils as _mu
+    _orig_get_expanded = _mu.PreTrainedModel.get_expanded_tied_weights_keys
+
+    def _patched_get_expanded(self, all_submodels=True):
+        try:
+            return _orig_get_expanded(self, all_submodels)
+        except AttributeError:
+            return set()
+
+    _mu.PreTrainedModel.get_expanded_tied_weights_keys = _patched_get_expanded
+except Exception:
+    pass
+
 warnings.filterwarnings("ignore")
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
@@ -256,7 +273,7 @@ def load_model(model_name: str) -> tuple:
         try:
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                torch_dtype=torch.float16,
+                dtype=torch.float16,
                 device_map="auto",
                 trust_remote_code=True,
             )
@@ -268,7 +285,7 @@ def load_model(model_name: str) -> tuple:
     if model is None:
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             trust_remote_code=True,
         )
         print("Model backend: fp32 (CPU) — generation will be slow")

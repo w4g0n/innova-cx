@@ -57,6 +57,22 @@ try:
 except Exception:
     pass
 
+# Patch: some transformers releases pass a list into get_expanded_tied_weights_keys
+# which calls .keys() expecting a dict — crashes with AttributeError on 'list'.
+try:
+    from transformers import modeling_utils as _mu
+    _orig_get_expanded = _mu.PreTrainedModel.get_expanded_tied_weights_keys
+
+    def _patched_get_expanded(self, all_submodels=True):
+        try:
+            return _orig_get_expanded(self, all_submodels)
+        except AttributeError:
+            return set()
+
+    _mu.PreTrainedModel.get_expanded_tied_weights_keys = _patched_get_expanded
+except Exception:
+    pass
+
 try:
     from transformers import BitsAndBytesConfig
 except ImportError:
