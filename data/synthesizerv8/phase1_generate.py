@@ -255,39 +255,26 @@ def load_model(model_name: str) -> tuple:
     has_cuda  = torch.cuda.is_available()
 
     model = None
-    # Attempt 1: 8-bit quantization (CUDA only)
+    # Attempt 1: fp16 GPU
     if has_cuda:
-        try:
-            from transformers import BitsAndBytesConfig
-            bnb_cfg = BitsAndBytesConfig(load_in_8bit=True)
-            model = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                quantization_config=bnb_cfg,
-                device_map="auto",
-                trust_remote_code=True,
-            )
-            print("Model backend: 8-bit quantized (CUDA)")
-        except Exception as e:
-            print(f"[WARN] 8-bit load failed ({e}), trying fp16...")
-
-    # Attempt 2: fp16 GPU
-    if model is None and has_cuda:
         try:
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 dtype=torch.float16,
-                device_map="auto",
+                low_cpu_mem_usage=False,
                 trust_remote_code=True,
             )
+            model = model.to("cuda")
             print("Model backend: fp16 (CUDA)")
         except Exception as e:
             print(f"[WARN] fp16 GPU load failed ({e}), falling back to CPU...")
 
-    # Attempt 3: CPU fallback
+    # Attempt 2: CPU fallback
     if model is None:
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             dtype=torch.float32,
+            low_cpu_mem_usage=False,
             trust_remote_code=True,
         )
         print("Model backend: fp32 (CPU) — generation will be slow")
