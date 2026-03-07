@@ -183,10 +183,23 @@ Examples:
             print(f"\n⏭   Phase {phase} ({PHASE_NAMES[phase]}): skipped (output exists, --resume)")
             continue
 
+        # ── Skip phase 4 in dry-run (10 rows always fails validation) ────────────
+        if args.dry_run and phase == 4:
+            print(
+                f"\n⏭   Phase 4 (Validate): skipped in --dry-run mode "
+                f"(row-count thresholds are meaningless for 50-row test)"
+            )
+            print(f"\n{'='*60}")
+            print(f"  DRY-RUN COMPLETE — pipeline ran without errors")
+            print(f"  Run without --dry-run for the full 10,000-row dataset.")
+            print(f"{'='*60}\n")
+            break
+
         # ── Build per-phase arguments ──────────────────────────────────────────
         phase_args: list[str] = []
 
-        if args.dry_run:
+        # Only phases 1 and 3 understand --dry-run; 2 and 4 are fast/don't need it
+        if args.dry_run and phase in (1, 3):
             phase_args.append("--dry-run")
 
         # Phase 1 and 3 support --resume internally

@@ -269,7 +269,6 @@ def label_ticket(
                     attention_mask=attn_mask,
                     max_new_tokens=80,
                     do_sample=False,       # Deterministic — labels must be consistent
-                    temperature=1.0,
                     repetition_penalty=1.1,
                     pad_token_id=tokenizer.eos_token_id,
                 )
