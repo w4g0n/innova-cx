@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { apiUrl } from "../../config/apiBase";
@@ -67,7 +67,7 @@ function AttachmentThumb({ url, fileName, token }) {
       anchor.remove();
       // Revoke after a short delay to allow the download to start
       setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-    } catch (err) {
+    } catch {
       // Fallback: open in new tab if blob download fails
       window.open(url, "_blank", "noopener,noreferrer");
     } finally {

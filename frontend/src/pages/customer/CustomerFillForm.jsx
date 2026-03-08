@@ -21,7 +21,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [voiceStage, setVoiceStage] = useState("idle");
   const [draftTranscript, setDraftTranscript] = useState("");
-  const [latestAudioFeatures, setLatestAudioFeatures] = useState(null);
 
   // Validation state
   const [errors, setErrors] = useState({});
@@ -81,7 +80,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     setIsTranscribing(false);
     setVoiceStage("idle");
     setDraftTranscript("");
-    setLatestAudioFeatures(null);
     setErrors({});
     cleanupStream();
   };
@@ -171,7 +169,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
           const filename = mimeType.includes("mp4") ? "mic.mp4" : "mic.webm";
           const data = await transcribeAudio(blob, filename);
           setDraftTranscript(data?.transcript || "");
-          setLatestAudioFeatures(data?.audio_features || null);
           setVoiceStage("review");
         } catch (err) {
           console.error("Transcription failed:", err);

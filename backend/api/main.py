@@ -4315,7 +4315,6 @@ def get_routing_review_item(
         (review_id, manager_department_name),
     )
     if not row:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Routing review item not found")
 
     return {
