@@ -48,7 +48,7 @@ class _FallbackPredictor:
 
 @lru_cache(maxsize=1)
 def _load_predictor():
-    model_dir = os.getenv("SENTIMENT_MODEL_DIR", "").strip()
+    model_dir = os.getenv("SENTIMENT_MODEL_DIR", "/app/agents/step04_sentimentanalysis/model").strip()
     if not model_dir:
         logger.info("sentiment | SENTIMENT_MODEL_DIR not set, using fallback predictor")
         return _FallbackPredictor()
@@ -67,7 +67,7 @@ def _load_predictor():
 
 
 def get_sentiment_diagnostics() -> dict[str, Any]:
-    model_dir = os.getenv("SENTIMENT_MODEL_DIR", "").strip()
+    model_dir = os.getenv("SENTIMENT_MODEL_DIR", "/app/agents/step04_sentimentanalysis/model").strip()
     model_enabled = bool(model_dir)
     model_file_exists = bool(model_dir and (Path(model_dir) / "model.pt").exists())
     mode = "model" if model_file_exists else "mock"

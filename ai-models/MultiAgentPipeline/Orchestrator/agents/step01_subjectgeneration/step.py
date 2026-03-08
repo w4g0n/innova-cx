@@ -17,9 +17,12 @@ import httpx
 from langchain_core.runnables import RunnableLambda
 
 BACKEND_URL = "http://backend:8000"
-SUBJECT_GENERATOR_MODEL_PATH = os.getenv("SUBJECT_GENERATOR_MODEL_PATH", "").strip()
+SUBJECT_GENERATOR_MODEL_PATH = os.getenv(
+    "SUBJECT_GENERATOR_MODEL_PATH",
+    "/app/agents/step01_subjectgeneration/model",
+).strip()
 SUBJECT_GENERATOR_MODEL_NAME = os.getenv("SUBJECT_GENERATOR_MODEL_NAME", "google/flan-t5-small").strip()
-SUBJECT_GENERATOR_AUTO_DOWNLOAD = os.getenv("SUBJECT_GENERATOR_AUTO_DOWNLOAD", "true").lower() in {"1", "true", "yes"}
+SUBJECT_GENERATOR_AUTO_DOWNLOAD = os.getenv("SUBJECT_GENERATOR_AUTO_DOWNLOAD", "false").lower() in {"1", "true", "yes"}
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip() or None
 
 logger = logging.getLogger(__name__)

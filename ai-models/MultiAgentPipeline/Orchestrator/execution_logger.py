@@ -327,7 +327,6 @@ def logged_step(
             elapsed_ms,
             json.dumps(_safe_json(stage_summary), ensure_ascii=False),
         )
-
         return result
 
     wrapper.__name__ = f"logged_{step_fn.__name__}"

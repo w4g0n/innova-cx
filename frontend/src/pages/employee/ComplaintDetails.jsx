@@ -762,8 +762,8 @@ export default function ComplaintDetails() {
           <div className="summary-grid">
             <div><span className="label">Issue Date:</span> {ticket.issueDate}</div>
             <div><span className="label">Ticket Source:</span> {formatTicketSource(ticket.ticketSource)}</div>
-            <div><span className="label">Mean Time To Respond:</span> {ticket.metrics?.meanTimeToRespond || "—"}</div>
-            <div><span className="label">Mean Time To Resolve:</span> {ticket.metrics?.meanTimeToResolve || "—"}</div>
+            <div><span className="label">Min Time To Respond:</span> {ticket.metrics?.minTimeToRespond || "—"}</div>
+            <div><span className="label">Min Time To Resolve:</span> {ticket.metrics?.minTimeToResolve || "—"}</div>
             <div><span className="label">Submitted By:</span> {ticket.submittedBy?.name}</div>
             <div><span className="label">Contact:</span> {ticket.submittedBy?.contact}</div>
             <div><span className="label">Location:</span> {ticket.submittedBy?.location}</div>

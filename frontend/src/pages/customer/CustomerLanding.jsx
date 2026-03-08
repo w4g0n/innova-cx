@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import "./CustomerLanding.css";
 import novaLogo from "../../assets/nova-logo.png";
@@ -109,29 +109,51 @@ const QUICK_ACTIONS = [
   const [recentTicket, setRecentTicket] = useState(null);
   const [ticketLoading, setTicketLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchRecentTicket() {
-      try {
-        const token = getToken();
-        const res = await fetch(apiUrl("/api/customer/mytickets"), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const tickets = data.tickets || [];
-          const sorted = [...tickets].sort((a, b) =>
-            new Date(b.updatedAt || b.issueDate) - new Date(a.updatedAt || a.issueDate)
-          );
-          setRecentTicket(sorted[0] || null);
-        }
-      } catch {
-        setRecentTicket(null);
-      } finally {
-        setTicketLoading(false);
-      }
-    }
-    fetchRecentTicket();
+  const hasUsableSubject = useCallback((ticket) => {
+    const subject = (ticket?.subject || ticket?.description?.subject || "").trim();
+    return subject.length > 0;
   }, []);
+
+  const fetchRecentTicket = useCallback(async () => {
+    try {
+      const token = getToken();
+      const res = await fetch(apiUrl("/api/customer/mytickets"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const tickets = data.tickets || [];
+        // Backend already returns ORDER BY created_at DESC.
+        const mostRecent = tickets[0] || null;
+        setRecentTicket(mostRecent);
+        // Keep loading state until a generated/fallback subject is available.
+        setTicketLoading(Boolean(mostRecent) && !hasUsableSubject(mostRecent));
+        return;
+      }
+      setRecentTicket(null);
+      setTicketLoading(false);
+    } catch {
+      setRecentTicket(null);
+      setTicketLoading(false);
+    }
+  }, [hasUsableSubject]);
+
+  useEffect(() => {
+    fetchRecentTicket();
+  }, [fetchRecentTicket]);
+
+  useEffect(() => {
+    if (!recentTicket || hasUsableSubject(recentTicket)) return undefined;
+    const timer = setTimeout(() => {
+      fetchRecentTicket();
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [recentTicket, hasUsableSubject, fetchRecentTicket]);
+
+  const handleTicketSubmitted = async () => {
+    setTicketLoading(true);
+    await fetchRecentTicket();
+  };
 
   useEffect(() => {
     async function fetchNotifications() {
@@ -522,7 +544,7 @@ const QUICK_ACTIONS = [
                 <span className="cl-ticket-priority">{recentTicket.priority}</span>
               </div>
 
-              <h3 className="cl-ticket-subject">{recentTicket.subject || recentTicket.description?.subject || "Untitled ticket"}</h3>
+              <h3 className="cl-ticket-subject">{recentTicket.subject || recentTicket.description?.subject}</h3>
 
               {recentTicket.updates && recentTicket.updates.length > 0 ? (
                 <div className="cl-updates-feed">
@@ -612,7 +634,12 @@ const QUICK_ACTIONS = [
           <div className={`novaWidgetBody ${novaView === "form" ? "novaWidgetBody--form" : ""}`}>
             {novaView === "form" ? (
               <div className="novaFormHost">
-                <CustomerFillForm embedded initialType={embeddedFormType} onCancel={() => setNovaView("chat")} />
+                <CustomerFillForm
+                  embedded
+                  initialType={embeddedFormType}
+                  onCancel={() => setNovaView("chat")}
+                  onSubmitted={handleTicketSubmitted}
+                />
               </div>
             ) : (
               <>
@@ -723,6 +750,7 @@ const QUICK_ACTIONS = [
                 embedded
                 initialType="Complaint"
                 onCancel={confirmFormClose}
+                onSubmitted={handleTicketSubmitted}
               />
             </div>
           </div>

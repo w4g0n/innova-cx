@@ -18,8 +18,6 @@ COPY ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/ /app/prioritizatio
 COPY ai-models/legacy/MultiAgentPipeline/SentimentCombiner/ /app/sentiment_combiner/
 # Copy sentiment pipeline code (runtime can load external model if SENTIMENT_MODEL_DIR is provided)
 COPY ai-models/legacy/MultiAgentPipeline/SentimentAnalysisAgent_runtime/src/ /app/sentiment_pipeline/
-# Copy lightweight model directory skeletons (actual model files are optional/local).
-COPY ai-models/MultiAgentPipeline/Orchestrator/models/ /app/models/
 
 ENV PYTHONPATH=/app
 

@@ -19,13 +19,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from pipeline import pipeline
-from agents.sentimentanalysis.step import get_sentiment_diagnostics
-from agents.classifier.step import get_classifier_diagnostics
-from agents.featureengineering.step import get_feature_engineering_diagnostics
-from agents.subjectgeneration.step import get_subject_generation_diagnostics
-from agents.router.step import get_router_diagnostics
-from agents.audioanalysis.step import get_audio_analysis_diagnostics
-from agents.priority.step import record_manager_feedback_from_state, get_priority_diagnostics
+from agents.step04_sentimentanalysis.step import get_sentiment_diagnostics
+from agents.step03_classifier.step import get_classifier_diagnostics
+from agents.step08_featureengineering.step import get_feature_engineering_diagnostics
+from agents.step01_subjectgeneration.step import get_subject_generation_diagnostics
+from agents.step10_router.step import get_router_diagnostics
+from agents.step05_audioanalysis.step import get_audio_analysis_diagnostics
+from agents.step09_priority.step import record_manager_feedback_from_state, get_priority_diagnostics
 
 try:
     from db import ensure_log_tables, db_connect
