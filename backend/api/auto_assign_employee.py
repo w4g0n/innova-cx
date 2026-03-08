@@ -57,6 +57,51 @@ def _select_balanced_employee_user_id(cur, department_id, incoming_priority: Opt
         (priority, str(department_id)),
     )
     row = cur.fetchone()
+    if row and row[0]:
+        return str(row[0])
+
+    # Fallback: if no active employee exists in the routed department,
+    # still assign to the globally least-loaded active employee.
+    cur.execute(
+        """
+        SELECT
+          u.id::text AS user_id,
+          COALESCE(
+            SUM(
+              CASE t.priority
+                WHEN 'Critical' THEN 8
+                WHEN 'High' THEN 5
+                WHEN 'Medium' THEN 3
+                ELSE 1
+              END
+            ) FILTER (WHERE t.status <> 'Resolved'),
+            0
+          ) AS weighted_active_load,
+          COUNT(*) FILTER (
+            WHERE t.status <> 'Resolved'
+              AND t.priority = %s::ticket_priority
+          ) AS same_priority_active,
+          COUNT(*) FILTER (WHERE t.status <> 'Resolved') AS active_total,
+          MAX(t.assigned_at) FILTER (WHERE t.status <> 'Resolved') AS last_assigned_at
+        FROM users u
+        JOIN user_profiles up
+          ON up.user_id = u.id
+        LEFT JOIN tickets t
+          ON t.assigned_to_user_id = u.id
+        WHERE u.role = 'employee'
+          AND u.is_active = TRUE
+        GROUP BY u.id
+        ORDER BY
+          weighted_active_load ASC,
+          same_priority_active ASC,
+          active_total ASC,
+          last_assigned_at ASC NULLS FIRST,
+          u.id ASC
+        LIMIT 1;
+        """,
+        (priority,),
+    )
+    row = cur.fetchone()
     return str(row[0]) if row and row[0] else None
 
 
