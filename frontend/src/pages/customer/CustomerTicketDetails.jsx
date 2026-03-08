@@ -4,7 +4,9 @@ import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
 import { getUser, authHeader } from "../../utils/auth";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { apiUrl } from "../../config/apiBase";
+import PriorityPill from "../../components/common/PriorityPill";
 import novaLogo from "../../assets/nova-logo.png";
+import TicketChat from "../../components/common/TicketChat";
 import "./CustomerTicketDetails.css";
 
 /* ── helpers ─────────────────────────────────────────────────── */
@@ -212,6 +214,10 @@ export default function CustomerTicketDetails() {
 
             <div className="ctd-meta-row">
               <div className="ctd-meta-item">
+                <span className="ctd-meta-label">Priority</span>
+                <PriorityPill priority={ticket.priority}/>
+              </div>
+              <div className="ctd-meta-item">
                 <span className="ctd-meta-label">Created</span>
                 <span className="ctd-meta-value">{ticket.date}</span>
               </div>
@@ -222,8 +228,8 @@ export default function CustomerTicketDetails() {
             <p className="ctd-description">{ticket.description}</p>
           </section>
 
-          {/* RIGHT — pipeline + activity */}
-          <section className="ctd-card">
+          {/* RIGHT — pipeline + activity + chat */}
+          <section className="ctd-card" style={{ display: "flex", flexDirection: "column" }}>
             <p className="ctd-section-label">Updates</p>
 
             {/* Status pipeline */}
@@ -293,6 +299,13 @@ export default function CustomerTicketDetails() {
                 })}
               </div>
             )}
+            {/* ── CHAT ── */}
+            <TicketChat
+              ticketId={ticket.id}
+              role="customer"
+              authHeader={authHeader}
+              disabled={normalizeStatus(ticket.status) === "resolved"}
+            />
           </section>
         </div>
       )}

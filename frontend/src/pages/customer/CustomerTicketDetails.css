@@ -175,3 +175,9 @@
   .ctd-page-header { padding: 16px 14px 0; }
   .ctd-layout { padding: 14px 14px 24px; }
 }
+/* ── TICKET CHAT (tc-*) is in TicketChat.css; import it alongside this file */
+/* Make the right card stretch to contain the chat box neatly */
+.ctd-layout > section:last-child {
+  display: flex;
+  flex-direction: column;
+}
