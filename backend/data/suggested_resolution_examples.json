@@ -1,65 +1,29 @@
 {
-  "updated_at": "2026-03-07T21:12:33.170934+00:00",
+  "updated_at": "2026-03-08T22:34:51.043960+00:00",
   "examples": [
     {
-      "ticket_code": "CX-9004",
+      "ticket_code": "CX-9003",
+      "ticket_type": "Complaint",
+      "priority": "Medium",
+      "subject": "Critical test ticket",
+      "details": "Seed ticket to populate \"Critical\".",
+      "decision": "declined_custom",
+      "suggested_resolution": "",
+      "employee_resolution": "123",
+      "final_resolution": "123",
+      "created_at": "2026-03-08T22:34:50.779865+00:00"
+    },
+    {
+      "ticket_code": "CX-R03",
       "ticket_type": "Complaint",
       "priority": "High",
-      "subject": "Overdue test ticket",
-      "details": "Seed ticket to populate \"Overdue\".",
+      "subject": "CCTV blind spot \u2013 Carpark Level 1",
+      "details": "Three cameras offline covering entire Level 1 south section.",
       "decision": "declined_custom",
       "suggested_resolution": "",
-      "employee_resolution": "hello how are you",
-      "final_resolution": "hello how are you",
-      "created_at": "2026-03-07T21:12:33.068583+00:00"
-    },
-    {
-      "ticket_code": "CX-1122",
-      "ticket_type": "Complaint",
-      "priority": "Critical",
-      "subject": "Air conditioning not working",
-      "details": "AC stopped cooling in office area. Needs urgent repair.",
-      "decision": "declined_custom",
-      "suggested_resolution": "",
-      "employee_resolution": "123",
-      "final_resolution": "123",
-      "created_at": "2026-03-07T21:08:06.931135+00:00"
-    },
-    {
-      "ticket_code": "CX-9001",
-      "ticket_type": "Complaint",
-      "priority": "Medium",
-      "subject": "New today test ticket",
-      "details": "Seed ticket to populate \"New Today\".",
-      "decision": "declined_custom",
-      "suggested_resolution": "",
-      "employee_resolution": "123",
-      "final_resolution": "123",
-      "created_at": "2026-03-06T23:16:31.333688+00:00"
-    },
-    {
-      "ticket_code": "CX-H003",
-      "ticket_type": "Complaint",
-      "priority": "Critical",
-      "subject": "CCTV system completely offline",
-      "details": "All 48 cameras showing signal lost on monitoring console. Security breach risk.",
-      "decision": "accepted",
-      "suggested_resolution": "Replace NVR hard drive and restore camera feeds.",
-      "employee_resolution": "",
-      "final_resolution": "NVR hard drive replaced; all 48 camera feeds restored.",
-      "created_at": "2026-03-06T18:41:52.536950+00:00"
-    },
-    {
-      "ticket_code": "CX-H014",
-      "ticket_type": "Complaint",
-      "priority": "Medium",
-      "subject": "Smoke detector false alarms \u2013 laboratory",
-      "details": "Lab smoke detector triggering false alarms every morning causing unnecessary evacuations.",
-      "decision": "declined_custom",
-      "suggested_resolution": "Replace detector head.",
-      "employee_resolution": "Root cause was accumulated dust \u2014 cleaning needed before replacement test.",
-      "final_resolution": "Detector cleaned and head replaced. No false alarms in 48-hour test.",
-      "created_at": "2026-03-06T18:41:52.536950+00:00"
+      "employee_resolution": "12345",
+      "final_resolution": "12345",
+      "created_at": "2026-03-08T19:25:24.158498+00:00"
     },
     {
       "ticket_code": "CX-H006",
@@ -71,7 +35,7 @@
       "suggested_resolution": "Secure rooftop area and review access logs.",
       "employee_resolution": "",
       "final_resolution": "Area secured; access logs reviewed; door lock replaced.",
-      "created_at": "2026-03-06T18:41:52.536950+00:00"
+      "created_at": "2026-03-07T23:59:57.836773+00:00"
     },
     {
       "ticket_code": "CX-H015",
@@ -83,7 +47,7 @@
       "suggested_resolution": "Re-encode access card.",
       "employee_resolution": "Card re-encode insufficient \u2014 server-side permission sync required.",
       "final_resolution": "Cards re-encoded; permission sync completed. Readers all operational.",
-      "created_at": "2026-03-06T18:41:52.536950+00:00"
+      "created_at": "2026-03-07T23:59:57.836773+00:00"
     },
     {
       "ticket_code": "CX-H001",
@@ -95,7 +59,7 @@
       "suggested_resolution": "Isolate gas supply and replace faulty valve.",
       "employee_resolution": "",
       "final_resolution": "Gas supply isolated; faulty valve replaced and area cleared for re-entry.",
-      "created_at": "2026-03-06T18:41:52.536950+00:00"
+      "created_at": "2026-03-07T23:59:57.836773+00:00"
     },
     {
       "ticket_code": "CX-H004",
@@ -107,7 +71,7 @@
       "suggested_resolution": "Activate backup cooling; repair primary unit.",
       "employee_resolution": "",
       "final_resolution": "Backup cooling activated; primary compressor replaced.",
-      "created_at": "2026-03-06T18:41:52.536950+00:00"
+      "created_at": "2026-03-07T23:59:57.836773+00:00"
     },
     {
       "ticket_code": "CX-H005",
@@ -119,7 +83,7 @@
       "suggested_resolution": "Deploy pumping crew and clear drainage channels.",
       "employee_resolution": "",
       "final_resolution": "Pumping crew deployed; drainage channel cleared.",
-      "created_at": "2026-03-06T18:41:52.536950+00:00"
+      "created_at": "2026-03-07T23:59:57.836773+00:00"
     },
     {
       "ticket_code": "CX-H007",
@@ -131,7 +95,7 @@
       "suggested_resolution": "Replace compressor and recharge refrigerant.",
       "employee_resolution": "",
       "final_resolution": "Compressor replaced and refrigerant recharged. Cooling restored.",
-      "created_at": "2026-03-06T18:41:52.536950+00:00"
+      "created_at": "2026-03-07T23:59:57.836773+00:00"
     },
     {
       "ticket_code": "CX-H009",
@@ -143,7 +107,43 @@
       "suggested_resolution": "Replace suppression head and retest.",
       "employee_resolution": "",
       "final_resolution": "Suppression head replaced; system retested \u2014 full pass. Certificate issued.",
-      "created_at": "2026-03-06T18:41:52.536950+00:00"
+      "created_at": "2026-03-07T23:59:57.836773+00:00"
+    },
+    {
+      "ticket_code": "CX-H011",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "Boiler failure \u2013 Building A heating",
+      "details": "Entire Building A without heating during winter. Heat exchanger fault.",
+      "decision": "accepted",
+      "suggested_resolution": "Replace heat exchanger and restore pressure.",
+      "employee_resolution": "",
+      "final_resolution": "Heat exchanger replaced; boiler pressure normalised. Heating restored.",
+      "created_at": "2026-03-07T23:59:57.836773+00:00"
+    },
+    {
+      "ticket_code": "CX-H010",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "UPS batteries below minimum capacity",
+      "details": "Data centre UPS batteries flagged at 18% capacity. Emergency runtime insufficient.",
+      "decision": "declined_custom",
+      "suggested_resolution": "Recharge UPS batteries.",
+      "employee_resolution": "Batteries degraded beyond recharge \u2014 full module replacement required.",
+      "final_resolution": "All 12 UPS battery modules replaced; 47-minute runtime certified.",
+      "created_at": "2026-03-07T23:59:57.836773+00:00"
+    },
+    {
+      "ticket_code": "CX-H002",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "Power outage \u2013 Finance floor",
+      "details": "Complete power failure affecting Finance department. UPS not kicking in.",
+      "decision": "accepted",
+      "suggested_resolution": "Reset tripped MCB and test UPS bypass.",
+      "employee_resolution": "",
+      "final_resolution": "Faulty MCB replaced; power restored. UPS tested operational.",
+      "created_at": "2026-03-07T23:59:57.836773+00:00"
     }
   ]
 }
