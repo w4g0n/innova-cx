@@ -124,3 +124,187 @@
   from { opacity: 0; transform: translateY(12px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* ─── Change Password Modal ──────────────────────────────────────────────────
+   Self-contained modal styles — no dependency on SettingsLayout's cpw classes.
+   These are scoped with the cpw- prefix to avoid collisions.
+   ─────────────────────────────────────────────────────────────────────────── */
+.cpw-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 10, 24, 0.18);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  z-index: 9999;
+}
+
+.cpw-modal {
+  width: min(440px, 100%);
+  background: var(--surface, #ffffff);
+  border-radius: 22px;
+  box-shadow: 0 8px 30px rgba(15, 10, 24, 0.12), 0 2px 8px rgba(15, 10, 24, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  animation: cpwSlideUp 0.22s cubic-bezier(0.22, 0.68, 0, 1.15) both;
+  overflow: hidden;
+}
+
+@keyframes cpwSlideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.cpw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border, rgba(0,0,0,0.08));
+}
+
+.cpw-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-primary, #111827);
+  font-family: "DM Sans", "Segoe UI", system-ui;
+}
+
+.cpw-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(89, 36, 180, 0.08);
+  color: #3f2a6e;
+  font-weight: 900;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.cpw-close:hover { background: rgba(89, 36, 180, 0.15); }
+
+.cpw-body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cpw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cpw-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-secondary, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: "DM Sans", "Segoe UI", system-ui;
+}
+
+.cpw-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border, rgba(89,36,180,0.18));
+  background: var(--surface, #fff);
+  font-size: 14px;
+  font-family: "DM Sans", "Segoe UI", system-ui;
+  color: var(--text-primary, #111827);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+.cpw-input:focus {
+  border-color: rgba(89, 36, 180, 0.5);
+  box-shadow: 0 0 0 3px rgba(89, 36, 180, 0.1);
+}
+
+.cpw-error {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b91c1c;
+  background: rgba(220, 38, 38, 0.07);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  border-radius: 10px;
+  padding: 9px 12px;
+}
+
+.cpw-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border, rgba(0,0,0,0.08));
+}
+
+.cpw-btnCancel {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border, rgba(89,36,180,0.18));
+  background: transparent;
+  font-size: 13px;
+  font-weight: 800;
+  font-family: "DM Sans", "Segoe UI", system-ui;
+  color: var(--text-secondary, #6b7280);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cpw-btnCancel:hover:not(:disabled) { background: rgba(89,36,180,0.06); }
+.cpw-btnCancel:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.cpw-btnSubmit {
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #7c3aed, #5924b4);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  font-family: "DM Sans", "Segoe UI", system-ui;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(124,58,237,0.3);
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+.cpw-btnSubmit:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(124,58,237,0.4); }
+.cpw-btnSubmit:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* Success state */
+.cpw-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 36px 20px;
+}
+.cpw-successIcon {
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.15);
+  border: 2px solid rgba(52, 211, 153, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: #059669;
+}
+.cpw-successText {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary, #111827);
+  font-family: "DM Sans", "Segoe UI", system-ui;
+}

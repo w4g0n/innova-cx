@@ -10,32 +10,31 @@ Flow:
     submitted ticket details (text + optional audio features)
         -> [1] SubjectGenerationAgent / subject_generation_step
             : generate subject when ticket subject is empty
-        -> [2] ClassificationAgent / classifier_step
+        -> [2] SuggestedResolutionAgent / suggested_resolution_step
+        -> [3] ClassificationAgent / classifier_step
             : in-process heuristic; skip if type provided
-        -> [3] AudioAnalysisAgent / audio_analysis_step
-            : complaint + audio ticket path
         -> [4] SentimentAgent / sentiment_step
-        -> [5] SentimentCombinerAgent / sentiment_combiner_step
-        -> [6] RecurrenceAgent / recurrence_step
-        -> [7] FeatureEngineeringAgent / feature_engineering_step
-        -> [8] PrioritizationAgent / priority_step (XGBoost/mock fallback)
-        -> [9] DepartmentRoutingAgent / router_step (Backend)
-        -> [10] SuggestedResolutionAgent / suggested_resolution_step
-            : triggers dedicated suggested resolution generation in backend
+        -> [5] AudioAnalysisAgent / audio_analysis_step
+            : complaint + audio ticket path
+        -> [6] SentimentCombinerAgent / sentiment_combiner_step
+        -> [7] RecurrenceAgent / recurrence_step
+        -> [8] FeatureEngineeringAgent / feature_engineering_step
+        -> [9] PrioritizationAgent / priority_step (XGBoost/mock fallback)
+        -> [10] DepartmentRoutingAgent / router_step
 """
 
 from langchain_core.runnables import RunnableLambda, RunnableSequence
 
 from agents.subjectgeneration.step import generate_subject
+from agents.suggestedresolution.step import generate_suggested_resolution
 from agents.classifier.step import classify
-from agents.audioanalysis.step import analyze_audio
 from agents.sentimentanalysis.step import analyze_sentiment
+from agents.audioanalysis.step import analyze_audio
 from agents.sentimentcombiner.step import combine_sentiment
 from agents.recurrence.step import check_recurrence
 from agents.featureengineering.step import engineer_features
 from agents.priority.step import score_priority
 from agents.router.step import route_and_store
-from agents.suggestedresolution.step import generate_suggested_resolution
 
 try:
     from execution_logger import logged_step
@@ -51,13 +50,13 @@ def _step(name: str, fn, order: int):
 
 pipeline: RunnableSequence = (
     _step("SubjectGenerationAgent", generate_subject, 1)
-    | _step("ClassificationAgent", classify, 2)
-    | _step("AudioAnalysisAgent", analyze_audio, 3)
+    | _step("SuggestedResolutionAgent", generate_suggested_resolution, 2)
+    | _step("ClassificationAgent", classify, 3)
     | _step("SentimentAgent", analyze_sentiment, 4)
-    | _step("SentimentCombinerAgent", combine_sentiment, 5)
-    | _step("RecurrenceAgent", check_recurrence, 6)
-    | _step("FeatureEngineeringAgent", engineer_features, 7)
-    | _step("PrioritizationAgent", score_priority, 8)
-    | _step("DepartmentRoutingAgent", route_and_store, 9)
-    | _step("SuggestedResolutionAgent", generate_suggested_resolution, 10)
+    | _step("AudioAnalysisAgent", analyze_audio, 5)
+    | _step("SentimentCombinerAgent", combine_sentiment, 6)
+    | _step("RecurrenceAgent", check_recurrence, 7)
+    | _step("FeatureEngineeringAgent", engineer_features, 8)
+    | _step("PrioritizationAgent", score_priority, 9)
+    | _step("DepartmentRoutingAgent", route_and_store, 10)
 )

@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   details             TEXT NOT NULL,
   ticket_type         ticket_type NOT NULL DEFAULT 'Complaint',
   status              ticket_status NOT NULL DEFAULT 'Open',
-  priority            ticket_priority NOT NULL DEFAULT 'Medium',
+  priority            ticket_priority,
   department_id       UUID REFERENCES departments(id) ON DELETE SET NULL,
   created_by_user_id  UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   assigned_to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -532,7 +532,7 @@ CREATE TABLE IF NOT EXISTS department_routing (
   confidence_score     NUMERIC(5,2) NOT NULL CHECK (confidence_score >= 0 AND confidence_score <= 100),
   is_confident         BOOLEAN NOT NULL,
   final_department     TEXT,
-  routed_by            TEXT CHECK (routed_by IN ('model', 'manager')),
+  routed_by            TEXT CHECK (routed_by IN ('model', 'manager', 'manager_denied')),
   manager_id           UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -1465,6 +1465,7 @@ SET value=EXCLUDED.value;
 \ir services/suggested.sql
 \ir migrations/001_agent_execution_logs.sql
 \ir migrations/002_operator_notifications.sql
+\ir migrations/007_ticket_priority_nullable.sql
 
 -- =========================================================
 -- Dev/Test safety: ensure ticket assignments match current
@@ -3645,5 +3646,10 @@ END $$;
 -- zzz_analytics_mvs.sh, which runs after this file in the Docker init
 -- sequence. No refresh call needed here.
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- Department staffing seed (7 departments, each 1 manager + 10 employees)
+-- ---------------------------------------------------------------------------
+\ir seeds/seed_department_staffing.sql
 
 COMMIT;

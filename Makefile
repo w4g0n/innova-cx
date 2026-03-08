@@ -4,6 +4,7 @@
 	frontend-logs \
 	pipeline pipeline-build \
 	pipeline-logs \
+	ticket-flow-logs \
 	dev dev-build \
 	dev-logs \
 	down
@@ -36,6 +37,9 @@ pipeline-build:
 
 pipeline-logs:
 	docker compose --profile pipeline logs -f
+
+ticket-flow-logs:
+	bash scripts/ticket_flow_logs.sh
 
 # =========================
 # PROFILE 3: DEV
