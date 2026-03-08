@@ -12,6 +12,7 @@ Usage:
     python run_pipeline.py                      # Full run from scratch
     python run_pipeline.py --resume             # Resume any incomplete phase
     python run_pipeline.py --dry-run --dry-run-count 5
+    python run_pipeline.py --quantize 4bit
     python run_pipeline.py --start-phase 3      # Start from phase 3
     python run_pipeline.py --skip-phase 2       # Skip phase 2 (use existing output)
     python run_pipeline.py --complaints 11000   # Override complaint count
@@ -109,6 +110,7 @@ Examples:
   python run_pipeline.py                    Full run from scratch
   python run_pipeline.py --resume           Resume any incomplete phase
   python run_pipeline.py --dry-run --dry-run-count 5
+  python run_pipeline.py --quantize 4bit
   python run_pipeline.py --start-phase 3   Start from Phase 3
   python run_pipeline.py --skip-phase 2    Skip dedup (use existing phase1 output)
         """,
@@ -152,6 +154,12 @@ Examples:
         default=None,
         metavar="N",
         help="Override complaint count for Phase 1 (default: 10,000).",
+    )
+    parser.add_argument(
+        "--quantize",
+        choices=["none", "8bit", "4bit"],
+        default="none",
+        help="Optional Phase 1 GPU quantization mode",
     )
     args = parser.parse_args()
 
@@ -217,6 +225,8 @@ Examples:
 
         if phase == 1 and args.complaints is not None:
             phase_args.extend(["--complaints", str(args.complaints)])
+        if phase == 1 and args.quantize != "none":
+            phase_args.extend(["--quantize", args.quantize])
 
         # ── Run the phase ──────────────────────────────────────────────────────
         success = run_phase(phase, phase_args)

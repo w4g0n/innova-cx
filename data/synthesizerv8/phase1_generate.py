@@ -28,6 +28,10 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
+try:
+    from transformers import BitsAndBytesConfig
+except Exception:
+    BitsAndBytesConfig = None  # type: ignore[assignment]
 
 # ── Phi-4 compatibility shims ──────────────────────────────────────────────────
 # Some transformers releases dropped/renamed internal classes that Phi-4's
@@ -323,29 +327,57 @@ def _check_versions() -> None:
 
 # ── Model loader ───────────────────────────────────────────────────────────────
 
-def load_model(model_name: str) -> tuple:
+def load_model(model_name: str, quantize: str = "none") -> tuple:
     _check_versions()
     print(f"\nLoading {model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     has_cuda  = torch.cuda.is_available()
 
     model = None
-    # Attempt 1: GPU (prefer bf16 for stability, fallback to fp16)
-    if has_cuda:
+    # Attempt 1: GPU quantized (optional)
+    if has_cuda and quantize in {"4bit", "8bit"} and BitsAndBytesConfig is not None:
         try:
-            gpu_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+            if quantize == "4bit":
+                qcfg = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                )
+            else:
+                qcfg = BitsAndBytesConfig(load_in_8bit=True)
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                dtype=gpu_dtype,
-                low_cpu_mem_usage=False,
+                quantization_config=qcfg,
+                device_map="auto",
                 trust_remote_code=True,
             )
-            model = model.to("cuda")
-            print(f"Model backend: {str(gpu_dtype).replace('torch.', '')} (CUDA)")
+            print(f"Model backend: {quantize} quantized (CUDA)")
+        except Exception as e:
+            print(f"[WARN] {quantize} quantized load failed ({e}), trying non-quantized GPU...")
+
+    if has_cuda and quantize in {"4bit", "8bit"} and BitsAndBytesConfig is None:
+        print(f"[WARN] quantize={quantize} requested but BitsAndBytesConfig unavailable; using non-quantized backend")
+
+    # Attempt 2: GPU (prefer bf16 for stability, fallback to fp16)
+    if has_cuda:
+        try:
+            if model is not None:
+                pass
+            else:
+                gpu_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    dtype=gpu_dtype,
+                    low_cpu_mem_usage=False,
+                    trust_remote_code=True,
+                )
+                model = model.to("cuda")
+                print(f"Model backend: {str(gpu_dtype).replace('torch.', '')} (CUDA)")
         except Exception as e:
             print(f"[WARN] GPU load failed ({e}), falling back to CPU...")
 
-    # Attempt 2: CPU fallback
+    # Attempt 3: CPU fallback
     if model is None:
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
@@ -482,6 +514,7 @@ def generate_complaint(
     user_prompt: str,
     expected_labels: dict | None = None,
     recent_texts: list[str] | None = None,
+    enforce_diversity: bool = True,
     max_new_tokens: int = 256,
     retries: int = 3,
     do_sample: bool = False,
@@ -502,7 +535,7 @@ def generate_complaint(
                 return_tensors="pt",
             )
 
-            with torch.no_grad():
+            with torch.inference_mode():
                 if isinstance(chat_inputs, torch.Tensor):
                     inputs     = chat_inputs.to(model.device)
                     prompt_len = inputs.shape[-1]
@@ -544,10 +577,11 @@ def generate_complaint(
                 raise ValueError("Contaminated output — JSON leaked into text fields")
             if len(subject) < MIN_SUBJECT_LEN or len(text) < MIN_TEXT_LEN:
                 raise ValueError("Generated fields are too short")
-            if _is_too_similar(text, [ex["text"] for ex in FEW_SHOT_EXAMPLES]):
-                raise ValueError("Generated text too close to few-shot examples")
-            if recent_texts and _is_too_similar(text, recent_texts):
-                raise ValueError("Generated text too similar to recent outputs")
+            if enforce_diversity:
+                if _is_too_similar(text, [ex["text"] for ex in FEW_SHOT_EXAMPLES]):
+                    raise ValueError("Generated text too close to few-shot examples")
+                if recent_texts and _is_too_similar(text, recent_texts):
+                    raise ValueError("Generated text too similar to recent outputs")
             if expected_labels:
                 for key, expected_value in expected_labels.items():
                     if parsed.get(key) != expected_value:
@@ -670,6 +704,8 @@ def main() -> None:
     parser.add_argument("--top-p",          type=float, default=0.9)
     parser.add_argument("--resume",         action="store_true",
                         help="Resume from existing checkpoint")
+    parser.add_argument("--quantize",       choices=["none", "8bit", "4bit"], default="none",
+                        help="Optional GPU quantization mode")
     parser.add_argument("--dry-run",        action="store_true",
                         help="Quick test mode")
     parser.add_argument("--dry-run-count",  type=int, default=50,
@@ -699,8 +735,17 @@ def main() -> None:
 
     plan = build_plan(remaining)
 
+    # Faster defaults for quick smoke tests.
+    effective_max_new_tokens = args.max_new_tokens
+    effective_retries = args.retries
+    enforce_diversity = True
+    if args.dry_run:
+        effective_max_new_tokens = min(args.max_new_tokens, 96)
+        effective_retries = min(args.retries, 1)
+        enforce_diversity = False
+
     # ── Load model ────────────────────────────────────────────────────────────
-    tokenizer, model = load_model(args.model)
+    tokenizer, model = load_model(args.model, quantize=args.quantize)
     leasing_sampler  = _RoundRobinSampler(LEASING_ISSUES)
     safety_sampler   = _RoundRobinSampler(SAFETY_ISSUES)
 
@@ -732,9 +777,10 @@ def main() -> None:
         result = generate_complaint(
             tokenizer, model, user_prompt,
             expected_labels=target_labels,
-            recent_texts=list(recent_texts),
-            max_new_tokens=args.max_new_tokens,
-            retries=args.retries,
+            recent_texts=(list(recent_texts) if enforce_diversity else None),
+            enforce_diversity=enforce_diversity,
+            max_new_tokens=effective_max_new_tokens,
+            retries=effective_retries,
             do_sample=args.do_sample,
             temperature=args.temperature,
             top_p=args.top_p,
