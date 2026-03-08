@@ -4,7 +4,6 @@ import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
 import { getUser, authHeader } from "../../utils/auth";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { apiUrl } from "../../config/apiBase";
-import PriorityPill from "../../components/common/PriorityPill";
 import novaLogo from "../../assets/nova-logo.png";
 import "./CustomerTicketDetails.css";
 
@@ -212,10 +211,6 @@ export default function CustomerTicketDetails() {
             <h2 className="ctd-ticket-title">{ticket.title}</h2>
 
             <div className="ctd-meta-row">
-              <div className="ctd-meta-item">
-                <span className="ctd-meta-label">Priority</span>
-                <PriorityPill priority={ticket.priority}/>
-              </div>
               <div className="ctd-meta-item">
                 <span className="ctd-meta-label">Created</span>
                 <span className="ctd-meta-value">{ticket.date}</span>
