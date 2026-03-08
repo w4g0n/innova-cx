@@ -13,7 +13,6 @@ import os
 from pathlib import Path
 from functools import lru_cache
 
-import joblib
 from langchain_core.runnables import RunnableLambda
 
 CONFIDENCE_THRESHOLD = 0.75
@@ -63,6 +62,8 @@ def _load_optional_model():
         logger.warning("classifier | model file not found at %s; using heuristic", model_path)
         return None
     try:
+        import joblib  # type: ignore
+
         model = joblib.load(model_path)
         vectorizer_path = os.getenv(VECTORIZER_PATH_ENV, "").strip() or str(
             Path(model_dir) / "vectorizer.pkl"

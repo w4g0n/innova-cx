@@ -9,7 +9,6 @@ import os
 import re
 import sys
 import logging
-import httpx
 from pathlib import Path
 from functools import lru_cache
 from typing import Any
@@ -17,7 +16,6 @@ from typing import Any
 from langchain_core.runnables import RunnableLambda
 
 logger = logging.getLogger(__name__)
-BACKEND_URL = "http://backend:8000"
 
 # Local sentiment pipeline source copied into orchestrator image.
 sys.path.insert(0, "/app/sentiment_pipeline")
@@ -82,28 +80,6 @@ def get_sentiment_diagnostics() -> dict[str, Any]:
 
 
 async def analyze_sentiment(state: dict) -> dict:
-    ticket_id = state.get("ticket_id")
-    if ticket_id and state.get("label") == "complaint":
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(
-                    f"{BACKEND_URL}/api/complaints",
-                    json={"ticket_id": ticket_id, "status": "In Progress"},
-                )
-                resp.raise_for_status()
-                update_result = resp.json()
-                logger.info(
-                    "ticket_status_update | ticket_id=%s status=%s priority=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
-                    update_result.get("ticket_id", ticket_id),
-                    update_result.get("status", "In Progress"),
-                    update_result.get("priority"),
-                    update_result.get("priority_assigned_at"),
-                    update_result.get("respond_due_at"),
-                    update_result.get("resolve_due_at"),
-                )
-        except Exception as exc:
-            logger.warning("sentiment | failed to mark ticket In Progress ticket_id=%s err=%s", ticket_id, exc)
-
     predictor = _load_predictor()
     data = predictor.predict(state["text"])
 

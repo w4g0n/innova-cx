@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import AudioReplyPlayer from "../../components/common/AudioReplyPlayer";
-import { submitTextComplaint, transcribeAudio } from "../../services/api";
+import { submitCustomerTicket, transcribeAudio } from "../../services/api";
 import "./CustomerFillForm.css";
 
 export default function CustomerFillForm({ embedded = false, onCancel, initialType }) {
@@ -113,21 +113,30 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
     const details = (message || "").trim();
     const wasAudio = mode === "Audio";
     try {
-      const orchestratorResult = await submitTextComplaint(details, {
-        ticket_type: initialType ? initialType.toLowerCase() : null,
-        has_audio: wasAudio,
-        audio_features: wasAudio ? latestAudioFeatures : null,
+      const result = await submitCustomerTicket({
+        type: initialType ? initialType.toLowerCase() : "complaint",
+        details,
+        subject: details.slice(0, 80),
+        asset_type: "General",
+        attachments: attachments.map((f) => ({
+          name: f.name,
+          type: f.type || null,
+          size: typeof f.size === "number" ? f.size : null,
+          lastModified: typeof f.lastModified === "number" ? f.lastModified : null,
+        })),
       });
-      const isInquiry = !orchestratorResult?.ticket_id;
-      const ticketId = orchestratorResult?.ticket_id ?? null;
+      const isInquiry = false;
+      const ticketId = result?.ticket?.ticketId ?? null;
       const replyText = isInquiry
-        ? (orchestratorResult?.chatbot_response || "Your inquiry has been received. Our team will respond shortly.")
+        ? "Your inquiry has been received. Our team will respond shortly."
         : `Your request has been successfully submitted. Ticket ID: ${ticketId}. Our team will review and respond as soon as possible.`;
       resetForm();
       setSubmitted({ ticketId, isInquiry, replyText, wasAudio });
     } catch (err) {
       console.error("Ticket creation failed:", err);
-      setErrors({ submit: `Submission failed: ${err.message}` });
+      setErrors({
+        submit: "We could not submit your request right now. Please try again in a moment.",
+      });
     }
   };
 
@@ -237,11 +246,13 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
             </div>
           )}
           <p className="custSuccessText">{submitted.replyText}</p>
-          <AudioReplyPlayer
-            ticketId={submitted.ticketId}
-            isInquiry={submitted.isInquiry}
-            replyText={submitted.replyText}
-          />
+          {submitted.wasAudio && (
+            <AudioReplyPlayer
+              ticketId={submitted.ticketId}
+              isInquiry={submitted.isInquiry}
+              replyText={submitted.replyText}
+            />
+          )}
           <button type="button" className="primaryPillBtn" onClick={() => setSubmitted(null)}>
             Submit Another
           </button>
