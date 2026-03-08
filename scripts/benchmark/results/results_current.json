@@ -1,0 +1,2141 @@
+{
+  "meta": {
+    "model_diagnostics": {
+      "chatbot_model_path": "/app/models/falcon3-1b-instruct",
+      "chatbot_model_exists": true,
+      "chatbot_use_mock": false,
+      "chatbot_mode": "model",
+      "chatbot_model_loaded": false
+    },
+    "tasks_run": [
+      "primary_intent",
+      "secondary_intent",
+      "aggression"
+    ],
+    "timestamp": "2026-03-04T05:51:12Z",
+    "total_elapsed_s": 1380.8
+  },
+  "results": {
+    "primary_intent": [
+      {
+        "id": "pi_001",
+        "user_text": "Can you check the status of my ticket?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 23723.1,
+        "error": null
+      },
+      {
+        "id": "pi_002",
+        "user_text": "What happened with ticket CX-1234?",
+        "expected": "follow_up",
+        "predicted": "create_ticket",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6307.8,
+        "error": null
+      },
+      {
+        "id": "pi_003",
+        "user_text": "I submitted a complaint last week, any update?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6331.9,
+        "error": null
+      },
+      {
+        "id": "pi_004",
+        "user_text": "Track my request",
+        "expected": "follow_up",
+        "predicted": "create_ticket",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6043.5,
+        "error": null
+      },
+      {
+        "id": "pi_005",
+        "user_text": "My ticket number is CX-ABCDEF",
+        "expected": "follow_up",
+        "predicted": "create_ticket",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6262.7,
+        "error": null
+      },
+      {
+        "id": "pi_006",
+        "user_text": "Has anyone looked at my report yet?",
+        "expected": "follow_up",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5710.3,
+        "error": null
+      },
+      {
+        "id": "pi_007",
+        "user_text": "I want to follow up on my previous complaint",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6227.2,
+        "error": null
+      },
+      {
+        "id": "pi_008",
+        "user_text": "Any progress on issue 4521?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6620.5,
+        "error": null
+      },
+      {
+        "id": "pi_009",
+        "user_text": "The ticket I submitted on Monday, what is the status?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6483.9,
+        "error": null
+      },
+      {
+        "id": "pi_010",
+        "user_text": "Update on my maintenance request please",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6420.0,
+        "error": null
+      },
+      {
+        "id": "pi_011",
+        "user_text": "Checking on my open ticket",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6426.0,
+        "error": null
+      },
+      {
+        "id": "pi_012",
+        "user_text": "Status update requested for my issue",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6365.9,
+        "error": null
+      },
+      {
+        "id": "pi_013",
+        "user_text": "I filed a request 3 days ago and have heard nothing",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6555.2,
+        "error": null
+      },
+      {
+        "id": "pi_014",
+        "user_text": "CX-999888 what is the current status?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6446.8,
+        "error": null
+      },
+      {
+        "id": "pi_015",
+        "user_text": "Has my ticket been assigned to anyone?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6537.4,
+        "error": null
+      },
+      {
+        "id": "pi_016",
+        "user_text": "I need an update on my repair request",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6571.7,
+        "error": null
+      },
+      {
+        "id": "pi_017",
+        "user_text": "Following up on my complaint about the broken AC",
+        "expected": "follow_up",
+        "predicted": "create_ticket",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6372.2,
+        "error": null
+      },
+      {
+        "id": "pi_018",
+        "user_text": "Can someone tell me when my issue will be fixed?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6600.0,
+        "error": null
+      },
+      {
+        "id": "pi_019",
+        "user_text": "Ticket 4872, is it resolved yet?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6511.9,
+        "error": null
+      },
+      {
+        "id": "pi_020",
+        "user_text": "My escalation from last Tuesday, what is happening?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6398.4,
+        "error": null
+      },
+      {
+        "id": "pi_021",
+        "user_text": "I raised an issue about water damage, what is the status?",
+        "expected": "follow_up",
+        "predicted": "create_ticket",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6528.3,
+        "error": null
+      },
+      {
+        "id": "pi_022",
+        "user_text": "Progress update needed for my facility request",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6505.5,
+        "error": null
+      },
+      {
+        "id": "pi_023",
+        "user_text": "When will my maintenance ticket be addressed?",
+        "expected": "follow_up",
+        "predicted": "create_ticket",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6764.3,
+        "error": null
+      },
+      {
+        "id": "pi_024",
+        "user_text": "Reference number ABC-123, any news?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6769.8,
+        "error": null
+      },
+      {
+        "id": "pi_025",
+        "user_text": "Check my open cases",
+        "expected": "follow_up",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5933.7,
+        "error": null
+      },
+      {
+        "id": "pi_026",
+        "user_text": "Did anyone respond to my complaint?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6326.3,
+        "error": null
+      },
+      {
+        "id": "pi_027",
+        "user_text": "My ticket from the facilities team, still unresolved",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6532.0,
+        "error": null
+      },
+      {
+        "id": "pi_028",
+        "user_text": "Still waiting on my repair request from last week",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6483.2,
+        "error": null
+      },
+      {
+        "id": "pi_029",
+        "user_text": "Where is my complaint in the queue?",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6373.0,
+        "error": null
+      },
+      {
+        "id": "pi_030",
+        "user_text": "I want to know if my ticket is resolved",
+        "expected": "follow_up",
+        "predicted": "follow_up",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6423.2,
+        "error": null
+      },
+      {
+        "id": "pi_031",
+        "user_text": "The elevator in building B is broken",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6411.4,
+        "error": null
+      },
+      {
+        "id": "pi_032",
+        "user_text": "I need to report a water leak in the office",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6591.1,
+        "error": null
+      },
+      {
+        "id": "pi_033",
+        "user_text": "My access card stopped working this morning",
+        "expected": "create_ticket",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5768.1,
+        "error": null
+      },
+      {
+        "id": "pi_034",
+        "user_text": "The air conditioning has been off for two days",
+        "expected": "create_ticket",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6007.6,
+        "error": null
+      },
+      {
+        "id": "pi_035",
+        "user_text": "There is a broken window in the warehouse",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6688.6,
+        "error": null
+      },
+      {
+        "id": "pi_036",
+        "user_text": "I want to submit a new request",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6329.0,
+        "error": null
+      },
+      {
+        "id": "pi_037",
+        "user_text": "How do I reset my building pass?",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6519.3,
+        "error": null
+      },
+      {
+        "id": "pi_038",
+        "user_text": "The lights in the conference room are flickering",
+        "expected": "create_ticket",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5933.2,
+        "error": null
+      },
+      {
+        "id": "pi_039",
+        "user_text": "There is a loud noise coming from the HVAC system",
+        "expected": "create_ticket",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5859.1,
+        "error": null
+      },
+      {
+        "id": "pi_040",
+        "user_text": "I need to log a maintenance issue urgently",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6438.4,
+        "error": null
+      },
+      {
+        "id": "pi_041",
+        "user_text": "The parking barrier is stuck and cars cannot get in",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6502.7,
+        "error": null
+      },
+      {
+        "id": "pi_042",
+        "user_text": "My office key fob is not working",
+        "expected": "create_ticket",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5824.9,
+        "error": null
+      },
+      {
+        "id": "pi_043",
+        "user_text": "There is a fire alarm going off intermittently",
+        "expected": "create_ticket",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5790.1,
+        "error": null
+      },
+      {
+        "id": "pi_044",
+        "user_text": "I want to raise an issue about the restroom facilities",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6593.6,
+        "error": null
+      },
+      {
+        "id": "pi_045",
+        "user_text": "The network printer on floor 3 is jammed",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6578.9,
+        "error": null
+      },
+      {
+        "id": "pi_046",
+        "user_text": "I need to report a safety hazard",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6367.3,
+        "error": null
+      },
+      {
+        "id": "pi_047",
+        "user_text": "The loading dock door is broken and stuck open",
+        "expected": "create_ticket",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5949.9,
+        "error": null
+      },
+      {
+        "id": "pi_048",
+        "user_text": "Can I submit a request for a new desk?",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6610.0,
+        "error": null
+      },
+      {
+        "id": "pi_049",
+        "user_text": "The coffee machine in the break room is leaking",
+        "expected": "create_ticket",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5816.7,
+        "error": null
+      },
+      {
+        "id": "pi_050",
+        "user_text": "I have a new complaint to make",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6518.1,
+        "error": null
+      },
+      {
+        "id": "pi_051",
+        "user_text": "The heating system in warehouse 2 is not working",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6594.5,
+        "error": null
+      },
+      {
+        "id": "pi_052",
+        "user_text": "I would like to log a new ticket please",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6352.4,
+        "error": null
+      },
+      {
+        "id": "pi_053",
+        "user_text": "Report a fault in the generator room",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6387.6,
+        "error": null
+      },
+      {
+        "id": "pi_054",
+        "user_text": "There is mold growing on the ceiling above my desk",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6482.1,
+        "error": null
+      },
+      {
+        "id": "pi_055",
+        "user_text": "The security camera on floor 4 is damaged",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6482.1,
+        "error": null
+      },
+      {
+        "id": "pi_056",
+        "user_text": "I need help with a broken door handle in the stairwell",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6422.8,
+        "error": null
+      },
+      {
+        "id": "pi_057",
+        "user_text": "The backup generator failed during testing",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6528.5,
+        "error": null
+      },
+      {
+        "id": "pi_058",
+        "user_text": "I want to raise a concern about pest control in the warehouse",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6712.0,
+        "error": null
+      },
+      {
+        "id": "pi_059",
+        "user_text": "New issue with the fire suppression system",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6314.9,
+        "error": null
+      },
+      {
+        "id": "pi_060",
+        "user_text": "I need to submit an urgent maintenance request",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6526.2,
+        "error": null
+      },
+      {
+        "id": "pi_061",
+        "user_text": "The roof is leaking above my workstation",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6551.0,
+        "error": null
+      },
+      {
+        "id": "pi_062",
+        "user_text": "Broken lock on the main entrance door",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6360.9,
+        "error": null
+      },
+      {
+        "id": "pi_063",
+        "user_text": "I want to create a new support request today",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 11970.5,
+        "error": null
+      },
+      {
+        "id": "pi_064",
+        "user_text": "The server room temperature alarm is triggered",
+        "expected": "create_ticket",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 7616.0,
+        "error": null
+      },
+      {
+        "id": "pi_065",
+        "user_text": "My building pass needs to be reactivated",
+        "expected": "create_ticket",
+        "predicted": "create_ticket",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6588.6,
+        "error": null
+      },
+      {
+        "id": "pi_066",
+        "user_text": "Hello",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5925.6,
+        "error": null
+      },
+      {
+        "id": "pi_067",
+        "user_text": "Hi there",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5993.6,
+        "error": null
+      },
+      {
+        "id": "pi_068",
+        "user_text": "Yes",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5721.8,
+        "error": null
+      },
+      {
+        "id": "pi_069",
+        "user_text": "No",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5936.5,
+        "error": null
+      },
+      {
+        "id": "pi_070",
+        "user_text": "Maybe",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5933.1,
+        "error": null
+      },
+      {
+        "id": "pi_071",
+        "user_text": "OK",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5730.9,
+        "error": null
+      },
+      {
+        "id": "pi_072",
+        "user_text": "Thank you",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5996.5,
+        "error": null
+      },
+      {
+        "id": "pi_073",
+        "user_text": "Good morning",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5993.8,
+        "error": null
+      },
+      {
+        "id": "pi_074",
+        "user_text": "What can you do?",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5748.3,
+        "error": null
+      },
+      {
+        "id": "pi_075",
+        "user_text": "I am not sure what I want",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5769.9,
+        "error": null
+      },
+      {
+        "id": "pi_076",
+        "user_text": "Just checking in",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5983.0,
+        "error": null
+      },
+      {
+        "id": "pi_077",
+        "user_text": "Test",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5914.5,
+        "error": null
+      },
+      {
+        "id": "pi_078",
+        "user_text": "Hmm",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5730.4,
+        "error": null
+      },
+      {
+        "id": "pi_079",
+        "user_text": "How does this work?",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5893.5,
+        "error": null
+      },
+      {
+        "id": "pi_080",
+        "user_text": "Never mind forget it",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5935.9,
+        "error": null
+      }
+    ],
+    "secondary_intent": [
+      {
+        "id": "si_001",
+        "user_text": "How do I request a parking permit?",
+        "expected": "inquiry",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5828.1,
+        "error": null
+      },
+      {
+        "id": "si_002",
+        "user_text": "What are the office opening hours on weekends?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6315.1,
+        "error": null
+      },
+      {
+        "id": "si_003",
+        "user_text": "Who is responsible for facility maintenance?",
+        "expected": "inquiry",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5843.5,
+        "error": null
+      },
+      {
+        "id": "si_004",
+        "user_text": "How do I book a meeting room?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6390.6,
+        "error": null
+      },
+      {
+        "id": "si_005",
+        "user_text": "What is the process for reporting a safety concern?",
+        "expected": "inquiry",
+        "predicted": "complaint",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6199.1,
+        "error": null
+      },
+      {
+        "id": "si_006",
+        "user_text": "Can you tell me the WiFi password for the warehouse?",
+        "expected": "inquiry",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6178.4,
+        "error": null
+      },
+      {
+        "id": "si_007",
+        "user_text": "How do I access the IT helpdesk?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6347.8,
+        "error": null
+      },
+      {
+        "id": "si_008",
+        "user_text": "What is the policy for remote work equipment?",
+        "expected": "inquiry",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5842.5,
+        "error": null
+      },
+      {
+        "id": "si_009",
+        "user_text": "How do I request a visitor badge?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6245.9,
+        "error": null
+      },
+      {
+        "id": "si_010",
+        "user_text": "What floor is HR located on?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6252.5,
+        "error": null
+      },
+      {
+        "id": "si_011",
+        "user_text": "Can you explain the equipment return process?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6125.7,
+        "error": null
+      },
+      {
+        "id": "si_012",
+        "user_text": "How do I submit an expenses claim?",
+        "expected": "inquiry",
+        "predicted": "complaint",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6164.8,
+        "error": null
+      },
+      {
+        "id": "si_013",
+        "user_text": "What are the emergency evacuation procedures?",
+        "expected": "inquiry",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5794.0,
+        "error": null
+      },
+      {
+        "id": "si_014",
+        "user_text": "How do I get a replacement access card?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 12090.1,
+        "error": null
+      },
+      {
+        "id": "si_015",
+        "user_text": "Who should I contact for payroll questions?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6258.2,
+        "error": null
+      },
+      {
+        "id": "si_016",
+        "user_text": "What are the catering options for the conference room?",
+        "expected": "inquiry",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6008.0,
+        "error": null
+      },
+      {
+        "id": "si_017",
+        "user_text": "How do I request a desk move?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6071.7,
+        "error": null
+      },
+      {
+        "id": "si_018",
+        "user_text": "What is the process for ordering office supplies?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6343.1,
+        "error": null
+      },
+      {
+        "id": "si_019",
+        "user_text": "How long does it take for maintenance requests to be processed?",
+        "expected": "inquiry",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6178.1,
+        "error": null
+      },
+      {
+        "id": "si_020",
+        "user_text": "Where is the nearest first aid kit?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6179.3,
+        "error": null
+      },
+      {
+        "id": "si_021",
+        "user_text": "Can I get information about the gym membership benefit?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6145.4,
+        "error": null
+      },
+      {
+        "id": "si_022",
+        "user_text": "What are the CCTV policy details?",
+        "expected": "inquiry",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5979.8,
+        "error": null
+      },
+      {
+        "id": "si_023",
+        "user_text": "How do I update my emergency contact information?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6363.6,
+        "error": null
+      },
+      {
+        "id": "si_024",
+        "user_text": "What cleaning services are available after hours?",
+        "expected": "inquiry",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5856.2,
+        "error": null
+      },
+      {
+        "id": "si_025",
+        "user_text": "Can someone explain the visitor sign-in process?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6363.8,
+        "error": null
+      },
+      {
+        "id": "si_026",
+        "user_text": "What is the maximum capacity for the boardroom?",
+        "expected": "inquiry",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6066.9,
+        "error": null
+      },
+      {
+        "id": "si_027",
+        "user_text": "How do I report a concern about workplace safety?",
+        "expected": "inquiry",
+        "predicted": "complaint",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6157.2,
+        "error": null
+      },
+      {
+        "id": "si_028",
+        "user_text": "What are the rules for using the kitchen area?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6307.2,
+        "error": null
+      },
+      {
+        "id": "si_029",
+        "user_text": "Can you tell me about the recycling policy?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6366.7,
+        "error": null
+      },
+      {
+        "id": "si_030",
+        "user_text": "How do I access IT support outside of business hours?",
+        "expected": "inquiry",
+        "predicted": "inquiry",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6290.1,
+        "error": null
+      },
+      {
+        "id": "si_031",
+        "user_text": "The elevator has been out of service for three days",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6222.5,
+        "error": null
+      },
+      {
+        "id": "si_032",
+        "user_text": "My office badge was rejected at the gate this morning",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5932.6,
+        "error": null
+      },
+      {
+        "id": "si_033",
+        "user_text": "The air conditioning in our section is broken and it is very hot",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6516.7,
+        "error": null
+      },
+      {
+        "id": "si_034",
+        "user_text": "There is a water leak coming through the ceiling",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5844.9,
+        "error": null
+      },
+      {
+        "id": "si_035",
+        "user_text": "The generator failed during the power test last night",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6038.7,
+        "error": null
+      },
+      {
+        "id": "si_036",
+        "user_text": "I was denied access to the car park due to a barrier fault",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6505.9,
+        "error": null
+      },
+      {
+        "id": "si_037",
+        "user_text": "The HVAC system is making a loud banging noise",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6123.2,
+        "error": null
+      },
+      {
+        "id": "si_038",
+        "user_text": "My workstation was damaged during the office move",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6226.0,
+        "error": null
+      },
+      {
+        "id": "si_039",
+        "user_text": "The shared printer has been jammed for two days",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6376.6,
+        "error": null
+      },
+      {
+        "id": "si_040",
+        "user_text": "There is a persistent smell of gas near the loading dock",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6049.0,
+        "error": null
+      },
+      {
+        "id": "si_041",
+        "user_text": "The fire door on level 3 will not close properly",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6102.7,
+        "error": null
+      },
+      {
+        "id": "si_042",
+        "user_text": "My locker combination no longer works",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5982.2,
+        "error": null
+      },
+      {
+        "id": "si_043",
+        "user_text": "The lights in the storage room have been broken for a week",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6503.1,
+        "error": null
+      },
+      {
+        "id": "si_044",
+        "user_text": "The security alarm went off at 3am with no cause",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5975.4,
+        "error": null
+      },
+      {
+        "id": "si_045",
+        "user_text": "The broken tile in the lobby is a trip hazard",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6300.5,
+        "error": null
+      },
+      {
+        "id": "si_046",
+        "user_text": "The cleaners did not come to our floor this week",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6300.7,
+        "error": null
+      },
+      {
+        "id": "si_047",
+        "user_text": "The tap in the staff kitchen is dripping constantly",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5840.1,
+        "error": null
+      },
+      {
+        "id": "si_048",
+        "user_text": "The toilet in the second floor bathroom is blocked",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6038.2,
+        "error": null
+      },
+      {
+        "id": "si_049",
+        "user_text": "The building intercom system is not working",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5942.6,
+        "error": null
+      },
+      {
+        "id": "si_050",
+        "user_text": "A window is cracked and letting in cold air and water",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6233.9,
+        "error": null
+      },
+      {
+        "id": "si_051",
+        "user_text": "My chair was delivered damaged",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6092.0,
+        "error": null
+      },
+      {
+        "id": "si_052",
+        "user_text": "The power outlet next to my desk is sparking",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6069.5,
+        "error": null
+      },
+      {
+        "id": "si_053",
+        "user_text": "The roof in the warehouse section has been leaking for a month",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6171.5,
+        "error": null
+      },
+      {
+        "id": "si_054",
+        "user_text": "The server room AC failed overnight and temperatures are critical",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6140.7,
+        "error": null
+      },
+      {
+        "id": "si_055",
+        "user_text": "The vending machine took my money and gave nothing",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6324.3,
+        "error": null
+      },
+      {
+        "id": "si_056",
+        "user_text": "The loading dock ramp has a serious defect and is unsafe",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6459.1,
+        "error": null
+      },
+      {
+        "id": "si_057",
+        "user_text": "The waste collection was not done this week",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5873.5,
+        "error": null
+      },
+      {
+        "id": "si_058",
+        "user_text": "The maintenance team did not show up for the scheduled repair",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6534.8,
+        "error": null
+      },
+      {
+        "id": "si_059",
+        "user_text": "The pest control treatment did not work, there are still rodents",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6466.7,
+        "error": null
+      },
+      {
+        "id": "si_060",
+        "user_text": "The backup power supply failed during today's drill",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5886.9,
+        "error": null
+      },
+      {
+        "id": "si_061",
+        "user_text": "My access has been restricted incorrectly",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5870.0,
+        "error": null
+      },
+      {
+        "id": "si_062",
+        "user_text": "The safety inspection was not completed as scheduled",
+        "expected": "complaint",
+        "predicted": "unknown",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 5984.2,
+        "error": null
+      },
+      {
+        "id": "si_063",
+        "user_text": "The grease trap in the kitchen has overflowed",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6453.1,
+        "error": null
+      },
+      {
+        "id": "si_064",
+        "user_text": "The office heating is completely off and it is very cold",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6348.0,
+        "error": null
+      },
+      {
+        "id": "si_065",
+        "user_text": "The motion sensor lights in the corridor are broken",
+        "expected": "complaint",
+        "predicted": "complaint",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6413.5,
+        "error": null
+      },
+      {
+        "id": "si_066",
+        "user_text": "I am not sure what I need",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 6002.4,
+        "error": null
+      },
+      {
+        "id": "si_067",
+        "user_text": "Something happened",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5940.5,
+        "error": null
+      },
+      {
+        "id": "si_068",
+        "user_text": "Yes it is about the building",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5995.4,
+        "error": null
+      },
+      {
+        "id": "si_069",
+        "user_text": "I just want to talk to someone",
+        "expected": "unknown",
+        "predicted": "inquiry",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6282.9,
+        "error": null
+      },
+      {
+        "id": "si_070",
+        "user_text": "It is urgent",
+        "expected": "unknown",
+        "predicted": "complaint",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6040.4,
+        "error": null
+      },
+      {
+        "id": "si_071",
+        "user_text": "Can you help me",
+        "expected": "unknown",
+        "predicted": "inquiry",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6065.7,
+        "error": null
+      },
+      {
+        "id": "si_072",
+        "user_text": "I have a situation",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5977.2,
+        "error": null
+      },
+      {
+        "id": "si_073",
+        "user_text": "There is something wrong",
+        "expected": "unknown",
+        "predicted": "complaint",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 7136.9,
+        "error": null
+      },
+      {
+        "id": "si_074",
+        "user_text": "I need assistance",
+        "expected": "unknown",
+        "predicted": "inquiry",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6079.1,
+        "error": null
+      },
+      {
+        "id": "si_075",
+        "user_text": "I do not know how to describe it",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5982.0,
+        "error": null
+      },
+      {
+        "id": "si_076",
+        "user_text": "It is complicated",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5945.9,
+        "error": null
+      },
+      {
+        "id": "si_077",
+        "user_text": "Everything",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5898.9,
+        "error": null
+      },
+      {
+        "id": "si_078",
+        "user_text": "This is about the facility",
+        "expected": "unknown",
+        "predicted": "unknown",
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 5992.1,
+        "error": null
+      },
+      {
+        "id": "si_079",
+        "user_text": "I have a general question or maybe a complaint",
+        "expected": "unknown",
+        "predicted": "inquiry",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6383.0,
+        "error": null
+      },
+      {
+        "id": "si_080",
+        "user_text": "Maybe a complaint or maybe not",
+        "expected": "unknown",
+        "predicted": "complaint",
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 6084.7,
+        "error": null
+      }
+    ],
+    "aggression": [
+      {
+        "id": "ag_001",
+        "user_text": "This is completely unacceptable, fix it NOW",
+        "expected": true,
+        "predicted": true,
+        "score": 0.82,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8713.1,
+        "error": null
+      },
+      {
+        "id": "ag_002",
+        "user_text": "I am going to report your entire department if this is not fixed today",
+        "expected": true,
+        "predicted": true,
+        "score": 0.87,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8861.6,
+        "error": null
+      },
+      {
+        "id": "ag_003",
+        "user_text": "Your company is useless, I have been waiting for three weeks",
+        "expected": true,
+        "predicted": true,
+        "score": 0.78,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8579.5,
+        "error": null
+      },
+      {
+        "id": "ag_004",
+        "user_text": "ABSOLUTE JOKE. Nobody responds, nobody cares about customers",
+        "expected": true,
+        "predicted": true,
+        "score": 0.8,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8548.0,
+        "error": null
+      },
+      {
+        "id": "ag_005",
+        "user_text": "If this is not resolved in the next hour I am contacting your CEO",
+        "expected": true,
+        "predicted": true,
+        "score": 0.85,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8669.3,
+        "error": null
+      },
+      {
+        "id": "ag_006",
+        "user_text": "I swear if one more thing goes wrong I will lose my mind",
+        "expected": true,
+        "predicted": true,
+        "score": 0.85,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8990.6,
+        "error": null
+      },
+      {
+        "id": "ag_007",
+        "user_text": "You people are incompetent, this is a total disgrace",
+        "expected": true,
+        "predicted": true,
+        "score": 0.9,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8819.3,
+        "error": null
+      },
+      {
+        "id": "ag_008",
+        "user_text": "I am furious. This has been ignored for three weeks straight",
+        "expected": true,
+        "predicted": true,
+        "score": 0.85,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8794.4,
+        "error": null
+      },
+      {
+        "id": "ag_009",
+        "user_text": "This is ridiculous. Sort it out or I will escalate to management immediately",
+        "expected": true,
+        "predicted": true,
+        "score": 0.75,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8921.1,
+        "error": null
+      },
+      {
+        "id": "ag_010",
+        "user_text": "Nobody in this company does their job. I am beyond angry",
+        "expected": true,
+        "predicted": true,
+        "score": 0.9,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8316.7,
+        "error": null
+      },
+      {
+        "id": "ag_011",
+        "user_text": "Fix this NOW or I will take this to the board of directors",
+        "expected": true,
+        "predicted": true,
+        "score": 0.91,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8887.2,
+        "error": null
+      },
+      {
+        "id": "ag_012",
+        "user_text": "I have sent five messages and nobody responds. This is outrageous",
+        "expected": true,
+        "predicted": true,
+        "score": 0.8,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8709.6,
+        "error": null
+      },
+      {
+        "id": "ag_013",
+        "user_text": "Your service is a complete failure and I am done waiting",
+        "expected": true,
+        "predicted": true,
+        "score": 0.95,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8942.9,
+        "error": null
+      },
+      {
+        "id": "ag_014",
+        "user_text": "I will be filing a formal complaint against your entire team",
+        "expected": true,
+        "predicted": true,
+        "score": 0.98,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8999.9,
+        "error": null
+      },
+      {
+        "id": "ag_015",
+        "user_text": "How dare you ignore my requests for this long. This is unacceptable",
+        "expected": true,
+        "predicted": true,
+        "score": 0.85,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8762.3,
+        "error": null
+      },
+      {
+        "id": "ag_016",
+        "user_text": "This is the worst support I have ever received in my entire life",
+        "expected": true,
+        "predicted": true,
+        "score": 0.98,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8842.0,
+        "error": null
+      },
+      {
+        "id": "ag_017",
+        "user_text": "If you do not fix this today I will escalate to your manager and HR",
+        "expected": true,
+        "predicted": true,
+        "score": 0.85,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8837.8,
+        "error": null
+      },
+      {
+        "id": "ag_018",
+        "user_text": "I am absolutely livid. This problem has been open for a month",
+        "expected": true,
+        "predicted": true,
+        "score": 0.92,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8967.1,
+        "error": null
+      },
+      {
+        "id": "ag_019",
+        "user_text": "You have wasted my entire day, this is completely unacceptable behaviour",
+        "expected": true,
+        "predicted": true,
+        "score": 0.95,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8679.0,
+        "error": null
+      },
+      {
+        "id": "ag_020",
+        "user_text": "I am threatening to go to HR if this is not resolved immediately",
+        "expected": true,
+        "predicted": true,
+        "score": 0.85,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8938.1,
+        "error": null
+      },
+      {
+        "id": "ag_021",
+        "user_text": "I am a bit frustrated as this has taken a while",
+        "expected": false,
+        "predicted": false,
+        "score": 0.55,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 9117.1,
+        "error": null
+      },
+      {
+        "id": "ag_022",
+        "user_text": "I would appreciate a quicker response next time",
+        "expected": false,
+        "predicted": false,
+        "score": 0.52,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8969.2,
+        "error": null
+      },
+      {
+        "id": "ag_023",
+        "user_text": "This is my second time following up on this issue",
+        "expected": false,
+        "predicted": false,
+        "score": 0.65,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 9392.4,
+        "error": null
+      },
+      {
+        "id": "ag_024",
+        "user_text": "I understand you are busy but this is important to me",
+        "expected": false,
+        "predicted": false,
+        "score": 0.67,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8851.7,
+        "error": null
+      },
+      {
+        "id": "ag_025",
+        "user_text": "Could you please prioritise this request",
+        "expected": false,
+        "predicted": false,
+        "score": 0.68,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 9108.1,
+        "error": null
+      },
+      {
+        "id": "ag_026",
+        "user_text": "I have been waiting a few days and would like an update",
+        "expected": false,
+        "predicted": true,
+        "score": 0.75,
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 8655.4,
+        "error": null
+      },
+      {
+        "id": "ag_027",
+        "user_text": "I am getting worried about this safety issue",
+        "expected": false,
+        "predicted": false,
+        "score": 0.65,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8983.7,
+        "error": null
+      },
+      {
+        "id": "ag_028",
+        "user_text": "Please could someone look at this soon",
+        "expected": false,
+        "predicted": true,
+        "score": 0.91,
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 8897.3,
+        "error": null
+      },
+      {
+        "id": "ag_029",
+        "user_text": "I feel like my request is being overlooked",
+        "expected": false,
+        "predicted": false,
+        "score": 0.65,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8920.7,
+        "error": null
+      },
+      {
+        "id": "ag_030",
+        "user_text": "It has been over a week and I am concerned about the progress",
+        "expected": false,
+        "predicted": false,
+        "score": 0.38,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8802.4,
+        "error": null
+      },
+      {
+        "id": "ag_031",
+        "user_text": "I would like this escalated if possible please",
+        "expected": false,
+        "predicted": true,
+        "score": 0.85,
+        "correct": false,
+        "parse_success": true,
+        "latency_ms": 8833.4,
+        "error": null
+      },
+      {
+        "id": "ag_032",
+        "user_text": "I am not trying to be difficult but this is urgent",
+        "expected": false,
+        "predicted": false,
+        "score": 0.65,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 9064.2,
+        "error": null
+      },
+      {
+        "id": "ag_033",
+        "user_text": "I am disappointed that this has not been resolved yet",
+        "expected": false,
+        "predicted": false,
+        "score": 0.65,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8903.8,
+        "error": null
+      },
+      {
+        "id": "ag_034",
+        "user_text": "My patience is running thin but I understand you are trying",
+        "expected": false,
+        "predicted": false,
+        "score": 0.43,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8968.5,
+        "error": null
+      },
+      {
+        "id": "ag_035",
+        "user_text": "This is the third time I have raised this concern",
+        "expected": false,
+        "predicted": false,
+        "score": 0.72,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8722.9,
+        "error": null
+      },
+      {
+        "id": "ag_036",
+        "user_text": "I am just wondering if there is any progress on my request",
+        "expected": false,
+        "predicted": false,
+        "score": 0.65,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8823.2,
+        "error": null
+      },
+      {
+        "id": "ag_037",
+        "user_text": "I would like to speak to a supervisor if that is possible",
+        "expected": false,
+        "predicted": false,
+        "score": 0.5,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 9990.3,
+        "error": null
+      },
+      {
+        "id": "ag_038",
+        "user_text": "This issue is affecting my work and I need it resolved soon",
+        "expected": false,
+        "predicted": false,
+        "score": 0.7,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8814.2,
+        "error": null
+      },
+      {
+        "id": "ag_039",
+        "user_text": "I appreciate your help but this is taking too long",
+        "expected": false,
+        "predicted": false,
+        "score": 0.53,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 9016.4,
+        "error": null
+      },
+      {
+        "id": "ag_040",
+        "user_text": "Please let me know when someone will address this issue",
+        "expected": false,
+        "predicted": false,
+        "score": 0.65,
+        "correct": true,
+        "parse_success": true,
+        "latency_ms": 8932.0,
+        "error": null
+      }
+    ]
+  },
+  "summary": {
+    "primary_intent": {
+      "total": 80,
+      "correct": 63,
+      "accuracy_pct": 78.8,
+      "parse_success_rate_pct": 100.0,
+      "latency_mean_ms": 6584.4,
+      "latency_p50_ms": 6398.4,
+      "latency_p95_ms": 6769.8,
+      "per_label": {
+        "follow_up": {
+          "total": 30,
+          "correct": 22,
+          "accuracy": 73.3
+        },
+        "create_ticket": {
+          "total": 35,
+          "correct": 26,
+          "accuracy": 74.3
+        },
+        "unknown": {
+          "total": 15,
+          "correct": 15,
+          "accuracy": 100.0
+        }
+      }
+    },
+    "secondary_intent": {
+      "total": 80,
+      "correct": 43,
+      "accuracy_pct": 53.8,
+      "parse_success_rate_pct": 100.0,
+      "latency_mean_ms": 6231.3,
+      "latency_p50_ms": 6145.4,
+      "latency_p95_ms": 6516.7,
+      "per_label": {
+        "inquiry": {
+          "total": 30,
+          "correct": 17,
+          "accuracy": 56.7
+        },
+        "complaint": {
+          "total": 35,
+          "correct": 18,
+          "accuracy": 51.4
+        },
+        "unknown": {
+          "total": 15,
+          "correct": 8,
+          "accuracy": 53.3
+        }
+      }
+    },
+    "aggression": {
+      "total": 40,
+      "correct": 37,
+      "accuracy_pct": 92.5,
+      "parse_success_rate_pct": 100.0,
+      "latency_mean_ms": 8888.7,
+      "latency_p50_ms": 8887.2,
+      "latency_p95_ms": 9392.4,
+      "per_label": {
+        "True": {
+          "total": 20,
+          "correct": 20,
+          "accuracy": 100.0
+        },
+        "False": {
+          "total": 20,
+          "correct": 17,
+          "accuracy": 85.0
+        }
+      }
+    }
+  }
+}
