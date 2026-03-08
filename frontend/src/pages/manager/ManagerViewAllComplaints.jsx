@@ -126,7 +126,7 @@ export default function ManagerViewComplaints() {
       .then((data) => data && setRows(data || []))
       .catch((err) => { console.error("Failed to fetch tickets:", err); setRows([]); });
 
-    fetch(apiUrl("/manager/departments"), { headers })
+    fetch(apiUrl("/api/manager/departments"), { headers })
       .then((res) => res.json())
       .then((data) => Array.isArray(data) && setDepartments(data))
       .catch(() => {});
@@ -189,7 +189,7 @@ export default function ManagerViewComplaints() {
   const confirmAssignment = async () => {
     if (!activeTicketId) return;
     try {
-      const res = await fetch(apiUrl(`/manager/complaints/${activeTicketId}/assign`), {
+      const res = await fetch(apiUrl(`/api/manager/complaints/${activeTicketId}/assign`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ employee_name: selectedEmployee || null }),
@@ -222,7 +222,7 @@ export default function ManagerViewComplaints() {
 
   const handleReroute = async (ticketId, dept) => {
     try {
-      const res = await fetch(apiUrl(`/manager/complaints/${ticketId}/department`), {
+      const res = await fetch(apiUrl(`/api/manager/complaints/${ticketId}/department`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ department: dept }),
