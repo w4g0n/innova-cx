@@ -532,7 +532,7 @@ CREATE TABLE IF NOT EXISTS department_routing (
   confidence_score     NUMERIC(5,2) NOT NULL CHECK (confidence_score >= 0 AND confidence_score <= 100),
   is_confident         BOOLEAN NOT NULL,
   final_department     TEXT,
-  routed_by            TEXT CHECK (routed_by IN ('model', 'manager')),
+  routed_by            TEXT CHECK (routed_by IN ('model', 'manager', 'manager_denied')),
   manager_id           UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()

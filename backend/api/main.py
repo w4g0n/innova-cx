@@ -182,6 +182,39 @@ def _ensure_runtime_schema_compatibility() -> None:
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
+
+                # FIX (Issue 3 — department_routing table missing):
+                # The live DB volume may pre-date when department_routing was added to init.sql.
+                # Create it here idempotently so the routing review feature works on all envs.
+                # Note: routed_by includes manager_denied (used by the Deny routing action).
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS department_routing (
+                      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+                      suggested_department TEXT NOT NULL,
+                      confidence_score     NUMERIC(5,2) NOT NULL CHECK (confidence_score >= 0 AND confidence_score <= 100),
+                      is_confident         BOOLEAN NOT NULL,
+                      final_department     TEXT,
+                      routed_by            TEXT CHECK (routed_by IN ('model', 'manager', 'manager_denied')),
+                      manager_id           UUID REFERENCES users(id) ON DELETE SET NULL,
+                      created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+                      updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+                    );
+                """)
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_department_routing_ticket ON department_routing(ticket_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_department_routing_pending ON department_routing(is_confident, final_department, created_at DESC);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_department_routing_finalized ON department_routing(final_department, routed_by, updated_at DESC);")
+                # If the table already existed with the old constraint (no manager_denied),
+                # widen it safely. PostgreSQL allows dropping and re-adding a CHECK constraint.
+                cur.execute("""
+                    DO $$
+                    BEGIN
+                        ALTER TABLE department_routing DROP CONSTRAINT IF EXISTS department_routing_routed_by_check;
+                        ALTER TABLE department_routing ADD CONSTRAINT department_routing_routed_by_check
+                            CHECK (routed_by IN ('model', 'manager', 'manager_denied'));
+                    EXCEPTION WHEN OTHERS THEN NULL;
+                    END $$;
+                """)
     except Exception as exc:
         logger.warning("db_compat | failed to apply compatibility DDL: %s", exc)
 
@@ -1768,6 +1801,57 @@ def employee_resolve_ticket(
                     (row["id"], row["id"], user_id, body.steps_taken.strip()),
                 )
 
+            # ── Notifications on employee resolve ──────────────────────────
+            # Fetch related user IDs and priority for notifications.
+            cur.execute(
+                """
+                SELECT created_by_user_id, priority
+                FROM tickets
+                WHERE id = %s
+                LIMIT 1;
+                """,
+                (existing["id"],),
+            )
+            t_extra = cur.fetchone() or {}
+            t_priority   = t_extra.get("priority")
+            customer_uid = t_extra.get("created_by_user_id")
+
+            # Notify the resolving employee (confirmation)
+            _insert_notification(
+                cur,
+                user_id=str(user_id),
+                notif_type="status_change",
+                title=f"Ticket Resolved: {row['ticket_code']}",
+                message=f"You resolved ticket {row['ticket_code']}. Resolution: {final_resolution[:120]}",
+                ticket_id=str(existing["id"]),
+                priority=t_priority,
+            )
+
+            # Notify manager
+            manager_row = fetch_one("SELECT id FROM users WHERE role = 'manager' LIMIT 1;")
+            if manager_row and str(manager_row["id"]) != str(user_id):
+                _insert_notification(
+                    cur,
+                    user_id=str(manager_row["id"]),
+                    notif_type="status_change",
+                    title=f"Ticket Resolved by Employee: {row['ticket_code']}",
+                    message=f"Employee resolved ticket {row['ticket_code']}. Resolution: {final_resolution[:120]}",
+                    ticket_id=str(existing["id"]),
+                    priority=t_priority,
+                )
+
+            # Notify customer
+            if customer_uid and str(customer_uid) != str(user_id):
+                _insert_notification(
+                    cur,
+                    user_id=str(customer_uid),
+                    notif_type="status_change",
+                    title=f"Your Ticket Has Been Resolved: {row['ticket_code']}",
+                    message=f"Ticket {row['ticket_code']} has been resolved. Resolution: {final_resolution[:120]}",
+                    ticket_id=str(existing["id"]),
+                    priority=t_priority,
+                )
+
     logger.info(
         "ticket_status_update | ticket_id=%s status=%s resolved_at=%s",
         row["ticket_code"],
@@ -3114,7 +3198,12 @@ def get_complaints(user: Dict[str, Any] = Depends(require_manager)):
 class AssignTicketBody(BaseModel):
     employee_name: Optional[str] = None
 
+# FIX (Issues 2 & 3): Register on both @app (legacy /manager/... path kept for
+# backward-compat) AND @api (/api/manager/... path) so that frontend calls to
+# /api/manager/complaints/{id}/assign work correctly on GCP prod where the
+# @app routes at /manager/... may not share the same CORS/proxy config as /api/...
 @app.patch("/manager/complaints/{ticket_id}/assign")
+@api.patch("/manager/complaints/{ticket_id}/assign")
 def assign_ticket(
     ticket_id: str,
     body: AssignTicketBody,
@@ -3173,6 +3262,7 @@ class RouteTicketBody(BaseModel):
     department: str
 
 @app.patch("/manager/complaints/{ticket_id}/resolve")
+@api.patch("/manager/complaints/{ticket_id}/resolve")
 def manager_resolve_ticket(
     ticket_id: str,
     body: ManagerResolveRequest,
@@ -3323,6 +3413,7 @@ def manager_resolve_ticket(
     }
 
 @app.patch("/manager/complaints/{ticket_id}/priority")
+@api.patch("/manager/complaints/{ticket_id}/priority")
 def manager_rescore_ticket(
     ticket_id: str,
     body: ManagerRescoreRequest,
@@ -3448,6 +3539,7 @@ def manager_rescore_ticket(
     }
 
 @app.patch("/manager/complaints/{ticket_id}/department")
+@api.patch("/manager/complaints/{ticket_id}/department")
 def route_ticket_department(
     ticket_id: str,
     body: RouteTicketBody,
@@ -3521,12 +3613,23 @@ def route_ticket_department(
     return {"ticket_id": ticket_id, "department": dept_name, "action": "rerouted"}
 
 @app.get("/manager/departments")
+@api.get("/manager/departments")
 def get_departments(authorization: Optional[str] = Header(default=None)):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
     depts = fetch_all("SELECT name FROM departments ORDER BY name;")
-    return [d["name"] for d in depts]
+    # FIX (Issue 1): normalize and deduplicate department names.
+    # Live DB may have both "Legal & Compliance" and "Legal and Compliance".
+    DEPT_NORMALIZE = {"legal and compliance": "Legal & Compliance"}
+    seen = set()
+    result = []
+    for d in depts:
+        canonical = DEPT_NORMALIZE.get((d["name"] or "").lower(), d["name"])
+        if canonical not in seen:
+            seen.add(canonical)
+            result.append(canonical)
+    return result
 #============================================
 
 @api.get("/manager")
@@ -3776,6 +3879,7 @@ def decide_approval(
 # =========================================================
 
 @app.get("/manager/complaints/{ticket_id}")
+@api.get("/manager/complaints/{ticket_id}")
 def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends(require_manager)):
     ticket = fetch_one("""
         SELECT
@@ -4119,7 +4223,53 @@ def get_routing_review_queue(
     status_filter: str = Query(default="Pending"),
     user: Dict[str, Any] = Depends(require_manager),
 ):
-    return get_routing_review_payload(fetch_all=fetch_all, status_filter=status_filter)
+    # FIX (Issue 4): Get results from service, then correct status for Denied items.
+    # The external get_routing_review_payload may not know about 'manager_denied'.
+    # We fetch the raw routing rows ourselves to patch status before returning.
+    raw = get_routing_review_payload(fetch_all=fetch_all, status_filter=status_filter)
+
+    # The service returns {"items": [...]} or a list directly — handle both
+    if isinstance(raw, dict) and "items" in raw:
+        items = raw["items"]
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        return raw  # unexpected shape — pass through unchanged
+
+    # Fetch routed_by values for all review IDs in the result so we can
+    # correctly label 'manager_denied' rows as "Denied" status.
+    if items:
+        review_ids = [str(item.get("reviewId") or item.get("review_id") or "") for item in items if item.get("reviewId") or item.get("review_id")]
+        if review_ids:
+            placeholders = ",".join(["%s"] * len(review_ids))
+            denied_ids = set()
+            try:
+                denied_rows = fetch_all(
+                    f"SELECT id::text FROM department_routing WHERE id::text IN ({placeholders}) AND routed_by = 'manager_denied';",
+                    tuple(review_ids),
+                )
+                denied_ids = {r["id"] for r in (denied_rows or [])}
+            except Exception:
+                pass  # if this fails, fall back to service-provided status
+
+            if denied_ids:
+                for item in items:
+                    rid = str(item.get("reviewId") or item.get("review_id") or "")
+                    if rid in denied_ids:
+                        item["status"] = "Denied"
+
+    # Re-apply status_filter after patching (service may have already filtered,
+    # but if status_filter is "Pending" it wrongly included denied items).
+    if status_filter not in ("All", "all", ""):
+        # Map frontend filter value → expected status string
+        filter_map = {"Approved": "Approved", "Overridden": "Overridden", "Denied": "Denied", "Pending": "Pending"}
+        expected = filter_map.get(status_filter)
+        if expected:
+            items = [i for i in items if i.get("status") == expected]
+
+    if isinstance(raw, dict) and "items" in raw:
+        return {**raw, "items": items}
+    return items
 
 
 class RoutingReviewDecisionRequest(BaseModel):
@@ -4139,8 +4289,9 @@ def get_routing_review_item(
         SELECT
           dr.id::text                          AS "reviewId",
           CASE
-            WHEN dr.final_department IS NULL THEN 'Pending'
-            WHEN dr.routed_by = 'manager' THEN 'Overridden'
+            WHEN dr.routed_by = 'manager_denied' THEN 'Denied'
+            WHEN dr.final_department IS NULL    THEN 'Pending'
+            WHEN dr.routed_by = 'manager'       THEN 'Overridden'
             ELSE 'Approved'
           END                                  AS "status",
           dr.suggested_department              AS "predictedDepartment",
@@ -4181,6 +4332,64 @@ def decide_routing_review(
     body: RoutingReviewDecisionRequest,
     user: Dict[str, Any] = Depends(require_manager),
 ):
+    # FIX (Issue 4 — add deny request option):
+    # Handle "Denied" directly here before delegating to decide_routing_review_service,
+    # which may not support this decision type. "Denied" means the manager rejects the
+    # AI routing suggestion; the ticket stays in its current department unchanged.
+    if body.decision == "Denied":
+        row = fetch_one(
+            """
+            SELECT id, ticket_id
+            FROM department_routing
+            WHERE id::text = %s AND is_confident = FALSE
+            LIMIT 1;
+            """,
+            (review_id,),
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Routing review item not found")
+
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                # Mark as denied: set routed_by = 'manager_denied', keep final_department NULL
+                # (ticket stays in its current department), record who made the decision.
+                cur.execute(
+                    """
+                    UPDATE department_routing
+                    SET
+                        routed_by  = 'manager_denied',
+                        manager_id = %s,
+                        updated_at = now()
+                    WHERE id::text = %s;
+                    """,
+                    (user["id"], review_id),
+                )
+                # Notify the manager (confirmation to themselves)
+                t_info = fetch_one(
+                    "SELECT ticket_code, priority FROM tickets WHERE id = %s LIMIT 1;",
+                    (row["ticket_id"],),
+                ) or {}
+                _insert_notification(
+                    cur,
+                    user_id=str(user["id"]),
+                    notif_type="status_change",
+                    title=f"Routing Denied: {t_info.get('ticket_code', '')}",
+                    message=(
+                        f"You denied the AI routing suggestion for ticket "
+                        f"{t_info.get('ticket_code', '')}. "
+                        f"The ticket keeps its current department assignment."
+                    ),
+                    ticket_id=str(row["ticket_id"]),
+                    priority=t_info.get("priority"),
+                )
+
+        logger.info(
+            "routing_review_denied | review_id=%s by=%s",
+            review_id, user["id"],
+        )
+        return {"ok": True, "reviewId": review_id, "decision": "Denied"}
+
+    # For "Approved" and "Overridden" decisions delegate to the existing service.
     return decide_routing_review_service(
         review_id=review_id,
         decision=body.decision,
