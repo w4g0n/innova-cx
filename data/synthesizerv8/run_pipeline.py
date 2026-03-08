@@ -229,7 +229,7 @@ Examples:
             # Pass quantize (default 8bit — bfloat16 without quantization is 27x slower on T4)
             phase_args.extend(["--quantize", args.quantize])
             # Enable sampling for complaint diversity
-            phase_args.append("--do-sample")
+            phase_args.extend(["--do-sample", "--temperature", "0.7"])
 
         # ── Run the phase ──────────────────────────────────────────────────────
         success = run_phase(phase, phase_args)

@@ -669,7 +669,7 @@ def build_plan(n: int) -> list[dict]:
     urg_sampler = _RoundRobinSampler(["low", "medium", "high"])
     imp_sampler = _RoundRobinSampler(["low", "medium", "high"])
 
-    safety_true_target = max(1, round(0.50 * n))
+    safety_true_target = max(1, round(0.25 * n))  # target 25% safety=True (validated range: 15-40%)
     safety_flags = [True] * safety_true_target + [False] * max(0, n - safety_true_target)
     random.shuffle(safety_flags)
 
