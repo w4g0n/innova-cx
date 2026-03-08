@@ -147,20 +147,37 @@ def auto_assign_ticket_if_needed(
           updated_at = now()
         WHERE ticket_code = %s
           AND assigned_to_user_id IS NULL
-        RETURNING assigned_to_user_id::text;
+        RETURNING assigned_to_user_id::text, id::text, priority::text;
         """,
         (assignee_user_id, ticket_code),
     )
     updated = cur.fetchone()
     if updated and updated[0]:
+        assigned_user_id = str(updated[0])
+        ticket_uuid = str(updated[1]) if len(updated) > 1 and updated[1] else None
+        assigned_priority = str(updated[2]) if len(updated) > 2 and updated[2] else str(priority or "Medium")
+        if ticket_uuid:
+            cur.execute(
+                """
+                INSERT INTO notifications (user_id, type, title, message, priority, ticket_id)
+                VALUES (%s, 'ticket_assignment'::notification_type, %s, %s, %s::ticket_priority, %s::uuid);
+                """,
+                (
+                    assigned_user_id,
+                    f"New Ticket Assigned: {ticket_code}",
+                    f"You have been assigned {ticket_code}. Priority: {assigned_priority}.",
+                    assigned_priority,
+                    ticket_uuid,
+                ),
+            )
         logger.info(
             "auto_assign_success | ticket=%s assignee=%s department_id=%s priority=%s",
             ticket_code,
-            updated[0],
+            assigned_user_id,
             department_id,
             priority,
         )
-        return str(updated[0])
+        return assigned_user_id
     logger.warning(
         "auto_assign_noop | ticket=%s department_id=%s priority=%s",
         ticket_code,

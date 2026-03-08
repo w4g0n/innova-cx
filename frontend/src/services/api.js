@@ -201,13 +201,12 @@ export async function submitCustomerTicket(payload = {}) {
   }
 
   const details = String(payload.details || "").trim();
-  const subjectFallback = details ? details.slice(0, 80) : "Customer request";
   const body = {
     name: String(user.full_name || user.name || "Customer"),
     email: String(user.email || ""),
     type: String(payload.type || "complaint"),
     asset_type: String(payload.asset_type || "General"),
-    subject: String(payload.subject || subjectFallback),
+    subject: String(payload.subject ?? ""),
     details,
     attachments: Array.isArray(payload.attachments) ? payload.attachments : [],
   };

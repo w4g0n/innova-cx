@@ -3,7 +3,7 @@
 This folder is for one-time offline bootstrap training.
 
 ## What it does
-- Generates synthetic labels from fuzzy logic.
+- Generates synthetic labels from deterministic rule logic (full input truth table).
 - Trains XGBoost using the full signal set.
 - Exports a saved model state to reuse in runtime.
 
@@ -18,8 +18,8 @@ This folder is for one-time offline bootstrap training.
 
 ## Run once
 ```bash
-python3 ai-models/MultiAgentPipeline/PrioritzationAgentTraining/train_once.py \
-  --output-dir ai-models/MultiAgentPipeline/PrioritzationAgentTraining/output \
+python3 ai-models/Trainings/PrioritzationAgentTraining/train_once.py \
+  --output-dir ai-models/Trainings/PrioritzationAgentTraining/output \
   --epochs 600
 ```
 

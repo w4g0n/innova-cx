@@ -20,13 +20,13 @@ logger = logging.getLogger(__name__)
 
 FEATURE_LABELER_MODEL_PATH = os.getenv(
     "FEATURE_LABELER_MODEL_PATH",
-    "/app/models/featureengineering/feature_labeler",
+    "/app/agents/step08_featureengineering/model",
 ).strip()
 FEATURE_LABELER_MODEL_NAME = os.getenv(
     "FEATURE_LABELER_MODEL_NAME",
     "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
 ).strip()
-FEATURE_LABELER_AUTO_DOWNLOAD = os.getenv("FEATURE_LABELER_AUTO_DOWNLOAD", "true").lower() in {"1", "true", "yes"}
+FEATURE_LABELER_AUTO_DOWNLOAD = os.getenv("FEATURE_LABELER_AUTO_DOWNLOAD", "false").lower() in {"1", "true", "yes"}
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip() or None
 
 SAFETY_KEYWORDS = (
@@ -317,6 +317,14 @@ async def engineer_features(state: dict) -> dict:
         state["safety_concern"],
         state["issue_severity"],
         state["issue_urgency"],
+    )
+    logger.info(
+        "feature_decision | business_impact=%s issue_severity=%s issue_urgency=%s safety_concern=%s source=%s",
+        state["business_impact"],
+        state["issue_severity"],
+        state["issue_urgency"],
+        state["safety_concern"],
+        state.get("feature_labels_source"),
     )
 
     return state

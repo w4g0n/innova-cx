@@ -770,8 +770,18 @@ def _trigger_resolution_retraining() -> None:
 
 
 def _trigger_priority_relearning(ticket_id: str, approved_priority: str, retrain_now: bool = False) -> None:
+    normalized_ticket_id = str(ticket_id).strip()
+    # Relearning endpoint looks up orchestrator logs by pipeline ticket id
+    # (typically the CX- ticket code). Approval flows often pass DB UUID.
+    if normalized_ticket_id and not normalized_ticket_id.upper().startswith("CX-"):
+        row = fetch_one(
+            "SELECT ticket_code FROM tickets WHERE id::text = %s LIMIT 1;",
+            (normalized_ticket_id,),
+        ) or {}
+        normalized_ticket_id = str(row.get("ticket_code") or normalized_ticket_id).strip()
+
     payload = {
-        "ticket_id": str(ticket_id),
+        "ticket_id": normalized_ticket_id,
         "approved_priority": str(approved_priority).strip().lower(),
         "retrain_now": bool(retrain_now),
     }
@@ -786,7 +796,7 @@ def _trigger_priority_relearning(ticket_id: str, approved_priority: str, retrain
                 logger.info(
                     "priority_relearn | triggered via %s ticket=%s label=%s",
                     base,
-                    ticket_id,
+                    normalized_ticket_id,
                     approved_priority,
                 )
                 return
@@ -794,7 +804,7 @@ def _trigger_priority_relearning(ticket_id: str, approved_priority: str, retrain
             continue
     logger.warning(
         "priority_relearn | failed to trigger for ticket=%s label=%s",
-        ticket_id,
+        normalized_ticket_id,
         approved_priority,
     )
 
@@ -1324,6 +1334,8 @@ def employee_tickets(user: Dict[str, Any] = Depends(require_employee)):
           t.created_at,
           t.priority_assigned_at,
           t.assigned_at,
+          t.respond_due_at,
+          t.resolve_due_at,
           t.first_response_at,
           t.resolved_at
         FROM tickets t
@@ -1339,18 +1351,14 @@ def employee_tickets(user: Dict[str, Any] = Depends(require_employee)):
         created_at = r.get("created_at")
         priority_assigned_at = r.get("priority_assigned_at")
         assigned_at = r.get("assigned_at")
-        first_response_at = r.get("first_response_at")
-        resolved_at = r.get("resolved_at")
+        respond_due_at = r.get("respond_due_at")
+        resolve_due_at = r.get("resolve_due_at")
 
         issue_date = created_at.date().isoformat() if created_at else ""
 
         resp_base = priority_assigned_at or assigned_at or created_at
-        resp_mins = diff_minutes(first_response_at, resp_base)
-        response_time = minutes_to_label(resp_mins)
-
-        res_base = priority_assigned_at or created_at
-        res_mins = diff_minutes(resolved_at, res_base)
-        resolution_time = minutes_to_label(res_mins)
+        response_time = minutes_to_label(diff_minutes(respond_due_at, resp_base))
+        resolution_time = minutes_to_label(diff_minutes(resolve_due_at, priority_assigned_at or created_at))
 
         tickets.append(
             {
@@ -1359,8 +1367,8 @@ def employee_tickets(user: Dict[str, Any] = Depends(require_employee)):
                 "priority": r.get("priority"),
                 "status": r.get("status"),
                 "issueDate": issue_date,
-                "responseTime": response_time,
-                "resolutionTime": resolution_time,
+                "minTimeToRespond": response_time,
+                "minTimeToResolve": resolution_time,
             }
         )
 
@@ -1601,6 +1609,8 @@ def employee_ticket_details(
           t.created_at,
           t.priority_assigned_at,
           t.assigned_at,
+          t.respond_due_at,
+          t.resolve_due_at,
           t.first_response_at,
           t.resolved_at,
           t.suggested_resolution,
@@ -1653,21 +1663,15 @@ def employee_ticket_details(
     created_at = row.get("created_at")
     priority_assigned_at = row.get("priority_assigned_at")
     assigned_at = row.get("assigned_at")
-    first_response_at = row.get("first_response_at")
-    resolved_at = row.get("resolved_at")
+    respond_due_at = row.get("respond_due_at")
+    resolve_due_at = row.get("resolve_due_at")
 
     issue_date = created_at.date().isoformat() if created_at else ""
 
     resp_base = priority_assigned_at or assigned_at or created_at
-    # Show live elapsed response/resolve time when a ticket is still in progress.
-    resp_end = first_response_at or datetime.now(timezone.utc)
-    resp_mins = diff_minutes(resp_end, resp_base)
-    response_time = minutes_to_label(resp_mins)
-
-    res_base = priority_assigned_at or created_at
-    res_end = resolved_at or datetime.now(timezone.utc)
-    res_mins = diff_minutes(res_end, res_base)
-    resolution_time = minutes_to_label(res_mins)
+    # Summary shows SLA minimum windows, not elapsed averages.
+    response_time = minutes_to_label(diff_minutes(respond_due_at, resp_base))
+    resolution_time = minutes_to_label(diff_minutes(resolve_due_at, priority_assigned_at or created_at))
 
     ticket = {
         "ticketId": row.get("ticket_code"),
@@ -1677,8 +1681,8 @@ def employee_ticket_details(
         "suggestedResolution": row.get("suggested_resolution") or "",
         "modelSuggestion": row.get("suggested_resolution") or row.get("model_suggestion"),
         "metrics": {
-            "meanTimeToRespond": response_time,
-            "meanTimeToResolve": resolution_time,
+            "minTimeToRespond": response_time,
+            "minTimeToResolve": resolution_time,
         },
         "submittedBy": {
             "name": row.get("submitter_name") or "Unknown",
@@ -2603,6 +2607,8 @@ def customer_mytickets(
           created_at,
           priority_assigned_at,
           assigned_at,
+          respond_due_at,
+          resolve_due_at,
           first_response_at,
           resolved_at
         FROM tickets
@@ -2618,16 +2624,13 @@ def customer_mytickets(
         created_at = r.get("created_at")
         priority_assigned_at = r.get("priority_assigned_at")
         assigned_at = r.get("assigned_at")
-        first_response_at = r.get("first_response_at")
-        resolved_at = r.get("resolved_at")
+        respond_due_at = r.get("respond_due_at")
+        resolve_due_at = r.get("resolve_due_at")
 
         issue_date = created_at.date().isoformat() if created_at else ""
         resp_base = priority_assigned_at or assigned_at or created_at
-        resp_mins = diff_minutes(first_response_at, resp_base)
-        response_time = minutes_to_label(resp_mins)
-        res_base = priority_assigned_at or created_at
-        res_mins = diff_minutes(resolved_at, res_base)
-        resolution_time = minutes_to_label(res_mins)
+        response_time = minutes_to_label(diff_minutes(respond_due_at, resp_base))
+        resolution_time = minutes_to_label(diff_minutes(resolve_due_at, priority_assigned_at or created_at))
 
         tickets.append(
             {
@@ -2637,8 +2640,8 @@ def customer_mytickets(
                 "ticketType": r.get("ticket_type"),
                 "status": r.get("status"),
                 "issueDate": issue_date,
-                "responseTime": response_time,
-                "resolutionTime": resolution_time,
+                "minTimeToRespond": response_time,
+                "minTimeToResolve": resolution_time,
             }
         )
 
@@ -2667,6 +2670,8 @@ def customer_ticket_details(
           t.created_at,
           t.priority_assigned_at,
           t.assigned_at,
+          t.respond_due_at,
+          t.resolve_due_at,
           t.first_response_at,
           t.resolved_at,
           t.model_suggestion,
@@ -2715,16 +2720,13 @@ def customer_ticket_details(
     created_at = row.get("created_at")
     priority_assigned_at = row.get("priority_assigned_at")
     assigned_at = row.get("assigned_at")
-    first_response_at = row.get("first_response_at")
-    resolved_at = row.get("resolved_at")
+    respond_due_at = row.get("respond_due_at")
+    resolve_due_at = row.get("resolve_due_at")
 
     issue_date = created_at.date().isoformat() if created_at else ""
     resp_base = priority_assigned_at or assigned_at or created_at
-    resp_mins = diff_minutes(first_response_at, resp_base)
-    response_time = minutes_to_label(resp_mins)
-    res_base = priority_assigned_at or created_at
-    res_mins = diff_minutes(resolved_at, res_base)
-    resolution_time = minutes_to_label(res_mins)
+    response_time = minutes_to_label(diff_minutes(respond_due_at, resp_base))
+    resolution_time = minutes_to_label(diff_minutes(resolve_due_at, priority_assigned_at or created_at))
 
     ticket = {
         "ticketId": row.get("ticket_code"),
@@ -2734,8 +2736,8 @@ def customer_ticket_details(
         "modelSuggestion": row.get("model_suggestion"),
         "assignedEmployee": row.get("assigned_employee_name") or None,
         "metrics": {
-            "meanTimeToRespond": response_time,
-            "meanTimeToResolve": resolution_time,
+            "minTimeToRespond": response_time,
+            "minTimeToResolve": resolution_time,
         },
         "description": {
             "subject": row.get("subject"),
@@ -3679,6 +3681,7 @@ SELECT
     ar.request_type AS type,
     ar.current_value AS current,
     ar.requested_value AS requested,
+    ar.request_reason AS request_reason,
     up.full_name AS submitted_by,
     ar.submitted_at AS submitted_on,
     ar.status AS status,
@@ -3706,6 +3709,7 @@ ORDER BY ar.submitted_at DESC;
             "type": a.get("type") or "",
             "current": a.get("current") or "",
             "requested": a.get("requested") or "",
+            "requestReason": a.get("request_reason") or "",
             "submittedBy": a.get("submitted_by") or "—",
             "submittedOn": submitted_on,
             "status": a.get("status") or "Pending",
@@ -3780,6 +3784,7 @@ def decide_approval(
             if decision == "Approved":
                 req_type  = ar["request_type"]
                 requested = ar["requested_value"] or ""
+                current = ar.get("current_value") or ""
                 ticket_id = ar["ticket_id"]
                 override  = (body.override_value or "").strip()
 
@@ -3794,6 +3799,25 @@ def decide_approval(
                         cur.execute(
                             "UPDATE tickets SET priority = %s WHERE id = %s;",
                             (new_priority, ticket_id),
+                        )
+                        old_priority = str(current).replace("Priority:", "").strip() or "Unknown"
+                        change_source = "manager_override" if override else "employee_request"
+                        cur.execute(
+                            """
+                            INSERT INTO ticket_updates (
+                                ticket_id, author_user_id, update_type, message
+                            )
+                            VALUES (%s, %s, 'priority_change', %s);
+                            """,
+                            (
+                                ticket_id,
+                                user["id"],
+                                (
+                                    f"Manager approved rescoring ({change_source}): "
+                                    f"{old_priority} -> {new_priority}. "
+                                    f"Request={request_id}."
+                                ),
+                            ),
                         )
                         relearn_ticket_id = str(ticket_id)
                         relearn_priority = new_priority
@@ -3813,6 +3837,25 @@ def decide_approval(
                         cur.execute(
                             "UPDATE tickets SET department_id = %s WHERE id = %s;",
                             (dept_row["id"], ticket_id),
+                        )
+                        old_dept = str(current).replace("Dept:", "").strip() or "Unknown"
+                        change_source = "manager_override" if override else "employee_request"
+                        cur.execute(
+                            """
+                            INSERT INTO ticket_updates (
+                                ticket_id, author_user_id, update_type, message
+                            )
+                            VALUES (%s, %s, 'department_change', %s);
+                            """,
+                            (
+                                ticket_id,
+                                user["id"],
+                                (
+                                    f"Manager approved rerouting ({change_source}): "
+                                    f"{old_dept} -> {new_dept_name}. "
+                                    f"Request={request_id}."
+                                ),
+                            ),
                         )
 
             # ── Notifications for approval decision ──────────────────────────
@@ -3907,6 +3950,8 @@ def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends
             t.created_at,
             t.priority_assigned_at,
             t.assigned_at,
+            t.respond_due_at,
+            t.resolve_due_at,
             t.first_response_at,
             t.resolved_at,
             up.full_name AS assignee_name,
@@ -3924,11 +3969,10 @@ def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends
 
     issue_date = ticket["created_at"].date().isoformat() if ticket.get("created_at") else ""
     resp_base = ticket.get("priority_assigned_at") or ticket.get("assigned_at") or ticket.get("created_at")
-    resp_mins = diff_minutes(ticket.get("first_response_at"), resp_base)
-    respond_time = minutes_to_label(resp_mins)
-    res_base = ticket.get("priority_assigned_at") or ticket.get("created_at")
-    res_mins = diff_minutes(ticket.get("resolved_at"), res_base)
-    resolve_time = minutes_to_label(res_mins)
+    respond_time = minutes_to_label(diff_minutes(ticket.get("respond_due_at"), resp_base))
+    resolve_time = minutes_to_label(
+        diff_minutes(ticket.get("resolve_due_at"), ticket.get("priority_assigned_at") or ticket.get("created_at"))
+    )
 
     assignee = ticket.get("assignee_name") or "—"
     priority_raw = (ticket.get("priority") or "").lower()
@@ -4548,6 +4592,12 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             if not incoming_ticket_code:
                 # ── No ticket_id supplied → create a new ticket ──
                 from api.ticket_creation_gate import create_ticket_via_gate
+                effective_department_id = department_id if (not has_routing_decision or routing_is_confident) else None
+                effective_status = normalized_status or "Open"
+                if has_routing_decision and routing_is_confident:
+                    effective_status = "Assigned"
+                elif has_routing_decision and not routing_is_confident:
+                    effective_status = "Open"
                 created = create_ticket_via_gate(
                     cur,
                     created_by_user_id=str(row["id"]),
@@ -4555,21 +4605,49 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     subject=(body.transcript or "")[:120].strip() or "Customer submission",
                     details=body.transcript or "",
                     priority=priority_label,
-                    status=normalized_status or "Open",
+                    status=effective_status,
                     ticket_source="form",
-                    department_id=department_id,
+                    department_id=effective_department_id,
                     sentiment_score=body.sentiment,
                     sentiment_label="orchestrator" if body.sentiment is not None else None,
                     model_priority=priority_label,
-                    model_department_id=department_id,
+                    model_department_id=effective_department_id,
                     model_confidence=routing_confidence_raw,
                 )
+                cur.execute(
+                    """
+                    INSERT INTO ticket_updates (
+                      ticket_id, author_user_id, update_type, message, to_status
+                    )
+                    VALUES (%s, %s, 'status_change', %s, %s);
+                    """,
+                    (
+                        created["id"],
+                        row["id"],
+                        "Ticket created by orchestrator pipeline.",
+                        created["status"],
+                    ),
+                )
+                if created.get("priority"):
+                    cur.execute(
+                        """
+                        INSERT INTO ticket_updates (
+                          ticket_id, author_user_id, update_type, message
+                        )
+                        VALUES (%s, %s, 'priority_change', %s);
+                        """,
+                        (
+                            created["id"],
+                            row["id"],
+                            f"Priority set to {created['priority']} by orchestrator.",
+                        ),
+                    )
                 return {
                     "ticket_id":   created["ticket_code"],
                     "status":      created["status"],
                     "priority":    created["priority"],
                     "asset_type":  None,
-                    "department":  requested_department,
+                    "department":  (requested_department if routing_is_confident else None),
                     "priority_assigned_at": created["priority_assigned_at"].isoformat() if created.get("priority_assigned_at") else None,
                     "respond_due_at":       created["respond_due_at"].isoformat() if created.get("respond_due_at") else None,
                     "resolve_due_at":       created["resolve_due_at"].isoformat() if created.get("resolve_due_at") else None,
@@ -4577,16 +4655,18 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
 
             # ── ticket_id supplied → update existing ticket ──
             cur.execute(
-                "SELECT id, priority_assigned_at, department_id FROM tickets WHERE ticket_code = %s LIMIT 1",
+                "SELECT id, priority_assigned_at, department_id, status, priority FROM tickets WHERE ticket_code = %s LIMIT 1",
                 (incoming_ticket_code,),
             )
             existing = cur.fetchone()
             if existing:
                     had_priority_before = existing[1] is not None
                     existing_department_id = existing[2]
-                    subject_update = None
-                    if requested_department and ticket_type:
-                        subject_update = f"[{requested_department.title()}] Automated {ticket_type.lower()}"
+                    previous_status = existing[3]
+                    previous_priority = existing[4]
+                    # Never rewrite subject to synthetic placeholders like
+                    # "[Dept] Automated complaint" on orchestrator updates.
+                    subject_update = (body.subject or "").strip() or None
 
                     details_update = body.transcript if body.transcript else None
                     base_status = normalized_status or "Open"
@@ -4617,7 +4697,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                           model_confidence = COALESCE(%s, model_confidence),
                           priority_assigned_at = COALESCE(%s, priority_assigned_at)
                         WHERE ticket_code = %s
-                        RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
+                        RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at, department_id;
                         """,
                         (
                             ticket_type,
@@ -4649,18 +4729,70 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                               END,
                               updated_at = now()
                             WHERE ticket_code = %s
-                            RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
+                            RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at, department_id;
                             """,
                             (incoming_ticket_code,),
                         )
                         updated = cur.fetchone()
+                    if previous_status != updated[1]:
+                        cur.execute(
+                            """
+                            INSERT INTO ticket_updates (
+                              ticket_id, author_user_id, update_type, message, from_status, to_status
+                            )
+                            VALUES (%s, %s, 'status_change', %s, %s, %s);
+                            """,
+                            (
+                                existing[0],
+                                row["id"],
+                                f"Orchestrator updated status from {previous_status or 'Unknown'} to {updated[1]}.",
+                                previous_status,
+                                updated[1],
+                            ),
+                        )
+                    if previous_priority != updated[2] and updated[2]:
+                        cur.execute(
+                            """
+                            INSERT INTO ticket_updates (
+                              ticket_id, author_user_id, update_type, message
+                            )
+                            VALUES (%s, %s, 'priority_change', %s);
+                            """,
+                            (
+                                existing[0],
+                                row["id"],
+                                f"Orchestrator updated priority from {previous_priority or 'Unknown'} to {updated[2]}.",
+                            ),
+                        )
+                    if existing_department_id != updated[7]:
+                        old_dept_name = "Unassigned"
+                        new_dept_name = "Unassigned"
+                        if existing_department_id:
+                            cur.execute("SELECT name FROM departments WHERE id = %s LIMIT 1;", (existing_department_id,))
+                            old_dept_name = (cur.fetchone() or [old_dept_name])[0]
+                        if updated[7]:
+                            cur.execute("SELECT name FROM departments WHERE id = %s LIMIT 1;", (updated[7],))
+                            new_dept_name = (cur.fetchone() or [new_dept_name])[0]
+                        cur.execute(
+                            """
+                            INSERT INTO ticket_updates (
+                              ticket_id, author_user_id, update_type, message
+                            )
+                            VALUES (%s, %s, 'department_change', %s);
+                            """,
+                            (
+                                existing[0],
+                                row["id"],
+                                f"Orchestrator updated department from {old_dept_name} to {new_dept_name}.",
+                            ),
+                        )
                     logger.info(
                         "orchestrator_ticket_update | ticket_id=%s status=%s priority=%s asset_type=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
                         updated[0],
                         updated[1],
                         updated[2],
                         updated[3],
-                        requested_department,
+                        (requested_department if routing_is_confident else None),
                         updated[4],
                         updated[5],
                         updated[6],
@@ -4713,7 +4845,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         "status":           updated[1],
                         "priority":         updated[2],
                         "asset_type":       updated[3],
-                        "department":       requested_department,
+                        "department":       (requested_department if routing_is_confident else None),
                         "queued_for_review": queued_for_review,
                         "priority_assigned_at": updated[4].isoformat() if updated[4] else None,
                         "respond_due_at":   updated[5].isoformat() if updated[5] else None,
@@ -4812,7 +4944,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 "status": created.get("status"),
                 "priority": created.get("priority"),
                 "asset_type": requested_asset_type,
-                "department": requested_department,
+                "department": (requested_department if routing_is_confident else None),
                 "queued_for_review": queued_for_review,
                 "priority_assigned_at": created.get("priority_assigned_at").isoformat()
                 if created.get("priority_assigned_at")

@@ -1,7 +1,7 @@
 """
 Step 6 — Prioritization Agent
 =============================
-Calls the PrioritizationAgent runtime model and stores:
+Calls the PrioritizationAgent runtime rules engine and stores:
     state["priority_label"]  -> low|medium|high|critical
     state["priority_score"]  -> int mapped for backend ticket insert
 """
@@ -24,7 +24,7 @@ except Exception as exc:  # pragma: no cover - runtime fallback guard
     model_prioritize = None
     add_manager_feedback_example = None
     _PRIORITY_MODEL_AVAILABLE = False
-    logger.warning("priority | model runtime unavailable, using mock fallback. err=%s", exc)
+    logger.warning("priority | runtime unavailable, using mock fallback. err=%s", exc)
 
 
 PRIORITY_TO_SCORE = {
@@ -95,7 +95,7 @@ async def score_priority(state: dict) -> dict:
             "; ".join(result.get("modifiers_applied", [])),
         )
     except Exception as exc:
-        logger.warning("priority | model unavailable/failed (%s) — defaulting medium", exc)
+        logger.warning("priority | runtime unavailable/failed (%s) — defaulting medium", exc)
         state["priority_label"] = "medium"
         state["priority_score"] = 3
 

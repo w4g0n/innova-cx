@@ -54,7 +54,7 @@ def _heuristic_classify(text: str) -> tuple[str, float]:
 
 @lru_cache(maxsize=1)
 def _load_optional_model():
-    model_dir = os.getenv(MODEL_DIR_ENV, "/app/models/classifier").strip()
+    model_dir = os.getenv(MODEL_DIR_ENV, "/app/agents/step03_classifier/model").strip()
     model_path = os.getenv(MODEL_PATH_ENV, "").strip() or str(Path(model_dir) / "model.pkl")
     if not model_path:
         return None
@@ -85,7 +85,7 @@ def _load_optional_model():
 
 
 def get_classifier_diagnostics() -> dict[str, object]:
-    model_dir = os.getenv(MODEL_DIR_ENV, "/app/models/classifier").strip()
+    model_dir = os.getenv(MODEL_DIR_ENV, "/app/agents/step03_classifier/model").strip()
     model_path = os.getenv(MODEL_PATH_ENV, "").strip() or str(Path(model_dir) / "model.pkl")
     vectorizer_path = os.getenv(VECTORIZER_PATH_ENV, "").strip() or str(
         Path(model_dir) / "vectorizer.pkl"
@@ -133,14 +133,6 @@ async def classify(state: dict) -> dict:
     """
     Classifies transcript in-process and sets state["label"].
     """
-    # If ticket type was already provided at ticket-creation gate, skip classifier.
-    provided_type = str(state.get("ticket_type") or state.get("label") or "").strip().lower()
-    if provided_type in {"complaint", "inquiry"}:
-        state["label"] = provided_type
-        state["class_confidence"] = 1.0
-        logger.info("classifier | skipped (provided ticket_type=%s)", provided_type)
-        return state
-
     if not state.get("text", "").strip():
         # Empty transcript — treat as complaint so it gets a ticket
         state["label"] = "complaint"
@@ -165,6 +157,13 @@ async def classify(state: dict) -> dict:
         "classifier | label=%s confidence=%.3f",
         state["label"],
         float(state.get("class_confidence", 0.0) or 0.0),
+    )
+    logger.info(
+        "classifier_decision | ticket_type=%s confidence=%.3f source=%s threshold=%.2f",
+        state["label"],
+        float(state.get("class_confidence", 0.0) or 0.0),
+        "model" if model_result else "heuristic",
+        CONFIDENCE_THRESHOLD,
     )
 
     return state

@@ -34,13 +34,13 @@ DEPARTMENT_LABELS = [
 ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("DEPARTMENT_ROUTING_THRESHOLD", "0.7"))
 ROUTER_MODEL_PATH = os.getenv(
     "DEPARTMENT_ROUTER_MODEL_PATH",
-    "/app/models/classifier/deberta-v3-base-mnli-fever-anli",
+    "/app/agents/step10_router/model",
 ).strip()
 ROUTER_MODEL_NAME = os.getenv(
     "DEPARTMENT_ROUTER_MODEL_NAME",
     "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
 ).strip()
-ROUTER_AUTO_DOWNLOAD = os.getenv("DEPARTMENT_ROUTER_AUTO_DOWNLOAD", "true").lower() in {"1", "true", "yes"}
+ROUTER_AUTO_DOWNLOAD = os.getenv("DEPARTMENT_ROUTER_AUTO_DOWNLOAD", "false").lower() in {"1", "true", "yes"}
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip() or None
 CALIBRATION_WEIGHT = float(os.getenv("DEPARTMENT_ROUTER_CALIBRATION_WEIGHT", "0.12"))
 
@@ -121,8 +121,8 @@ def _predict_department_from_text(text: str) -> tuple[list[str], list[float], st
         top = _mock_department_from_text(text)
         remaining = [dept for dept in DEPARTMENT_LABELS if dept != top]
         labels = [top, *remaining]
-        # Deliberately weak confidence, but above threshold so routing still functions.
-        scores = [0.74] + [0.26 / max(1, len(remaining))] * len(remaining)
+        # Keep mock routing below threshold so manager review is required.
+        scores = [0.49] + [0.51 / max(1, len(remaining))] * len(remaining)
         return labels, scores, "mock"
 
     try:

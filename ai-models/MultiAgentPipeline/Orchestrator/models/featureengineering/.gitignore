@@ -1,7 +1,0 @@
-*
-!.gitignore
-!.gitkeep
-!feature_labeler/
-feature_labeler/*
-!feature_labeler/.gitignore
-!feature_labeler/.gitkeep
