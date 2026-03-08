@@ -1,17 +1,17 @@
 {
-  "updated_at": "2026-03-08T22:18:10.966814+00:00",
+  "updated_at": "2026-03-08T22:34:51.043960+00:00",
   "examples": [
     {
       "ticket_code": "CX-9003",
       "ticket_type": "Complaint",
-      "priority": "High",
+      "priority": "Medium",
       "subject": "Critical test ticket",
       "details": "Seed ticket to populate \"Critical\".",
       "decision": "declined_custom",
       "suggested_resolution": "",
-      "employee_resolution": "1234",
-      "final_resolution": "1234",
-      "created_at": "2026-03-08T22:18:10.875043+00:00"
+      "employee_resolution": "123",
+      "final_resolution": "123",
+      "created_at": "2026-03-08T22:34:50.779865+00:00"
     },
     {
       "ticket_code": "CX-R03",
@@ -24,18 +24,6 @@
       "employee_resolution": "12345",
       "final_resolution": "12345",
       "created_at": "2026-03-08T19:25:24.158498+00:00"
-    },
-    {
-      "ticket_code": "CX-H014",
-      "ticket_type": "Complaint",
-      "priority": "Medium",
-      "subject": "Smoke detector false alarms \u2013 laboratory",
-      "details": "Lab smoke detector triggering false alarms every morning causing unnecessary evacuations.",
-      "decision": "declined_custom",
-      "suggested_resolution": "Replace detector head.",
-      "employee_resolution": "Root cause was accumulated dust \u2014 cleaning needed before replacement test.",
-      "final_resolution": "Detector cleaned and head replaced. No false alarms in 48-hour test.",
-      "created_at": "2026-03-07T23:59:57.836773+00:00"
     },
     {
       "ticket_code": "CX-H006",
@@ -143,6 +131,18 @@
       "suggested_resolution": "Recharge UPS batteries.",
       "employee_resolution": "Batteries degraded beyond recharge \u2014 full module replacement required.",
       "final_resolution": "All 12 UPS battery modules replaced; 47-minute runtime certified.",
+      "created_at": "2026-03-07T23:59:57.836773+00:00"
+    },
+    {
+      "ticket_code": "CX-H002",
+      "ticket_type": "Complaint",
+      "priority": "Critical",
+      "subject": "Power outage \u2013 Finance floor",
+      "details": "Complete power failure affecting Finance department. UPS not kicking in.",
+      "decision": "accepted",
+      "suggested_resolution": "Reset tripped MCB and test UPS bypass.",
+      "employee_resolution": "",
+      "final_resolution": "Faulty MCB replaced; power restored. UPS tested operational.",
       "created_at": "2026-03-07T23:59:57.836773+00:00"
     }
   ]

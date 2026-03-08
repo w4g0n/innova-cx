@@ -638,7 +638,7 @@ export default function ManagerComplaintDetails() {
         const data = await res.json();
         if (!data.error) { setTicket(data); return; }
       }
-    } catch (_) {
+    } catch {
       // fall through to local update
     }
     setTicket((prev) => ({ ...prev, status: "Resolved" }));
