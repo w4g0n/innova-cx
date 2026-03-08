@@ -1665,8 +1665,6 @@ def employee_ticket_details(
     assigned_at = row.get("assigned_at")
     respond_due_at = row.get("respond_due_at")
     resolve_due_at = row.get("resolve_due_at")
-    first_response_at = row.get("first_response_at")
-    resolved_at = row.get("resolved_at")
 
     issue_date = created_at.date().isoformat() if created_at else ""
 
@@ -2724,8 +2722,6 @@ def customer_ticket_details(
     assigned_at = row.get("assigned_at")
     respond_due_at = row.get("respond_due_at")
     resolve_due_at = row.get("resolve_due_at")
-    first_response_at = row.get("first_response_at")
-    resolved_at = row.get("resolved_at")
 
     issue_date = created_at.date().isoformat() if created_at else ""
     resp_base = priority_assigned_at or assigned_at or created_at

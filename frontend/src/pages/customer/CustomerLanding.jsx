@@ -139,7 +139,10 @@ const QUICK_ACTIONS = [
   }, [hasUsableSubject]);
 
   useEffect(() => {
-    fetchRecentTicket();
+    const timer = setTimeout(() => {
+      void fetchRecentTicket();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [fetchRecentTicket]);
 
   useEffect(() => {
