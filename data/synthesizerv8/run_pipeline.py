@@ -206,8 +206,13 @@ Examples:
         if args.resume and phase in (1, 3):
             phase_args.append("--resume")
 
-        if phase == 1 and args.complaints is not None:
-            phase_args.extend(["--complaints", str(args.complaints)])
+        if phase == 1:
+            # Always use 8-bit quantization — bfloat16 fallback is 27x slower on T4
+            phase_args.extend(["--quantize", "8bit"])
+            # Always enable sampling for complaint diversity
+            phase_args.append("--do-sample")
+            if args.complaints is not None:
+                phase_args.extend(["--complaints", str(args.complaints)])
 
         # ── Run the phase ──────────────────────────────────────────────────────
         success = run_phase(phase, phase_args)
