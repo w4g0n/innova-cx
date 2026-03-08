@@ -4238,7 +4238,6 @@ def get_routing_review_queue(
     status_filter: str = Query(default="Pending"),
     user: Dict[str, Any] = Depends(require_manager),
 ):
-<<<<<<< HEAD
     manager_dept_row = fetch_one(
         """
         SELECT d.name AS department_name
@@ -4254,55 +4253,6 @@ def get_routing_review_queue(
         status_filter=status_filter,
         manager_department_name=manager_dept_row.get("department_name"),
     )
-=======
-    # FIX (Issue 4): Get results from service, then correct status for Denied items.
-    # The external get_routing_review_payload may not know about 'manager_denied'.
-    # We fetch the raw routing rows ourselves to patch status before returning.
-    raw = get_routing_review_payload(fetch_all=fetch_all, status_filter=status_filter)
-
-    # The service returns {"items": [...]} or a list directly — handle both
-    if isinstance(raw, dict) and "items" in raw:
-        items = raw["items"]
-    elif isinstance(raw, list):
-        items = raw
-    else:
-        return raw  # unexpected shape — pass through unchanged
-
-    # Fetch routed_by values for all review IDs in the result so we can
-    # correctly label 'manager_denied' rows as "Denied" status.
-    if items:
-        review_ids = [str(item.get("reviewId") or item.get("review_id") or "") for item in items if item.get("reviewId") or item.get("review_id")]
-        if review_ids:
-            placeholders = ",".join(["%s"] * len(review_ids))
-            denied_ids = set()
-            try:
-                denied_rows = fetch_all(
-                    f"SELECT id::text FROM department_routing WHERE id::text IN ({placeholders}) AND routed_by = 'manager_denied';",
-                    tuple(review_ids),
-                )
-                denied_ids = {r["id"] for r in (denied_rows or [])}
-            except Exception:
-                pass  # if this fails, fall back to service-provided status
-
-            if denied_ids:
-                for item in items:
-                    rid = str(item.get("reviewId") or item.get("review_id") or "")
-                    if rid in denied_ids:
-                        item["status"] = "Denied"
-
-    # Re-apply status_filter after patching (service may have already filtered,
-    # but if status_filter is "Pending" it wrongly included denied items).
-    if status_filter not in ("All", "all", ""):
-        # Map frontend filter value → expected status string
-        filter_map = {"Approved": "Approved", "Overridden": "Overridden", "Denied": "Denied", "Pending": "Pending"}
-        expected = filter_map.get(status_filter)
-        if expected:
-            items = [i for i in items if i.get("status") == expected]
-
-    if isinstance(raw, dict) and "items" in raw:
-        return {**raw, "items": items}
-    return items
->>>>>>> origin/DEV
 
 
 class RoutingReviewDecisionRequest(BaseModel):
@@ -4381,7 +4331,6 @@ def decide_routing_review(
     body: RoutingReviewDecisionRequest,
     user: Dict[str, Any] = Depends(require_manager),
 ):
-<<<<<<< HEAD
     manager_dept_row = fetch_one(
         """
         SELECT d.name AS department_name
@@ -4392,66 +4341,6 @@ def decide_routing_review(
         """,
         (user["id"],),
     ) or {}
-=======
-    # FIX (Issue 4 — add deny request option):
-    # Handle "Denied" directly here before delegating to decide_routing_review_service,
-    # which may not support this decision type. "Denied" means the manager rejects the
-    # AI routing suggestion; the ticket stays in its current department unchanged.
-    if body.decision == "Denied":
-        row = fetch_one(
-            """
-            SELECT id, ticket_id
-            FROM department_routing
-            WHERE id::text = %s AND is_confident = FALSE
-            LIMIT 1;
-            """,
-            (review_id,),
-        )
-        if not row:
-            raise HTTPException(status_code=404, detail="Routing review item not found")
-
-        with db_connect() as conn:
-            with conn.cursor() as cur:
-                # Mark as denied: set routed_by = 'manager_denied', keep final_department NULL
-                # (ticket stays in its current department), record who made the decision.
-                cur.execute(
-                    """
-                    UPDATE department_routing
-                    SET
-                        routed_by  = 'manager_denied',
-                        manager_id = %s,
-                        updated_at = now()
-                    WHERE id::text = %s;
-                    """,
-                    (user["id"], review_id),
-                )
-                # Notify the manager (confirmation to themselves)
-                t_info = fetch_one(
-                    "SELECT ticket_code, priority FROM tickets WHERE id = %s LIMIT 1;",
-                    (row["ticket_id"],),
-                ) or {}
-                _insert_notification(
-                    cur,
-                    user_id=str(user["id"]),
-                    notif_type="status_change",
-                    title=f"Routing Denied: {t_info.get('ticket_code', '')}",
-                    message=(
-                        f"You denied the AI routing suggestion for ticket "
-                        f"{t_info.get('ticket_code', '')}. "
-                        f"The ticket keeps its current department assignment."
-                    ),
-                    ticket_id=str(row["ticket_id"]),
-                    priority=t_info.get("priority"),
-                )
-
-        logger.info(
-            "routing_review_denied | review_id=%s by=%s",
-            review_id, user["id"],
-        )
-        return {"ok": True, "reviewId": review_id, "decision": "Denied"}
-
-    # For "Approved" and "Overridden" decisions delegate to the existing service.
->>>>>>> origin/DEV
     return decide_routing_review_service(
         review_id=review_id,
         decision=body.decision,
