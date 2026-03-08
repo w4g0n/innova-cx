@@ -3,8 +3,7 @@
 This folder is runtime-only and is loaded by the orchestrator pipeline.
 
 ## Runtime behavior
-- Loads pre-trained `XGBoost` model artifacts from `PRIORITY_MODEL_DIR`.
-- Predicts priority from these signals:
+- Computes priority using deterministic rule-based logic from these signals:
   - `ticket_type` (`complaint|inquiry`)
   - `is_recurring` (`true|false`)
   - `business_impact_val` (`low|medium|high`)
@@ -12,7 +11,11 @@ This folder is runtime-only and is loaded by the orchestrator pipeline.
   - `sentiment_score` (`negative|neutral|positive`)
   - `issue_severity_val` (`low|medium|high`)
   - `issue_urgency_val` (`low|medium|high`)
-- If no model is found, returns safe fallback (`medium`) until artifacts are deployed.
+- Order of execution:
+  - apply safety minimum (`high`) when `safety_concern=true`
+  - evaluate triple-rule base priority from impact/severity/urgency
+  - apply modifiers (`is_recurring`, `ticket_type`, `sentiment_score`)
+  - clamp final value to `[low, critical]`
 
 ## Relearning loop
 - Manager-approved rescoring is appended as labeled feedback.

@@ -108,6 +108,7 @@
 .rrd-badge--pending    { background: rgba(251,191,36,0.18);  color: #fbbf24; border: 1px solid rgba(251,191,36,0.35); }
 .rrd-badge--confirmed  { background: rgba(52,211,153,0.18);  color: #34d399; border: 1px solid rgba(52,211,153,0.35); }
 .rrd-badge--overridden { background: rgba(167,139,250,0.18); color: #a78bfa; border: 1px solid rgba(167,139,250,0.35); }
+.rrd-badge--denied     { background: rgba(220,38,38,0.18);   color: #fca5a5; border: 1px solid rgba(220,38,38,0.35); }
 
 .rrd-heroRight { display: flex; flex-direction: column; align-items: flex-end; gap: 14px; flex-shrink: 0; position: relative; z-index: 10; }
 .rrd-heroStats {
@@ -228,11 +229,26 @@
   border: 1px solid rgba(167,139,250,0.4);
 }
 .rrd-btnOverride:hover:not(:disabled) { background: rgba(167,139,250,0.32); transform: translateY(-2px); }
-.rrd-btnConfirm:disabled, .rrd-btnOverride:disabled { opacity: 0.45; cursor: not-allowed; }
+/* FIX (Issue 4): Deny button style */
+.rrd-btnDeny {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 20px; border-radius: 999px;
+  font-size: 13px; font-weight: 700; font-family: inherit;
+  cursor: pointer;
+  background: rgba(220,38,38,0.18); color: #fca5a5;
+  border: 1px solid rgba(220,38,38,0.45);
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+.rrd-btnDeny:hover:not(:disabled) { background: rgba(220,38,38,0.3); transform: translateY(-2px); }
+.rrd-btnConfirm:disabled, .rrd-btnOverride:disabled, .rrd-btnDeny:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .rrd-resolvedBanner {
   background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
   border-radius: 10px; padding: 10px 16px; color: #e9d5ff; font-size: 13px; font-weight: 600;
+}
+/* FIX (Issue 4): Denied state banner */
+.rrd-resolvedBanner--denied {
+  background: rgba(220,38,38,0.15); border-color: rgba(220,38,38,0.35); color: #fca5a5;
 }
 
 /* ── Main grid ───────────────────────────────────────────── */

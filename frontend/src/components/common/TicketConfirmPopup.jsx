@@ -10,6 +10,7 @@ import "./TicketConfirmPopup.css";
  *   ticketId   - ticket code (e.g. "CX-12345") or null
  *   isInquiry  - true for inquiry, false for complaint
  *   replyText  - confirmation message text
+ *   enableAudio - play audio confirmation when true
  *   onClose    - callback when user dismisses the popup
  */
 export default function TicketConfirmPopup({
@@ -17,6 +18,7 @@ export default function TicketConfirmPopup({
   ticketId,
   isInquiry = false,
   replyText = "",
+  enableAudio = false,
   onClose,
 }) {
   if (!open) return null;
@@ -56,11 +58,13 @@ export default function TicketConfirmPopup({
 
         <p className="tcp__message">{displayText}</p>
 
-        <AudioReplyPlayer
-          ticketId={ticketId}
-          isInquiry={isInquiry}
-          replyText={displayText}
-        />
+        {enableAudio && (
+          <AudioReplyPlayer
+            ticketId={ticketId}
+            isInquiry={isInquiry}
+            replyText={displayText}
+          />
+        )}
 
         <button className="tcp__btnClose" type="button" onClick={onClose}>
           Continue

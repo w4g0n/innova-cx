@@ -105,19 +105,8 @@ backend/services/chatbot/hf_cache/
 backend/services/chatbot/models/
 ai-models/MultiAgentPipeline/Orchestrator/feature_labeler_model/
 ai-models/MultiAgentPipeline/Orchestrator/feature_engineering_models/
-ai-models/MultiAgentPipeline/Orchestrator/models/classifier/*
-!ai-models/MultiAgentPipeline/Orchestrator/models/classifier/.gitignore
-!ai-models/MultiAgentPipeline/Orchestrator/models/classifier/.gitkeep
-ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/*
-!ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/.gitignore
-!ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/.gitkeep
-!ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/feature_labeler/
-ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/feature_labeler/*
-!ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/feature_labeler/.gitignore
-!ai-models/MultiAgentPipeline/Orchestrator/models/featureengineering/feature_labeler/.gitkeep
-ai-models/MultiAgentPipeline/Orchestrator/models/sentimentanalysis/*
-!ai-models/MultiAgentPipeline/Orchestrator/models/sentimentanalysis/.gitignore
-!ai-models/MultiAgentPipeline/Orchestrator/models/sentimentanalysis/.gitkeep
+ai-models/MultiAgentPipeline/Orchestrator/agents/*/model/*
+!ai-models/MultiAgentPipeline/Orchestrator/agents/*/model/.gitkeep
 .claude/worktrees/
  
 # PrioritizationAgent test artifacts (keep folder placeholders only)
@@ -125,3 +114,8 @@ ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/test_outputs/*
 ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/test_inputs/*
 !ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/test_outputs/.gitkeep
 !ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/test_inputs/.gitkeep
+
+# Prioritization training/model artifacts (local only; do not push)
+ai-models/Trainings/PrioritzationAgentTraining/output/*
+ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/runtime/*.json
+ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/runtime/*.csv

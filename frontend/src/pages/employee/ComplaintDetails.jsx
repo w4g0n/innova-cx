@@ -21,9 +21,14 @@ function formatTicketSource(value) {
 }
 
 // --- AttachmentThumb --------------------------------------------------------
-function AttachmentThumb({ url, fileName }) {
+// FIX (Issue 1): Non-image attachments are downloaded via fetch+blob so that
+// the request includes the auth token and the Content-Disposition header is
+// respected in production (cross-origin). Images still render inline with a
+// direct URL because <img> loads are not blocked by CORS for display.
+function AttachmentThumb({ url, fileName, token }) {
   const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(fileName || "");
   const [imgError, setImgError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   if (!url) return null;
 
@@ -41,22 +46,64 @@ function AttachmentThumb({ url, fileName }) {
     );
   }
 
+  // For all non-image files (and images that fail to load), use fetch+blob
+  // download so it works reliably in cross-origin production environments.
+  const handleDownload = async (e) => {
+    e.preventDefault();
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) throw new Error(`Download failed (${res.status})`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = fileName || "download";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      // Revoke after a short delay to allow the download to start
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch {
+      // Fallback: open in new tab if blob download fails
+      window.open(url, "_blank", "noopener,noreferrer");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
-    <a href={url} download={fileName} target="_blank" rel="noopener noreferrer"
-       className="attachment-thumb attachment-thumb--file" title={fileName}>
+    <a
+      href={url}
+      onClick={handleDownload}
+      className="attachment-thumb attachment-thumb--file"
+      title={fileName}
+      aria-disabled={downloading}
+    >
       <svg className="attachment-thumb__icon" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" />
         <path d="M14 2v6h6M8 13h8M8 17h5" />
       </svg>
-      <span className="attachment-thumb__name">{fileName}</span>
+      <span className="attachment-thumb__name">
+        {downloading ? "Downloading…" : fileName}
+      </span>
     </a>
   );
 }
 
 // ─── Modal (outside ComplaintDetails so it never remounts on parent re-render)
+// FIX (Issues 2 & 3): `confirming` state is now LIFTED into the parent
+// (ComplaintDetails) and passed as a prop, so it is always reset to false
+// when the modal is opened or closed. Previously it lived here as local
+// useState, which meant it persisted across modal open/close cycles.
 function TicketModal({
   type, ticket, id,
+  // confirming — now controlled by parent to guarantee clean reset on open
+  confirming, setConfirming,
   // reroute
   rerouteDepartment, setRerouteDepartment,
   rerouteReason, setRerouteReason,
@@ -75,8 +122,6 @@ function TicketModal({
   // shared
   closeModal, loadTicket, uploadAttachmentsOrThrow, onSuccess,
 }) {
-  const [confirming, setConfirming] = useState(false);
-
   if (!type || !ticket) return null;
 
   const titles = {
@@ -89,7 +134,7 @@ function TicketModal({
   const submitText =
     type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
 
-  // ── Confirmation summary for reroute / rescore ──
+  // ── Confirmation summary for reroute / rescore / resolve ──
   const renderConfirmation = () => {
     if (type === "reroute") {
       return (
@@ -589,6 +634,14 @@ export default function ComplaintDetails() {
   const [error, setError] = useState("");
   const [modalType, setModalType] = useState(null);
 
+  // FIX (Issues 2 & 3): `confirming` is now owned by the parent so we can
+  // reset it to false every time a modal is opened or closed. Previously this
+  // lived inside TicketModal as local state, and since TicketModal never
+  // unmounts (it just returns null when type is null), the stale `true` value
+  // persisted across open/close cycles, causing the confirmation screen to
+  // appear immediately on the next open.
+  const [confirming, setConfirming] = useState(false);
+
   const [resolveReviewAction, setResolveReviewAction] = useState("accepted");
   const [resolutionSuggestion, setResolutionSuggestion] = useState("");
   const [finalResolution, setFinalResolution] = useState("");
@@ -611,8 +664,18 @@ export default function ComplaintDetails() {
     setTimeout(() => setToast((t) => ({ ...t, show: false })), 4000);
   };
 
+  // FIX (Issues 2 & 3): openModal always resets confirming to false so the
+  // form is always shown first, regardless of what happened in a previous
+  // modal session.
+  const openModal = (type) => {
+    setConfirming(false);
+    setModalType(type);
+  };
+
   const closeModal = () => {
     setModalType(null);
+    // FIX (Issues 2 & 3): also reset confirming on close so next open is clean
+    setConfirming(false);
     setRerouteError("");
     setRescoreError("");
   };
@@ -667,6 +730,10 @@ export default function ComplaintDetails() {
   if (error) return <Layout role="employee"><div className="empTicketDetail">{error}</div></Layout>;
   if (!ticket) return null;
 
+  // FIX (Issue 1): pass auth token to AttachmentThumb so it can include it
+  // in the fetch-based blob download, which is required in cross-origin prod.
+  const authToken = getAuthToken();
+
   return (
     <Layout role="employee">
       <div className="empTicketDetail">
@@ -683,9 +750,10 @@ export default function ComplaintDetails() {
           </div>
 
           <div className="header-actions">
-            <button className="btn-outline" onClick={() => setModalType("rescore")}>Rescore</button>
-            <button className="btn-outline" onClick={() => setModalType("reroute")}>Reroute</button>
-            <button className="btn-primary" onClick={() => setModalType("resolve")}>Resolve</button>
+            {/* FIX (Issues 2 & 3): use openModal() instead of setModalType() directly */}
+            <button className="btn-outline" onClick={() => openModal("rescore")}>Rescore</button>
+            <button className="btn-outline" onClick={() => openModal("reroute")}>Reroute</button>
+            <button className="btn-primary" onClick={() => openModal("resolve")}>Resolve</button>
           </div>
         </div>
 
@@ -694,8 +762,8 @@ export default function ComplaintDetails() {
           <div className="summary-grid">
             <div><span className="label">Issue Date:</span> {ticket.issueDate}</div>
             <div><span className="label">Ticket Source:</span> {formatTicketSource(ticket.ticketSource)}</div>
-            <div><span className="label">Mean Time To Respond:</span> {ticket.metrics?.meanTimeToRespond || "—"}</div>
-            <div><span className="label">Mean Time To Resolve:</span> {ticket.metrics?.meanTimeToResolve || "—"}</div>
+            <div><span className="label">Min Time To Respond:</span> {ticket.metrics?.minTimeToRespond || "—"}</div>
+            <div><span className="label">Min Time To Resolve:</span> {ticket.metrics?.minTimeToResolve || "—"}</div>
             <div><span className="label">Submitted By:</span> {ticket.submittedBy?.name}</div>
             <div><span className="label">Contact:</span> {ticket.submittedBy?.contact}</div>
             <div><span className="label">Location:</span> {ticket.submittedBy?.location}</div>
@@ -717,7 +785,14 @@ export default function ComplaintDetails() {
                   const fileUrl  = rawUrl
                     ? apiUrl(rawUrl)
                     : fileName ? apiUrl("/uploads/" + fileName) : null;
-                  return <AttachmentThumb key={i} url={fileUrl} fileName={fileName} />;
+                  return (
+                    <AttachmentThumb
+                      key={i}
+                      url={fileUrl}
+                      fileName={fileName}
+                      token={authToken}
+                    />
+                  );
                 })}
               </div>
             )}
@@ -757,6 +832,8 @@ export default function ComplaintDetails() {
         type={modalType}
         ticket={ticket}
         id={id}
+        confirming={confirming}
+        setConfirming={setConfirming}
         rerouteDepartment={rerouteDepartment} setRerouteDepartment={setRerouteDepartment}
         rerouteReason={rerouteReason} setRerouteReason={setRerouteReason}
         rerouteError={rerouteError} setRerouteError={setRerouteError}

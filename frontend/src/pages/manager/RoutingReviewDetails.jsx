@@ -66,6 +66,7 @@ function StatusBadge({ status }) {
     Pending:    { cls: "rrd-badge--pending",    icon: "●", label: "Pending" },
     Approved:   { cls: "rrd-badge--confirmed",  icon: "✓", label: "Confirmed" },
     Overridden: { cls: "rrd-badge--overridden", icon: "↺", label: "Overridden" },
+    Denied:     { cls: "rrd-badge--denied",     icon: "✕", label: "Denied" },
   }[status] || { cls: "rrd-badge--pending", icon: "●", label: status };
   return <span className={`rrd-badge ${cfg.cls}`}>{cfg.icon} {cfg.label}</span>;
 }
@@ -169,7 +170,10 @@ export default function RoutingReviewDetails() {
   }, [reviewId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const triggerFlash = (decision) => {
-    setFlash(decision === "Approved" ? "rrd-flash--confirm" : "rrd-flash--override");
+    const cls = decision === "Approved" ? "rrd-flash--confirm"
+              : decision === "Denied"   ? "rrd-flash--override"
+              :                          "rrd-flash--override";
+    setFlash(cls);
     setTimeout(() => setFlash(""), 900);
   };
 
@@ -190,7 +194,10 @@ export default function RoutingReviewDetails() {
         headers,
         body: JSON.stringify({
           decision,
-          approved_department: decision === "Overridden" ? dept : item.predictedDepartment,
+          // For Denied, send no approved_department (ticket keeps current dept)
+          approved_department: decision === "Overridden" ? dept
+                             : decision === "Approved"   ? item.predictedDepartment
+                             : undefined,
         }),
       });
       if (!res.ok) {
@@ -200,13 +207,15 @@ export default function RoutingReviewDetails() {
       setItem((prev) => ({
         ...prev,
         status:             decision,
-        approvedDepartment: decision === "Overridden" ? dept : prev.predictedDepartment,
+        approvedDepartment: decision === "Overridden" ? dept
+                          : decision === "Approved"   ? prev.predictedDepartment
+                          : null,
       }));
       showToast(
-        decision === "Approved"
-          ? `✓ AI routing confirmed → ${item.predictedDepartment}`
-          : `↺ Routing overridden → ${dept}`,
-        "success"
+        decision === "Approved"   ? `✓ AI routing confirmed → ${item.predictedDepartment}`
+        : decision === "Denied"   ? "✕ Routing suggestion denied. Ticket keeps its current department."
+        :                           `↺ Routing overridden → ${dept}`,
+        decision === "Denied" ? "error" : "success"
       );
     } catch (e) {
       showToast(e.message || "Failed to save decision.", "error");
@@ -339,6 +348,15 @@ export default function RoutingReviewDetails() {
                       </div>
                     )}
                   </div>
+                  {/* FIX (Issue 4): Deny button — rejects the AI routing suggestion */}
+                  <button
+                    className="rrd-btnDeny"
+                    type="button"
+                    disabled={deciding}
+                    onClick={() => setConfirm({ open: true, decision: "Denied" })}
+                  >
+                    {deciding ? "…" : "✕ Deny"}
+                  </button>
                   <button
                     className="rrd-btnConfirm"
                     type="button"
@@ -350,9 +368,13 @@ export default function RoutingReviewDetails() {
                 </div>
               )}
 
-              {!isPending && finalDept && (
-                <div className="rrd-resolvedBanner">
-                  {item.status === "Approved" ? "✓ Confirmed →" : "↺ Overridden →"} <strong>{finalDept}</strong>
+              {/* Show resolved/denied banner when not pending */}
+              {!isPending && (finalDept || item?.status === "Denied") && (
+                <div className={`rrd-resolvedBanner${item.status === "Denied" ? " rrd-resolvedBanner--denied" : ""}`}>
+                  {item.status === "Approved"   ? "✓ Confirmed →"
+                   : item.status === "Denied"   ? "✕ Denied — ticket keeps current department"
+                   :                              "↺ Overridden →"}{" "}
+                  {finalDept && <strong>{finalDept}</strong>}
                   {item.decidedBy && <span style={{ opacity: 0.7 }}> by {item.decidedBy}</span>}
                 </div>
               )}
@@ -600,7 +622,6 @@ export default function RoutingReviewDetails() {
               <h3 className="rrd-sideCardTitle">Details</h3>
               <div className="rrd-detailGrid">
                 {[
-                  { label: "Review ID",   val: reviewId?.slice(0, 8) + "…" },
                   { label: "Ticket",      val: item.ticketCode },
                   { label: "Submitted",   val: createdAt?.toLocaleString() || "—" },
                   { label: "Decided At",  val: decidedAt?.toLocaleString() || "—" },
@@ -629,14 +650,24 @@ export default function RoutingReviewDetails() {
 
       <ConfirmDialog
         open={confirm.open}
-        title={confirm.decision === "Approved" ? "Confirm AI Routing" : "Override Routing"}
+        title={
+          confirm.decision === "Approved"   ? "Confirm AI Routing"
+          : confirm.decision === "Denied"   ? "Deny Routing Suggestion"
+          :                                   "Override Routing"
+        }
         message={
           confirm.decision === "Approved"
             ? `Confirm that this ticket should stay routed to "${item.predictedDepartment}"?`
+            : confirm.decision === "Denied"
+            ? `Deny this routing suggestion? The ticket will keep its current department assignment.`
             : `Override AI routing and assign this ticket to "${confirm.overrideDept || selDept}"?`
         }
         variant={confirm.decision === "Approved" ? "success" : "danger"}
-        confirmLabel={confirm.decision === "Approved" ? "Yes, Confirm" : "Yes, Override"}
+        confirmLabel={
+          confirm.decision === "Approved" ? "Yes, Confirm"
+          : confirm.decision === "Denied" ? "Yes, Deny"
+          :                                 "Yes, Override"
+        }
         onConfirm={() => {
           const d = confirm.decision;
           const dept = confirm.overrideDept || selDept;

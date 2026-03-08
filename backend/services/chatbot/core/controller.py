@@ -227,7 +227,6 @@ def _handle_inquiry(session: dict, user_text: str) -> dict:
         ]
         response = generate_response(messages)
         rtype    = "inquiry_kb_answer"
-        response += "\n\nDid that answer your question? (Yes / No)"
     else:
         system = (
             "You are a support assistant. "
@@ -241,15 +240,10 @@ def _handle_inquiry(session: dict, user_text: str) -> dict:
         ]
         response = generate_response(messages)
         rtype    = "inquiry_falcon_fallback"
-        response = (
-            "[Not fully certain] "
-            + response
-            + "\n\nWas that helpful? (Yes / No)"
-        )
+        response = "[Not fully certain] " + response
 
-    # Transition to confirm so the yes/no reply is handled separately
-    # and does not incorrectly increment inquiry_attempts
-    transition(session, "inquiry_confirm")
+    # Do not force binary follow-up prompts; allow natural conversation.
+    transition(session, "await_primary_intent")
     _log_and_save(session, response, rtype)
     return _result(response, rtype, session_id)
 
@@ -263,11 +257,22 @@ def _handle_inquiry_confirm(session: dict, user_id: str, user_text: str) -> dict
     session_id  = session["session_id"]
     text_clean  = user_text.strip()
     text_lower  = text_clean.lower()
-    is_positive = any(
-        re.search(rf"\b{re.escape(w)}\b", text_lower)
-        for w in ("yes", "yeah", "yep", "yup", "correct", "perfect",
-                  "great", "thanks", "thank", "solved", "sorted", "resolved")
+    # Treat as explicit confirmation only when the whole message is essentially
+    # yes/no feedback. If user includes details after "yeah"/"no", continue handling
+    # it as a substantive inquiry message.
+    positive_only = bool(
+        re.fullmatch(
+            r"\s*(yes|yeah|yep|yup|correct|perfect|great|thanks|thank you|solved|sorted|resolved)[\s!.,-]*",
+            text_lower,
+        )
     )
+    negative_only = bool(
+        re.fullmatch(
+            r"\s*(no|nope|nah|not really|not exactly|not quite)[\s!.,-]*",
+            text_lower,
+        )
+    )
+    is_positive = positive_only and not negative_only
 
     if is_positive:
         response = "Great, glad I could help! Is there anything else I can assist you with?"

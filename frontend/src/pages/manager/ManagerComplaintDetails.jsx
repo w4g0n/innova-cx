@@ -80,7 +80,7 @@ function ManagerTicketModalInner({
     if (type !== "reroute") return;
     const token = getAuthToken();
 
-    fetch(apiUrl("/manager/departments"), {
+    fetch(apiUrl("/api/manager/departments"), {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
@@ -119,7 +119,7 @@ function ManagerTicketModalInner({
 
     try {
       const token = getAuthToken();
-      const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/department`), {
+      const res = await fetch(apiUrl(`/api/manager/complaints/${ticket.id}/department`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -154,7 +154,7 @@ function ManagerTicketModalInner({
 
     try {
       const token = getAuthToken();
-      const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/priority`), {
+      const res = await fetch(apiUrl(`/api/manager/complaints/${ticket.id}/priority`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -192,7 +192,7 @@ function ManagerTicketModalInner({
 
     try {
       const token = getAuthToken();
-      const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/resolve`), {
+      const res = await fetch(apiUrl(`/api/manager/complaints/${ticket.id}/resolve`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -444,7 +444,7 @@ export default function ManagerComplaintDetails() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(apiUrl(`/manager/complaints/${id}`), {
+        const res = await fetch(apiUrl(`/api/manager/complaints/${id}`), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error("Ticket not found");
@@ -515,31 +515,31 @@ export default function ManagerComplaintDetails() {
           <h2 className="section-title">Summary</h2>
           <div className="summary-grid">
             <div>
-              <span className="label">Issue Date</span>
+              <span className="mvd-label">Issue Date</span>
               {ticket.issueDate || "—"}
             </div>
             <div>
-              <span className="label">Response Time</span>
+              <span className="mvd-label">Min Time To Respond</span>
               {ticket.respondTime || "—"}
             </div>
             <div>
-              <span className="label">Resolve Time</span>
+              <span className="mvd-label">Min Time To Resolve</span>
               {ticket.resolveTime || "—"}
             </div>
             <div>
-              <span className="label">Assignee</span>
+              <span className="mvd-label">Assignee</span>
               {ticket.assignee || "—"}
             </div>
             <div>
-              <span className="label">Department</span>
+              <span className="mvd-label">Department</span>
               {ticket.department || "—"}
             </div>
             <div>
-              <span className="label">Submitted By</span>
+              <span className="mvd-label">Submitted By</span>
               {ticket.submittedBy || "—"}
             </div>
             <div>
-              <span className="label">Ticket Source</span>
+              <span className="mvd-label">Ticket Source</span>
               {formatTicketSource(ticket.ticketSource)}
             </div>
           </div>

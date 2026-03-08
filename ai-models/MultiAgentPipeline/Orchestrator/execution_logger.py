@@ -134,6 +134,44 @@ def _extract_confidence(state: dict) -> float | None:
     return None
 
 
+def _summarize_stage_output(output_state: dict, state_diff: dict) -> dict:
+    """
+    Build a compact, terminal-friendly output summary for each stage.
+    """
+    important_keys = (
+        "ticket_id",
+        "subject",
+        "label",
+        "class_confidence",
+        "text_sentiment",
+        "audio_sentiment",
+        "sentiment_score",
+        "sentiment_score_numeric",
+        "is_recurring",
+        "safety_concern",
+        "issue_severity",
+        "issue_urgency",
+        "business_impact",
+        "priority_label",
+        "priority_score",
+        "department",
+        "status",
+        "suggested_resolution",
+        "priority_assigned_at",
+        "respond_due_at",
+        "resolve_due_at",
+    )
+    changed_keys = sorted(list(state_diff.keys()))
+    important = {k: _safe_value(output_state.get(k)) for k in important_keys if k in output_state}
+    # Keep log line readable when suggestion text is long.
+    if "suggested_resolution" in important and isinstance(important["suggested_resolution"], str):
+        important["suggested_resolution"] = important["suggested_resolution"][:180]
+    return {
+        "changed_keys": changed_keys,
+        "important": important,
+    }
+
+
 def _write_logs(
     execution_id: str,
     ticket_id: str | None,
@@ -214,6 +252,14 @@ def logged_step(
         # Strip internal keys from the snapshot we log (keep state clean)
         input_snapshot = {k: v for k, v in copy.deepcopy(state).items() if not k.startswith("_")}
 
+        logger.info(
+            "STAGE_START | execution_id=%s step=%d agent=%s ticket_id=%s",
+            execution_id,
+            step_order,
+            agent_name,
+            ticket_id,
+        )
+
         start = time.monotonic()
 
         try:
@@ -234,12 +280,21 @@ def logged_step(
                 error_flag=True,
                 error_message=error_msg,
             )
+            logger.error(
+                "STAGE_ERROR | execution_id=%s step=%d agent=%s ticket_id=%s error=%s",
+                execution_id,
+                step_order,
+                agent_name,
+                ticket_id,
+                error_msg,
+            )
             raise
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
         output_snapshot = {k: v for k, v in copy.deepcopy(result).items() if not k.startswith("_")}
         state_diff = _compute_diff(input_snapshot, output_snapshot)
         confidence = _extract_confidence(result)
+        stage_summary = _summarize_stage_output(output_snapshot, state_diff)
 
         _write_logs(
             execution_id=execution_id,
@@ -263,7 +318,15 @@ def logged_step(
             f"{confidence:.4f}" if confidence is not None else "n/a",
             False,
         )
-
+        logger.info(
+            "STAGE_OUTPUT | execution_id=%s step=%d agent=%s ticket_id=%s time_ms=%d summary=%s",
+            execution_id,
+            step_order,
+            agent_name,
+            result.get("ticket_id"),
+            elapsed_ms,
+            json.dumps(_safe_json(stage_summary), ensure_ascii=False),
+        )
         return result
 
     wrapper.__name__ = f"logged_{step_fn.__name__}"

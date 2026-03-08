@@ -1,10 +1,13 @@
 import os
 import time
 import urllib.parse
+import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 def create_ticket_via_gate(
@@ -14,7 +17,7 @@ def create_ticket_via_gate(
     ticket_type: str,
     subject: str,
     details: str,
-    priority: str,
+    priority: Optional[str],
     status: str,
     ticket_source: str,
     model_suggestion: Optional[str] = None,
@@ -30,6 +33,14 @@ def create_ticket_via_gate(
     Single DB gate for ticket creation writes.
     """
     ticket_code = f"CX-{int(time.time() * 1000)}-{os.urandom(2).hex().upper()}"
+    logger.info(
+        "ticket_gate_create_start | ticket_code=%s source=%s type=%s status=%s priority=%s",
+        ticket_code,
+        ticket_source,
+        ticket_type,
+        status,
+        priority,
+    )
     cur.execute(
         """
         INSERT INTO tickets (
@@ -51,7 +62,7 @@ def create_ticket_via_gate(
             priority_assigned_at,
             created_at
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+            %s, %s, %s, %s, %s::ticket_priority, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
         )
         RETURNING id, ticket_code, status, priority, priority_assigned_at, respond_due_at, resolve_due_at;
         """,
@@ -75,6 +86,14 @@ def create_ticket_via_gate(
         ),
     )
     row = cur.fetchone()
+    logger.info(
+        "ticket_gate_create_done | ticket_code=%s id=%s status=%s priority=%s priority_assigned_at=%s",
+        row[1],
+        row[0],
+        row[2],
+        row[3],
+        row[4],
+    )
     return {
         "id": row[0],
         "ticket_code": row[1],
@@ -120,12 +139,40 @@ def dispatch_ticket_to_orchestrator(
     encoded = urllib.parse.urlencode(payload).encode("utf-8")
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-    for base in [orchestrator_url, orchestrator_url_local]:
+    dispatch_timeout = float(os.getenv("TICKET_GATE_ORCHESTRATOR_TIMEOUT_SECONDS", "180"))
+    base_candidates = [orchestrator_url, orchestrator_url_local, "http://innovacx-orchestrator:8004"]
+    bases = []
+    for base in base_candidates:
+        normalized = (base or "").rstrip("/")
+        if normalized and normalized not in bases:
+            bases.append(normalized)
+
+    for base in bases:
         try:
-            with httpx.Client(timeout=8.0) as client:
+            logger.info(
+                "ticket_gate_dispatch_attempt | ticket_code=%s target=%s type=%s has_audio=%s",
+                ticket_code,
+                base,
+                type_value,
+                payload.get("has_audio"),
+            )
+            with httpx.Client(timeout=dispatch_timeout) as client:
                 response = client.post(f"{base}/process/text", content=encoded, headers=headers)
                 response.raise_for_status()
+                logger.info(
+                    "ticket_gate_dispatch_done | ticket_code=%s target=%s status_code=%s",
+                    ticket_code,
+                    base,
+                    response.status_code,
+                )
                 return True
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "ticket_gate_dispatch_failed | ticket_code=%s target=%s err=%s",
+                ticket_code,
+                base,
+                exc,
+            )
             continue
+    logger.error("ticket_gate_dispatch_exhausted | ticket_code=%s", ticket_code)
     return False
