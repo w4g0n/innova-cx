@@ -31,48 +31,6 @@ CHATBOT_USE_MOCK = os.environ.get("CHATBOT_USE_MOCK", "true").lower() in {"1", "
 _tokenizer = None
 _model = None
 _model_init_attempted = False
-_resolved_model_path = ""
-
-
-def _model_dir_name(model_name: str) -> str:
-    return (model_name or "").strip().lower().replace("/", "-")
-
-
-def _is_valid_model_dir(path: Path) -> bool:
-    if not path:
-        return False
-    if not (path / "config.json").exists():
-        return False
-    return any(
-        (path / fname).exists()
-        for fname in ("model.safetensors", "pytorch_model.bin", "pytorch_model.bin.index.json")
-    )
-
-
-def _resolve_model_path() -> str:
-    """
-    Resolve model directory in this order:
-    1) Explicit CHATBOT_MODEL_PATH
-    2) Common cache/model locations derived from CHATBOT_MODEL_NAME
-    """
-    explicit = CHATBOT_MODEL_PATH.strip()
-    if explicit:
-        return explicit
-
-    hf_home = os.environ.get("HF_HOME", "/app/hf_cache").strip() or "/app/hf_cache"
-    slug = _model_dir_name(CHATBOT_MODEL_NAME)
-    candidates = [
-        Path(hf_home) / slug,
-        Path("/app/hf_cache") / slug,
-        Path("/app/models/chatbot") / slug,
-        Path("/app/models/chatbot"),
-    ]
-
-    for candidate in candidates:
-        if _is_valid_model_dir(candidate):
-            logger.info("chatbot_llm | discovered local model at %s", candidate)
-            return str(candidate)
-    return ""
 
 
 # ── Public helpers ───────────────────────────────────────────────────────────
@@ -86,11 +44,10 @@ def llm_available() -> bool:
 
 
 def get_llm_diagnostics() -> dict[str, Any]:
-    model_path = _resolved_model_path or _resolve_model_path()
-    local_model_exists = bool(model_path and _is_valid_model_dir(Path(model_path)))
+    local_model_exists = bool(CHATBOT_MODEL_PATH and (Path(CHATBOT_MODEL_PATH) / "config.json").exists())
     return {
         "chatbot_llm_provider": CHATBOT_LLM_PROVIDER,
-        "chatbot_model_path": model_path or None,
+        "chatbot_model_path": CHATBOT_MODEL_PATH or None,
         "chatbot_model_name": CHATBOT_MODEL_NAME or None,
         "chatbot_auto_download": CHATBOT_AUTO_DOWNLOAD,
         "chatbot_local_model_exists": local_model_exists,
@@ -104,7 +61,7 @@ def get_llm_diagnostics() -> dict[str, Any]:
 # ── Model loading ────────────────────────────────────────────────────────────
 
 def _init_model_once() -> None:
-    global _tokenizer, _model, _model_init_attempted, _resolved_model_path
+    global _tokenizer, _model, _model_init_attempted
 
     if _model_init_attempted:
         return
@@ -114,32 +71,28 @@ def _init_model_once() -> None:
         logger.info("chatbot_llm | provider=template, no model to load")
         return
 
-    model_path_str = _resolve_model_path()
-    if not model_path_str:
-        # No explicit path and no discovered local model: choose default cache target
-        # for optional auto-download; otherwise fall back to template/rule generator.
-        hf_home = os.environ.get("HF_HOME", "/app/hf_cache").strip() or "/app/hf_cache"
-        model_path_str = str(Path(hf_home) / _model_dir_name(CHATBOT_MODEL_NAME))
+    if not CHATBOT_MODEL_PATH:
+        logger.warning("chatbot_llm | CHATBOT_MODEL_PATH is empty, falling back to template mode")
+        return
 
-    model_path = Path(model_path_str)
-    _resolved_model_path = model_path_str
-    if not _is_valid_model_dir(model_path) and CHATBOT_AUTO_DOWNLOAD and CHATBOT_MODEL_NAME:
+    model_path = Path(CHATBOT_MODEL_PATH)
+    if not (model_path / "config.json").exists() and CHATBOT_AUTO_DOWNLOAD and CHATBOT_MODEL_NAME:
         try:
             from huggingface_hub import snapshot_download
 
-            logger.info("chatbot_llm | downloading model=%s to %s", CHATBOT_MODEL_NAME, model_path_str)
+            logger.info("chatbot_llm | downloading model=%s to %s", CHATBOT_MODEL_NAME, CHATBOT_MODEL_PATH)
             snapshot_download(
                 repo_id=CHATBOT_MODEL_NAME,
-                local_dir=model_path_str,
+                local_dir=CHATBOT_MODEL_PATH,
                 token=HF_TOKEN,
             )
         except Exception as exc:
             logger.warning("chatbot_llm | auto-download failed (%s), falling back to template mode", exc)
 
-    if not _is_valid_model_dir(model_path):
+    if not (model_path / "config.json").exists():
         logger.warning(
             "chatbot_llm | no local model found at %s (missing config.json), falling back to template mode",
-            model_path_str,
+            CHATBOT_MODEL_PATH,
         )
         return
 
@@ -147,7 +100,7 @@ def _init_model_once() -> None:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        model_name = model_path_str
+        model_name = CHATBOT_MODEL_PATH
         logger.info("chatbot_llm | loading local model %s (quantization=%s)", model_name, QUANTIZATION)
 
         _tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN, trust_remote_code=True)
@@ -198,48 +151,27 @@ def _template_response(messages: list[dict]) -> str:
     prompt and formatting it as a helpful answer.
     """
     system_msg = ""
-    user_msg = ""
+    #user_msg = ""
     for msg in messages:
         role = str(msg.get("role", "")).lower()
         content = str(msg.get("content", "")).strip()
         if role == "system":
             system_msg = content
         elif role == "user":
-            user_msg = content  # last user message
-
-    def _clean_context_lines(ctx: str) -> list[str]:
-        lines = [ln.strip().lstrip("- ").strip() for ln in ctx.split("\n") if ln.strip()]
-        cleaned = []
-        for ln in lines:
-            low = ln.lower()
-            if low.startswith(("agent:", "caller:", "tenant:")):
-                ln = ln.split(":", 1)[1].strip()
-                low = ln.lower()
-            if "industrial park leasing desk" in low and "good morning" in low:
-                continue
-            if len(ln) < 8:
-                continue
-            cleaned.append(ln)
-        return cleaned
+            pass
+            #user_msg = content  # last user message
 
     # If system prompt contains KB context, use it as the answer
     if "Context:" in system_msg:
         context = system_msg.split("Context:")[-1].strip()
-        lines = _clean_context_lines(context)
+        # Clean up the context for a natural response
+        lines = [ln.strip().lstrip("- ") for ln in context.split("\n") if ln.strip()]
         if lines:
-            combined = " ".join(lines).lower()
-            user_low = user_msg.lower()
-            if any(x in user_low for x in ("cost", "price", "pricing", "rent", "quote", "how much")):
-                return (
-                    "Pricing depends on unit type, location, size, and lease terms. "
-                    "I can help prepare a quote if you share your preferred asset type, location, and approximate square footage."
-                )
-            if "parking" in user_low and "parking" in combined:
-                return (
-                    "Parking is typically allocated based on unit size. "
-                    "If you share the unit size, I can help estimate expected parking allocation."
-                )
-            return lines[0][:420]
+            best = lines[0][:500]
+            return (
+                f"Based on our records: {best}\n\n"
+                "Is there anything else you would like to know?"
+            )
 
     # If system prompt contains guidelines/context
     if "Guidelines:" in system_msg:
