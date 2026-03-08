@@ -95,7 +95,7 @@ export default function ApprovalRequestDetails() {
         setApproval(found);
 
         if (found.ticketCode) {
-          return fetch(apiUrl(`/manager/complaints/${found.ticketCode}`), {
+          return fetch(apiUrl(`/api/manager/complaints/${found.ticketCode}`), {
             headers: { Authorization: `Bearer ${token}` },
           })
             .then((r) => r.json())
@@ -242,7 +242,7 @@ export default function ApprovalRequestDetails() {
               <TypeIcon type={approval.type} />
               <div>
                 <div className="ard-heroSub">Approval Request</div>
-                <h1 className="ard-heroTitle">{String(approval.requestId)}</h1>
+                <h1 className="ard-heroTitle">{approval.ticketCode ? `Request · ${approval.ticketCode}` : "Approval Request"}</h1>
                 <div className="ard-heroMeta">
                   <span className="ard-typePill">{approval.type}</span>
                   <StatusBadge status={approval.status} />
@@ -361,14 +361,8 @@ export default function ApprovalRequestDetails() {
               )}
             </div>
 
-            {/* Detail chips — Request ID gets its own full-width row */}
+            {/* Detail chips */}
             <div className="ard-detailsRow">
-              <div className="ard-detailChip ard-detailChip--full">
-                <span className="ard-detailChipLabel">Request ID</span>
-                <span className="ard-detailChipVal ard-detailChipVal--mono">
-                  {String(approval.requestId)}
-                </span>
-              </div>
               <div className="ard-detailChip">
                 <span className="ard-detailChipLabel">Ticket</span>
                 <span

@@ -80,7 +80,7 @@ function ManagerTicketModalInner({
     if (type !== "reroute") return;
     const token = getAuthToken();
 
-    fetch(apiUrl("/manager/departments"), {
+    fetch(apiUrl("/api/manager/departments"), {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
@@ -119,7 +119,7 @@ function ManagerTicketModalInner({
 
     try {
       const token = getAuthToken();
-      const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/department`), {
+      const res = await fetch(apiUrl(`/api/manager/complaints/${ticket.id}/department`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -154,7 +154,7 @@ function ManagerTicketModalInner({
 
     try {
       const token = getAuthToken();
-      const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/priority`), {
+      const res = await fetch(apiUrl(`/api/manager/complaints/${ticket.id}/priority`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -192,7 +192,7 @@ function ManagerTicketModalInner({
 
     try {
       const token = getAuthToken();
-      const res = await fetch(apiUrl(`/manager/complaints/${ticket.id}/resolve`), {
+      const res = await fetch(apiUrl(`/api/manager/complaints/${ticket.id}/resolve`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -444,7 +444,7 @@ export default function ManagerComplaintDetails() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(apiUrl(`/manager/complaints/${id}`), {
+        const res = await fetch(apiUrl(`/api/manager/complaints/${id}`), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error("Ticket not found");
