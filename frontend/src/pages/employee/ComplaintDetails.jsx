@@ -116,6 +116,7 @@ function TicketModal({
   resolveReviewAction, setResolveReviewAction,
   resolutionSuggestion, suggestionBusy,
   finalResolution, setFinalResolution,
+  stepsTaken, setStepsTaken,
   resolveError, setResolveError,
   resolveFiles, setResolveFiles,
   resolveBusy, setResolveBusy,
@@ -360,6 +361,15 @@ function TicketModal({
               </div>
             )}
 
+            <label>Steps Taken <span className="modal-label-optional">optional</span></label>
+            <textarea
+              className="modal-textarea"
+              value={stepsTaken}
+              onChange={(e) => setStepsTaken(e.target.value)}
+              placeholder="List the steps taken to resolve this issue..."
+              disabled={suggestionBusy}
+            />
+
             <label>Attachments <span className="modal-label-optional">optional</span></label>
             <div className="modal-upload-box">
               <label className="modal-upload-box__label">
@@ -513,6 +523,7 @@ function TicketModal({
       const payload = {
         decision,
         final_resolution: decision === "declined_custom" ? finalTrimmed : undefined,
+        steps_taken: stepsTaken.trim() || undefined,
       };
 
       const res = await fetch(
@@ -527,6 +538,7 @@ function TicketModal({
 
       await loadTicket();
       setResolveFiles([]);
+      setStepsTaken("");
       closeModal();
       onSuccess("Ticket resolved successfully.");
     } catch (e) {
@@ -645,6 +657,7 @@ export default function ComplaintDetails() {
   const [resolveReviewAction, setResolveReviewAction] = useState("accepted");
   const [resolutionSuggestion, setResolutionSuggestion] = useState("");
   const [finalResolution, setFinalResolution] = useState("");
+  const [stepsTaken, setStepsTaken] = useState("");
   const [resolveBusy, setResolveBusy] = useState(false);
   const [resolveError, setResolveError] = useState("");
   const [resolveFiles, setResolveFiles] = useState([]);
@@ -760,14 +773,34 @@ export default function ComplaintDetails() {
         <section className="card-section">
           <h2 className="section-title">Summary</h2>
           <div className="summary-grid">
-            <div><span className="label">Issue Date:</span> {ticket.issueDate}</div>
-            <div><span className="label">Ticket Source:</span> {formatTicketSource(ticket.ticketSource)}</div>
-            <div><span className="label">Min Time To Respond:</span> {ticket.metrics?.minTimeToRespond || "—"}</div>
-            <div><span className="label">Min Time To Resolve:</span> {ticket.metrics?.minTimeToResolve || "—"}</div>
-            <div><span className="label">Submitted By:</span> {ticket.submittedBy?.name}</div>
-            <div><span className="label">Contact:</span> {ticket.submittedBy?.contact}</div>
-            <div><span className="label">Location:</span> {ticket.submittedBy?.location}</div>
-            <div><span className="label">Description:</span> {ticket.description?.details}</div>
+            <div>
+              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Issue Date:</div>
+              <div>{ticket.issueDate || "—"}</div>
+            </div>
+            <div>
+              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Min Time To Respond:</div>
+              <div>{ticket.metrics?.minTimeToRespond || "—"}</div>
+            </div>
+            <div>
+              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Min Time To Resolve:</div>
+              <div>{ticket.metrics?.minTimeToResolve || "—"}</div>
+            </div>
+            <div>
+              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Submitted By:</div>
+              <div>{ticket.submittedBy?.name || "—"}</div>
+            </div>
+            <div>
+              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Contact:</div>
+              <div>{ticket.submittedBy?.contact || "—"}</div>
+            </div>
+            <div>
+              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Location:</div>
+              <div>{ticket.submittedBy?.location || "—"}</div>
+            </div>
+            <div>
+              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Ticket Source:</div>
+              <div>{formatTicketSource(ticket.ticketSource)}</div>
+            </div>
           </div>
         </section>
 
@@ -814,6 +847,13 @@ export default function ComplaintDetails() {
             </div>
           )}
         </section>
+
+        {ticket.finalResolution && (
+          <section className="card-section">
+            <h2 className="section-title">Final Resolution</h2>
+            <p className="description">{ticket.finalResolution}</p>
+          </section>
+        )}
       </div>
 
       {toast.show && (
@@ -843,6 +883,7 @@ export default function ComplaintDetails() {
         resolveReviewAction={resolveReviewAction} setResolveReviewAction={setResolveReviewAction}
         resolutionSuggestion={resolutionSuggestion} suggestionBusy={suggestionBusy}
         finalResolution={finalResolution} setFinalResolution={setFinalResolution}
+        stepsTaken={stepsTaken} setStepsTaken={setStepsTaken}
         resolveError={resolveError} setResolveError={setResolveError}
         resolveFiles={resolveFiles} setResolveFiles={setResolveFiles}
         resolveBusy={resolveBusy} setResolveBusy={setResolveBusy}

@@ -1615,6 +1615,7 @@ def employee_ticket_details(
           t.resolved_at,
           t.suggested_resolution,
           t.model_suggestion,
+          t.final_resolution,
           up.full_name AS submitter_name,
           up.phone     AS submitter_phone,
           up.location  AS submitter_location
@@ -1680,6 +1681,7 @@ def employee_ticket_details(
         "issueDate": issue_date,
         "suggestedResolution": row.get("suggested_resolution") or "",
         "modelSuggestion": row.get("suggested_resolution") or row.get("model_suggestion"),
+        "finalResolution": row.get("final_resolution") or "",
         "metrics": {
             "minTimeToRespond": response_time,
             "minTimeToResolve": resolution_time,
@@ -3277,6 +3279,7 @@ def assign_ticket(
         return {"ticket_id": ticket_id, "assigned_to": None, "action": "unassigned"}
 class RouteTicketBody(BaseModel):
     department: str
+    reason: Optional[str] = None
 
 @app.patch("/manager/complaints/{ticket_id}/resolve")
 @api.patch("/manager/complaints/{ticket_id}/resolve")
@@ -3603,6 +3606,7 @@ def route_ticket_department(
     assigned_uid = t_info.get("assigned_to_user_id")
     t_priority   = t_info.get("priority")
     old_dept     = t_info.get("old_dept") or "Unknown"
+    reroute_reason = (body.reason or "").strip()
 
     with db_connect() as conn:
         with conn.cursor() as cur:
@@ -3611,7 +3615,8 @@ def route_ticket_department(
                 user_id=str(user["id"]),
                 notif_type="status_change",
                 title=f"Ticket Rerouted: {ticket_code}",
-                message=f"You rerouted ticket {ticket_code} from {old_dept} to {dept_name}.",
+                message=f"You rerouted ticket {ticket_code} from {old_dept} to {dept_name}."
+                        + (f" Reason: {reroute_reason}" if reroute_reason else ""),
                 ticket_id=ticket_id,
                 priority=t_priority,
             )
@@ -3622,7 +3627,8 @@ def route_ticket_department(
                     user_id=str(assigned_uid),
                     notif_type="status_change",
                     title=f"Ticket Rerouted: {ticket_code}",
-                    message=f"Your ticket {ticket_code} has been rerouted from {old_dept} to the {dept_name} department.",
+                    message=f"Your ticket {ticket_code} has been rerouted from {old_dept} to the {dept_name} department."
+                            + (f" Reason: {reroute_reason}" if reroute_reason else ""),
                     ticket_id=ticket_id,
                     priority=t_priority,
                 )
@@ -3947,6 +3953,7 @@ def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends
             t.status,
             t.details,
             t.priority,
+            t.final_resolution,
             t.created_at,
             t.priority_assigned_at,
             t.assigned_at,
@@ -3966,6 +3973,23 @@ def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends
 
     if not ticket:
         return {"error": "Ticket not found"}
+
+    # Steps taken
+    steps = fetch_all(
+        """
+        SELECT
+          tws.step_no AS step,
+          COALESCE(tp.full_name, tu.email) AS technician,
+          tws.occurred_at AS occurred_at,
+          tws.notes AS notes
+        FROM ticket_work_steps tws
+        LEFT JOIN users tu ON tu.id = tws.technician_user_id
+        LEFT JOIN user_profiles tp ON tp.user_id = tu.id
+        WHERE tws.ticket_id = %s
+        ORDER BY tws.step_no ASC
+        """,
+        (ticket["ticket_id"],),
+    ) or []
 
     issue_date = ticket["created_at"].date().isoformat() if ticket.get("created_at") else ""
     resp_base = ticket.get("priority_assigned_at") or ticket.get("assigned_at") or ticket.get("created_at")
@@ -3992,6 +4016,16 @@ def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends
         "respondTime": respond_time,
         "resolveTime": resolve_time,
         "department": ticket.get("department_name") or "",
+        "finalResolution": ticket.get("final_resolution") or "",
+        "stepsTaken": [
+            {
+                "step": s["step"],
+                "technician": s["technician"],
+                "time": (s["occurred_at"].isoformat() if s.get("occurred_at") else ""),
+                "notes": s.get("notes") or "",
+            }
+            for s in steps
+        ],
     }
 
 #============================================
