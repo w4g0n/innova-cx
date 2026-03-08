@@ -3,15 +3,16 @@ run_pipeline.py — V8 Synthesizer Orchestrator
 ==============================================
 Runs all 4 phases in sequence:
 
-  Phase 1  Generate     Phi-4-mini complaint generation (10,000 rows)
+  Phase 1  Generate     Phi-4-mini complaint+label generation (10,000 rows)
   Phase 2  Deduplicate  TF-IDF near-duplicate removal
-  Phase 3  Label        Phi-4-mini few-shot labeling (4 labels)
+  Phase 3  Label        Pass-through if labels already exist (fallback: model labeling)
   Phase 4  Validate     Class balance check + final_dataset.csv
 
 Usage:
     python run_pipeline.py                      # Full run from scratch
     python run_pipeline.py --resume             # Resume any incomplete phase
-    python run_pipeline.py --dry-run            # Quick test: 50 complaints, 10 labeled
+    python run_pipeline.py --dry-run --dry-run-count 5
+    python run_pipeline.py --quantize 4bit
     python run_pipeline.py --start-phase 3      # Start from phase 3
     python run_pipeline.py --skip-phase 2       # Skip phase 2 (use existing output)
     python run_pipeline.py --complaints 11000   # Override complaint count
@@ -48,7 +49,7 @@ PHASE_SCRIPTS: dict[int, Path] = {
 PHASE_NAMES: dict[int, str] = {
     1: "Generate",
     2: "Deduplicate",
-    3: "Label",
+    3: "Label/Pass-through",
     4: "Validate",
 }
 
@@ -56,7 +57,7 @@ PHASE_NAMES: dict[int, str] = {
 PHASE_TIME_ESTIMATES: dict[int, str] = {
     1: "~3.5 hrs",
     2: "~2 mins",
-    3: "~4.5 hrs",
+    3: "~10 secs if integrated",
     4: "~30 secs",
 }
 
@@ -108,7 +109,8 @@ def main() -> None:
 Examples:
   python run_pipeline.py                    Full run from scratch
   python run_pipeline.py --resume           Resume any incomplete phase
-  python run_pipeline.py --dry-run          Quick test (50 generated, 10 labeled)
+  python run_pipeline.py --dry-run --dry-run-count 5
+  python run_pipeline.py --quantize 4bit
   python run_pipeline.py --start-phase 3   Start from Phase 3
   python run_pipeline.py --skip-phase 2    Skip dedup (use existing phase1 output)
         """,
@@ -121,7 +123,14 @@ Examples:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Quick sanity check: 50 complaints generated, 10 labeled",
+        help="Quick sanity check with reduced row count",
+    )
+    parser.add_argument(
+        "--dry-run-count",
+        type=int,
+        default=50,
+        metavar="N",
+        help="Number of complaints for --dry-run (default: 50)",
     )
     parser.add_argument(
         "--start-phase",
@@ -145,6 +154,12 @@ Examples:
         default=None,
         metavar="N",
         help="Override complaint count for Phase 1 (default: 10,000).",
+    )
+    parser.add_argument(
+        "--quantize",
+        choices=["none", "8bit", "4bit"],
+        default="8bit",
+        help="Phase 1 GPU quantization mode (default: 8bit — bfloat16 is 27x slower on T4)",
     )
     args = parser.parse_args()
 
@@ -201,18 +216,20 @@ Examples:
         # Only phases 1 and 3 understand --dry-run; 2 and 4 are fast/don't need it
         if args.dry_run and phase in (1, 3):
             phase_args.append("--dry-run")
+            if phase == 1:
+                phase_args.extend(["--dry-run-count", str(args.dry_run_count)])
 
         # Phase 1 and 3 support --resume internally
         if args.resume and phase in (1, 3):
             phase_args.append("--resume")
 
         if phase == 1:
-            # Always use 8-bit quantization — bfloat16 fallback is 27x slower on T4
-            phase_args.extend(["--quantize", "8bit"])
-            # Always enable sampling for complaint diversity
-            phase_args.append("--do-sample")
             if args.complaints is not None:
                 phase_args.extend(["--complaints", str(args.complaints)])
+            # Pass quantize (default 8bit — bfloat16 without quantization is 27x slower on T4)
+            phase_args.extend(["--quantize", args.quantize])
+            # Enable sampling for complaint diversity
+            phase_args.append("--do-sample")
 
         # ── Run the phase ──────────────────────────────────────────────────────
         success = run_phase(phase, phase_args)
