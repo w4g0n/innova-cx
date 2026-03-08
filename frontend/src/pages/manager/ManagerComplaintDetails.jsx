@@ -515,31 +515,31 @@ export default function ManagerComplaintDetails() {
           <h2 className="section-title">Summary</h2>
           <div className="summary-grid">
             <div>
-              <span className="label">Issue Date</span>
+              <span className="mvd-label">Issue Date</span>
               {ticket.issueDate || "—"}
             </div>
             <div>
-              <span className="label">Response Time</span>
+              <span className="mvd-label">Min Time To Respond</span>
               {ticket.respondTime || "—"}
             </div>
             <div>
-              <span className="label">Resolve Time</span>
+              <span className="mvd-label">Min Time To Resolve</span>
               {ticket.resolveTime || "—"}
             </div>
             <div>
-              <span className="label">Assignee</span>
+              <span className="mvd-label">Assignee</span>
               {ticket.assignee || "—"}
             </div>
             <div>
-              <span className="label">Department</span>
+              <span className="mvd-label">Department</span>
               {ticket.department || "—"}
             </div>
             <div>
-              <span className="label">Submitted By</span>
+              <span className="mvd-label">Submitted By</span>
               {ticket.submittedBy || "—"}
             </div>
             <div>
-              <span className="label">Ticket Source</span>
+              <span className="mvd-label">Ticket Source</span>
               {formatTicketSource(ticket.ticketSource)}
             </div>
           </div>

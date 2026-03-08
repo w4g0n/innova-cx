@@ -55,7 +55,7 @@ class ModelPaths:
 
 
 def _resolve_paths() -> ModelPaths:
-    default_dir = "/app/models/prioritization"
+    default_dir = "/app/agents/step09_priority/model"
     requested_dir = Path(os.getenv("PRIORITY_MODEL_DIR", default_dir)).resolve()
     fallback_dir = (Path(__file__).resolve().parents[1] / "runtime").resolve()
     try:
@@ -357,7 +357,7 @@ def prioritize(
     is_recurring: bool,
     ticket_type: str,
 ) -> dict[str, Any]:
-    """Runtime inference from pre-trained model state."""
+    """Model inference with deterministic rule fallback."""
     if PRIORITY_USE_MOCK:
         return {
             "raw_score": 1.0,
@@ -368,40 +368,100 @@ def prioritize(
             "engine": "mock",
         }
 
+    severity = _normalize_3level(issue_severity_val)
+    urgency = _normalize_3level(issue_urgency_val)
+    impact = _normalize_choice(business_impact_val, set(IMPACT_LEVELS), "medium")
+    sentiment = _normalize_sentiment(sentiment_score)
+    ticket = _normalize_choice(ticket_type, set(TICKET_TYPES), "complaint")
+
+    levels = [impact, severity, urgency]
+    high_count = sum(1 for lvl in levels if lvl == "high")
+    medium_count = sum(1 for lvl in levels if lvl == "medium")
+
+    # Triple-rule base priority.
+    if high_count >= 2:
+        base_priority = "critical"
+    elif high_count == 1:
+        base_priority = "medium"
+    elif medium_count == 3:
+        base_priority = "high"
+    elif medium_count == 2:
+        base_priority = "medium"
+    else:
+        base_priority = "low"
+
+    priority_idx = PRIORITY_MAP[base_priority]
+    modifiers_applied: list[str] = []
+
+    # Safety is applied first and enforces a minimum of high.
+    safety_floor_idx = PRIORITY_MAP["high"] if bool(safety_concern) else PRIORITY_MAP["low"]
+    if bool(safety_concern):
+        modifiers_applied.append("safety_concern=true(min_high)")
+        if priority_idx < safety_floor_idx:
+            priority_idx = safety_floor_idx
+
+    # Modifiers after triple rules.
+    if bool(is_recurring):
+        priority_idx += 1
+        modifiers_applied.append("is_recurring=true(+1)")
+
+    if ticket == "inquiry":
+        priority_idx -= 1
+        modifiers_applied.append("ticket_type=inquiry(-1)")
+    else:
+        modifiers_applied.append("ticket_type=complaint(0)")
+
+    if sentiment == "negative":
+        priority_idx += 1
+        modifiers_applied.append("sentiment=negative(+1)")
+    elif sentiment == "positive":
+        priority_idx -= 1
+        modifiers_applied.append("sentiment=positive(-1)")
+    else:
+        modifiers_applied.append("sentiment=neutral(0)")
+
+    # Clamp to valid range and re-apply safety floor as a hard minimum.
+    priority_idx = max(PRIORITY_MAP["low"], min(PRIORITY_MAP["critical"], priority_idx))
+    priority_idx = max(priority_idx, safety_floor_idx)
+    rule_final_priority = PRIORITY_LEVELS[priority_idx]
+
     if not _ensure_model_ready() or _model is None:
+        modifiers_applied.append("fallback=rule_no_model")
         return {
-            "raw_score": 1.0,
-            "base_priority": "medium",
-            "final_priority": "medium",
-            "modifiers_applied": ["fallback=no_model_loaded"],
-            "confidence": 0.0,
-            "engine": "fallback",
+            "raw_score": float(priority_idx),
+            "base_priority": base_priority,
+            "final_priority": rule_final_priority,
+            "modifiers_applied": modifiers_applied,
+            "confidence": 1.0,
+            "engine": "rule_based_v2",
         }
 
     x = np.asarray(
         [
             _encode_row(
-                sentiment_score=sentiment_score,
-                issue_severity_val=issue_severity_val,
-                issue_urgency_val=issue_urgency_val,
-                business_impact_val=business_impact_val,
+                sentiment_score=sentiment,
+                issue_severity_val=severity,
+                issue_urgency_val=urgency,
+                business_impact_val=impact,
                 safety_concern=safety_concern,
                 is_recurring=is_recurring,
-                ticket_type=ticket_type,
+                ticket_type=ticket,
             )
         ],
         dtype=np.float32,
     )
-
     pred_idx = int(_model.predict(x)[0])
     pred_proba = _model.predict_proba(x)[0].tolist()
-    priority = PRIORITY_LEVELS[pred_idx]
+    model_priority = PRIORITY_LEVELS[pred_idx]
 
     return {
         "raw_score": float(pred_idx),
-        "base_priority": priority,
-        "final_priority": priority,
-        "modifiers_applied": ["model=xgboost"],
+        "base_priority": base_priority,
+        "final_priority": model_priority,
+        "modifiers_applied": [
+            "model=xgboost",
+            f"rule_reference_final={rule_final_priority}",
+        ],
         "confidence": round(float(max(pred_proba)), 4),
         "engine": "xgboost",
     }

@@ -5,7 +5,7 @@ import AudioReplyPlayer from "../../components/common/AudioReplyPlayer";
 import { submitCustomerTicket, transcribeAudio } from "../../services/api";
 import "./CustomerFillForm.css";
 
-export default function CustomerFillForm({ embedded = false, onCancel, initialType }) {
+export default function CustomerFillForm({ embedded = false, onCancel, onSubmitted, initialType }) {
   const [mode, setMode] = useState("Text");
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState([]);
@@ -114,7 +114,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
       const result = await submitCustomerTicket({
         type: initialType ? initialType.toLowerCase() : "complaint",
         details,
-        subject: details.slice(0, 80),
+        subject: "",
         asset_type: "General",
         attachments: attachments.map((f) => ({
           name: f.name,
@@ -130,6 +130,9 @@ export default function CustomerFillForm({ embedded = false, onCancel, initialTy
         : `Your request has been successfully submitted. Ticket ID: ${ticketId}. Our team will review and respond as soon as possible.`;
       resetForm();
       setSubmitted({ ticketId, isInquiry, replyText, wasAudio });
+      if (typeof onSubmitted === "function") {
+        onSubmitted(result?.ticket || null);
+      }
     } catch (err) {
       console.error("Ticket creation failed:", err);
       setErrors({

@@ -249,6 +249,17 @@ def decide_routing_review(
             if dept_row:
                 cur.execute(
                     """
+                    SELECT t.ticket_code, d.name AS current_department
+                    FROM tickets t
+                    LEFT JOIN departments d ON d.id = t.department_id
+                    WHERE t.id = %s
+                    LIMIT 1;
+                    """,
+                    (rrq["ticket_id"],),
+                )
+                before_row = cur.fetchone() or {}
+                cur.execute(
+                    """
                     UPDATE tickets
                     SET
                       department_id = %s,
@@ -261,6 +272,24 @@ def decide_routing_review(
                 )
                 ticket_row = cur.fetchone()
                 if ticket_row:
+                    old_dept = before_row.get("current_department") or "Unknown"
+                    cur.execute(
+                        """
+                        INSERT INTO ticket_updates (
+                            ticket_id, author_user_id, update_type, message
+                        )
+                        VALUES (%s, %s, 'department_change', %s);
+                        """,
+                        (
+                            rrq["ticket_id"],
+                            user["id"],
+                            (
+                                f"Manager {effective_decision.lower()} routing review: "
+                                f"{old_dept} -> {final_dept}. "
+                                f"Review={review_id}."
+                            ),
+                        ),
+                    )
                     with conn.cursor() as assign_cur:
                         auto_assign_ticket_if_needed(
                             assign_cur,

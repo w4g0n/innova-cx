@@ -2,7 +2,7 @@
 One-time prioritization bootstrap training
 =========================================
 
-- Generates synthetic labels by running all combinations through fuzzy logic.
+- Generates a full truth-table dataset from deterministic priority rules.
 - Trains XGBoost on the generated dataset.
 - Exports model + metadata + base training dataset.
 
@@ -20,8 +20,6 @@ from itertools import product
 from pathlib import Path
 
 import numpy as np
-import skfuzzy as fuzz
-from skfuzzy import control as ctrl
 from xgboost import XGBClassifier
 from sklearn.metrics import accuracy_score
 
@@ -34,7 +32,6 @@ BOOL_VALUES = [False, True]
 TICKET_TYPES = ["complaint", "inquiry"]
 PRIORITY_LEVELS = ["low", "medium", "high", "critical"]
 
-SENTIMENT_NUM = {"negative": -0.7, "neutral": 0.0, "positive": 0.7}
 SENTIMENT_MAP = {"negative": 0, "neutral": 1, "positive": 2}
 SEVERITY_MAP = {"low": 0, "medium": 1, "high": 2}
 URGENCY_MAP = {"low": 0, "medium": 1, "high": 2}
@@ -52,68 +49,12 @@ class TrainingArtifacts:
     test_report_file: Path
 
 
-def build_fuzzy_system() -> ctrl.ControlSystem:
-    sentiment_universe = np.arange(-1, 1.05, 0.05)
-    severity_universe = np.arange(0, 3, 1)
-    urgency_universe = np.arange(0, 3, 1)
-    impact_universe = np.arange(0, 3, 1)
-    priority_universe = np.arange(0, 4, 1)
-
-    sentiment = ctrl.Antecedent(sentiment_universe, "sentiment")
-    issue_severity = ctrl.Antecedent(severity_universe, "issue_severity")
-    issue_urgency = ctrl.Antecedent(urgency_universe, "issue_urgency")
-    business_impact = ctrl.Antecedent(impact_universe, "business_impact")
-    priority = ctrl.Consequent(priority_universe, "priority", defuzzify_method="centroid")
-
-    sentiment["negative"] = fuzz.trapmf(sentiment_universe, [-1, -1, -0.25, 0.0])
-    sentiment["neutral"] = fuzz.trimf(sentiment_universe, [-0.25, 0.0, 0.25])
-    sentiment["positive"] = fuzz.trapmf(sentiment_universe, [0.0, 0.25, 1.0, 1.0])
-
-    issue_severity["low"] = fuzz.trimf(severity_universe, [0, 0, 1])
-    issue_severity["medium"] = fuzz.trimf(severity_universe, [0, 1, 2])
-    issue_severity["high"] = fuzz.trimf(severity_universe, [1, 2, 2])
-
-    issue_urgency["low"] = fuzz.trimf(urgency_universe, [0, 0, 1])
-    issue_urgency["medium"] = fuzz.trimf(urgency_universe, [0, 1, 2])
-    issue_urgency["high"] = fuzz.trimf(urgency_universe, [1, 2, 2])
-
-    business_impact["low"] = fuzz.trimf(impact_universe, [0, 0, 1])
-    business_impact["medium"] = fuzz.trimf(impact_universe, [0, 1, 2])
-    business_impact["high"] = fuzz.trimf(impact_universe, [1, 2, 2])
-
-    priority["low"] = fuzz.trimf(priority_universe, [0, 0, 1])
-    priority["medium"] = fuzz.trimf(priority_universe, [0, 1, 2])
-    priority["high"] = fuzz.trimf(priority_universe, [1, 2, 3])
-    priority["critical"] = fuzz.trimf(priority_universe, [2, 3, 3])
-
-    rules = [
-        ctrl.Rule(issue_severity["high"] & issue_urgency["high"], priority["high"]),
-        ctrl.Rule(issue_severity["high"] & issue_urgency["medium"], priority["high"]),
-        ctrl.Rule(issue_severity["medium"] & issue_urgency["high"], priority["high"]),
-        ctrl.Rule(issue_severity["high"] & issue_urgency["low"], priority["medium"]),
-        ctrl.Rule(issue_severity["low"] & issue_urgency["high"], priority["medium"]),
-        ctrl.Rule(issue_severity["medium"] & issue_urgency["medium"], priority["medium"]),
-        ctrl.Rule(issue_severity["medium"] & issue_urgency["low"], priority["medium"]),
-        ctrl.Rule(issue_severity["low"] & issue_urgency["medium"], priority["medium"]),
-        ctrl.Rule(issue_severity["low"] & issue_urgency["low"], priority["low"]),
-
-        ctrl.Rule(business_impact["high"] & issue_severity["high"] & issue_urgency["high"], priority["critical"]),
-        ctrl.Rule(business_impact["high"] & issue_severity["medium"] & issue_urgency["high"], priority["high"]),
-
-        ctrl.Rule(sentiment["negative"], priority["high"]),
-        ctrl.Rule(sentiment["positive"], priority["low"]),
-    ]
-
-    return ctrl.ControlSystem(rules)
-
-
 def clamp_priority(index: int) -> str:
     max_idx = len(PRIORITY_LEVELS) - 1
     return PRIORITY_LEVELS[max(0, min(max_idx, int(index)))]
 
 
-def fuzzy_label(
-    fuzzy_ctrl: ctrl.ControlSystem,
+def rule_based_label(
     *,
     sentiment_score: str,
     issue_severity_val: str,
@@ -123,14 +64,25 @@ def fuzzy_label(
     is_recurring: bool,
     ticket_type: str,
 ) -> str:
-    sim = ctrl.ControlSystemSimulation(fuzzy_ctrl)
-    sim.input["sentiment"] = SENTIMENT_NUM[sentiment_score]
-    sim.input["issue_severity"] = SEVERITY_MAP[issue_severity_val]
-    sim.input["issue_urgency"] = URGENCY_MAP[issue_urgency_val]
-    sim.input["business_impact"] = IMPACT_MAP[business_impact_val]
-    sim.compute()
+    levels = [business_impact_val, issue_severity_val, issue_urgency_val]
+    high_count = sum(1 for lvl in levels if lvl == "high")
+    medium_count = sum(1 for lvl in levels if lvl == "medium")
 
-    base = int(round(float(sim.output["priority"])))
+    if high_count >= 2:
+        base_label = "critical"
+    elif high_count == 1:
+        base_label = "medium"
+    elif medium_count == 3:
+        base_label = "high"
+    elif medium_count == 2:
+        base_label = "medium"
+    else:
+        base_label = "low"
+
+    base = PRIORITY_MAP[base_label]
+    safety_floor = PRIORITY_MAP["high"] if safety_concern else PRIORITY_MAP["low"]
+    if safety_concern and base < safety_floor:
+        base = safety_floor
 
     modifier = 0
     if is_recurring:
@@ -143,16 +95,14 @@ def fuzzy_label(
         modifier -= 1
 
     final = base + modifier
+    final = max(PRIORITY_MAP["low"], min(PRIORITY_MAP["critical"], final))
+    final = max(final, safety_floor)
     final_label = clamp_priority(final)
-
-    if safety_concern and PRIORITY_MAP[final_label] < PRIORITY_MAP["high"]:
-        final_label = "high"
 
     return final_label
 
 
 def build_dataset() -> list[dict[str, object]]:
-    fuzzy_ctrl = build_fuzzy_system()
     rows: list[dict[str, object]] = []
 
     for (
@@ -172,8 +122,7 @@ def build_dataset() -> list[dict[str, object]]:
         SEVERITY_LEVELS,
         URGENCY_LEVELS,
     ):
-        label = fuzzy_label(
-            fuzzy_ctrl,
+        label = rule_based_label(
             sentiment_score=sentiment_score,
             issue_severity_val=issue_severity,
             issue_urgency_val=issue_urgency,
@@ -193,7 +142,7 @@ def build_dataset() -> list[dict[str, object]]:
                 "issue_severity_val": issue_severity,
                 "issue_urgency_val": issue_urgency,
                 "label_priority": label,
-                "label_source": "fuzzy_synthetic",
+                "label_source": "rule_truth_table_v2",
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
         )
@@ -284,6 +233,7 @@ def run_training(output_dir: Path, epochs: int) -> TrainingArtifacts:
         "synthetic_rows": len(rows),
         "combinations_formula": "2*2*3*2*3*3*3",
         "expected_rows": 648,
+        "label_engine": "rule_truth_table_v2",
         "epochs": int(epochs),
         "train_set_evaluation": eval_report,
         "feature_order": [
