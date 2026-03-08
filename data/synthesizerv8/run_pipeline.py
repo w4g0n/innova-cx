@@ -11,7 +11,7 @@ Runs all 4 phases in sequence:
 Usage:
     python run_pipeline.py                      # Full run from scratch
     python run_pipeline.py --resume             # Resume any incomplete phase
-    python run_pipeline.py --dry-run            # Quick test: 50 complaints (with labels)
+    python run_pipeline.py --dry-run --dry-run-count 5
     python run_pipeline.py --start-phase 3      # Start from phase 3
     python run_pipeline.py --skip-phase 2       # Skip phase 2 (use existing output)
     python run_pipeline.py --complaints 11000   # Override complaint count
@@ -108,7 +108,7 @@ def main() -> None:
 Examples:
   python run_pipeline.py                    Full run from scratch
   python run_pipeline.py --resume           Resume any incomplete phase
-  python run_pipeline.py --dry-run          Quick test (50 generated with labels)
+  python run_pipeline.py --dry-run --dry-run-count 5
   python run_pipeline.py --start-phase 3   Start from Phase 3
   python run_pipeline.py --skip-phase 2    Skip dedup (use existing phase1 output)
         """,
@@ -121,7 +121,14 @@ Examples:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Quick sanity check: 50 complaints generated with labels",
+        help="Quick sanity check with reduced row count",
+    )
+    parser.add_argument(
+        "--dry-run-count",
+        type=int,
+        default=50,
+        metavar="N",
+        help="Number of complaints for --dry-run (default: 50)",
     )
     parser.add_argument(
         "--start-phase",
@@ -201,6 +208,8 @@ Examples:
         # Only phases 1 and 3 understand --dry-run; 2 and 4 are fast/don't need it
         if args.dry_run and phase in (1, 3):
             phase_args.append("--dry-run")
+            if phase == 1:
+                phase_args.extend(["--dry-run-count", str(args.dry_run_count)])
 
         # Phase 1 and 3 support --resume internally
         if args.resume and phase in (1, 3):

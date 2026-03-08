@@ -10,7 +10,7 @@ Supports --resume to continue from an interrupted run.
 Usage:
     python phase1_generate.py
     python phase1_generate.py --resume
-    python phase1_generate.py --dry-run          # 50 rows only
+    python phase1_generate.py --dry-run --dry-run-count 5
     python phase1_generate.py --complaints 500   # custom count
 """
 
@@ -330,19 +330,20 @@ def load_model(model_name: str) -> tuple:
     has_cuda  = torch.cuda.is_available()
 
     model = None
-    # Attempt 1: fp16 GPU
+    # Attempt 1: GPU (prefer bf16 for stability, fallback to fp16)
     if has_cuda:
         try:
+            gpu_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                dtype=torch.float16,
+                dtype=gpu_dtype,
                 low_cpu_mem_usage=False,
                 trust_remote_code=True,
             )
             model = model.to("cuda")
-            print("Model backend: fp16 (CUDA)")
+            print(f"Model backend: {str(gpu_dtype).replace('torch.', '')} (CUDA)")
         except Exception as e:
-            print(f"[WARN] fp16 GPU load failed ({e}), falling back to CPU...")
+            print(f"[WARN] GPU load failed ({e}), falling back to CPU...")
 
     # Attempt 2: CPU fallback
     if model is None:
@@ -483,6 +484,7 @@ def generate_complaint(
     recent_texts: list[str] | None = None,
     max_new_tokens: int = 256,
     retries: int = 3,
+    do_sample: bool = False,
     temperature: float = 0.7,
     top_p: float = 0.9,
 ) -> dict | None:
@@ -507,7 +509,7 @@ def generate_complaint(
                     output_ids = model.generate(
                         inputs,
                         max_new_tokens=current_max,
-                        do_sample=True,
+                        do_sample=do_sample,
                         temperature=temperature,
                         top_p=top_p,
                         use_cache=False,
@@ -520,7 +522,7 @@ def generate_complaint(
                     output_ids = model.generate(
                         **inputs,
                         max_new_tokens=current_max,
-                        do_sample=True,
+                        do_sample=do_sample,
                         temperature=temperature,
                         top_p=top_p,
                         use_cache=False,
@@ -662,12 +664,16 @@ def main() -> None:
     parser.add_argument("--model",          default=MODEL_NAME)
     parser.add_argument("--max-new-tokens", type=int,   default=256)
     parser.add_argument("--retries",        type=int,   default=3)
-    parser.add_argument("--temperature",    type=float, default=0.7)
+    parser.add_argument("--do-sample",      action="store_true",
+                        help="Enable stochastic decoding (disabled by default for stability)")
+    parser.add_argument("--temperature",    type=float, default=0.2)
     parser.add_argument("--top-p",          type=float, default=0.9)
     parser.add_argument("--resume",         action="store_true",
                         help="Resume from existing checkpoint")
     parser.add_argument("--dry-run",        action="store_true",
-                        help="Generate only 50 complaints (quick test)")
+                        help="Quick test mode")
+    parser.add_argument("--dry-run-count",  type=int, default=50,
+                        help="Number of complaints in dry-run mode (default: 50)")
     args = parser.parse_args()
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -679,7 +685,7 @@ def main() -> None:
         results  = existing.to_dict("records")
         print(f"[RESUME] Loaded {len(results)} rows from checkpoint")
 
-    target    = 50 if args.dry_run else args.complaints
+    target    = args.dry_run_count if args.dry_run else args.complaints
     remaining = max(0, target - len(results))
     start_idx = len(results)  # for ticket_id assignment
 
@@ -729,6 +735,7 @@ def main() -> None:
             recent_texts=list(recent_texts),
             max_new_tokens=args.max_new_tokens,
             retries=args.retries,
+            do_sample=args.do_sample,
             temperature=args.temperature,
             top_p=args.top_p,
         )
