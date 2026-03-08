@@ -18,7 +18,7 @@ from psycopg2.extras import RealDictCursor
 from psycopg2 import OperationalError
 import httpx
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -87,7 +87,7 @@ SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
 ROUTING_CONFIDENCE_THRESHOLD = float(
     os.getenv(
         "DEPARTMENT_ROUTING_THRESHOLD",
-        os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.35"),
+        os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.70"),
     )
 )
 CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "30"))
@@ -688,10 +688,27 @@ def predict_is_recurring(*, user_id: str, subject: str, details: str) -> bool:
         return False
 
 
+def _predict_department_from_details(details: str) -> tuple[str, float]:
+    text = (details or "").lower()
+    if any(k in text for k in ("wifi", "network", "internet", "server", "system", "software", "login")):
+        return "IT", 0.86
+    if any(k in text for k in ("leak", "pipe", "water", "ac", "air conditioning", "maintenance", "electrical", "power")):
+        return "Maintenance", 0.86
+    if any(k in text for k in ("fire", "unsafe", "hazard", "security", "alarm", "theft", "emergency")):
+        return "Safety & Security", 0.88
+    if any(k in text for k in ("contract", "legal", "policy", "compliance", "regulation", "law")):
+        return "Legal & Compliance", 0.82
+    if any(k in text for k in ("lease", "tenant", "rent", "handover", "move in")):
+        return "Leasing", 0.82
+    if any(k in text for k in ("hr", "salary", "leave", "employee", "staff")):
+        return "HR", 0.82
+    return "Facilities Management", 0.62
+
+
 CHATBOT_URL = os.getenv("CHATBOT_URL", "http://chatbot:8000")
 CHATBOT_URL_LOCAL = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001")
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8004")
-ORCHESTRATOR_URL_LOCAL = os.getenv("ORCHESTRATOR_URL_LOCAL", "http://localhost:8004")
+ORCHESTRATOR_URL_LOCAL = os.getenv("ORCHESTRATOR_URL_LOCAL", "http://innovacx-orchestrator:8004")
 
 def _insert_notification(
     cur,
@@ -2842,6 +2859,27 @@ class InternalCreateTicketRequest(BaseModel):
     asset_type: Optional[str] = "General"
 
 
+def _dispatch_orchestrator_after_submit(
+    *,
+    ticket_code: str,
+    details: str,
+    ticket_type: Optional[str],
+    subject: Optional[str],
+) -> None:
+    ok = dispatch_ticket_to_orchestrator(
+        ticket_code=ticket_code,
+        details=details,
+        orchestrator_url=ORCHESTRATOR_URL,
+        orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
+        ticket_type=ticket_type,
+        subject=subject,
+    )
+    if not ok:
+        logger.warning("orchestrator_dispatch | failed for ticket=%s", ticket_code)
+    else:
+        logger.info("orchestrator_dispatch | accepted for ticket=%s", ticket_code)
+
+
 @api.post("/internal/tickets/create")
 def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
     """
@@ -2867,7 +2905,7 @@ def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
                 ticket_type=ticket_type,
                 subject=subject,
                 details=details,
-                priority="Low",
+                priority=None,
                 status="Open",
                 ticket_source=(body.ticket_source or "chatbot").strip() or "chatbot",
                 model_suggestion=json.dumps({"is_recurring": False}),
@@ -2884,10 +2922,9 @@ def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
     )
     if not orchestrator_dispatched:
         logger.warning(
-            "orchestrator_dispatch | failed for internal ticket=%s, applying local mock pipeline fallback",
+            "orchestrator_dispatch | failed for internal ticket=%s",
             ticket_code,
         )
-        _apply_mock_pipeline_outcome(ticket_code, details)
 
     return {
         "ok": True,
@@ -2903,6 +2940,7 @@ def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
 @api.post("/customer/tickets")
 def create_customer_ticket(
     body: CreateTicketRequest,
+    background_tasks: BackgroundTasks,
     user: Dict[str, Any] = Depends(require_customer),
 ):
     is_recurring = predict_is_recurring(user_id=user["id"], subject=body.subject, details=body.details)
@@ -2911,7 +2949,6 @@ def create_customer_ticket(
     # Insert ticket into database through centralized gate.
     ticket_id = None
     ticket_code = None
-    suggestion_text = ""
     with db_connect() as conn:
         with conn.cursor() as cur:
             normalized_ticket_type = (
@@ -2925,13 +2962,21 @@ def create_customer_ticket(
                 ticket_type=normalized_ticket_type,
                 subject=body.subject,
                 details=body.details,
-                priority="Low",
+                priority=None,
                 status="Open",
                 ticket_source="user",
                 model_suggestion=model_suggestion,
             )
             ticket_id = created["id"]
             ticket_code = created["ticket_code"]
+            logger.info(
+                "customer_ticket_submit | ticket_code=%s user_id=%s type=%s status=%s priority=%s",
+                ticket_code,
+                user["id"],
+                normalized_ticket_type,
+                created.get("status"),
+                created.get("priority"),
+            )
 
             # Insert attachments if any
             for att in body.attachments or []:
@@ -2943,67 +2988,30 @@ def create_customer_ticket(
                     (ticket_id, att.name),
                 )
 
-            # Generate suggestion at creation time so employee resolve view only loads it.
-            try:
-                suggestion_text = generate_resolution_suggestion(
-                    {
-                        "ticket_code": ticket_code,
-                        "ticket_type": normalized_ticket_type,
-                        "subject": body.subject,
-                        "details": body.details,
-                        "asset_type": body.asset_type,
-                        "priority": "Low",
-                        "department_name": "General",
-                        "status": "Open",
-                    },
-                    logger,
-                )
-            except Exception as exc:
-                logger.warning(
-                    "suggested_resolution | generation failed at ticket create ticket=%s err=%s",
-                    ticket_code,
-                    exc,
-                )
-                suggestion_text = ""
+            # Suggested resolution is generated by orchestrator flow.
 
-            if suggestion_text:
-                cur.execute(
-                    """
-                    UPDATE tickets
-                    SET
-                      suggested_resolution = %s,
-                      suggested_resolution_model = %s,
-                      suggested_resolution_generated_at = now()
-                    WHERE id = %s;
-                    """,
-                    (suggestion_text, get_resolution_model_label(), ticket_id),
-                )
-
-    orchestrator_dispatched = dispatch_ticket_to_orchestrator(
+    background_tasks.add_task(
+        _dispatch_orchestrator_after_submit,
         ticket_code=ticket_code,
         details=body.details,
-        orchestrator_url=ORCHESTRATOR_URL,
-        orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
         ticket_type=body.type,
         subject=body.subject,
     )
-    if not orchestrator_dispatched:
-        logger.warning(
-            "orchestrator_dispatch | failed for ticket=%s, applying local mock pipeline fallback",
-            ticket_code,
-        )
-        _apply_mock_pipeline_outcome(ticket_code, body.details)
+    logger.info("orchestrator_dispatch | queued for ticket=%s", ticket_code)
 
     return {
         "ok": True,
         "message": "Ticket created successfully",
         "ticket": {
             "ticketId": ticket_code,
-            "ticketType": body.type, 
+            "ticketType": body.type,
             "subject": body.subject,
-            "priority": "Normal",
-            "status": "New",
+            "priority": created.get("priority"),
+            "status": created.get("status"),
             "is_recurring": is_recurring,
+            "priority_assigned_at": created.get("priority_assigned_at").isoformat() if created.get("priority_assigned_at") else None,
+            "respond_due_at": created.get("respond_due_at").isoformat() if created.get("respond_due_at") else None,
+            "resolve_due_at": created.get("resolve_due_at").isoformat() if created.get("resolve_due_at") else None,
         },
     }
 
@@ -4230,6 +4238,23 @@ def get_routing_review_queue(
     status_filter: str = Query(default="Pending"),
     user: Dict[str, Any] = Depends(require_manager),
 ):
+<<<<<<< HEAD
+    manager_dept_row = fetch_one(
+        """
+        SELECT d.name AS department_name
+        FROM user_profiles up
+        LEFT JOIN departments d ON d.id = up.department_id
+        WHERE up.user_id = %s
+        LIMIT 1
+        """,
+        (user["id"],),
+    ) or {}
+    return get_routing_review_payload(
+        fetch_all=fetch_all,
+        status_filter=status_filter,
+        manager_department_name=manager_dept_row.get("department_name"),
+    )
+=======
     # FIX (Issue 4): Get results from service, then correct status for Denied items.
     # The external get_routing_review_payload may not know about 'manager_denied'.
     # We fetch the raw routing rows ourselves to patch status before returning.
@@ -4277,6 +4302,7 @@ def get_routing_review_queue(
     if isinstance(raw, dict) and "items" in raw:
         return {**raw, "items": items}
     return items
+>>>>>>> origin/DEV
 
 
 class RoutingReviewDecisionRequest(BaseModel):
@@ -4291,6 +4317,20 @@ def get_routing_review_item(
     user: Dict[str, Any] = Depends(require_manager),
 ):
     """Fetch a single routing review item by its UUID."""
+    manager_dept_row = fetch_one(
+        """
+        SELECT d.name AS department_name
+        FROM user_profiles up
+        LEFT JOIN departments d ON d.id = up.department_id
+        WHERE up.user_id = %s
+        LIMIT 1
+        """,
+        (user["id"],),
+    ) or {}
+    manager_department_name = manager_dept_row.get("department_name")
+    if not manager_department_name:
+        raise HTTPException(status_code=403, detail="Manager is not assigned to a department")
+
     row = fetch_one(
         """
         SELECT
@@ -4317,10 +4357,12 @@ def get_routing_review_item(
         JOIN tickets t ON t.id = dr.ticket_id
         LEFT JOIN departments d ON d.id = t.department_id
         LEFT JOIN user_profiles up ON up.user_id = dr.manager_id
-        WHERE dr.id::text = %s AND dr.is_confident = FALSE
+        WHERE dr.id::text = %s
+          AND dr.is_confident = FALSE
+          AND LOWER(dr.suggested_department) = LOWER(%s)
         LIMIT 1
         """,
-        (review_id,),
+        (review_id, manager_department_name),
     )
     if not row:
         from fastapi import HTTPException
@@ -4339,6 +4381,18 @@ def decide_routing_review(
     body: RoutingReviewDecisionRequest,
     user: Dict[str, Any] = Depends(require_manager),
 ):
+<<<<<<< HEAD
+    manager_dept_row = fetch_one(
+        """
+        SELECT d.name AS department_name
+        FROM user_profiles up
+        LEFT JOIN departments d ON d.id = up.department_id
+        WHERE up.user_id = %s
+        LIMIT 1
+        """,
+        (user["id"],),
+    ) or {}
+=======
     # FIX (Issue 4 — add deny request option):
     # Handle "Denied" directly here before delegating to decide_routing_review_service,
     # which may not support this decision type. "Denied" means the manager rejects the
@@ -4397,11 +4451,13 @@ def decide_routing_review(
         return {"ok": True, "reviewId": review_id, "decision": "Denied"}
 
     # For "Approved" and "Overridden" decisions delegate to the existing service.
+>>>>>>> origin/DEV
     return decide_routing_review_service(
         review_id=review_id,
         decision=body.decision,
         approved_department=body.approved_department,
         user=user,
+        manager_department_name=manager_dept_row.get("department_name"),
         fetch_one=fetch_one,
         db_connect=db_connect,
         auto_assign_ticket_if_needed=auto_assign_ticket_if_needed,
@@ -4552,9 +4608,15 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
     ticket_type = "Inquiry" if label == "inquiry" else ("Complaint" if label else None)
     requested_asset_type = (body.asset_type or "").strip() or None
     requested_department = (body.department or "").strip() or None
+    routing_confidence_raw = body.classification_confidence
+    if not requested_department and body.priority is not None:
+        inferred_department, inferred_confidence = _predict_department_from_details(body.transcript or "")
+        requested_department = inferred_department
+        if routing_confidence_raw is None:
+            routing_confidence_raw = inferred_confidence
     routing_meta = build_routing_meta(
         requested_department=requested_department,
-        classification_confidence=body.classification_confidence,
+        classification_confidence=routing_confidence_raw,
         threshold=ROUTING_CONFIDENCE_THRESHOLD,
     )
     has_routing_decision = routing_meta["has_routing_decision"]
@@ -4604,7 +4666,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     ticket_type=ticket_type or "Complaint",
                     subject=(body.transcript or "")[:120].strip() or "Customer submission",
                     details=body.transcript or "",
-                    priority=priority_label or "Low",
+                    priority=priority_label,
                     status=normalized_status or "Open",
                     ticket_source="form",
                     department_id=department_id,
@@ -4612,7 +4674,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     sentiment_label="orchestrator" if body.sentiment is not None else None,
                     model_priority=priority_label,
                     model_department_id=department_id,
-                    model_confidence=body.classification_confidence,
+                    model_confidence=routing_confidence_raw,
                 )
                 return {
                     "ticket_id":   created["ticket_code"],
@@ -4639,15 +4701,14 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         subject_update = f"[{requested_department.title()}] Automated {ticket_type.lower()}"
 
                     details_update = body.transcript if body.transcript else None
+                    base_status = normalized_status or "Open"
                     if has_routing_decision:
                         effective_department_id = department_id if routing_is_confident else None
+                        effective_status = "Assigned" if routing_is_confident else "Open"
                     else:
                         effective_department_id = department_id or existing_department_id
-                    should_start_sla = bool(
-                        effective_department_id
-                        and normalized_status == "Assigned"
-                    )
-                    now_utc = datetime.now(timezone.utc) if should_start_sla else None
+                        effective_status = base_status
+                    now_utc = None
                     sentiment_label_update = "orchestrator" if body.sentiment is not None else None
 
                     cur.execute(
@@ -4676,13 +4737,13 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                             details_update,
                             requested_asset_type,
                             priority_label,
-                            normalized_status,
+                            effective_status,
                             effective_department_id,
                             body.sentiment,
                             sentiment_label_update,
                             priority_label,
                             effective_department_id,
-                            body.classification_confidence,
+                            routing_confidence_raw,
                             now_utc,
                             incoming_ticket_code,
                         ),
@@ -4692,7 +4753,13 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         cur.execute(
                             """
                             UPDATE tickets
-                            SET department_id = NULL, updated_at = now()
+                            SET
+                              department_id = NULL,
+                              status = CASE
+                                WHEN status IN ('Resolved', 'Escalated', 'Overdue') THEN status
+                                ELSE 'Open'
+                              END,
+                              updated_at = now()
                             WHERE ticket_code = %s
                             RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at;
                             """,
@@ -4779,16 +4846,16 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 "chatbot" if str(body.created_by_user_id or "").strip() else "orchestrator"
             )
             normalized_type = ticket_type or "Complaint"
-            initial_priority = priority_label or "Low"
+            initial_priority = priority_label
             initial_status = normalized_status or "Open"
             initial_department_id = department_id
-            if has_routing_decision and not routing_is_confident:
-                initial_department_id = None
-            initial_priority_assigned_at = (
-                datetime.now(timezone.utc)
-                if (initial_status == "Assigned" and initial_department_id)
-                else None
-            )
+            if has_routing_decision:
+                if routing_is_confident:
+                    initial_status = "Assigned"
+                else:
+                    initial_department_id = None
+                    initial_status = "Open"
+            initial_priority_assigned_at = None
             subject_text = (
                 (body.subject or "").strip()
                 or (body.transcript or "").strip()[:120]
@@ -4809,7 +4876,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 sentiment_label="orchestrator" if body.sentiment is not None else None,
                 model_priority=initial_priority,
                 model_department_id=department_id,
-                model_confidence=body.classification_confidence,
+                model_confidence=routing_confidence_raw,
                 priority_assigned_at=initial_priority_assigned_at,
             )
             auto_assign_ticket_if_needed(
@@ -5027,20 +5094,44 @@ async def proxy_orchestrator_process_text(request: Request):
     body_bytes = await request.body()
     content_type = request.headers.get("content-type", "application/x-www-form-urlencoded")
     last_error = None
+    base_candidates = [
+        ORCHESTRATOR_URL,
+        ORCHESTRATOR_URL_LOCAL,
+        "http://innovacx-orchestrator:8004",
+    ]
+    bases: list[str] = []
+    for base in base_candidates:
+        normalized = (base or "").rstrip("/")
+        if normalized and normalized not in bases:
+            bases.append(normalized)
 
-    for base in [ORCHESTRATOR_URL, ORCHESTRATOR_URL_LOCAL]:
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{base}/process/text",
-                    content=body_bytes,
-                    headers={"Content-Type": content_type},
-                )
-                response.raise_for_status()
-                return response.json()
-        except Exception as exc:
-            last_error = exc
-            continue
+    for attempt in range(1, 4):
+        for base in bases:
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    response = await client.post(
+                        f"{base}/process/text",
+                        content=body_bytes,
+                        headers={"Content-Type": content_type},
+                    )
+                    response.raise_for_status()
+                    return response.json()
+            except httpx.HTTPStatusError as exc:
+                # Preserve user/input errors from orchestrator, retry only 5xx.
+                status_code = exc.response.status_code
+                if 400 <= status_code < 500:
+                    detail = None
+                    try:
+                        payload = exc.response.json()
+                        detail = payload.get("detail")
+                    except Exception:
+                        detail = exc.response.text or "Request rejected by orchestrator"
+                    raise HTTPException(status_code=status_code, detail=detail)
+                last_error = exc
+            except Exception as exc:
+                last_error = exc
+                continue
+        await asyncio.sleep(0.5 * attempt)
 
     raise HTTPException(status_code=503, detail=f"Orchestrator service unavailable: {last_error}")
 

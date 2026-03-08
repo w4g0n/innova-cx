@@ -164,7 +164,67 @@ export async function submitTextComplaint(text, options = {}) {
   });
 
   if (!response.ok) {
-    throw new Error("Orchestrator text processing failed");
+    try {
+      await response.json();
+    } catch {
+      // ignore parse failures; user-facing error remains generic
+    }
+    throw new Error(
+      "We could not submit your request right now. Please try again in a moment."
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Submit a customer ticket through backend ticket creation gate.
+ * Flow: frontend -> backend (/api/customer/tickets) -> ticket gate insert -> orchestrator dispatch.
+ *
+ * @param {{
+ *   type?: string,
+ *   details: string,
+ *   subject?: string,
+ *   asset_type?: string,
+ *   attachments?: Array<{name: string, type?: string, size?: number, lastModified?: number}>
+ * }} payload
+ * @returns {Promise<{ok: boolean, message?: string, ticket?: {ticketId?: string}}>}
+ */
+export async function submitCustomerTicket(payload = {}) {
+  const token = localStorage.getItem("access_token");
+  const rawUser = localStorage.getItem("user");
+  let user = {};
+  try {
+    user = rawUser ? JSON.parse(rawUser) : {};
+  } catch {
+    user = {};
+  }
+
+  const details = String(payload.details || "").trim();
+  const subjectFallback = details ? details.slice(0, 80) : "Customer request";
+  const body = {
+    name: String(user.full_name || user.name || "Customer"),
+    email: String(user.email || ""),
+    type: String(payload.type || "complaint"),
+    asset_type: String(payload.asset_type || "General"),
+    subject: String(payload.subject || subjectFallback),
+    details,
+    attachments: Array.isArray(payload.attachments) ? payload.attachments : [],
+  };
+
+  const response = await fetch(apiUrl("/api/customer/tickets"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      "We could not submit your request right now. Please try again in a moment."
+    );
   }
 
   return response.json();
@@ -236,6 +296,7 @@ export default {
   sendChatMessage,
   checkSentimentHealth,
   submitTextComplaint,
+  submitCustomerTicket,
   submitAudioComplaint,
   getAudioReply,
 };

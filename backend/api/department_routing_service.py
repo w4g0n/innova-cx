@@ -37,29 +37,18 @@ def manager_targets_for_department(cur, department_id: Optional[str]) -> List[Di
         cols = [d[0] for d in (cur.description or [])]
         return [dict(zip(cols, row)) for row in rows]
 
-    if department_id:
-        cur.execute(
-            """
-            SELECT u.id, up.full_name
-            FROM users u
-            JOIN user_profiles up ON up.user_id = u.id
-            WHERE u.role = 'manager' AND up.department_id = %s
-            ORDER BY up.full_name;
-            """,
-            (department_id,),
-        )
-        rows = _rows_as_dicts(cur.fetchall() or [])
-        if rows:
-            return rows
+    if not department_id:
+        return []
 
     cur.execute(
         """
         SELECT u.id, up.full_name
         FROM users u
-        LEFT JOIN user_profiles up ON up.user_id = u.id
-        WHERE u.role = 'manager'
-        ORDER BY up.full_name NULLS LAST, u.id;
-        """
+        JOIN user_profiles up ON up.user_id = u.id
+        WHERE u.role = 'manager' AND up.department_id = %s
+        ORDER BY up.full_name;
+        """,
+        (department_id,),
     )
     return _rows_as_dicts(cur.fetchall() or [])
 
@@ -132,6 +121,7 @@ def record_department_routing_decision(
 def get_routing_review_payload(
     fetch_all: Callable[..., List[Dict[str, Any]]],
     status_filter: str,
+    manager_department_name: Optional[str],
 ) -> Dict[str, Any]:
     valid = {"Pending", "Resolved", "All", "Approved", "Overridden"}
     if status_filter not in valid:
@@ -141,6 +131,12 @@ def get_routing_review_payload(
 
     where = "WHERE dr.is_confident = FALSE"
     params: List[Any] = []
+    if manager_department_name:
+        where += " AND LOWER(dr.suggested_department) = LOWER(%s)"
+        params.append(manager_department_name)
+    else:
+        where += " AND 1=0"
+
     if status_filter == "Pending":
         where += " AND dr.final_department IS NULL"
     elif status_filter == "Resolved":
@@ -205,19 +201,25 @@ def decide_routing_review(
     auto_assign_ticket_if_needed: Callable[..., Any],
     insert_notification: Callable[..., None],
     logger,
+    manager_department_name: Optional[str],
 ) -> Dict[str, Any]:
     effective_decision = (decision or "").strip() or "Overridden"
     if effective_decision not in ("Approved", "Overridden"):
         raise HTTPException(status_code=422, detail="decision must be 'Approved' or 'Overridden'")
 
+    if not manager_department_name:
+        raise HTTPException(status_code=403, detail="Manager is not assigned to a department")
+
     rrq = fetch_one(
         """
         SELECT id, ticket_id, suggested_department, final_department
         FROM department_routing
-        WHERE id::text = %s AND is_confident = FALSE
+        WHERE id::text = %s
+          AND is_confident = FALSE
+          AND LOWER(suggested_department) = LOWER(%s)
         LIMIT 1
         """,
-        (review_id,),
+        (review_id, manager_department_name),
     )
     if not rrq:
         raise HTTPException(status_code=404, detail="Review item not found")

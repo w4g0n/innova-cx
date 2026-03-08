@@ -14,10 +14,17 @@ logger = logging.getLogger(__name__)
 
 # Prioritization agent package copied in Docker to /app/prioritization_agent
 sys.path.insert(0, "/app/prioritization_agent")
-from src.inference import (  # noqa: E402
-    prioritize as model_prioritize,
-    add_manager_feedback_example,
-)
+try:
+    from src.inference import (  # noqa: E402
+        prioritize as model_prioritize,
+        add_manager_feedback_example,
+    )
+    _PRIORITY_MODEL_AVAILABLE = True
+except Exception as exc:  # pragma: no cover - runtime fallback guard
+    model_prioritize = None
+    add_manager_feedback_example = None
+    _PRIORITY_MODEL_AVAILABLE = False
+    logger.warning("priority | model runtime unavailable, using mock fallback. err=%s", exc)
 
 
 PRIORITY_TO_SCORE = {
@@ -26,6 +33,17 @@ PRIORITY_TO_SCORE = {
     "high": 3,
     "critical": 4,
 }
+
+def get_priority_diagnostics() -> dict[str, object]:
+    return {
+        "priority_model_available": _PRIORITY_MODEL_AVAILABLE,
+        "priority_mode": "model" if _PRIORITY_MODEL_AVAILABLE else "mock",
+        "priority_mode_reason": (
+            "prioritization runtime loaded from /app/prioritization_agent"
+            if _PRIORITY_MODEL_AVAILABLE
+            else "prioritization runtime missing; using medium-priority mock fallback"
+        ),
+    }
 
 def _bucket_from_numeric(score: float) -> str:
     if score < -0.25:
@@ -54,6 +72,8 @@ async def score_priority(state: dict) -> dict:
     ticket_type = str(state.get("label", "complaint")).strip().lower()
 
     try:
+        if not _PRIORITY_MODEL_AVAILABLE or model_prioritize is None:
+            raise RuntimeError("priority runtime unavailable")
         result = model_prioritize(
             sentiment_score=sentiment_input,
             issue_severity_val=issue_severity,
@@ -75,7 +95,7 @@ async def score_priority(state: dict) -> dict:
             "; ".join(result.get("modifiers_applied", [])),
         )
     except Exception as exc:
-        logger.warning("Model prioritization failed (%s) — defaulting medium", exc)
+        logger.warning("priority | model unavailable/failed (%s) — defaulting medium", exc)
         state["priority_label"] = "medium"
         state["priority_score"] = 3
 
@@ -95,6 +115,13 @@ def record_manager_feedback_from_state(
         sentiment_score = _bucket_from_numeric(
             float(state.get("sentiment_score_numeric") or state.get("text_sentiment") or 0.0)
         )
+    if not _PRIORITY_MODEL_AVAILABLE or add_manager_feedback_example is None:
+        return {
+            "saved": False,
+            "retrained": False,
+            "mode": "mock",
+            "note": "priority runtime unavailable; feedback not persisted to model",
+        }
     return add_manager_feedback_example(
         sentiment_score=sentiment_score,
         issue_severity_val=str(state.get("issue_severity", "medium")),
