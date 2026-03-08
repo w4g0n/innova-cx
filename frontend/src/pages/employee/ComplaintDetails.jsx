@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { apiUrl } from "../../config/apiBase";
+import TicketChat from "../../components/common/TicketChat";
 import "./TicketDetails.css";
 
 const API_BASE = apiUrl("/api");
@@ -848,6 +849,13 @@ export default function ComplaintDetails() {
           )}
         </section>
 
+        {/* ── CUSTOMER CONVERSATION ── */}
+        <TicketChat
+          ticketId={ticket.ticketId}
+          role="employee"
+          authHeader={() => ({ Authorization: `Bearer ${authToken}` })}
+          disabled={String(ticket.status || "").toLowerCase() === "resolved"}
+        />
         {ticket.finalResolution && (
           <section className="card-section">
             <h2 className="section-title">Final Resolution</h2>
