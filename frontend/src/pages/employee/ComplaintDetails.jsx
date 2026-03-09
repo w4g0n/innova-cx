@@ -21,6 +21,15 @@ function formatTicketSource(value) {
   return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
 }
 
+function updateTypeTone(type) {
+  const t = String(type || "").toLowerCase();
+  if (t === "system")            return { dot: "#7c3aed", bg: "rgba(124,58,237,.1)",  color: "#7c3aed", label: "AI Stage"          };
+  if (t === "status_change")     return { dot: "#065f46", bg: "rgba(16,185,129,.1)",  color: "#065f46", label: "Status"             };
+  if (t === "priority_change")   return { dot: "#92400e", bg: "rgba(245,158,11,.12)", color: "#92400e", label: "Priority"           };
+  if (t === "department_change") return { dot: "#374151", bg: "rgba(55,65,81,.08)",   color: "#374151", label: "Department"         };
+  return                                { dot: "#9ca3af", bg: "rgba(156,163,175,.1)", color: "#6b7280", label: type || "Update"     };
+}
+
 // --- AttachmentThumb --------------------------------------------------------
 // FIX (Issue 1): Non-image attachments are downloaded via fetch+blob so that
 // the request includes the auth token and the Content-Disposition header is
@@ -844,7 +853,16 @@ export default function ComplaintDetails() {
       });
       if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
       const data = await res.json();
-      setTicket(data?.ticket || null);
+      const t = data?.ticket || null;
+      if (t) {
+        t.updates = (t.updates || []).map((u) => ({
+          date:    u.date ? new Date(u.date).toLocaleString() : "",
+          message: u.message,
+          type:    u.type,
+          author:  u.author || "System",
+        }));
+      }
+      setTicket(t);
     } catch (e) {
       setError(e?.message || "Could not load ticket details.");
       setTicket(null);
@@ -1084,11 +1102,38 @@ export default function ComplaintDetails() {
                   );
                 })}
               </div>
-            )}
+            </div>
+
+            <div className="card-section" style={{margin:0}}>
+              <h2 className="section-title">Ticket Details</h2>
+              <div className="subject">{ticket.description?.subject}</div>
+              <p className="description">{ticket.description?.details}</p>
+
+              {ticket.attachments?.length > 0 && (
+                <div className="attachments">
+                  {ticket.attachments.map((att, i) => {
+                    const fileName = att?.fileName ?? (typeof att === "string" ? att : "");
+                    const rawUrl   = att?.fileUrl ?? null;
+                    const fileUrl  = rawUrl
+                      ? apiUrl(rawUrl)
+                      : fileName ? apiUrl("/uploads/" + fileName) : null;
+                    return (
+                      <AttachmentThumb
+                        key={i}
+                        url={fileUrl}
+                        fileName={fileName}
+                        token={authToken}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
-          {ticket.stepsTaken?.length > 0 && (
-            <div className="card-section">
+          {/* ── RIGHT COLUMN: Steps Taken (new component goes below later) ── */}
+          <div style={{display:"flex", flexDirection:"column", gap:"20px", alignItems:"flex-start"}}>
+            <div className="card-section" style={{margin:0, width:"100%", alignSelf:"flex-start"}}>
               <h2 className="section-title">Steps Taken</h2>
               {ticket.stepsTaken.map((step) => (
                 <div key={step.step} className="step">
@@ -1101,9 +1146,9 @@ export default function ComplaintDetails() {
                     Notes: {step.notes}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
-          )}
+          </div>
         </section>
 
         <TicketChat
