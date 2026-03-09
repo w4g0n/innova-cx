@@ -10,16 +10,30 @@ jobs:
   guard-branch-direction:
     runs-on: ubuntu-latest
     steps:
-      - name: Block prod-live PR source into dev/main
+      - name: Enforce branch promotion order
         run: |
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "Not a pull_request event."
             exit 0
           fi
           echo "base=${{ github.base_ref }} head=${{ github.head_ref }}"
+
+          # Block reverse flow from prod-live back into dev/main.
           if [ "${{ github.head_ref }}" = "prod-live" ] && \
              { [ "${{ github.base_ref }}" = "main" ] || [ "${{ github.base_ref }}" = "dev" ]; }; then
-            echo "::error::PRs from prod-live into dev/main are blocked. Allowed flow is dev -> main -> prod-live."
+            echo "::error::PRs from prod-live into dev/main are blocked."
+            exit 1
+          fi
+
+          # Enforce dev -> main only.
+          if [ "${{ github.base_ref }}" = "main" ] && [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "::error::PRs to main must come from dev."
+            exit 1
+          fi
+
+          # Enforce main -> prod-live only.
+          if [ "${{ github.base_ref }}" = "prod-live" ] && [ "${{ github.head_ref }}" != "main" ]; then
+            echo "::error::PRs to prod-live must come from main."
             exit 1
           fi
 
@@ -74,6 +88,40 @@ jobs:
             echo "$PRESENT"
             exit 1
           fi
+
+  guard-prod-live-model-volumes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure model persistence volumes remain configured
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "prod-live" ]; then
+            echo "Not a PR targeting prod-live."
+            exit 0
+          fi
+
+          FILE="docker-compose.yml"
+          if [ ! -f "$FILE" ]; then
+            echo "::error::Missing docker-compose.yml"
+            exit 1
+          fi
+
+          grep -qE '^[[:space:]]+hf_cache:[[:space:]]*$' "$FILE" || {
+            echo "::error::Missing hf_cache named volume declaration."
+            exit 1
+          }
+          grep -qE '^[[:space:]]+chatbot_models:[[:space:]]*$' "$FILE" || {
+            echo "::error::Missing chatbot_models named volume declaration."
+            exit 1
+          }
+          grep -q '/app/hf_cache' "$FILE" || {
+            echo "::error::Missing /app/hf_cache mount."
+            exit 1
+          }
+          grep -q '/app/models' "$FILE" || {
+            echo "::error::Missing /app/models mount."
+            exit 1
+          }
 
   lint-frontend:
     runs-on: ubuntu-latest
