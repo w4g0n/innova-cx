@@ -21,6 +21,15 @@ function formatTicketSource(value) {
   return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
 }
 
+function updateTypeTone(type) {
+  const t = String(type || "").toLowerCase();
+  if (t === "system")            return { dot: "#7c3aed", bg: "rgba(124,58,237,.1)",  color: "#7c3aed", label: "AI Stage"          };
+  if (t === "status_change")     return { dot: "#065f46", bg: "rgba(16,185,129,.1)",  color: "#065f46", label: "Status"             };
+  if (t === "priority_change")   return { dot: "#92400e", bg: "rgba(245,158,11,.12)", color: "#92400e", label: "Priority"           };
+  if (t === "department_change") return { dot: "#374151", bg: "rgba(55,65,81,.08)",   color: "#374151", label: "Department"         };
+  return                                { dot: "#9ca3af", bg: "rgba(156,163,175,.1)", color: "#6b7280", label: type || "Update"     };
+}
+
 // --- AttachmentThumb --------------------------------------------------------
 // FIX (Issue 1): Non-image attachments are downloaded via fetch+blob so that
 // the request includes the auth token and the Content-Disposition header is
@@ -714,7 +723,16 @@ export default function ComplaintDetails() {
       });
       if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
       const data = await res.json();
-      setTicket(data?.ticket || null);
+      const t = data?.ticket || null;
+      if (t) {
+        t.updates = (t.updates || []).map((u) => ({
+          date:    u.date ? new Date(u.date).toLocaleString() : "",
+          message: u.message,
+          type:    u.type,
+          author:  u.author || "System",
+        }));
+      }
+      setTicket(t);
     } catch (e) {
       setError(e?.message || "Could not load ticket details.");
       setTicket(null);
@@ -771,97 +789,137 @@ export default function ComplaintDetails() {
           </div>
         </div>
 
-        <section className="card-section">
-          <h2 className="section-title">Summary</h2>
-          <div className="summary-grid">
-            <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Issue Date:</div>
-              <div>{ticket.issueDate || "—"}</div>
-            </div>
-            <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Min Time To Respond:</div>
-              <div>{ticket.metrics?.minTimeToRespond || "—"}</div>
-            </div>
-            <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Min Time To Resolve:</div>
-              <div>{ticket.metrics?.minTimeToResolve || "—"}</div>
-            </div>
-            <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Submitted By:</div>
-              <div>{ticket.submittedBy?.name || "—"}</div>
-            </div>
-            <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Contact:</div>
-              <div>{ticket.submittedBy?.contact || "—"}</div>
-            </div>
-            <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Location:</div>
-              <div>{ticket.submittedBy?.location || "—"}</div>
-            </div>
-            <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Ticket Source:</div>
-              <div>{formatTicketSource(ticket.ticketSource)}</div>
-            </div>
-          </div>
-        </section>
-
         <section className="details-grid">
-          <div className="card-section">
-            <h2 className="section-title">Ticket Details</h2>
-            <div className="subject">{ticket.description?.subject}</div>
-            <p className="description">{ticket.description?.details}</p>
-
-            {ticket.attachments?.length > 0 && (
-              <div className="attachments">
-                {ticket.attachments.map((att, i) => {
-                  const fileName = att?.fileName ?? (typeof att === "string" ? att : "");
-                  const rawUrl   = att?.fileUrl ?? null;
-                  const fileUrl  = rawUrl
-                    ? apiUrl(rawUrl)
-                    : fileName ? apiUrl("/uploads/" + fileName) : null;
-                  return (
-                    <AttachmentThumb
-                      key={i}
-                      url={fileUrl}
-                      fileName={fileName}
-                      token={authToken}
-                    />
-                  );
-                })}
+          {/* ── LEFT COLUMN: Summary + Ticket Details stacked ── */}
+          <div style={{display:"flex", flexDirection:"column", gap:"20px"}}>
+            <div className="card-section" style={{margin:0}}>
+              <h2 className="section-title">Summary</h2>
+              <div className="summary-grid">
+                <div>
+                  <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Issue Date:</div>
+                  <div>{ticket.issueDate || "—"}</div>
+                </div>
+                <div>
+                  <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Min Time To Respond:</div>
+                  <div>{ticket.metrics?.minTimeToRespond || "—"}</div>
+                </div>
+                <div>
+                  <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Min Time To Resolve:</div>
+                  <div>{ticket.metrics?.minTimeToResolve || "—"}</div>
+                </div>
+                <div>
+                  <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Submitted By:</div>
+                  <div>{ticket.submittedBy?.name || "—"}</div>
+                </div>
+                <div>
+                  <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Contact:</div>
+                  <div>{ticket.submittedBy?.contact || "—"}</div>
+                </div>
+                <div>
+                  <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Location:</div>
+                  <div>{ticket.submittedBy?.location || "—"}</div>
+                </div>
+                <div>
+                  <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Ticket Source:</div>
+                  <div>{formatTicketSource(ticket.ticketSource)}</div>
+                </div>
               </div>
-            )}
+            </div>
+
+            <div className="card-section" style={{margin:0}}>
+              <h2 className="section-title">Ticket Details</h2>
+              <div className="subject">{ticket.description?.subject}</div>
+              <p className="description">{ticket.description?.details}</p>
+
+              {ticket.attachments?.length > 0 && (
+                <div className="attachments">
+                  {ticket.attachments.map((att, i) => {
+                    const fileName = att?.fileName ?? (typeof att === "string" ? att : "");
+                    const rawUrl   = att?.fileUrl ?? null;
+                    const fileUrl  = rawUrl
+                      ? apiUrl(rawUrl)
+                      : fileName ? apiUrl("/uploads/" + fileName) : null;
+                    return (
+                      <AttachmentThumb
+                        key={i}
+                        url={fileUrl}
+                        fileName={fileName}
+                        token={authToken}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
-          {ticket.stepsTaken?.length > 0 && (
-            <div className="card-section">
+          {/* ── RIGHT COLUMN: Steps Taken (new component goes below later) ── */}
+          <div style={{display:"flex", flexDirection:"column", gap:"20px", alignItems:"flex-start"}}>
+            <div className="card-section" style={{margin:0, width:"100%", alignSelf:"flex-start"}}>
               <h2 className="section-title">Steps Taken</h2>
-              {ticket.stepsTaken.map((step) => (
-                <div key={step.step} className="step">
-                  <div className="step-title">Step {step.step}</div>
-                  <div className="step-text">
-                    Technician assigned: {step.technician}<br />
-                    Time: {step.time}<br />
-                    Notes: {step.notes}
-                  </div>
-                </div>
-              ))}
+              {ticket.stepsTaken?.length > 0
+                ? ticket.stepsTaken.map((step) => (
+                    <div key={step.step} className="step">
+                      <div className="step-title">Step {step.step}</div>
+                      <div className="step-text">
+                        Technician assigned: {step.technician}<br />
+                        Time: {step.time}<br />
+                        Notes: {step.notes}
+                      </div>
+                    </div>
+                  ))
+                : <p style={{fontSize:"13px", color:"rgba(17,17,17,0.45)", margin:0}}>No steps recorded yet.</p>
+              }
             </div>
-          )}
+            {/* ── ACTIVITY LOG ── */}
+            <div className="card-section emp-activity-log" style={{margin:0, width:"100%"}}>
+              <h2 className="section-title">Activity Log</h2>
+              {!ticket.updates || ticket.updates.length === 0 ? (
+                <p style={{fontSize:"13px", color:"rgba(17,17,17,0.45)", margin:0}}>No activity recorded yet.</p>
+              ) : (
+                <div className="emp-log-list">
+                  {ticket.updates.map((u, idx) => {
+                    const tone = updateTypeTone(u.type);
+                    const dateStr = u.date ? new Date(u.date).toLocaleString() : "";
+                    return (
+                      <div key={idx} className="emp-log-row">
+                        <div className="emp-log-spine">
+                          <div className="emp-log-dot" style={{ background: tone.dot }} />
+                          {idx < ticket.updates.length - 1 && <div className="emp-log-line" />}
+                        </div>
+                        <div className="emp-log-body">
+                          <div className="emp-log-meta">
+                            <span className="emp-log-author">{u.author || "System"}</span>
+                            <span className="emp-log-tag" style={{ background: tone.bg, color: tone.color }}>{tone.label}</span>
+                            <span className="emp-log-date">{dateStr}</span>
+                          </div>
+                          <div className="emp-log-text">{u.message}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </section>
 
-        {/* ── CUSTOMER CONVERSATION ── */}
-        <TicketChat
-          ticketId={ticket.ticketId}
-          role="employee"
-          authHeader={() => ({ Authorization: `Bearer ${authToken}` })}
-          disabled={String(ticket.status || "").toLowerCase() === "resolved"}
-        />
         {ticket.finalResolution && (
           <section className="card-section">
             <h2 className="section-title">Final Resolution</h2>
             <p className="description">{ticket.finalResolution}</p>
           </section>
         )}
+
+        {/* ── CUSTOMER CONVERSATION ── */}
+        <div className="ticket-chat-anchor">
+        <TicketChat
+          ticketId={ticket.ticketId}
+          role="employee"
+          authHeader={() => ({ Authorization: `Bearer ${authToken}` })}
+          disabled={String(ticket.status || "").toLowerCase() === "resolved"}
+        />
+        </div>
       </div>
 
       {toast.show && (
