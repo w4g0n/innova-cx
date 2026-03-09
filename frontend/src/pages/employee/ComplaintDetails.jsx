@@ -21,6 +21,15 @@ function formatTicketSource(value) {
   return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
 }
 
+function updateTypeTone(type) {
+  const t = String(type || "").toLowerCase();
+  if (t === "system")            return { dot: "#7c3aed", bg: "rgba(124,58,237,.1)",  color: "#7c3aed", label: "AI Stage"          };
+  if (t === "status_change")     return { dot: "#065f46", bg: "rgba(16,185,129,.1)",  color: "#065f46", label: "Status"             };
+  if (t === "priority_change")   return { dot: "#92400e", bg: "rgba(245,158,11,.12)", color: "#92400e", label: "Priority"           };
+  if (t === "department_change") return { dot: "#374151", bg: "rgba(55,65,81,.08)",   color: "#374151", label: "Department"         };
+  return                                { dot: "#9ca3af", bg: "rgba(156,163,175,.1)", color: "#6b7280", label: type || "Update"     };
+}
+
 // --- AttachmentThumb --------------------------------------------------------
 // FIX (Issue 1): Non-image attachments are downloaded via fetch+blob so that
 // the request includes the auth token and the Content-Disposition header is
@@ -35,8 +44,13 @@ function AttachmentThumb({ url, fileName, token }) {
 
   if (isImage && !imgError) {
     return (
-      <a href={url} target="_blank" rel="noopener noreferrer"
-         title={fileName} className="attachment-thumb attachment-thumb--image">
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={fileName}
+        className="attachment-thumb attachment-thumb--image"
+      >
         <img
           src={url}
           alt={fileName}
@@ -66,10 +80,8 @@ function AttachmentThumb({ url, fileName, token }) {
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      // Revoke after a short delay to allow the download to start
       setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     } catch {
-      // Fallback: open in new tab if blob download fails
       window.open(url, "_blank", "noopener,noreferrer");
     } finally {
       setDownloading(false);
@@ -84,8 +96,15 @@ function AttachmentThumb({ url, fileName, token }) {
       title={fileName}
       aria-disabled={downloading}
     >
-      <svg className="attachment-thumb__icon" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        className="attachment-thumb__icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" />
         <path d="M14 2v6h6M8 13h8M8 17h5" />
       </svg>
@@ -102,27 +121,41 @@ function AttachmentThumb({ url, fileName, token }) {
 // when the modal is opened or closed. Previously it lived here as local
 // useState, which meant it persisted across modal open/close cycles.
 function TicketModal({
-  type, ticket, id,
-  // confirming — now controlled by parent to guarantee clean reset on open
-  confirming, setConfirming,
-  // reroute
-  rerouteDepartment, setRerouteDepartment,
-  rerouteReason, setRerouteReason,
-  rerouteError, setRerouteError,
-  // rescore
-  rescoreNewPriority, setRescoreNewPriority,
-  rescoreReason, setRescoreReason,
-  rescoreError, setRescoreError,
-  // resolve
-  resolveReviewAction, setResolveReviewAction,
-  resolutionSuggestion, suggestionBusy,
-  finalResolution, setFinalResolution,
-  stepsTaken, setStepsTaken,
-  resolveError, setResolveError,
-  resolveFiles, setResolveFiles,
-  resolveBusy, setResolveBusy,
-  // shared
-  closeModal, loadTicket, uploadAttachmentsOrThrow, onSuccess,
+  type,
+  ticket,
+  id,
+  confirming,
+  setConfirming,
+  rerouteDepartment,
+  setRerouteDepartment,
+  rerouteReason,
+  setRerouteReason,
+  rerouteError,
+  setRerouteError,
+  rescoreNewPriority,
+  setRescoreNewPriority,
+  rescoreReason,
+  setRescoreReason,
+  rescoreError,
+  setRescoreError,
+  resolveReviewAction,
+  setResolveReviewAction,
+  resolutionSuggestion,
+  suggestionBusy,
+  finalResolution,
+  setFinalResolution,
+  stepsTaken,
+  setStepsTaken,
+  resolveError,
+  setResolveError,
+  resolveFiles,
+  setResolveFiles,
+  resolveBusy,
+  setResolveBusy,
+  closeModal,
+  loadTicket,
+  uploadAttachmentsOrThrow,
+  onSuccess,
 }) {
   if (!type || !ticket) return null;
 
@@ -136,7 +169,6 @@ function TicketModal({
   const submitText =
     type === "resolve" ? "Resolve" : type === "escalate" ? "Escalate" : "Submit";
 
-  // ── Confirmation summary for reroute / rescore / resolve ──
   const renderConfirmation = () => {
     if (type === "reroute") {
       return (
@@ -144,7 +176,8 @@ function TicketModal({
           <div className="modal-confirm-icon">↗</div>
           <p className="modal-confirm-heading">Confirm Reroute Request</p>
           <p className="modal-confirm-sub">
-            Please review the details below before submitting. This will be sent for manager approval.
+            Please review the details below before submitting. This will be sent
+            for manager approval.
           </p>
           <div className="modal-confirm-rows">
             <div className="modal-confirm-row">
@@ -153,7 +186,9 @@ function TicketModal({
             </div>
             <div className="modal-confirm-row">
               <span className="modal-confirm-label">Reason</span>
-              <span className="modal-confirm-value modal-confirm-reason">{rerouteReason}</span>
+              <span className="modal-confirm-value modal-confirm-reason">
+                {rerouteReason}
+              </span>
             </div>
           </div>
         </div>
@@ -165,7 +200,8 @@ function TicketModal({
           <div className="modal-confirm-icon">⚖</div>
           <p className="modal-confirm-heading">Confirm Rescore Request</p>
           <p className="modal-confirm-sub">
-            Please review the details below before submitting. This will be sent for manager approval.
+            Please review the details below before submitting. This will be sent
+            for manager approval.
           </p>
           <div className="modal-confirm-rows">
             <div className="modal-confirm-row">
@@ -178,7 +214,9 @@ function TicketModal({
             </div>
             <div className="modal-confirm-row">
               <span className="modal-confirm-label">Reason</span>
-              <span className="modal-confirm-value modal-confirm-reason">{rescoreReason}</span>
+              <span className="modal-confirm-value modal-confirm-reason">
+                {rescoreReason}
+              </span>
             </div>
           </div>
         </div>
@@ -190,23 +228,31 @@ function TicketModal({
           <div className="modal-confirm-icon">✓</div>
           <p className="modal-confirm-heading">Confirm Resolution</p>
           <p className="modal-confirm-sub">
-            Please review the details below before submitting. This action will mark the ticket as resolved.
+            Please review the details below before submitting. This action will
+            mark the ticket as resolved.
           </p>
           <div className="modal-confirm-rows">
             <div className="modal-confirm-row">
               <span className="modal-confirm-label">Resolution Decision</span>
               <span className="modal-confirm-value">
-                {resolveReviewAction === "accepted" ? "AI Suggestion Accepted" : "Custom Resolution"}
+                {resolveReviewAction === "accepted"
+                  ? "AI Suggestion Accepted"
+                  : "Custom Resolution"}
               </span>
             </div>
             <div className="modal-confirm-row">
               <span className="modal-confirm-label">Final Resolution</span>
-              <span className="modal-confirm-value modal-confirm-reason">{finalResolution || "—"}</span>
+              <span className="modal-confirm-value modal-confirm-reason">
+                {finalResolution || "—"}
+              </span>
             </div>
             {resolveFiles.length > 0 && (
               <div className="modal-confirm-row">
                 <span className="modal-confirm-label">Attachments</span>
-                <span className="modal-confirm-value">{resolveFiles.length} file(s): {resolveFiles.map(f => f.name).join(", ")}</span>
+                <span className="modal-confirm-value">
+                  {resolveFiles.length} file(s):{" "}
+                  {resolveFiles.map((f) => f.name).join(", ")}
+                </span>
               </div>
             )}
           </div>
@@ -227,7 +273,9 @@ function TicketModal({
                 value={rerouteDepartment}
                 onChange={(e) => setRerouteDepartment(e.target.value)}
               >
-                <option value="" disabled>Select Department</option>
+                <option value="" disabled>
+                  Select Department
+                </option>
                 <option>Facilities Management</option>
                 <option>Legal &amp; Compliance</option>
                 <option>Safety &amp; Security</option>
@@ -241,10 +289,15 @@ function TicketModal({
             <textarea
               className="modal-textarea"
               value={rerouteReason}
-              onChange={(e) => { setRerouteReason(e.target.value); setRerouteError(""); }}
+              onChange={(e) => {
+                setRerouteReason(e.target.value);
+                setRerouteError("");
+              }}
               placeholder="Explain why this ticket should be rerouted..."
             />
-            {rerouteError && <div className="modal-inline-error">{rerouteError}</div>}
+            {rerouteError && (
+              <div className="modal-inline-error">{rerouteError}</div>
+            )}
           </>
         );
 
@@ -267,10 +320,15 @@ function TicketModal({
             <textarea
               className="modal-textarea"
               value={rescoreReason}
-              onChange={(e) => { setRescoreReason(e.target.value); setRescoreError(""); }}
+              onChange={(e) => {
+                setRescoreReason(e.target.value);
+                setRescoreError("");
+              }}
               placeholder="Explain why the model score should be adjusted..."
             />
-            {rescoreError && <div className="modal-inline-error">{rescoreError}</div>}
+            {rescoreError && (
+              <div className="modal-inline-error">{rescoreError}</div>
+            )}
           </>
         );
 
@@ -280,7 +338,9 @@ function TicketModal({
             <label>Escalation Level</label>
             <div className="select-wrapper modal-dropdown">
               <select defaultValue="">
-                <option value="" disabled>Select Level</option>
+                <option value="" disabled>
+                  Select Level
+                </option>
                 <option>Supervisor</option>
                 <option>Department Head</option>
                 <option>Management</option>
@@ -292,7 +352,10 @@ function TicketModal({
               placeholder="Explain why this ticket must be escalated..."
             />
             <label>Additional Notes (optional)</label>
-            <textarea className="modal-textarea" placeholder="Any extra context..." />
+            <textarea
+              className="modal-textarea"
+              placeholder="Any extra context..."
+            />
           </>
         );
 
@@ -315,14 +378,18 @@ function TicketModal({
                     setResolveReviewAction("edited");
                   }
                 }}
-                placeholder={suggestionBusy ? "Generating..." : "No suggestion available."}
+                placeholder={
+                  suggestionBusy ? "Generating..." : "No suggestion available."
+                }
                 disabled={suggestionBusy}
               />
 
               <div className="resolution-review-box__actions">
                 <button
                   type="button"
-                  className={`resolution-icon-btn resolution-icon-btn--decline ${resolveReviewAction === "declined" ? "is-active" : ""}`}
+                  className={`resolution-icon-btn resolution-icon-btn--decline ${
+                    resolveReviewAction === "declined" ? "is-active" : ""
+                  }`}
                   onClick={() => setResolveReviewAction("declined")}
                   disabled={suggestionBusy}
                   aria-label="Decline suggestion"
@@ -332,7 +399,9 @@ function TicketModal({
                 </button>
                 <button
                   type="button"
-                  className={`resolution-icon-btn resolution-icon-btn--accept ${resolveReviewAction === "accepted" ? "is-active" : ""}`}
+                  className={`resolution-icon-btn resolution-icon-btn--accept ${
+                    resolveReviewAction === "accepted" ? "is-active" : ""
+                  }`}
                   onClick={() => {
                     setResolveReviewAction("accepted");
                     setFinalResolution(resolutionSuggestion || "");
@@ -345,7 +414,9 @@ function TicketModal({
                 </button>
                 <button
                   type="button"
-                  className={`resolution-icon-btn resolution-icon-btn--edit ${resolveReviewAction === "edited" ? "is-active" : ""}`}
+                  className={`resolution-icon-btn resolution-icon-btn--edit ${
+                    resolveReviewAction === "edited" ? "is-active" : ""
+                  }`}
                   onClick={() => setResolveReviewAction("edited")}
                   disabled={suggestionBusy}
                   aria-label="Edit suggestion"
@@ -362,7 +433,9 @@ function TicketModal({
               </div>
             )}
 
-            <label>Steps Taken <span className="modal-label-optional">optional</span></label>
+            <label>
+              Steps Taken <span className="modal-label-optional">optional</span>
+            </label>
             <textarea
               className="modal-textarea"
               value={stepsTaken}
@@ -371,13 +444,21 @@ function TicketModal({
               disabled={suggestionBusy}
             />
 
-            <label>Attachments <span className="modal-label-optional">optional</span></label>
+            <label>
+              Attachments <span className="modal-label-optional">optional</span>
+            </label>
             <div className="modal-upload-box">
               <label className="modal-upload-box__label">
                 <div className="modal-upload-box__inner">
                   <div className="modal-upload-box__icon-wrap">
-                    <svg viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="17 8 12 3 7 8" />
                       <line x1="12" y1="3" x2="12" y2="15" />
@@ -385,7 +466,9 @@ function TicketModal({
                   </div>
                   <span className="modal-upload-box__title">
                     {resolveFiles.length > 0
-                      ? `${resolveFiles.length} file${resolveFiles.length > 1 ? "s" : ""} attached`
+                      ? `${resolveFiles.length} file${
+                          resolveFiles.length > 1 ? "s" : ""
+                        } attached`
                       : "Click to upload files"}
                   </span>
                 </div>
@@ -393,7 +476,12 @@ function TicketModal({
                   type="file"
                   multiple
                   className="modal-upload-box__input"
-                  onChange={(e) => setResolveFiles(prev => [...prev, ...Array.from(e.target.files || [])])}
+                  onChange={(e) =>
+                    setResolveFiles((prev) => [
+                      ...prev,
+                      ...Array.from(e.target.files || []),
+                    ])
+                  }
                 />
               </label>
               {resolveFiles.length > 0 && (
@@ -401,8 +489,14 @@ function TicketModal({
                   {resolveFiles.map((f, i) => (
                     <div key={i} className="modal-upload-box__file">
                       <div className="modal-upload-box__file-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" />
                           <path d="M14 2v6h6" />
                         </svg>
@@ -418,12 +512,20 @@ function TicketModal({
                       <button
                         type="button"
                         className="modal-upload-box__remove"
-                        onClick={() => setResolveFiles((prev) => prev.filter((_, j) => j !== i))}
+                        onClick={() =>
+                          setResolveFiles((prev) => prev.filter((_, j) => j !== i))
+                        }
                         disabled={resolveBusy}
                         aria-label="Remove file"
                       >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
                           <line x1="18" y1="6" x2="6" y2="18" />
                           <line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
@@ -453,8 +555,14 @@ function TicketModal({
           `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/rescore`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ new_priority: rescoreNewPriority, reason: rescoreReason.trim() }),
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              new_priority: rescoreNewPriority,
+              reason: rescoreReason.trim(),
+            }),
           }
         );
         if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
@@ -478,8 +586,14 @@ function TicketModal({
           `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/reroute`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ new_department: rerouteDepartment, reason: rerouteReason.trim() }),
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              new_department: rerouteDepartment,
+              reason: rerouteReason.trim(),
+            }),
           }
         );
         if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
@@ -499,9 +613,12 @@ function TicketModal({
       return;
     }
 
-    // ── resolve ──
     const token = getAuthToken();
-    if (!token) { setResolveError("Missing auth token. Please log in again."); return; }
+    if (!token) {
+      setResolveError("Missing auth token. Please log in again.");
+      return;
+    }
+
     const suggestedTrimmed = (resolutionSuggestion || "").trim();
     const finalTrimmed = finalResolution.trim();
 
@@ -520,7 +637,9 @@ function TicketModal({
     try {
       await uploadAttachmentsOrThrow({ ticketCode: id, token, files: resolveFiles });
 
-      const decision = resolveReviewAction === "accepted" ? "accepted" : "declined_custom";
+      const decision =
+        resolveReviewAction === "accepted" ? "accepted" : "declined_custom";
+
       const payload = {
         decision,
         final_resolution: decision === "declined_custom" ? finalTrimmed : undefined,
@@ -531,11 +650,17 @@ function TicketModal({
         `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/resolve`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(payload),
         }
       );
-      if (!res.ok) throw new Error((await res.text()) || `Failed to resolve ticket (${res.status})`);
+
+      if (!res.ok) {
+        throw new Error((await res.text()) || `Failed to resolve ticket (${res.status})`);
+      }
 
       await loadTicket();
       setResolveFiles([]);
@@ -552,12 +677,16 @@ function TicketModal({
   return (
     <div className="modal-overlay" onClick={closeModal}>
       <div
-        className={`modal-card ${type === "escalate" ? "modal-red" : ""} ${type === "resolve" ? "modal-card--resolve" : ""}`}
+        className={`modal-card ${type === "escalate" ? "modal-red" : ""} ${
+          type === "resolve" ? "modal-card--resolve" : ""
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
           <h2>{titles[type]}</h2>
-          <span className="modal-close" onClick={closeModal}>✕</span>
+          <span className="modal-close" onClick={closeModal}>
+            ✕
+          </span>
         </div>
 
         <div className="modal-body">
@@ -567,22 +696,29 @@ function TicketModal({
         <div className="modal-footer">
           {confirming ? (
             <>
-              <button className="modal-btn cancel" onClick={() => setConfirming(false)}>← Back</button>
+              <button className="modal-btn cancel" onClick={() => setConfirming(false)}>
+                ← Back
+              </button>
               <button
                 className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
                 onClick={handleSubmit}
                 disabled={resolveBusy || suggestionBusy}
               >
-                {resolveBusy ? "Saving..." : type === "resolve" ? "Confirm & Resolve" : "Confirm & Submit"}
+                {resolveBusy
+                  ? "Saving..."
+                  : type === "resolve"
+                  ? "Confirm & Resolve"
+                  : "Confirm & Submit"}
               </button>
             </>
           ) : (
             <>
-              <button className="modal-btn cancel" onClick={closeModal}>Cancel</button>
+              <button className="modal-btn cancel" onClick={closeModal}>
+                Cancel
+              </button>
               <button
                 className={`modal-btn ${type === "escalate" ? "escalate" : "submit"}`}
                 onClick={() => {
-                  // reroute / rescore → show confirmation first
                   if (type === "reroute") {
                     if (!rerouteDepartment || !rerouteReason.trim()) {
                       setRerouteError("Please select a department and provide a reason.");
@@ -610,7 +746,6 @@ function TicketModal({
                     setConfirming(true);
                     return;
                   }
-                  // all other types submit directly
                   handleSubmit();
                 }}
                 disabled={resolveBusy || suggestionBusy}
@@ -627,13 +762,20 @@ function TicketModal({
 
 function statusPillClass(status) {
   switch ((status || "").toLowerCase().replace(/\s+/g, "")) {
-    case "open":       return "empStatusPill--open";
-    case "assigned":   return "empStatusPill--assigned";
-    case "inprogress": return "empStatusPill--inprogress";
-    case "escalated":  return "empStatusPill--escalated";
-    case "overdue":    return "empStatusPill--overdue";
-    case "resolved":   return "empStatusPill--resolved";
-    default:           return "";
+    case "open":
+      return "empStatusPill--open";
+    case "assigned":
+      return "empStatusPill--assigned";
+    case "inprogress":
+      return "empStatusPill--inprogress";
+    case "escalated":
+      return "empStatusPill--escalated";
+    case "overdue":
+      return "empStatusPill--overdue";
+    case "resolved":
+      return "empStatusPill--resolved";
+    default:
+      return "";
   }
 }
 
@@ -647,12 +789,6 @@ export default function ComplaintDetails() {
   const [error, setError] = useState("");
   const [modalType, setModalType] = useState(null);
 
-  // FIX (Issues 2 & 3): `confirming` is now owned by the parent so we can
-  // reset it to false every time a modal is opened or closed. Previously this
-  // lived inside TicketModal as local state, and since TicketModal never
-  // unmounts (it just returns null when type is null), the stale `true` value
-  // persisted across open/close cycles, causing the confirmation screen to
-  // appear immediately on the next open.
   const [confirming, setConfirming] = useState(false);
 
   const [resolveReviewAction, setResolveReviewAction] = useState("accepted");
@@ -678,17 +814,14 @@ export default function ComplaintDetails() {
     setTimeout(() => setToast((t) => ({ ...t, show: false })), 4000);
   };
 
-  // FIX (Issues 2 & 3): openModal always resets confirming to false so the
-  // form is always shown first, regardless of what happened in a previous
-  // modal session.
   const openModal = (type) => {
+    if (String(ticket?.status || "").toLowerCase() === "resolved") return;
     setConfirming(false);
     setModalType(type);
   };
 
   const closeModal = () => {
     setModalType(null);
-    // FIX (Issues 2 & 3): also reset confirming on close so next open is clean
     setConfirming(false);
     setRerouteError("");
     setRescoreError("");
@@ -705,16 +838,31 @@ export default function ComplaintDetails() {
 
   const loadTicket = useCallback(async () => {
     const token = getAuthToken();
-    if (!token) { setError("Missing auth token."); setLoading(false); return; }
+    if (!token) {
+      setError("Missing auth token.");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError("");
+
     try {
       const res = await fetch(`${API_BASE}/employee/tickets/${encodeURIComponent(id)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
       const data = await res.json();
-      setTicket(data?.ticket || null);
+      const t = data?.ticket || null;
+      if (t) {
+        t.updates = (t.updates || []).map((u) => ({
+          date:    u.date ? new Date(u.date).toLocaleString() : "",
+          message: u.message,
+          type:    u.type,
+          author:  u.author || "System",
+        }));
+      }
+      setTicket(t);
     } catch (e) {
       setError(e?.message || "Could not load ticket details.");
       setTicket(null);
@@ -729,23 +877,43 @@ export default function ComplaintDetails() {
 
   async function uploadAttachmentsOrThrow({ ticketCode, token, files }) {
     if (!files || files.length === 0) return;
+
     for (const file of files) {
       const fd = new FormData();
       fd.append("file", file);
       const upRes = await fetch(
         `${API_BASE}/employee/tickets/${encodeURIComponent(ticketCode)}/attachments`,
-        { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd }
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        }
       );
-      if (!upRes.ok) throw new Error((await upRes.text()) || `Upload failed (${upRes.status})`);
+      if (!upRes.ok) {
+        throw new Error((await upRes.text()) || `Upload failed (${upRes.status})`);
+      }
     }
   }
 
-  if (loading) return <Layout role="employee"><div className="empTicketDetail">Loading ticket details...</div></Layout>;
-  if (error) return <Layout role="employee"><div className="empTicketDetail">{error}</div></Layout>;
+  if (loading) {
+    return (
+      <Layout role="employee">
+        <div className="empTicketDetail">Loading ticket details...</div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout role="employee">
+        <div className="empTicketDetail">{error}</div>
+      </Layout>
+    );
+  }
+
   if (!ticket) return null;
 
-  // FIX (Issue 1): pass auth token to AttachmentThumb so it can include it
-  // in the fetch-based blob download, which is required in cross-origin prod.
+  const isResolved = String(ticket.status || "").toLowerCase() === "resolved";
   const authToken = getAuthToken();
 
   return (
@@ -753,53 +921,155 @@ export default function ComplaintDetails() {
       <div className="empTicketDetail">
         <div className="details-header">
           <div className="header-left">
-            <button className="back-btn" onClick={() => navigate(-1)}>← Back</button>
+            <button className="back-btn" onClick={() => navigate(-1)}>
+              ← Back
+            </button>
             <h1 className="ticket-title">Ticket ID: {ticket.ticketId}</h1>
             <div className="status-row">
               <span className={`header-pill ${(ticket.priority || "").toLowerCase()}-pill`}>
                 {ticket.priority}
               </span>
-              <span className={`header-pill empStatusPill ${statusPillClass(ticket.status)}`}>{ticket.status}</span>
+              <span className={`header-pill empStatusPill ${statusPillClass(ticket.status)}`}>
+                {ticket.status}
+              </span>
             </div>
           </div>
 
-          <div className="header-actions">
-            {/* FIX (Issues 2 & 3): use openModal() instead of setModalType() directly */}
-            <button className="btn-outline" onClick={() => openModal("rescore")}>Rescore</button>
-            <button className="btn-outline" onClick={() => openModal("reroute")}>Reroute</button>
-            <button className="btn-primary" onClick={() => openModal("resolve")}>Resolve</button>
-          </div>
+          {!isResolved && (
+            <div className="header-actions">
+              <button className="btn-outline" onClick={() => openModal("rescore")}>
+                Rescore
+              </button>
+              <button className="btn-outline" onClick={() => openModal("reroute")}>
+                Reroute
+              </button>
+              <button className="btn-primary" onClick={() => openModal("resolve")}>
+                Resolve
+              </button>
+            </div>
+          )}
         </div>
 
         <section className="card-section">
           <h2 className="section-title">Summary</h2>
           <div className="summary-grid">
             <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Issue Date:</div>
+              <div
+                className="label"
+                style={{
+                  display: "block",
+                  color: "#374151",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: 3,
+                }}
+              >
+                Issue Date:
+              </div>
               <div>{ticket.issueDate || "—"}</div>
             </div>
             <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Min Time To Respond:</div>
+              <div
+                className="label"
+                style={{
+                  display: "block",
+                  color: "#374151",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: 3,
+                }}
+              >
+                Min Time To Respond:
+              </div>
               <div>{ticket.metrics?.minTimeToRespond || "—"}</div>
             </div>
             <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Min Time To Resolve:</div>
+              <div
+                className="label"
+                style={{
+                  display: "block",
+                  color: "#374151",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: 3,
+                }}
+              >
+                Min Time To Resolve:
+              </div>
               <div>{ticket.metrics?.minTimeToResolve || "—"}</div>
             </div>
             <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Submitted By:</div>
+              <div
+                className="label"
+                style={{
+                  display: "block",
+                  color: "#374151",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: 3,
+                }}
+              >
+                Submitted By:
+              </div>
               <div>{ticket.submittedBy?.name || "—"}</div>
             </div>
             <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Contact:</div>
+              <div
+                className="label"
+                style={{
+                  display: "block",
+                  color: "#374151",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: 3,
+                }}
+              >
+                Contact:
+              </div>
               <div>{ticket.submittedBy?.contact || "—"}</div>
             </div>
             <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Location:</div>
+              <div
+                className="label"
+                style={{
+                  display: "block",
+                  color: "#374151",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: 3,
+                }}
+              >
+                Location:
+              </div>
               <div>{ticket.submittedBy?.location || "—"}</div>
             </div>
             <div>
-              <div className="label" style={{display:"block",color:"#374151",fontSize:"11px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Ticket Source:</div>
+              <div
+                className="label"
+                style={{
+                  display: "block",
+                  color: "#374151",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: 3,
+                }}
+              >
+                Ticket Source:
+              </div>
               <div>{formatTicketSource(ticket.ticketSource)}</div>
             </div>
           </div>
@@ -815,10 +1085,13 @@ export default function ComplaintDetails() {
               <div className="attachments">
                 {ticket.attachments.map((att, i) => {
                   const fileName = att?.fileName ?? (typeof att === "string" ? att : "");
-                  const rawUrl   = att?.fileUrl ?? null;
-                  const fileUrl  = rawUrl
+                  const rawUrl = att?.fileUrl ?? null;
+                  const fileUrl = rawUrl
                     ? apiUrl(rawUrl)
-                    : fileName ? apiUrl("/uploads/" + fileName) : null;
+                    : fileName
+                    ? apiUrl("/uploads/" + fileName)
+                    : null;
+
                   return (
                     <AttachmentThumb
                       key={i}
@@ -829,33 +1102,62 @@ export default function ComplaintDetails() {
                   );
                 })}
               </div>
-            )}
+            </div>
+
+            <div className="card-section" style={{margin:0}}>
+              <h2 className="section-title">Ticket Details</h2>
+              <div className="subject">{ticket.description?.subject}</div>
+              <p className="description">{ticket.description?.details}</p>
+
+              {ticket.attachments?.length > 0 && (
+                <div className="attachments">
+                  {ticket.attachments.map((att, i) => {
+                    const fileName = att?.fileName ?? (typeof att === "string" ? att : "");
+                    const rawUrl   = att?.fileUrl ?? null;
+                    const fileUrl  = rawUrl
+                      ? apiUrl(rawUrl)
+                      : fileName ? apiUrl("/uploads/" + fileName) : null;
+                    return (
+                      <AttachmentThumb
+                        key={i}
+                        url={fileUrl}
+                        fileName={fileName}
+                        token={authToken}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
-          {ticket.stepsTaken?.length > 0 && (
-            <div className="card-section">
+          {/* ── RIGHT COLUMN: Steps Taken (new component goes below later) ── */}
+          <div style={{display:"flex", flexDirection:"column", gap:"20px", alignItems:"flex-start"}}>
+            <div className="card-section" style={{margin:0, width:"100%", alignSelf:"flex-start"}}>
               <h2 className="section-title">Steps Taken</h2>
               {ticket.stepsTaken.map((step) => (
                 <div key={step.step} className="step">
                   <div className="step-title">Step {step.step}</div>
                   <div className="step-text">
-                    Technician assigned: {step.technician}<br />
-                    Time: {step.time}<br />
+                    Technician assigned: {step.technician}
+                    <br />
+                    Time: {step.time}
+                    <br />
                     Notes: {step.notes}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
-          )}
+          </div>
         </section>
 
-        {/* ── CUSTOMER CONVERSATION ── */}
         <TicketChat
           ticketId={ticket.ticketId}
           role="employee"
           authHeader={() => ({ Authorization: `Bearer ${authToken}` })}
-          disabled={String(ticket.status || "").toLowerCase() === "resolved"}
+          disabled={isResolved}
         />
+
         {ticket.finalResolution && (
           <section className="card-section">
             <h2 className="section-title">Final Resolution</h2>
@@ -882,19 +1184,32 @@ export default function ComplaintDetails() {
         id={id}
         confirming={confirming}
         setConfirming={setConfirming}
-        rerouteDepartment={rerouteDepartment} setRerouteDepartment={setRerouteDepartment}
-        rerouteReason={rerouteReason} setRerouteReason={setRerouteReason}
-        rerouteError={rerouteError} setRerouteError={setRerouteError}
-        rescoreNewPriority={rescoreNewPriority} setRescoreNewPriority={setRescoreNewPriority}
-        rescoreReason={rescoreReason} setRescoreReason={setRescoreReason}
-        rescoreError={rescoreError} setRescoreError={setRescoreError}
-        resolveReviewAction={resolveReviewAction} setResolveReviewAction={setResolveReviewAction}
-        resolutionSuggestion={resolutionSuggestion} suggestionBusy={suggestionBusy}
-        finalResolution={finalResolution} setFinalResolution={setFinalResolution}
-        stepsTaken={stepsTaken} setStepsTaken={setStepsTaken}
-        resolveError={resolveError} setResolveError={setResolveError}
-        resolveFiles={resolveFiles} setResolveFiles={setResolveFiles}
-        resolveBusy={resolveBusy} setResolveBusy={setResolveBusy}
+        rerouteDepartment={rerouteDepartment}
+        setRerouteDepartment={setRerouteDepartment}
+        rerouteReason={rerouteReason}
+        setRerouteReason={setRerouteReason}
+        rerouteError={rerouteError}
+        setRerouteError={setRerouteError}
+        rescoreNewPriority={rescoreNewPriority}
+        setRescoreNewPriority={setRescoreNewPriority}
+        rescoreReason={rescoreReason}
+        setRescoreReason={setRescoreReason}
+        rescoreError={rescoreError}
+        setRescoreError={setRescoreError}
+        resolveReviewAction={resolveReviewAction}
+        setResolveReviewAction={setResolveReviewAction}
+        resolutionSuggestion={resolutionSuggestion}
+        suggestionBusy={suggestionBusy}
+        finalResolution={finalResolution}
+        setFinalResolution={setFinalResolution}
+        stepsTaken={stepsTaken}
+        setStepsTaken={setStepsTaken}
+        resolveError={resolveError}
+        setResolveError={setResolveError}
+        resolveFiles={resolveFiles}
+        setResolveFiles={setResolveFiles}
+        resolveBusy={resolveBusy}
+        setResolveBusy={setResolveBusy}
         closeModal={closeModal}
         loadTicket={loadTicket}
         uploadAttachmentsOrThrow={uploadAttachmentsOrThrow}
