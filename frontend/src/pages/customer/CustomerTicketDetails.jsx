@@ -22,14 +22,6 @@ function statusTone(s) {
   return                                           { color: "#7c3aed", bg: "rgba(124,58,237,.12)"  };
 }
 
-function updateTypeTone(type) {
-  const t = String(type || "").toLowerCase();
-  if (t === "system")          return { dot: "#7c3aed", bg: "rgba(124,58,237,.1)",  color: "#7c3aed", label: "AI Stage"  };
-  if (t === "status_change")   return { dot: "#15803d", bg: "rgba(21,128,61,.1)",   color: "#15803d", label: "Status"   };
-  if (t === "priority_change") return { dot: "#b45309", bg: "rgba(180,83,9,.1)",    color: "#b45309", label: "Priority" };
-  return                              { dot: "var(--muted)", bg: "var(--surface)",   color: "var(--muted)", label: type || "Update" };
-}
-
 const STATUS_STAGES = [
   { id: "open",       label: "Opened"      },
   { id: "inprogress", label: "In Progress" },
