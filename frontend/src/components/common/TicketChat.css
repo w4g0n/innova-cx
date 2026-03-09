@@ -1,0 +1,552 @@
+/* ============================================================
+   TicketChat.css — shared chat widget
+   Works with the --void / --card-bg / --orchid / --pink /
+   --muted / --text / --card-border CSS variable system.
+   ============================================================ */
+
+/* ── ROOT CONTAINER ─────────────────────────────────────────── */
+
+.tc-root {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--card-bg);
+  margin-top: 20px;
+}
+
+
+[data-theme="dark"]  .tc-root { box-shadow: 0 8px 40px rgba(0,0,0,.22); }
+[data-theme="light"] .tc-root { box-shadow: 0 4px 24px rgba(109,40,217,.08); }
+
+/* ── HEADER ─────────────────────────────────────────────────── */
+.tc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--card-border);
+  background: rgba(109,40,217,.04);
+}
+
+[data-theme="dark"] .tc-header { background: rgba(109,40,217,.07); }
+
+.tc-header-left  { display: flex; align-items: center; gap: 8px; }
+
+.tc-header-icon {
+  width: 26px; height: 26px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--orchid), var(--pink));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; flex-shrink: 0;
+}
+
+.tc-header-title {
+  font-size: 12px; font-weight: 800;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text);
+}
+
+.tc-header-badge {
+  display: none
+}
+
+
+@keyframes tcPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: .5; transform: scale(1.3); }
+}
+
+/* ── MESSAGE LIST ───────────────────────────────────────────── */
+.tc-list {
+  flex: 1;
+  height: 320px;       /* fixed scrollable window */
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+.tc-list::-webkit-scrollbar { width: 4px; }
+.tc-list::-webkit-scrollbar-track { background: transparent; }
+.tc-list::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 999px;
+}
+
+/* ── EMPTY / LOADING STATE ──────────────────────────────────── */
+.tc-state-center {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 10px; text-align: center;
+  color: var(--muted); font-size: 13px;
+  min-height: 200px;
+}
+
+.tc-spinner {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid var(--card-border);
+  border-top-color: var(--orchid);
+  animation: tcSpin .8s linear infinite;
+}
+@keyframes tcSpin { to { transform: rotate(360deg); } }
+
+/* ── MESSAGE RUNS ───────────────────────────────────────────── */
+.tc-run {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.tc-run--own   { flex-direction: row-reverse; }
+.tc-run--other { flex-direction: row; }
+
+.tc-bubbles {
+  display: flex; flex-direction: column;
+  gap: 3px;
+  max-width: 72%;
+}
+
+.tc-run--own   .tc-bubbles { align-items: flex-end; }
+.tc-run--other .tc-bubbles { align-items: flex-start; }
+
+/* ── SENDER LABEL ───────────────────────────────────────────── */
+.tc-sender-label {
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: .06em; color: var(--muted);
+  margin-bottom: 2px;
+  text-transform: uppercase;
+}
+
+/* ── AVATAR ─────────────────────────────────────────────────── */
+.tc-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 11px; font-weight: 800;
+  color: #fff;
+  align-self: flex-end;
+}
+
+.tc-avatar--customer {
+  background: linear-gradient(135deg, #6d28d9, #9333ea);
+}
+.tc-avatar--employee {
+  background: linear-gradient(135deg, #0369a1, #0ea5e9);
+}
+
+/* ── BUBBLES ────────────────────────────────────────────────── */
+.tc-bubble {
+  padding: 9px 13px;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  word-break: break-word;
+  position: relative;
+  transition: opacity .25s;
+}
+
+/* Customer / own side */
+.tc-bubble--own {
+  background: linear-gradient(135deg, var(--orchid), #9333ea);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+/* Employee / other side */
+.tc-bubble--other {
+  background: #ece7f6;
+  color: #111111;
+  border: 1px solid rgba(124, 58, 237, 0.14);
+  border-bottom-left-radius: 4px;
+}
+
+.tc-bubble--sending { opacity: .6; }
+
+/* ── TYPING INDICATOR ───────────────────────────────────────── */
+.tc-bubble--typing {
+  padding: 11px 16px;
+}
+
+.tc-dot-anim {
+  display: inline-flex; gap: 4px; align-items: center;
+}
+
+.tc-dot-anim span {
+  display: block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255,255,255,.7);
+  animation: tcBounce 1.2s ease-in-out infinite;
+}
+.tc-dot-anim span:nth-child(2) { animation-delay: .15s; }
+.tc-dot-anim span:nth-child(3) { animation-delay: .30s; }
+
+@keyframes tcBounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40%           { transform: translateY(-5px); }
+}
+
+/* ── TIMESTAMP ──────────────────────────────────────────────── */
+.tc-time {
+  font-size: 10.5px; color: var(--muted);
+  margin-top: 4px; letter-spacing: .02em;
+}
+
+/* ── QUICK-REPLY TRAY (employee) ────────────────────────────── */
+.tc-quick-tray {
+  padding: 12px 18px 8px;
+  border-top: 1px solid var(--card-border);
+  background: rgba(89, 36, 180, 0.08);
+}
+
+[data-theme="dark"] .tc-quick-tray { background: rgba(109,40,217,.06); }
+
+.tc-quick-label {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 8px;
+}
+
+.tc-quick-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+
+.tc-quick-chip {
+  font-size: 12px; font-weight: 500;
+  color: var(--text);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.4;
+  transition: border-color .18s, background .18s, color .18s;
+  max-width: 100%;
+}
+
+.tc-quick-chip:hover {
+  border-color: var(--orchid);
+  background: rgba(109,40,217,.08);
+  color: var(--pink);
+}
+
+/* ── ERROR BANNER ───────────────────────────────────────────── */
+.tc-error {
+  display: flex; align-items: center; gap: 7px;
+  margin: 0 18px 8px;
+  padding: 8px 12px;
+  background: rgba(185,28,28,.1);
+  border: 1px solid rgba(185,28,28,.2);
+  border-radius: 10px;
+  font-size: 12.5px; color: #ef4444;
+}
+
+/* ── INPUT BAR ──────────────────────────────────────────────── */
+.tc-input-bar {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--card-border);
+  background: rgba(109,40,217,.03);
+}
+
+[data-theme="dark"] .tc-input-bar { background: rgba(109,40,217,.05); }
+
+.tc-input-bar--disabled { opacity: .55; pointer-events: none; }
+
+/* Textarea auto-grow via JS rows but limited by max-height */
+.tc-textarea {
+  flex: 1;
+  resize: none;
+  border: 1px solid rgba(124, 58, 237, 0.14);
+  border-radius: 12px;
+  background: #ece7f6;
+  color: #111111;
+  font-family: "Outfit", sans-serif;
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 9px 13px;
+  outline: none;
+  min-height: 38px;
+  max-height: 100px;
+  overflow-y: auto;
+  transition: border-color .18s;
+}
+
+.tc-textarea::placeholder {
+  color: #111111;
+  opacity: 0.7;
+}
+
+.tc-textarea:focus {
+  border-color: var(--orchid);
+  box-shadow: 0 0 0 3px rgba(109,40,217,.12);
+}
+
+/* ── SEND BUTTON ────────────────────────────────────────────── */
+.tc-send-btn {
+  width: 38px; height: 38px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--orchid), var(--pink));
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; flex-shrink: 0;
+  transition: opacity .18s, transform .15s;
+}
+
+.tc-send-btn:hover:not(:disabled) { opacity: .88; transform: scale(1.06); }
+.tc-send-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ── QUICK TOGGLE (lightning bolt) ─────────────────────────── */
+.tc-quick-btn {
+  width: 36px; height: 36px; border-radius: 11px;
+  background: transparent;
+  border: 1px solid var(--card-border);
+  color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+  transition: border-color .18s, color .18s, background .18s;
+}
+
+.tc-quick-btn:hover,
+.tc-quick-btn--active {
+  border-color: var(--orchid);
+  color: var(--pink);
+  background: rgba(109,40,217,.08);
+}
+
+/* ── EMPLOYEE-SIDE TICKET DETAILS INTEGRATION ─────────────────  */
+.empTicketDetail .tc-root {
+  --orchid: #7c3aed;
+  --pink: #7c3aed;
+  --muted: #6b7280;
+  --text: #111111;
+  --card-bg: #ffffff;
+  --card-border: rgba(0, 0, 0, 0.06);
+  --surface: #ece7f6;
+}
+
+
+/* =========================================================
+   EMPLOYEE TICKET DETAILS ONLY
+   Makes Ticket Conversation match TicketDetails card style
+   Does NOT affect customer view
+========================================================= */
+
+.empTicketDetail .tc-root {
+  --orchid: #7c3aed;
+  --pink: #7c3aed;
+  --muted: #111111;
+  --text: #111111;
+  --card-bg: #ffffff;
+  --card-border: rgba(0, 0, 0, 0.06);
+  --surface: #ece7f6;
+
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 22px;
+  box-shadow: 0px 12px 30px rgba(0, 0, 0, 0.06);
+  margin-top: 20px;
+  overflow: hidden;
+}
+
+/* header */
+.empTicketDetail .tc-header {
+  background: #ffffff;
+  color: #111111;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.empTicketDetail .tc-header-title,
+.empTicketDetail .tc-header-left,
+.empTicketDetail .tc-header-badge {
+  color: #111111;
+}
+
+.empTicketDetail .tc-header-icon {
+  background: #ece7f6;
+  color: #7c3aed;
+}
+
+.empTicketDetail .tc-header-badge {
+  background: #ece7f6;
+  border: 1px solid rgba(124, 58, 237, 0.14);
+  color: #111111;
+}
+
+.empTicketDetail .tc-header-badge-dot {
+  background: #7c3aed;
+}
+
+/* main list area */
+.empTicketDetail .tc-list {
+  background: #ffffff;
+  color: #111111;
+}
+
+/* sender label + time */
+.empTicketDetail .tc-sender-label,
+.empTicketDetail .tc-time,
+.empTicketDetail .tc-state-center,
+.empTicketDetail .tc-error,
+.empTicketDetail .tc-quick-label {
+  color: #111111;
+}
+
+/* avatars */
+.empTicketDetail .tc-avatar--employee {
+  background: #7c3aed;
+  color: #ffffff;
+}
+
+.empTicketDetail .tc-avatar--customer {
+  background: #ece7f6;
+  color: #111111;
+  border: 1px solid rgba(124, 58, 237, 0.14);
+}
+
+/* customer / other bubble */
+.empTicketDetail .tc-bubble--other {
+  background: #f8f8f8;
+  color: #111111;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* employee / own bubble */
+.empTicketDetail .tc-bubble--own {
+  background: #ece7f6;
+  color: #111111;
+  border: 1px solid rgba(124, 58, 237, 0.14);
+  border-bottom-right-radius: 4px;
+}
+
+.empTicketDetail .tc-bubble-text {
+  color: inherit;
+}
+
+/* typing bubble */
+.empTicketDetail .tc-bubble--typing {
+  background: #ece7f6;
+  border: 1px solid rgba(124, 58, 237, 0.14);
+}
+
+.empTicketDetail .tc-dot-anim span {
+  background: #7c3aed;
+}
+
+/* quick reply tray */
+.empTicketDetail .tc-quick-tray {
+  background: #ffffff;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.empTicketDetail .tc-quick-chip {
+  background: #ece7f6;
+  color: #111111;
+  border: 1px solid rgba(124, 58, 237, 0.14);
+}
+
+.empTicketDetail .tc-quick-chip:hover {
+  background: #e3dbf3;
+  border-color: rgba(124, 58, 237, 0.24);
+}
+
+/* input bar */
+.empTicketDetail .tc-input-bar {
+  background: #ffffff;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* lightning quick button */
+.empTicketDetail .tc-quick-btn {
+  background: #ece7f6;
+  color: #7c3aed;
+  border: 1px solid rgba(124, 58, 237, 0.14);
+}
+
+.empTicketDetail .tc-quick-btn:hover,
+.empTicketDetail .tc-quick-btn--active {
+  background: #e3dbf3;
+  color: #7c3aed;
+  border-color: rgba(124, 58, 237, 0.24);
+}
+
+/* respond box */
+.empTicketDetail .tc-textarea {
+  background: #ece7f6;
+  color: #111111;
+  border: 1px solid rgba(124, 58, 237, 0.14);
+}
+
+.empTicketDetail .tc-textarea::placeholder {
+  color: #111111;
+  opacity: 0.7;
+}
+
+.empTicketDetail .tc-textarea:focus {
+  border-color: #7c3aed;
+  box-shadow: none;
+  outline: none;
+}
+
+/* send button */
+.empTicketDetail .tc-send-btn {
+  background: #7c3aed;
+  color: #ffffff;
+}
+
+.empTicketDetail .tc-send-btn:hover:not(:disabled) {
+  background: #6d28d9;
+}
+
+.empTicketDetail .tc-send-btn:disabled {
+  background: #d8c9f3;
+  color: #ffffff;
+}
+
+/* disabled state */
+.empTicketDetail .tc-input-bar--disabled {
+  background: #f8f8f8;
+}
+
+.empTicketDetail .tc-input-bar--disabled .tc-textarea {
+  background: #f3f3f3;
+  color: #111111;
+}
+
+/* scrollbar polish */
+.empTicketDetail .tc-list::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.22);
+}
+
+.empTicketDetail .tc-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 58, 237, 0.35);
+}
+
+.empTicketDetail .tc-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.empTicketDetail .tc-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.empTicketDetail .tc-header-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #111111;
+}
+
+/* Make chat use the same font as page headers */
+.empTicketDetail .tc-root,
+.empTicketDetail .tc-root * {
+  font-family: var(--font-body);
+}
