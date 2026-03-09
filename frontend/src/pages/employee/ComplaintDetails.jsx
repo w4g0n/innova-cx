@@ -21,6 +21,15 @@ function formatTicketSource(value) {
   return String(value || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
 }
 
+function updateTypeTone(type) {
+  const t = String(type || "").toLowerCase();
+  if (t === "system")            return { dot: "#7c3aed", bg: "rgba(124,58,237,.1)",  color: "#7c3aed", label: "AI Stage"          };
+  if (t === "status_change")     return { dot: "#065f46", bg: "rgba(16,185,129,.1)",  color: "#065f46", label: "Status"             };
+  if (t === "priority_change")   return { dot: "#92400e", bg: "rgba(245,158,11,.12)", color: "#92400e", label: "Priority"           };
+  if (t === "department_change") return { dot: "#374151", bg: "rgba(55,65,81,.08)",   color: "#374151", label: "Department"         };
+  return                                { dot: "#9ca3af", bg: "rgba(156,163,175,.1)", color: "#6b7280", label: type || "Update"     };
+}
+
 // --- AttachmentThumb --------------------------------------------------------
 // FIX (Issue 1): Non-image attachments are downloaded via fetch+blob so that
 // the request includes the auth token and the Content-Disposition header is
@@ -714,7 +723,16 @@ export default function ComplaintDetails() {
       });
       if (!res.ok) throw new Error((await res.text()) || `Failed (${res.status})`);
       const data = await res.json();
-      setTicket(data?.ticket || null);
+      const t = data?.ticket || null;
+      if (t) {
+        t.updates = (t.updates || []).map((u) => ({
+          date:    u.date ? new Date(u.date).toLocaleString() : "",
+          message: u.message,
+          type:    u.type,
+          author:  u.author || "System",
+        }));
+      }
+      setTicket(t);
     } catch (e) {
       setError(e?.message || "Could not load ticket details.");
       setTicket(null);
@@ -853,7 +871,36 @@ export default function ComplaintDetails() {
                 : <p style={{fontSize:"13px", color:"rgba(17,17,17,0.45)", margin:0}}>No steps recorded yet.</p>
               }
             </div>
-            {/* ── new component will go here ── */}
+            {/* ── ACTIVITY LOG ── */}
+            <div className="card-section emp-activity-log" style={{margin:0, width:"100%"}}>
+              <h2 className="section-title">Activity Log</h2>
+              {!ticket.updates || ticket.updates.length === 0 ? (
+                <p style={{fontSize:"13px", color:"rgba(17,17,17,0.45)", margin:0}}>No activity recorded yet.</p>
+              ) : (
+                <div className="emp-log-list">
+                  {ticket.updates.map((u, idx) => {
+                    const tone = updateTypeTone(u.type);
+                    const dateStr = u.date ? new Date(u.date).toLocaleString() : "";
+                    return (
+                      <div key={idx} className="emp-log-row">
+                        <div className="emp-log-spine">
+                          <div className="emp-log-dot" style={{ background: tone.dot }} />
+                          {idx < ticket.updates.length - 1 && <div className="emp-log-line" />}
+                        </div>
+                        <div className="emp-log-body">
+                          <div className="emp-log-meta">
+                            <span className="emp-log-author">{u.author || "System"}</span>
+                            <span className="emp-log-tag" style={{ background: tone.bg, color: tone.color }}>{tone.label}</span>
+                            <span className="emp-log-date">{dateStr}</span>
+                          </div>
+                          <div className="emp-log-text">{u.message}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
@@ -865,12 +912,14 @@ export default function ComplaintDetails() {
         )}
 
         {/* ── CUSTOMER CONVERSATION ── */}
+        <div className="ticket-chat-anchor">
         <TicketChat
           ticketId={ticket.ticketId}
           role="employee"
           authHeader={() => ({ Authorization: `Bearer ${authToken}` })}
           disabled={String(ticket.status || "").toLowerCase() === "resolved"}
         />
+        </div>
       </div>
 
       {toast.show && (

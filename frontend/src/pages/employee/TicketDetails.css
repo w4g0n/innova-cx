@@ -7,6 +7,15 @@
   max-width: none;
   font-size: 14px;
   animation: fadeUp 0.4s var(--ease-out) both;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* Always push the chat section to the bottom of the page */
+.ticket-chat-anchor {
+  margin-top: auto;
+  width: 100%;
 }
 
 /* ---- Page header row ---- */
@@ -917,6 +926,87 @@
 @keyframes toastSlide {
   from { opacity: 0; transform: translateY(12px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ================================================
+   Activity Log
+   ================================================ */
+.emp-activity-log .section-title {
+  margin-bottom: 16px;
+}
+
+.emp-log-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.emp-log-row {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 16px;
+}
+
+.emp-log-spine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 12px;
+}
+
+.emp-log-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.emp-log-line {
+  width: 1.5px;
+  flex: 1;
+  margin-top: 5px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.emp-log-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.emp-log-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.emp-log-author {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.emp-log-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 6px;
+  letter-spacing: 0.03em;
+}
+
+.emp-log-date {
+  font-size: 11.5px;
+  color: rgba(17, 17, 17, 0.4);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.emp-log-text {
+  font-size: 13px;
+  color: rgba(17, 17, 17, 0.6);
+  line-height: 1.55;
 }
 
 /* ================================================
