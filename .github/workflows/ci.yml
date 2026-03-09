@@ -4,9 +4,125 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [dev, main, prod-live]
 
 jobs:
+  guard-branch-direction:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce branch promotion order
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Not a pull_request event."
+            exit 0
+          fi
+          echo "base=${{ github.base_ref }} head=${{ github.head_ref }}"
+
+          # Block reverse flow from prod-live back into dev/main.
+          if [ "${{ github.head_ref }}" = "prod-live" ] && \
+             { [ "${{ github.base_ref }}" = "main" ] || [ "${{ github.base_ref }}" = "dev" ]; }; then
+            echo "::error::PRs from prod-live into dev/main are blocked."
+            exit 1
+          fi
+
+          # Enforce dev -> main only.
+          if [ "${{ github.base_ref }}" = "main" ] && [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "::error::PRs to main must come from dev."
+            exit 1
+          fi
+
+          # Enforce main -> prod-live only.
+          if [ "${{ github.base_ref }}" = "prod-live" ] && [ "${{ github.head_ref }}" != "main" ]; then
+            echo "::error::PRs to prod-live must come from main."
+            exit 1
+          fi
+
+  guard-no-prod-prune-into-dev-main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Block prod-live-only path deletions in dev/main PRs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Not a pull_request event."
+            exit 0
+          fi
+          if [ "${{ github.base_ref }}" != "dev" ] && [ "${{ github.base_ref }}" != "main" ]; then
+            echo "Not a PR targeting dev/main."
+            exit 0
+          fi
+
+          DELETED="$(git diff --name-status "$BASE_SHA" "$HEAD_SHA" \
+            | awk '$1 == "D" {print $2}' \
+            | grep -E '^(data/|docs/|Prototype/|postman/|CLOUD_README\.md$|README\.md$|deslop\.pdf$|test\.csv$)' || true)"
+          if [ -n "$DELETED" ]; then
+            echo "::error::Detected deletions of prod-live-only paths in a PR to ${GITHUB_BASE_REF}."
+            echo "These deletions must never enter dev/main:"
+            echo "$DELETED"
+            exit 1
+          fi
+
+  guard-prod-live-no-dev-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Block protected dev paths in prod-live PRs
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "prod-live" ]; then
+            echo "Not a PR targeting prod-live."
+            exit 0
+          fi
+
+          PRESENT="$(git ls-tree -r --name-only "$HEAD_SHA" | grep -E '^(data/|docs/|Prototype/|postman/|CLOUD_README\.md$|README\.md$|deslop\.pdf$|test\.csv$)' || true)"
+          if [ -n "$PRESENT" ]; then
+            echo "::error::prod-live must not contain protected dev paths."
+            echo "$PRESENT"
+            exit 1
+          fi
+
+  guard-prod-live-model-volumes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure model persistence volumes remain configured
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "prod-live" ]; then
+            echo "Not a PR targeting prod-live."
+            exit 0
+          fi
+
+          FILE="docker-compose.yml"
+          if [ ! -f "$FILE" ]; then
+            echo "::error::Missing docker-compose.yml"
+            exit 1
+          fi
+
+          grep -qE '^[[:space:]]+hf_cache:[[:space:]]*$' "$FILE" || {
+            echo "::error::Missing hf_cache named volume declaration."
+            exit 1
+          }
+          grep -qE '^[[:space:]]+chatbot_models:[[:space:]]*$' "$FILE" || {
+            echo "::error::Missing chatbot_models named volume declaration."
+            exit 1
+          }
+          grep -q '/app/hf_cache' "$FILE" || {
+            echo "::error::Missing /app/hf_cache mount."
+            exit 1
+          }
+          grep -q '/app/models' "$FILE" || {
+            echo "::error::Missing /app/models mount."
+            exit 1
+          }
+
   lint-frontend:
     runs-on: ubuntu-latest
     defaults:

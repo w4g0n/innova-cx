@@ -38,28 +38,53 @@ git config merge.ours.driver true
 If this is missing, protected-path merge behavior is not guaranteed.
 
 ## Standard Merge Flow (`main` -> `prod-live`)
+Always use the repo script so protected paths are restored to pre-merge `prod-live` state.
+
 1. Checkout `prod-live`.
 2. Ensure working tree is clean.
-3. Merge `main` into `prod-live`.
-4. Resolve any non-protected conflicts.
-5. Run smoke tests / startup checks.
-6. Deploy.
+3. Run `./scripts/merge-main-into-prod-live.sh main`.
+4. Run smoke tests / startup checks.
+5. Push and deploy.
 
 Example:
 
 ```bash
 git checkout prod-live
 git pull origin prod-live
-git merge main
+./scripts/merge-main-into-prod-live.sh main
 git push origin prod-live
 ```
+
+## Branch Promotion Rules
+
+Allowed branch flow:
+
+- `feature/*` -> `dev`
+- `dev` -> `main`
+- `main` -> `prod-live`
+
+Blocked flow:
+
+- `prod-live` -> `main` or `dev`
+- any non-`dev` branch -> `main`
+- any non-`main` branch -> `prod-live`
+
+CI enforces these rules on pull requests.
 
 ## One-Time Cleanup Policy
 For paths that should not exist in `prod-live`, remove them once on `prod-live` and commit the deletion.
 After that, protected path rules keep them from being reintroduced during merges.
 
 ## Model Files on `prod-live`
-If you add model files under protected directories (for example under `data/`), they should:
+`prod-live` model artifacts should be stored in persistent Docker volumes, not committed to Git.
+In this repo, `docker-compose.yml` already keeps model storage via named volumes:
+
+- `hf_cache` mounted to `/app/hf_cache`
+- `chatbot_models` mounted to `/app/models`
+
+This keeps model files safe across `main` -> `prod-live` merges and container rebuilds.
+
+If you still keep any model artifacts in protected Git paths (for example under `data/`), they should:
 
 1. Stay on `prod-live` across merges from `main`.
 2. Be used at runtime only if service config/env points to those exact model paths.
