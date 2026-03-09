@@ -229,6 +229,26 @@ export default function CustomerChatbot() {
     }
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend(e);
+    }
+  };
+
+  const handleNewChat = () => {
+    setChatSessionId(null);
+    setMessages([
+      {
+        id: `m-${Date.now()}`,
+        from: "bot",
+        text: `Hi ${nameFromEmail}! I'm Nova. How can I help you today?`,
+      },
+    ]);
+    setActionButtons([]);
+    setTicketPopup(null);
+  };
+
   const handleActionButton = async (button) => {
     const message = BUTTON_MESSAGE[button];
     if (!message || sending) return;
@@ -265,6 +285,13 @@ export default function CustomerChatbot() {
                   Track Ticket
                 </button>
                 <button onClick={() => goToForm("Complaint")}>Open Form</button>
+                <button
+                  className="custNewChatBtn"
+                  title="Start a new conversation"
+                  onClick={handleNewChat}
+                >
+                  New Chat
+                </button>
               </div>
             </div>
 
@@ -304,8 +331,9 @@ export default function CustomerChatbot() {
               <textarea
                 className="custInput"
                 value={text}
-                placeholder="Type your message..."
+                placeholder="Type your message… (Enter to send, Shift+Enter for new line)"
                 onChange={(e) => setText(e.target.value)}
+                onKeyDown={handleKeyDown}
                 disabled={sending}
               />
               <button type="submit" className="primaryPillBtn" disabled={sending}>

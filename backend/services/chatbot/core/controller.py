@@ -1,4 +1,8 @@
+import logging
 import re
+
+logger = logging.getLogger(__name__)
+
 from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression
 from .llm import generate_response, llm_available
 from .logger import log_bot_response, log_user_message
@@ -204,8 +208,8 @@ def _handle_inquiry(session: dict, user_text: str) -> dict:
     if attempts > MAX_INQUIRY_ATTEMPTS:
         response = (
             "I have not been able to resolve this for you through chat. "
-            "Let me create a support ticket so the team can follow up. "
-            "What type of asset does this relate to — Office, Warehouse, or Retail?"
+            "Let me create a support ticket so the team can follow up with you directly. "
+            "Could you briefly describe the issue so I can log it for you?"
         )
         context["category"] = "inquiry"
         transition(session, "collecting_inquiry_ticket")
@@ -377,9 +381,10 @@ def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
         transition(session, "ticket_created")
         rtype = "ticket_created"
     else:
+        logger.error("ticket_create_error session=%s err=%s", session_id, result.get("error"))
         response = (
-            f"I encountered an issue creating your ticket: {result['error']}. "
-            "Please try again."
+            "I was unable to create your ticket at this time. "
+            "Please try again or use the complaint form directly."
         )
         rtype = "ticket_create_error"
 
