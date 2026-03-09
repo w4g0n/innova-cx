@@ -192,121 +192,115 @@ export default function CustomerTicketDetails() {
           </button>
         </div>
       ) : (
-        <div className="ctd-layout">
+        <div className="ctd-body">
+          <div className="ctd-layout">
 
-          {/* LEFT — ticket info */}
-          <section className="ctd-card">
-            {/* Top row */}
-            <div className="ctd-id-row">
-              <span className="ctd-mono">{ticket.id}</span>
-              <span className="ctd-dot">·</span>
-              <span className="ctd-mono">Ticket</span>
-              <span className="ctd-dot">·</span>
-              <span className="ctd-mono">{ticket.source}</span>
-              <span className="ctd-dot">·</span>
-              <span className="ctd-status-badge" style={{ color: tone.color, background: tone.bg }}>
-                <span className="ctd-status-dot" style={{ background: tone.color }}/>
-                {ticket.status}
-              </span>
-            </div>
+            {/* LEFT COLUMN — ticket info + pipeline + activity log */}
+            <div className="ctd-left-col">
 
-            <h2 className="ctd-ticket-title">{ticket.title}</h2>
-
-            <div className="ctd-meta-row">
-              <div className="ctd-meta-item">
-                <span className="ctd-meta-label">Priority</span>
-                <PriorityPill priority={ticket.priority}/>
+              {/* Ticket info card */}
+              <section className="ctd-card">
+              {/* Top row */}
+              <div className="ctd-id-row">
+                <span className="ctd-mono">{ticket.id}</span>
+                <span className="ctd-dot">·</span>
+                <span className="ctd-mono">Ticket</span>
+                <span className="ctd-dot">·</span>
+                <span className="ctd-mono">{ticket.source}</span>
+                <span className="ctd-dot">·</span>
+                <span className="ctd-status-badge" style={{ color: tone.color, background: tone.bg }}>
+                  <span className="ctd-status-dot" style={{ background: tone.color }}/>
+                  {ticket.status}
+                </span>
               </div>
-              <div className="ctd-meta-item">
-                <span className="ctd-meta-label">Created</span>
-                <span className="ctd-meta-value">{ticket.date}</span>
-              </div>
-            </div>
 
-            <div className="ctd-divider"/>
-            <p className="ctd-section-label">Description</p>
-            <p className="ctd-description">{ticket.description}</p>
-          </section>
+              <h2 className="ctd-ticket-title">{ticket.title}</h2>
 
-          {/* RIGHT — pipeline + activity + chat */}
-          <section className="ctd-card" style={{ display: "flex", flexDirection: "column" }}>
-            <p className="ctd-section-label">Updates</p>
-
-            {/* Status pipeline */}
-            <div className="ctd-pipeline">
-              <div className="ctd-pipeline-top">
-                <div>
-                  <div className="ctd-pipeline-eyebrow">Ticket Status</div>
-                  <div className="ctd-pipeline-current">{STATUS_STAGES[stageIdx].label}</div>
+              <div className="ctd-meta-row">
+                <div className="ctd-meta-item">
+                  <span className="ctd-meta-label">Priority</span>
+                  <PriorityPill priority={ticket.priority}/>
                 </div>
-                <div className="ctd-pipeline-frac">
-                  <span className="ctd-frac-num">{stageIdx + 1}</span>
-                  <span className="ctd-frac-sep">/</span>
-                  <span className="ctd-frac-total">{STATUS_STAGES.length}</span>
+                <div className="ctd-meta-item">
+                  <span className="ctd-meta-label">Created</span>
+                  <span className="ctd-meta-value">{ticket.date}</span>
                 </div>
               </div>
 
-              <div className="ctd-track">
-                <div className="ctd-track-fill" style={{ width: `${progress}%` }}/>
+              <div className="ctd-divider"/>
+              <div className="ctd-description-block">
+                <p className="ctd-section-label">Description</p>
+                <p className="ctd-description">{ticket.description}</p>
               </div>
+            </section>
 
-              <div className="ctd-stage-dots">
-                {STATUS_STAGES.map((stage, i) => (
-                  <div key={stage.id} className="ctd-stage-wrap">
-                    <div className={`ctd-stage-dot ${i < stageIdx ? "done" : ""} ${i === stageIdx ? "current" : ""}`}>
-                      {i < stageIdx  && <span className="ctd-dot-check">✓</span>}
-                      {i === stageIdx && <span className="ctd-dot-pulse"/>}
-                    </div>
-                    <div className={`ctd-stage-label ${i === stageIdx ? "active" : ""}`}>
-                      {stage.label}
-                      {i === stageIdx && <span className="ctd-dot-cond">Current</span>}
-                    </div>
+              {/* Pipeline + activity card */}
+              <section className="ctd-card">
+                <p className="ctd-section-label">Updates</p>
+
+              {/* Status pipeline */}
+              <div className="ctd-pipeline">
+                <div className="ctd-pipeline-top">
+                  <div>
+                    <div className="ctd-pipeline-eyebrow">Ticket Status</div>
+                    <div className="ctd-pipeline-current">{STATUS_STAGES[stageIdx].label}</div>
                   </div>
-                ))}
-              </div>
-            </div>
+                  <div className="ctd-pipeline-frac">
+                    <span className="ctd-frac-num">{stageIdx + 1}</span>
+                    <span className="ctd-frac-sep">/</span>
+                    <span className="ctd-frac-total">{STATUS_STAGES.length}</span>
+                  </div>
+                </div>
 
-            <div className="ctd-divider ctd-divider--gap"/>
-            <p className="ctd-section-label">Activity Log</p>
+                <div className="ctd-track">
+                  <div className="ctd-track-fill" style={{ width: `${progress}%` }}/>
+                </div>
 
-            {ticket.updates.length === 0 ? (
-              <div className="ctd-log-empty">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-                <div>No activity updates yet.</div>
-              </div>
-            ) : (
-              <div className="ctd-log-list">
-                {ticket.updates.map((u, idx) => {
-                  const t = updateTypeTone(u.type);
-                  return (
-                    <div key={idx} className="ctd-log-row">
-                      <div className="ctd-log-spine">
-                        <div className="ctd-log-dot" style={{ background: t.dot }}/>
-                        {idx < ticket.updates.length - 1 && <div className="ctd-log-line"/>}
+                <div className="ctd-stage-dots">
+                  {STATUS_STAGES.map((stage, i) => (
+                    <div key={stage.id} className="ctd-stage-wrap">
+                      <div className={`ctd-stage-dot ${i < stageIdx ? "done" : ""} ${i === stageIdx ? "current" : ""}`}>
+                        {i < stageIdx  && <span className="ctd-dot-check">✓</span>}
+                        {i === stageIdx && <span className="ctd-dot-pulse"/>}
                       </div>
-                      <div className="ctd-log-body">
-                        <div className="ctd-log-meta">
-                          <span className="ctd-log-author">{u.author}</span>
-                          <span className="ctd-log-tag" style={{ background: t.bg, color: t.color }}>{t.label}</span>
-                          <span className="ctd-log-date">{u.date}</span>
-                        </div>
-                        <div className="ctd-log-text">{u.message}</div>
+                      <div className={`ctd-stage-label ${i === stageIdx ? "active" : ""}`}>
+                        {stage.label}
+                        {i === stageIdx && <span className="ctd-dot-cond">Current</span>}
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            )}
-            {/* ── CHAT ── */}
-            <TicketChat
-              ticketId={ticket.id}
-              role="customer"
-              authHeader={authHeader}
-              disabled={normalizeStatus(ticket.status) === "resolved"}
-            />
-          </section>
+
+
+            </section>
+            </div>{/* end ctd-left-col */}
+
+            {/* RIGHT COLUMN — full-height conversation */}
+            <div className="ctd-right-col">
+              <section className="ctd-card ctd-chat-card">
+                <div className="ctd-chat-card-header">
+                  <div className="ctd-chat-card-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                  </div>
+                  <span className="ctd-chat-card-title">Ticket Conversation</span>
+                  {normalizeStatus(ticket.status) === "resolved" && (
+                    <span className="ctd-chat-resolved-badge">Resolved</span>
+                  )}
+                </div>
+                <TicketChat
+                  ticketId={ticket.id}
+                  role="customer"
+                  authHeader={authHeader}
+                  disabled={normalizeStatus(ticket.status) === "resolved"}
+                />
+              </section>
+            </div>
+
+          </div>
         </div>
       )}
 

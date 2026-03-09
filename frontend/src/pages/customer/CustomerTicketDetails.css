@@ -30,18 +30,105 @@
 .ctd-page-sub { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
 
 /* ── LAYOUT ─────────────────────────────────────────────────── */
-.ctd-layout {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+.ctd-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   padding: clamp(16px,2vw,24px) clamp(16px,3vw,32px) clamp(24px,3vw,40px);
-  align-items: start; flex: 1;
 }
+
+.ctd-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+  flex: 1;
+}
+
+/* Left column — stacks two cards vertically */
+.ctd-left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ctd-left-col .ctd-card {
+  flex: 1;
+}
+
+/* Right column — single tall chat card */
+.ctd-right-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.ctd-right-col .ctd-chat-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Chat card custom header */
+.ctd-chat-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.ctd-chat-card-icon {
+  width: 30px; height: 30px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--orchid), var(--pink));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; flex-shrink: 0;
+}
+
+.ctd-chat-card-title {
+  font-size: 13px; font-weight: 800;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text);
+  flex: 1;
+}
+
+.ctd-chat-resolved-badge {
+  font-size: 11px; font-weight: 700;
+  padding: 3px 10px; border-radius: 999px;
+  background: rgba(21,128,61,.12);
+  color: #15803d;
+  letter-spacing: .04em;
+}
+
+/* Make TicketChat fill the card height */
+.ctd-right-col .ctd-chat-card .tc-root {
+  flex: 1;
+  margin-top: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.ctd-right-col .ctd-chat-card .tc-list {
+  flex: 1;
+  height: auto;
+  min-height: 200px;
+}
+
+/* Hide the built-in tc-root header since we have our own */
+.ctd-right-col .ctd-chat-card .tc-header {
+  display: none;
+}
+
 
 /* ── CARD ───────────────────────────────────────────────────── */
 .ctd-card {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: 20px; padding: 24px;
-  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   transition: background .3s, border-color .3s, box-shadow .3s;
 }
 [data-theme="dark"]  .ctd-card { box-shadow: 0 8px 40px rgba(0,0,0,.25); }
@@ -75,7 +162,35 @@
 .ctd-divider { height: 1px; background: var(--card-border); margin: 0 0 18px; }
 .ctd-divider--gap { margin: 20px 0 18px; }
 .ctd-section-label { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); margin-bottom: 14px; }
-.ctd-description   { font-size: 14px; color: var(--muted); line-height: 1.7; margin: 0; }
+.ctd-description   { font-size: 14px; color: var(--muted); line-height: 1.7; margin: 0; flex: 1; min-height: 80px; }
+
+/* Ticket info card stretches so description fills remaining space */
+.ctd-left-col .ctd-card:first-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.ctd-left-col .ctd-card:first-child .ctd-description-block {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* Updates card — pipeline vertically centered */
+.ctd-updates-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.ctd-pipeline-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.ctd-pipeline-center .ctd-pipeline {
+  width: 100%;
+}
 
 /* ── PIPELINE ───────────────────────────────────────────────── */
 .ctd-pipeline {
@@ -170,14 +285,11 @@
 .ctd-not-found p  { font-size: 14px; color: var(--muted); margin: 0; }
 
 /* ── RESPONSIVE ─────────────────────────────────────────────── */
-@media(max-width:900px) { .ctd-layout { grid-template-columns: 1fr; } }
+@media(max-width:900px) {
+  .ctd-layout { grid-template-columns: 1fr; }
+  .ctd-right-col .ctd-chat-card .tc-list { min-height: 300px; }
+}
 @media(max-width:560px) {
   .ctd-page-header { padding: 16px 14px 0; }
-  .ctd-layout { padding: 14px 14px 24px; }
-}
-/* ── TICKET CHAT (tc-*) is in TicketChat.css; import it alongside this file */
-/* Make the right card stretch to contain the chat box neatly */
-.ctd-layout > section:last-child {
-  display: flex;
-  flex-direction: column;
+  .ctd-body { padding: 14px 14px 24px; }
 }
