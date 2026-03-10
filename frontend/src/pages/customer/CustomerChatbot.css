@@ -197,54 +197,6 @@
   transform: translateY(0);
 }
 
-/* ---- Typing indicator (animated bouncing dots) ---- */
-.custTypingIndicator {
-  display: inline-flex;
-  gap: 4px;
-  padding: 4px 0;
-}
-.custTypingIndicator span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(89, 36, 180, 0.35);
-  animation: typingBounce 1.2s infinite ease-in-out;
-}
-.custTypingIndicator span:nth-child(2) { animation-delay: 0.15s; }
-.custTypingIndicator span:nth-child(3) { animation-delay: 0.3s; }
-
-@keyframes typingBounce {
-  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-  40% { transform: translateY(-6px); opacity: 1; }
-}
-
-/* ---- New Chat button ---- */
-.custNewChatBtn {
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  background: transparent;
-  color: rgba(17, 17, 17, 0.55);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
-  margin-left: auto;
-}
-.custNewChatBtn:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: rgba(17, 17, 17, 0.8);
-  border-color: rgba(0, 0, 0, 0.25);
-}
-
-/* ---- Disabled state for buttons during send ---- */
-.custQuickTopBtns button:disabled,
-.primaryPillBtn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
 /* ================================================
    Responsive
    ================================================ */

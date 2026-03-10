@@ -32,14 +32,6 @@ export function clearTokens() {
   localStorage.removeItem(TEMP_TOKEN_KEY);
 }
 
-// Remove every auth-related localStorage key (session expiry / full logout)
-export function clearAllAuth() {
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("user");
-  localStorage.removeItem("token");
-  localStorage.removeItem("temp_token");
-}
-
 // -----------------------------
 // Headers for API calls
 // -----------------------------

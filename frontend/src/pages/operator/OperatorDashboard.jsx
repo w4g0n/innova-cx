@@ -1,170 +1,241 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
-import KpiCard from "../../components/common/KpiCard";
+import PillSelect from "../../components/common/PillSelect";
+import ExportPdfButton from "../../components/common/ExportPdfButton";
+import operatorDashboardData from "../../mock-data/operatorDashboard.json";
 import "./OperatorDashboard.css";
+import { PDFDownloadLink } from "@react-pdf/renderer";
+import OperatorDashboardPDF from "./OperatorDashboardPDF.jsx";
 import useScrollReveal from "../../utils/useScrollReveal";
-import { apiUrl } from "../../config/apiBase";
-
-function getStoredToken() {
-  const direct =
-    localStorage.getItem("access_token") ||
-    localStorage.getItem("token") ||
-    localStorage.getItem("jwt") ||
-    localStorage.getItem("authToken");
-  if (direct) return direct;
-  try {
-    const rawUser = localStorage.getItem("user");
-    if (!rawUser) return "";
-    const user = JSON.parse(rawUser);
-    return user?.access_token || "";
-  } catch { return ""; }
-}
-
-async function apiFetch(path) {
-  const token = getStoredToken();
-  const url = apiUrl(`/api${path}`);
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (res.status === 401 || res.status === 403) { window.location.href = "/login"; throw new Error("Session expired."); }
-  if (!res.ok) { const d = await res.text().catch(() => res.statusText); throw new Error(`${res.status}: ${d}`); }
-  return res.json();
-}
-
-function Dot({ ok }) {
-  return <span className={`opDash__dot opDash__dot--${ok ? "green" : "red"}`} />;
-}
-
-function ModuleCard({ tag, title, desc, to, rows, loading }) {
-  return (
-    <Link to={to} className="opDash__moduleCard">
-      <div className="opDash__moduleTop">
-        <span className="opDash__moduleTag">{tag}</span>
-        <span className="opDash__moduleArrow">→</span>
-      </div>
-      <div className="opDash__moduleTitle">{title}</div>
-      <div className="opDash__moduleDesc">{desc}</div>
-      <div className="opDash__moduleDivider" />
-      <div className="opDash__moduleStats">
-        {loading ? (
-          <span className="opDash__moduleLoading">Loading…</span>
-        ) : (
-          rows.map((r) => (
-            <div key={r.label} className="opDash__moduleStat">
-              {r.ok !== undefined && <Dot ok={r.ok} />}
-              <span className="opDash__moduleStatLabel">{r.label}</span>
-              <span className="opDash__moduleStatValue">{r.value ?? "—"}</span>
-            </div>
-          ))
-        )}
-      </div>
-    </Link>
-  );
-}
-
 
 export default function OperatorDashboard() {
   const revealRef = useScrollReveal();
+  const navigate = useNavigate();
+  const [range, setRange] = useState("last_1_hour");
 
-  const [chatbot,          setChatbot]          = useState(null);
-  const [chatbotLoading,   setChatbotLoading]   = useState(true);
-  const [sentiment,        setSentiment]        = useState(null);
-  const [sentimentLoading, setSentimentLoading] = useState(true);
-  const [qcAccept,         setQcAccept]         = useState(null);
-  const [qcAcceptLoading,  setQcAcceptLoading]  = useState(true);
-  const [qcRescore,        setQcRescore]        = useState(null);
-  const [qcRescoreLoading, setQcRescoreLoading] = useState(true);
-  const [users,            setUsers]            = useState(null);
-  const [usersLoading,     setUsersLoading]     = useState(true);
+  const [data, setData]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(null);
 
   useEffect(() => {
-    let cancelled = false;
-    const load = (path, set, setLoading) => {
-      apiFetch(path)
-        .then((d)  => { if (!cancelled) set(d); })
-        .catch(()  => {})
-        .finally(() => { if (!cancelled) setLoading(false); });
-    };
-    load("/operator/analytics/model-health/chatbot?timeRange=last30days",  setChatbot,   setChatbotLoading);
-    load("/operator/analytics/model-health/sentiment?timeRange=last30days", setSentiment, setSentimentLoading);
-    load("/operator/analytics/qc/acceptance?timeRange=last30days",          setQcAccept,  setQcAcceptLoading);
-    load("/operator/analytics/qc/rescoring?timeRange=last30days",           setQcRescore, setQcRescoreLoading);
-    load("/operator/users",                                                  setUsers,     setUsersLoading);
-    return () => { cancelled = true; };
-  }, []);
+    try {
+      setLoading(true);
+      setError(null);
+      setData(operatorDashboardData);
+    } catch (err) { // eslint-disable-line no-unused-vars
+      setError("Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  }, [range]);
 
-  const userStats = useMemo(() => {
-    if (!users || !Array.isArray(users)) return null;
-    return {
-      total:    users.length,
-      active:   users.filter((u) => u.status === "active").length,
-      inactive: users.filter((u) => u.status === "inactive").length,
-    };
-  }, [users]);
+  if (loading) {
+    return (
+      <Layout role="operator">
+        <div className="opDash">Loading system dashboard…</div>
+      </Layout>
+    );
+  }
 
-  const topKpis = [
-    { label: "Containment Rate", value: chatbot?.kpis?.containmentRate     != null ? `${chatbot.kpis.containmentRate}%`          : chatbotLoading   ? "…" : "—" },
-    { label: "Escalation Rate",  value: chatbot?.kpis?.escalationRate      != null ? `${chatbot.kpis.escalationRate}%`           : chatbotLoading   ? "…" : "—" },
-    { label: "Avg Sentiment",    value: sentiment?.kpis?.avgSentimentScore  != null ? sentiment.kpis.avgSentimentScore.toFixed(2) : sentimentLoading  ? "…" : "—" },
-    { label: "QC Acceptance",    value: qcAccept?.kpis?.acceptanceRate     != null ? `${qcAccept.kpis.acceptanceRate}%`          : qcAcceptLoading   ? "…" : "—" },
-    { label: "Rescore Rate",     value: qcRescore?.kpis?.rescoreRate       != null ? `${qcRescore.kpis.rescoreRate}%`            : qcRescoreLoading  ? "…" : "—" },
-  ];
+  if (error) {
+    return (
+      <Layout role="operator">
+        <div className="opDash">⚠️ {error}</div>
+      </Layout>
+    );
+  }
 
-  const modules = [
-    {
-      tag: "Models", title: "Model Health",
-      desc: "Chatbot containment, sentiment scoring, and feature extraction diagnostics.",
-      to: "/operator/model-health", loading: chatbotLoading,
-      rows: [
-        { label: "Containment rate", value: chatbot?.kpis?.containmentRate != null ? `${chatbot.kpis.containmentRate}%` : "—", ok: chatbot?.kpis?.containmentRate >= 70 },
-        { label: "Escalation rate",  value: chatbot?.kpis?.escalationRate  != null ? `${chatbot.kpis.escalationRate}%`  : "—", ok: chatbot?.kpis?.escalationRate  <= 20 },
-        { label: "Total sessions",   value: chatbot?.kpis?.totalSessions?.toLocaleString() ?? "—" },
-      ],
-    },
-    {
-      tag: "QA", title: "Quality Control",
-      desc: "AI suggestion acceptance, priority rescoring, and routing override tracking.",
-      to: "/operator/quality-control", loading: qcAcceptLoading,
-      rows: [
-        { label: "Acceptance rate",   value: qcAccept?.kpis?.acceptanceRate != null ? `${qcAccept.kpis.acceptanceRate}%` : "—", ok: qcAccept?.kpis?.acceptanceRate >= 60 },
-        { label: "Declined (custom)", value: qcAccept?.kpis?.declinedRate   != null ? `${qcAccept.kpis.declinedRate}%`   : "—", ok: qcAccept?.kpis?.declinedRate   <= 40 },
-        { label: "Total resolutions", value: qcAccept?.kpis?.totalResolutions?.toLocaleString() ?? "—" },
-      ],
-    },
-    {
-      tag: "Access", title: "Users",
-      desc: "RBAC roles, account status, and user access management across the platform.",
-      to: "/operator/users", loading: usersLoading,
-      rows: [
-        { label: "Total users", value: userStats?.total    ?? "—" },
-        { label: "Active",      value: userStats?.active   ?? "—", ok: true },
-        { label: "Inactive",    value: userStats?.inactive ?? "—", ok: userStats ? userStats.inactive === 0 : undefined },
-      ],
-    },
-  ];
+  const headerActions = (
+    <div className="opDash__topActions">
+      <div className="opDash__selectWrap">
+        <PillSelect
+          value={range}
+          onChange={setRange}
+          ariaLabel="Filter by time range"
+          options={[
+            { label: "Last 30 minutes", value: "last_30_min" },
+            { label: "Last 1 hour",     value: "last_1_hour" },
+            { label: "Today",           value: "today" },
+            { label: "Last 7 days",     value: "last_7_days" },
+          ]}
+        />
+      </div>
+
+      <PDFDownloadLink
+        className="exportPdfLink"
+        document={<OperatorDashboardPDF data={data} range={range} />}
+        fileName={`operator-dashboard-${new Date().toISOString().slice(0, 10)}.pdf`}
+      >
+        {({ loading: pdfLoading }) => (
+          <span className={`exportPdfBtn ${pdfLoading ? "isLoading" : ""}`}>
+            <ExportPdfButton loading={pdfLoading} />
+          </span>
+        )}
+      </PDFDownloadLink>
+    </div>
+  );
 
   return (
     <Layout role="operator">
       <div className="opDash" ref={revealRef}>
+
         <PageHeader
-          title="Operator Dashboard"
-          subtitle="Metrics shown are from the last 30 days. Use each module's filters for deeper analysis."
+          title="Operator System Dashboard"
+          subtitle="High-level health of the complaint-handling platform and AI services."
+          actions={headerActions}
         />
 
-        {/* KPI BAR */}
-        <section className="opDash__kpiRow">
-          {topKpis.map((k) => (
-            <KpiCard key={k.label} label={k.label} value={k.value} />
-          ))}
+        {/* Row 1 — Core Services + Error Overview */}
+        <section className="opDash__cardsRow">
+          <article className="opDash__card">
+            <h2 className="opDash__cardTitle">Core Services Status</h2>
+            <p className="opDash__cardSubtitle">Real-time health of critical components.</p>
+
+            <div className="opDash__statusGrid">
+              {data.coreServices.map((svc) => (
+                <div key={svc.name} className="opDash__statusItem">
+                  <div className="opDash__statusLabel">{svc.name}</div>
+                  <span className={`opDash__statusPill opDash__status--${svc.severity}`}>
+                    {svc.status}
+                  </span>
+                  <p className="opDash__statusNote">{svc.note}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="opDash__card opDash__card--narrow">
+            <h2 className="opDash__cardTitle">Error & Fallback Overview</h2>
+
+            <div className="opDash__miniKpiCol">
+              <MiniKpi
+                label="System errors"
+                {...data.errorFallbackOverview.systemErrors}
+              />
+              <MiniKpi
+                label="Chatbot → Human fallbacks"
+                {...data.errorFallbackOverview.chatbotToHumanFallbacks}
+              />
+              <MiniKpi
+                label="Routing failures"
+                {...data.errorFallbackOverview.routingFailures}
+                critical
+              />
+            </div>
+          </article>
         </section>
 
-        {/* MODULE CARDS — 3 equal columns filling full width */}
-        <div className="opDash__moduleCol">
-          {modules.map((m) => (
-            <ModuleCard key={m.title} {...m} />
-          ))}
-        </div>
+        {/* Row 2 — Integrations + Queue Health */}
+        <section className="opDash__cardsRow">
+          <article className="opDash__card">
+            <h2 className="opDash__cardTitle">Integrations Status</h2>
+
+            <ul className="opDash__list">
+              {data.integrations.map((i) => (
+                <li key={i.name} className="opDash__listItem">
+                  <div>
+                    <div className="opDash__itemName">{i.name}</div>
+                    <div className="opDash__itemMeta">{i.note}</div>
+                  </div>
+                  <span className={`opDash__statusPill opDash__status--${i.severity}`}>
+                    {i.status}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </article>
+
+          <article className="opDash__card">
+            <h2 className="opDash__cardTitle">Pipeline & Queue Health</h2>
+
+            <div className="opDash__queueGrid">
+              {data.queues.map((q) => (
+                <div key={q.name} className="opDash__queueItem">
+                  <div className="opDash__queueLabel">{q.name}</div>
+                  <div className="opDash__queueValue">{q.value}</div>
+                  <div className={`opDash__queueNote${q.severity === "warning" ? " opDash__queueNote--warning" : ""}`}>
+                    {q.note}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+
+        {/* Full-width — Event Feed */}
+        <section className="opDash__card opDash__card--full">
+          <h2 className="opDash__cardTitle">Incident & Event Feed</h2>
+
+          <ul className="opDash__eventFeed">
+            {data.eventFeed.map((e, idx) => (
+              <li key={idx} className={`opDash__eventItem opDash__event--${e.severity}`}>
+                <span className="opDash__eventDot" />
+                <div className="opDash__eventContent">
+                  <div className="opDash__eventHeader">
+                    <span className="opDash__eventTitle">{e.title}</span>
+                    <span className="opDash__eventTime">{e.time}</span>
+                  </div>
+                  <p className="opDash__eventDesc">{e.description}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* Row 3 — AI Versions + Safety */}
+        <section className="opDash__cardsRow">
+          <article className="opDash__card">
+            <h2 className="opDash__cardTitle">AI & Chatbot Versions</h2>
+
+            <ul className="opDash__list">
+              {data.versions.map((v) => (
+                <li key={v.component} className="opDash__listItem">
+                  <div>
+                    <div className="opDash__itemName">{v.component}</div>
+                    <div className="opDash__itemMeta">
+                      {v.version} · Deployed {v.deployedAt}
+                    </div>
+                  </div>
+                  <button
+                    className="opDash__linkBtn"
+                    onClick={() => navigate("/operator/model-analysis")}
+                  >
+                    View details
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </article>
+
+          <article className="opDash__card">
+            <h2 className="opDash__cardTitle">Safety & Maintenance</h2>
+
+            <ul className="opDash__safetyList">
+              {Object.entries(data.safetyMaintenance).map(([k, v]) => (
+                <li key={k} className="opDash__safetyItem">
+                  <span className="opDash__safetyLabel">{k}</span>
+                  <span className="opDash__configPill">{v}</span>
+                </li>
+              ))}
+            </ul>
+          </article>
+        </section>
+
       </div>
     </Layout>
+  );
+}
+
+function MiniKpi({ label, count, trendLabel, critical }) {
+  return (
+    <div className="opDash__miniKpi">
+      <span className="opDash__miniKpiLabel">{label}</span>
+      <span className="opDash__miniKpiValue">{count}</span>
+      <span className={`opDash__miniKpiTrend${critical ? " opDash__miniKpiTrend--critical" : " opDash__miniKpiTrend--normal"}`}>
+        {trendLabel}
+      </span>
+    </div>
   );
 }

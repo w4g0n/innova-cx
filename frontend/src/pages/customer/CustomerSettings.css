@@ -188,18 +188,13 @@
 
 /* Overlay / backdrop (purple-tinted instead of muddy grey) */
 :is(.cpw-overlay, .cpw-backdrop, .cpwBackdrop, .changePasswordOverlay, .changePasswordBackdrop) {
-  background: rgba(15, 10, 24, 0.18) !important;
+  background: rgba(45, 27, 105, 0.35) !important;
   backdrop-filter: blur(6px) !important;
   -webkit-backdrop-filter: blur(6px) !important;
 }
 
+/* Modal card depth (optional polish) */
 :is(.cpw-modal, .cpwModal, .changePasswordModal) {
-  box-shadow: 0 8px 30px rgba(15, 10, 24, 0.12), 0 2px 8px rgba(15, 10, 24, 0.06) !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  animation: cpwSlideUp 0.22s cubic-bezier(0.22, 0.68, 0, 1.15) both !important;
-}
-
-@keyframes cpwSlideUp {
-  from { opacity: 0; transform: translateY(12px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  box-shadow: 0 25px 80px rgba(45, 27, 105, 0.25) !important;
+  border: 1px solid var(--border) !important;
 }

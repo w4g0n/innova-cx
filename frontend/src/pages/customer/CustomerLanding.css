@@ -522,6 +522,30 @@ body {
   color: #2b1247;
 }
 
+/* ── Typing indicator (animated dots) ──────────────────── */
+.novaTyping {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+}
+
+.novaTyping span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(64, 28, 81, 0.55);
+  animation: novaTypingBounce 1.2s ease-in-out infinite;
+}
+
+.novaTyping span:nth-child(2) { animation-delay: 0.2s; }
+.novaTyping span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes novaTypingBounce {
+  0%, 60%, 100% { transform: translateY(0);    opacity: 0.6; }
+  30%           { transform: translateY(-6px); opacity: 1;   }
+}
+
 .novaQuickRow {
   display: flex;
   gap: 10px;

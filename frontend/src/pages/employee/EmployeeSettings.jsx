@@ -75,11 +75,10 @@ export default function EmployeeSettings() {
           </div>
         </div>
 
+        {showPwModal && (
+          <ChangePasswordModal onClose={() => setShowPwModal(false)} />
+        )}
       </div>
-
-      {showPwModal && (
-        <ChangePasswordModal onClose={() => setShowPwModal(false)} />
-      )}
     </Layout>
   );
 }

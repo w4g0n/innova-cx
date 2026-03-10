@@ -80,15 +80,8 @@ function DateRangePicker({ dateRange, onChange }) {
   return (
     <div className="qc-datepicker" ref={ref}>
       <button type="button" className="qc-datepicker__btn" onClick={() => setOpen((v) => !v)}>
+        <span className="qc-datepicker__icon">📅</span>
         {label}
-        <span className="qc-datepicker__icon">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-            <line x1="16" y1="2" x2="16" y2="6"/>
-            <line x1="8" y1="2" x2="8" y2="6"/>
-            <line x1="3" y1="10" x2="21" y2="10"/>
-          </svg>
-        </span>
       </button>
       {open && (
         <div className="qc-datepicker__dropdown">
@@ -144,6 +137,15 @@ function Card({ title, subtitle, children, wide }) {
   );
 }
 
+function SectionHeading({ icon, label, accent }) {
+  return (
+    <div className={`ma-section-heading ma-section-heading--${accent}`}>
+      <span className="ma-section-heading__icon">{icon}</span>
+      <span className="ma-section-heading__label">{label}</span>
+    </div>
+  );
+}
+
 function EmptyState({ message = "No data for this period." }) {
   return (
     <div style={{ padding: "1.5rem", color: C.muted, textAlign: "center", fontSize: 14 }}>
@@ -190,6 +192,7 @@ function ChatbotAgentView({ data, loading, error, onRetry }) {
 
   return (
     <div className="ma-view">
+      <SectionHeading icon="💬" label="Chatbot Agent — Session Analytics" accent="purple" />
       <div className="ma-kpi-row">
         <KpiCard label="Containment Rate" value={`${kpis.containmentRate}%`} pill="resolved_without_ticket" sub="Sessions resolved without creating a ticket or escalating" />
         <KpiCard label="Escalation Rate" value={`${kpis.escalationRate}%`} pill="escalated_to_human" sub="Sessions ending in human handoff" flag={kpis.escalationRate > 20 ? "warn" : undefined} />
@@ -235,6 +238,13 @@ function ChatbotAgentView({ data, loading, error, onRetry }) {
           </div>
         </Card>
       </div>
+      <div className="ma-info-banner">
+        <span className="ma-info-banner__icon">ℹ️</span>
+        <span>
+          Sourced from <code>mv_chatbot_daily</code> (sessions + user_chat_logs).
+          Containment = sessions where <code>escalated_to_human = FALSE</code> and <code>linked_ticket_id IS NULL</code>.
+        </span>
+      </div>
     </div>
   );
 }
@@ -245,10 +255,11 @@ function SentimentAgentView({ data, loading, error, onRetry }) {
   if (!data) return null;
 
   const { kpis, distribution, scoreOverTime, sentimentByDept } = data;
-  const distColors = { Positive: C.light, Neutral: C.pale, Negative: C.purple, "Very Negative": C.mid };
+  const distColors = { Positive: C.green, Neutral: C.pale, Negative: C.red, "Very Negative": "#7f1d1d" };
 
   return (
     <div className="ma-view">
+      <SectionHeading icon="🧠" label="Sentiment Agent — Scoring Analytics" accent="purple" />
       <div className="ma-kpi-row">
         <KpiCard label="Low Confidence Rate" value={`${kpis.lowConfidenceRate}%`} pill="confidence < 0.60" sub="Inferences below threshold" flag={kpis.lowConfidenceRate > 10 ? "warn" : undefined} />
         <KpiCard label="Avg Sentiment Score" value={kpis.avgSentimentScore?.toFixed(2) ?? "—"} pill="−1.0 to +1.0" sub="Mean score across all tickets in period" flag={kpis.avgSentimentScore < -0.1 ? "warn" : undefined} />
@@ -304,13 +315,20 @@ function SentimentAgentView({ data, loading, error, onRetry }) {
                   <Tooltip contentStyle={{ borderRadius: 10 }} />
                   <ReferenceLine y={0} stroke={C.muted} strokeDasharray="3 3" />
                   <Bar dataKey="avg" name="Avg Sentiment" radius={[4, 4, 0, 0]}>
-                    {sentimentByDept.map((d) => <Cell key={d.department} fill={d.avg < 0 ? C.purple : C.light} />)}
+                    {sentimentByDept.map((d) => <Cell key={d.department} fill={d.avg < 0 ? C.red : C.green} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             )}
         </div>
       </Card>
+      <div className="ma-info-banner">
+        <span className="ma-info-banner__icon">ℹ️</span>
+        <span>
+          Sourced from <code>mv_sentiment_daily</code> (sentiment_outputs joined to tickets + departments,
+          <code> is_current = TRUE</code>). Low confidence uses <code>confidence_score &lt; 0.60</code>.
+        </span>
+      </div>
     </div>
   );
 }
@@ -324,6 +342,7 @@ function FeatureAgentView({ data, loading, error, onRetry }) {
 
   return (
     <div className="ma-view">
+      <SectionHeading icon="⚙️" label="Feature Engineering Agent — Extraction Analytics" accent="purple" />
       <div className="ma-kpi-row">
         <KpiCard label="Safety Flag Rate" value={`${kpis.safetyFlagRate}%`} pill="safety_concern = true" sub="All flagged tickets require human review." flag={kpis.safetyFlagRate > 0 ? "danger" : undefined} />
         <KpiCard label="Recurring Issue Rate" value={`${kpis.recurringIssueRate}%`} pill="is_recurring = true" sub="Tickets flagged as recurring in the period" flag={kpis.recurringIssueRate > 12 ? "warn" : undefined} />
@@ -339,9 +358,9 @@ function FeatureAgentView({ data, loading, error, onRetry }) {
                 <ResponsiveContainer width="100%" height={240}>
                   <PieChart>
                     <Pie data={businessImpact} dataKey="value" nameKey="label" innerRadius={55} outerRadius={90} stroke="none" label={renderPctLabel} labelLine={false}>
-                      <Cell fill={C.purple} />
-                      <Cell fill={C.mid} />
-                      <Cell fill={C.light} />
+                      <Cell fill={C.red} />
+                      <Cell fill={C.amber} />
+                      <Cell fill={C.green} />
                     </Pie>
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     <Tooltip contentStyle={{ borderRadius: 10 }} />
@@ -359,15 +378,15 @@ function FeatureAgentView({ data, loading, error, onRetry }) {
                   <AreaChart data={recurringTrend} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                     <defs>
                       <linearGradient id="recGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={C.light} stopOpacity={0.25} />
-                        <stop offset="95%" stopColor={C.light} stopOpacity={0} />
+                        <stop offset="5%"  stopColor={C.amber} stopOpacity={0.25} />
+                        <stop offset="95%" stopColor={C.amber} stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
                     <XAxis dataKey="day" tick={{ fill: C.muted, fontSize: 12 }} />
                     <YAxis tick={{ fill: C.muted, fontSize: 12 }} unit="%" />
                     <Tooltip contentStyle={{ borderRadius: 10 }} formatter={(v) => `${v}%`} />
-                    <Area type="monotone" dataKey="rate" name="Recurring %" stroke={C.light} fill="url(#recGrad)" strokeWidth={2.5} dot={{ r: 3 }} />
+                    <Area type="monotone" dataKey="rate" name="Recurring %" stroke={C.amber} fill="url(#recGrad)" strokeWidth={2.5} dot={{ r: 3 }} />
                   </AreaChart>
                 </ResponsiveContainer>
               )}
@@ -386,14 +405,23 @@ function FeatureAgentView({ data, loading, error, onRetry }) {
                   <YAxis tick={{ fill: C.muted, fontSize: 12 }} unit="%" />
                   <Tooltip contentStyle={{ borderRadius: 10 }} formatter={(v) => `${v}%`} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="high"   name="High Impact"   stackId="a" fill={C.purple} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="medium" name="Medium Impact" stackId="a" fill={C.mid}    radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="low"    name="Low Impact"    stackId="a" fill={C.light}  radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="high"   name="High Impact"   stackId="a" fill={C.red}   radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="medium" name="Medium Impact" stackId="a" fill={C.amber} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="low"    name="Low Impact"    stackId="a" fill={C.green} radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
         </div>
       </Card>
+      <div className="ma-info-banner">
+        <span className="ma-info-banner__icon">ℹ️</span>
+        <span>
+          Sourced from <code>mv_feature_daily</code> (feature_outputs joined to tickets + departments,{" "}
+          <code>is_current = TRUE</code>). <code>business_impact</code>, <code>safety_concern</code>,{" "}
+          <code>issue_severity</code>, <code>issue_urgency</code> are extracted from{" "}
+          <code>feature_outputs.raw_features</code> JSONB.
+        </span>
+      </div>
     </div>
   );
 }
@@ -501,7 +529,7 @@ export default function ModelHealth() {
               onClick={() => setActiveAgent(a.id)}
               type="button"
             >
-              {a.label}
+              <span>{a.icon}</span> {a.label}
             </button>
           ))}
         </div>

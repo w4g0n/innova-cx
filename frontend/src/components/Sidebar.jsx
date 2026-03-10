@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import "./Sidebar.css";
 import logo from "../assets/nova-logo.png";
 import ConfirmDialog from "./common/ConfirmDialog";
-import { clearAllAuth } from "../utils/auth";
 
 /* SVG icon set */
 const Icon = {
@@ -174,8 +173,8 @@ export default function Sidebar({ role }) {
 
   /* Actually perform the logout */
   const doLogout = () => {
-    clearAllAuth();
-    navigate("/login");
+    localStorage.removeItem("user");
+    navigate("/");
   };
 
   return (

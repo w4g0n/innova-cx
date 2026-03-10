@@ -158,7 +158,7 @@ export async function submitTextComplaint(text, options = {}) {
   if (options.audio_features) {
     body.set("audio_features", JSON.stringify(options.audio_features));
   }
-  const response = await fetch(apiUrl("/api/orchestrator/process/text"), {
+  const response = await fetch(`${API_CONFIG.orchestrator}/process/text`, {
     method: "POST",
     body,
   });
@@ -191,43 +191,6 @@ export async function submitAudioComplaint(audioBlob, filename = "recording.webm
   });
 }
 
-/**
- * Request a call-centre-style TTS audio reply for a submitted ticket.
- * Returns base64-encoded MP3 audio from the backend (edge-tts).
- * Returns null if the backend TTS service is unavailable so the caller
- * can fall back to browser SpeechSynthesis.
- *
- * @param {{ ticketId?: string|null, ticketType?: string, messageType?: string }} opts
- * @returns {Promise<{audio_base64: string, mime_type: string, text: string}|null>}
- */
-export async function getAudioReply({
-  ticketId = null,
-  ticketType = "complaint",
-  messageType = "ticket_logged",
-} = {}) {
-  try {
-    const token = localStorage.getItem("access_token");
-    const response = await fetch(apiUrl("/api/tts/speak"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        message_type: messageType,
-        ticket_id: ticketId ?? undefined,
-        ticket_type: ticketType,
-      }),
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    if (!data?.audio_base64) return null;
-    return data;
-  } catch {
-    return null;
-  }
-}
-
 export default {
   transcribeAudio,
   analyzeSentiment,
@@ -237,5 +200,4 @@ export default {
   checkSentimentHealth,
   submitTextComplaint,
   submitAudioComplaint,
-  getAudioReply,
 };

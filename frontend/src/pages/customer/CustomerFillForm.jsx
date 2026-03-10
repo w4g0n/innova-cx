@@ -2,7 +2,6 @@ import { useState, useRef } from "react";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
-import AudioReplyPlayer from "../../components/common/AudioReplyPlayer";
 import { submitTextComplaint, transcribeAudio } from "../../services/api";
 import "./CustomerFillForm.css";
 
@@ -74,9 +73,6 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
   const [draftTranscript, setDraftTranscript] = useState("");
   const [latestAudioFeatures, setLatestAudioFeatures] = useState(null);
 
-  // Success state: set after submission, triggers success screen
-  const [submitted, setSubmitted] = useState(null);
-
   const cleanupStream = () => {
     try {
       if (streamRef.current) {
@@ -102,6 +98,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
     cleanupStream();
   };
 
+  // Submit ticket details to orchestrator pipeline
   const submit = async (e) => {
     e.preventDefault();
     const details = (message || "").trim();
@@ -110,27 +107,23 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
       return;
     }
 
-    // Capture mode before resetForm() clears it
-    const wasAudio = mode === "Audio";
-
     try {
       const orchestratorResult = await submitTextComplaint(details, {
         ticket_type: type === "Auto" ? null : type.toLowerCase(),
-        has_audio: wasAudio,
-        audio_features: wasAudio ? latestAudioFeatures : null,
+        has_audio: mode === "Audio",
+        audio_features: mode === "Audio" ? latestAudioFeatures : null,
       });
 
-      const isInquiry = !orchestratorResult?.ticket_id;
-      const ticketId = orchestratorResult?.ticket_id ?? null;
-
-      const replyText = isInquiry
-        ? (orchestratorResult?.chatbot_response || "Your inquiry has been received. Our team will respond shortly.")
-        : `Your complaint has been successfully logged. Ticket ID: ${ticketId}. Our team will review your concern and respond as soon as possible.`;
+      if (orchestratorResult?.ticket_id) {
+        alert(`Ticket submitted and processed. Ticket ID: ${orchestratorResult.ticket_id || "N/A"}`);
+      } else {
+        alert(`Inquiry processed. Reply: ${orchestratorResult?.chatbot_response || "No reply"}`);
+      }
 
       resetForm();
 
-      // Show success screen with audio reply
-      setSubmitted({ ticketId, isInquiry, replyText, wasAudio });
+      // Close embedded form if present
+      if (embedded && typeof onCancel === "function") onCancel();
     } catch (err) {
       console.error("Ticket creation failed:", err);
       alert(`Error creating ticket: ${err.message}`);
@@ -245,58 +238,6 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
     window.history.back();
   };
 
-  // ── Success screen ─────────────────────────────────────────────────────────
-  if (submitted) {
-    const successContent = (
-      <div className="custFormPage">
-        <PageHeader
-          title="Submission Confirmed"
-          subtitle="Your request has been received."
-        />
-        <div className="custSuccessCard">
-          <div className="custSuccessIcon" aria-hidden="true">
-            <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-              <circle cx="26" cy="26" r="26" fill="#dcfce7" />
-              <path
-                d="M15 26.5l8 8 14-16"
-                stroke="#16a34a"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-
-          {!submitted.isInquiry && (
-            <div className="custSuccessTicketId">
-              Ticket ID: <strong>{submitted.ticketId}</strong>
-            </div>
-          )}
-
-          <p className="custSuccessText">{submitted.replyText}</p>
-
-          <AudioReplyPlayer
-            ticketId={submitted.ticketId}
-            isInquiry={submitted.isInquiry}
-            replyText={submitted.replyText}
-          />
-
-          <button
-            type="button"
-            className="primaryPillBtn"
-            onClick={() => setSubmitted(null)}
-          >
-            Submit Another
-          </button>
-        </div>
-      </div>
-    );
-
-    if (embedded) return successContent;
-    return <Layout role="customer">{successContent}</Layout>;
-  }
-
-  // ── Normal form ────────────────────────────────────────────────────────────
   const content = (
     <div className={`custFormPage ${embedded ? "custFormPage--embedded" : ""}`}>
       <PageHeader
@@ -404,7 +345,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
                     </div>
 
                     <div className="custVoiceBarText">
-                      {isTranscribing ? "Transcribing..." : "Listening..."}
+                      {isTranscribing ? "Transcribing…" : "Listening…"}
                     </div>
 
                     <div className="custVoiceActions">
@@ -449,7 +390,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
                 {voiceStage === "review" && (
                   <div className="custVoiceReview">
                     <div className="custVoiceReviewTop">
-                      <div className="custHint">Review & edit transcript, then check to insert.</div>
+                      <div className="custHint">Review & edit transcript, then ✓ to insert.</div>
                       <div className="custVoiceActions">
                         <button
                           type="button"
@@ -491,7 +432,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
                       value={draftTranscript}
                       onChange={(e) => setDraftTranscript(e.target.value)}
                       rows={3}
-                      placeholder="Transcript will appear here..."
+                      placeholder="Transcript will appear here…"
                     />
                   </div>
                 )}
@@ -507,7 +448,7 @@ export default function CustomerFillForm({ embedded = false, onCancel }) {
               required
             />
 
-
+            
             <div className="custAttachSection">
               <div className="custAttachHeader">
                 <div>
