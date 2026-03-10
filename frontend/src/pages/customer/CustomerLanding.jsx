@@ -81,6 +81,7 @@ const QUICK_ACTIONS = [
 
   const profileRef = useRef(null);
   const notifRef = useRef(null);
+  const loadingTimeoutRef = useRef(null);
 
   // ── Nova chat widget state ──────────────────────────────────────────────
   const [isOpen, setIsOpen] = useState(false);
@@ -126,8 +127,12 @@ const QUICK_ACTIONS = [
         // Backend already returns ORDER BY created_at DESC.
         const mostRecent = tickets[0] || null;
         setRecentTicket(mostRecent);
-        // Keep loading state until a generated/fallback subject is available.
-        setTicketLoading(Boolean(mostRecent) && !hasUsableSubject(mostRecent));
+        // Only keep loading if subject is missing AND we haven't hit the 4s cap yet.
+        // The cap is enforced by loadingTimeoutRef set at call-site.
+        if (!mostRecent || hasUsableSubject(mostRecent)) {
+          setTicketLoading(false);
+          if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+        }
         return;
       }
       setRecentTicket(null);
@@ -142,7 +147,12 @@ const QUICK_ACTIONS = [
     const timer = setTimeout(() => {
       void fetchRecentTicket();
     }, 0);
-    return () => clearTimeout(timer);
+    // Hard cap: never show skeleton for more than 4 seconds regardless of subject
+    loadingTimeoutRef.current = setTimeout(() => setTicketLoading(false), 4000);
+    return () => {
+      clearTimeout(timer);
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+    };
   }, [fetchRecentTicket]);
 
   useEffect(() => {
