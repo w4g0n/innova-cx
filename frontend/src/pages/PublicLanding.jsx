@@ -163,7 +163,6 @@ function SolarSystem({ onReady }) {
     let renderer, scene, camera, raf;
     let planetObjects = [];
     let orbitMeshes   = [];
-    let meteorObjects = [];
     let raycaster, mouse;
     let hoveredIdx = -1;
     let autoRotY   = 0;
@@ -205,6 +204,7 @@ function SolarSystem({ onReady }) {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setSize(W, H);
       renderer.setClearColor(0x000000, 0);
+      renderer.domElement.style.background = "transparent";
       mount.appendChild(renderer.domElement);
 
       scene  = new THREE.Scene();
@@ -799,7 +799,7 @@ function SolarSystem({ onReady }) {
         // Subtle sun light flicker — solar variability
         sunLight.intensity = 5.8 + Math.sin(t*1.3)*0.3 + Math.sin(t*2.9)*0.12;
 
-        planetObjects.forEach(({ mesh, labelAnchor, innerPivot, cfg, idx, mat }) => {
+        planetObjects.forEach(({ mesh, innerPivot, cfg, idx, mat }) => {
           angles[idx] += cfg.speed;
           innerPivot.rotation.y = angles[idx];
           mesh.rotation.y += dt * 0.3;
@@ -913,11 +913,12 @@ function SolarSystem({ onReady }) {
       return () => { if (mount._cleanup) mount._cleanup(); if (script.parentNode) script.parentNode.removeChild(script); };
     }
     return () => { if (mount._cleanup) mount._cleanup(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <div className="pl-solar-wrap">
-      <div ref={mountRef} className="pl-solar-canvas" />
+    <div className="pl-solar-wrap" style={{ background: "transparent" }}>
+      <div ref={mountRef} className="pl-solar-canvas" style={{ background: "transparent" }} />
       <div ref={labelsRef} className="pl-label-layer" />
       {hovered && (
         <div className="pl-planet-tooltip" style={{ borderColor: hovered.color + "66" }}>
@@ -1030,13 +1031,13 @@ export default function PublicLanding() {
   const navigate = useNavigate();
   const [scrollY, setScrollY] = useState(0);
   const [ready, setReady] = useState(false);
-  const [splashDone, setSplashDone] = useState(false);
   const readyRef = useRef(false);
+  const splashDoneRef = useRef(false);
 
   // Minimum hold: 2.8s so text animations finish before fade-out
   useEffect(() => {
     const t = setTimeout(() => {
-      setSplashDone(true);
+      splashDoneRef.current = true;
       if (readyRef.current) setReady(true);
     }, 2800);
     return () => clearTimeout(t);
@@ -1044,7 +1045,7 @@ export default function PublicLanding() {
 
   const handleReady = () => {
     readyRef.current = true;
-    if (splashDone) setReady(true);
+    if (splashDoneRef.current) setReady(true);
   };
 
   useEffect(() => {
@@ -1156,7 +1157,7 @@ export default function PublicLanding() {
           fontSize: 11, letterSpacing: "0.12em",
           color: "rgba(167,139,250,0.30)",
           animation: "wcx-fadein 1s ease 0.9s both",
-        }}>InnovaAI X DUBAI COMMERCITY · 2026</div>
+        }}>DUBAI COMMERCITY · 2026</div>
 
         <style>{`
           @keyframes wcx-fadein {
