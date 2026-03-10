@@ -4,6 +4,7 @@ import "./CustomerLanding.css";
 import novaLogo from "../../assets/nova-logo.png";
 import CustomerFillForm from "./CustomerFillForm";
 import useNovaChatbot from "./chatbot.js";
+import TicketConfirmPopup from "../../components/common/TicketConfirmPopup";
 import { apiUrl } from "../../config/apiBase";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { getToken} from "../../utils/auth";
@@ -61,6 +62,7 @@ const QUICK_ACTIONS = [
   const [theme, toggleTheme] = useTheme();
 
   const [embeddedFormType, setEmbeddedFormType] = useState("Complaint");
+  const [ticketPopup, setTicketPopup] = useState(null);
 
   const {
     listRef,
@@ -76,6 +78,9 @@ const QUICK_ACTIONS = [
       if (!isOpen) setIsOpen(true);
       setNovaView("form");
       setIsExpanded(true);
+    },
+    onTicketCreated: ({ ticketId, replyText }) => {
+      setTicketPopup({ ticketId, replyText });
     },
   });
 
@@ -628,6 +633,12 @@ const QUICK_ACTIONS = [
               </div>
             </div>
             <div className="novaWidgetHeaderRight">
+              <button type="button" className="novaIconBtn" onClick={resetSession} aria-label="New conversation" title="New conversation">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M3 3v5h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
               <button type="button" className="novaIconBtn" onClick={toggleExpand} aria-label={isExpanded ? "Exit fullscreen" : "Fullscreen"}>
                 {isExpanded ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 3H3v6M15 3h6v6M21 15v6h-6M3 15v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -804,6 +815,18 @@ const QUICK_ACTIONS = [
             </div>
           )}
         </div>
+      )}
+
+      {/* ─── TICKET CONFIRM POPUP (chatbot ticket creation) ────── */}
+      {ticketPopup && (
+        <TicketConfirmPopup
+          open
+          ticketId={ticketPopup.ticketId}
+          isInquiry={false}
+          replyText={ticketPopup.replyText}
+          enableAudio={false}
+          onClose={() => setTicketPopup(null)}
+        />
       )}
 
       {/* ─── LOGOUT CONFIRM ────────────────────────────────────── */}
