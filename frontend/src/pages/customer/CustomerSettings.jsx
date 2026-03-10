@@ -23,7 +23,7 @@ export default function CustomerSettings() {
   const navigate = useNavigate();
   const [showPwModal, setShowPwModal] = useState(false);
 
-  useEffect(() => { applyStoredTheme(); }, []);
+  useEffect(() => { applyStoredTheme(); return () => document.documentElement.removeAttribute("data-theme"); }, []);
 
   const user = useMemo(() => getUser() || {}, []);
   const displayName  = user.name || user.full_name || user.fullName || user.username || "Customer";
