@@ -32,12 +32,12 @@ _analyzer = AudioSentimentAnalyzer() if _AUDIO_MODEL_AVAILABLE else None
 
 def get_audio_analysis_diagnostics() -> dict[str, object]:
     return {
-        "audio_analysis_model_available": _AUDIO_MODEL_AVAILABLE,
-        "audio_analysis_mode": "model" if _AUDIO_MODEL_AVAILABLE else "mock",
+        "audio_analysis_model_available": False,
+        "audio_analysis_mode": "deterministic" if _AUDIO_MODEL_AVAILABLE else "fallback",
         "audio_analysis_mode_reason": (
-            "AudioSentimentAnalyzer loaded from /app/sentiment_combiner"
+            "AudioSentimentAnalyzer loaded from /app/sentiment_combiner; no per-agent model artifact is required"
             if _AUDIO_MODEL_AVAILABLE
-            else "AudioSentimentAnalyzer missing; using neutral mock fallback when audio is present"
+            else "AudioSentimentAnalyzer unavailable; using neutral fallback when audio is present"
         ),
     }
 
@@ -45,9 +45,9 @@ def get_audio_analysis_diagnostics() -> dict[str, object]:
 async def analyze_audio(state: dict) -> dict:
     has_audio_ticket = bool(state.get("has_audio")) or bool(state.get("audio_features"))
     state["has_audio"] = has_audio_ticket
+    state["audio_analysis_mode"] = "deterministic" if _analyzer is not None else "fallback"
     if state["label"] != "complaint" or not has_audio_ticket:
         state["audio_sentiment"] = None
-        state["combined_sentiment"] = state.get("text_sentiment", 0.0)
         logger.info(
             "audio_analysis | skipped (label=%s has_audio=%s)",
             state.get("label"),
@@ -65,19 +65,14 @@ async def analyze_audio(state: dict) -> dict:
     }
     if _analyzer is None:
         state["audio_sentiment"] = 0.5
-        state["combined_sentiment"] = float(state.get("text_sentiment", 0.0) or 0.0)
-        logger.info("audio_analysis | model unavailable, using mock audio_sentiment=0.5")
+        logger.info("audio_analysis | analyzer unavailable, using fallback audio_sentiment=0.5")
         return state
 
     signals = _analyzer.extract_sentiment_signals(features)
     state["audio_sentiment"] = float(signals.overall_audio_sentiment)
-    state["combined_sentiment"] = (0.7 * float(state.get("text_sentiment", 0.0) or 0.0)) + (
-        0.3 * state["audio_sentiment"]
-    )
     logger.info(
-        "audio_analysis | audio_sentiment=%.3f combined_sentiment=%.3f",
+        "audio_analysis | audio_sentiment=%.3f",
         float(state.get("audio_sentiment", 0.0) or 0.0),
-        float(state.get("combined_sentiment", 0.0) or 0.0),
     )
     return state
 

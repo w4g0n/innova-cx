@@ -9,6 +9,7 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
+import { fireNotifRefresh } from "../../utils/notifRefresh";
 import { apiUrl } from "../../config/apiBase";
 import useScrollReveal from "../../utils/useScrollReveal";
 
@@ -233,6 +234,7 @@ export default function ManagerViewComplaints() {
         return;
       }
       setRows((prev) => prev.map((r) => r.id === ticketId ? { ...r, department: dept, reroutedTo: dept } : r));
+      fireNotifRefresh();
       pushToast(`Ticket rerouted to ${dept}`, "success");
     } catch { pushToast("Network error during reroute.", "error"); }
     closeMenu();

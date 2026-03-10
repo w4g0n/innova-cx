@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -260,6 +261,7 @@ export default function TicketReviewDetail() {
   const [noteText,     setNoteText]     = useState("");
   const [noteSaved,    setNoteSaved]    = useState(false);
   const [feedbackAct,  setFeedbackAct]  = useState(null);
+  const [pendingFeedback, setPendingFeedback] = useState(null); // "accept" | "reject" | null
 
   // FIX: useCallback so the function reference is stable — prevents infinite re-renders
   // and ensures onRetry always calls the latest version.
@@ -648,14 +650,14 @@ export default function TicketReviewDetail() {
                   <button
                     type="button"
                     className={`trd-feedback-btn trd-feedback-btn--accept ${feedbackAct === "accept" ? "trd-feedback-btn--active" : ""}`}
-                    onClick={() => setFeedbackAct("accept")}
+                    onClick={() => setPendingFeedback("accept")}
                   >
                     ✓ Accept
                   </button>
                   <button
                     type="button"
                     className={`trd-feedback-btn trd-feedback-btn--reject ${feedbackAct === "reject" ? "trd-feedback-btn--active" : ""}`}
-                    onClick={() => setFeedbackAct("reject")}
+                    onClick={() => setPendingFeedback("reject")}
                   >
                     ✕ Override
                   </button>
@@ -682,6 +684,20 @@ export default function TicketReviewDetail() {
         </TabPanel>
 
       </div>
+    
+      <ConfirmDialog
+        open={pendingFeedback !== null}
+        icon={pendingFeedback === "accept" ? "✓" : "✕"}
+        title={pendingFeedback === "accept" ? "Accept suggestion?" : "Override suggestion?"}
+        message={pendingFeedback === "accept"
+          ? "Mark the AI suggestion as correct. This will be recorded as accepted."
+          : "Mark the AI suggestion as incorrect. This will be recorded as a human override."}
+        confirmLabel={pendingFeedback === "accept" ? "Accept" : "Override"}
+        cancelLabel="Cancel"
+        variant={pendingFeedback === "accept" ? "success" : "warning"}
+        onConfirm={() => { setFeedbackAct(pendingFeedback); setPendingFeedback(null); }}
+        onCancel={() => setPendingFeedback(null)}
+      />
     </Layout>
   );
 }

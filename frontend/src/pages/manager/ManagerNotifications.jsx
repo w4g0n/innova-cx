@@ -4,8 +4,8 @@ import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
-import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
+import { fireNotifRefresh } from "../../utils/notifRefresh";
 import "./ManagerNotifications.css";
 
 function getAuthToken() {
@@ -132,7 +132,9 @@ export default function ManagerNotifications() {
       });
     } catch (e) {
       console.error("Failed to mark all notifications as read:", e);
+      return;
     }
+    fireNotifRefresh();
   };
 
   const onNotificationClick = async (n) => {
@@ -148,6 +150,7 @@ export default function ManagerNotifications() {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
+        fireNotifRefresh();
       } catch { /* silently ignore */ }
     }
 
@@ -220,7 +223,6 @@ export default function ManagerNotifications() {
                   <div className="empNotifs__content">
                     <div className="empNotifs__topRow">
                       <div className="empNotifs__title">{n.title}</div>
-                      {n.priority && <PriorityPill priority={n.priority} />}
                     </div>
                     <div className="empNotifs__message">{n.message}</div>
                     <div className="empNotifs__meta">

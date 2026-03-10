@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -168,6 +169,71 @@ def _mock_labels(text: str) -> dict[str, Any]:
     }
 
 
+def _load_multitask_feature_labeler(model_dir: Path):
+    model_pt = model_dir / "model.pt"
+    model_cfg = model_dir / "model_config.json"
+    label_classes = model_dir / "label_classes.json"
+    if not (model_pt.exists() and model_cfg.exists() and label_classes.exists()):
+        return None
+
+    try:
+        import torch  # type: ignore
+        import torch.nn as nn  # type: ignore
+        from transformers import AutoModel, AutoTokenizer  # type: ignore
+    except Exception as exc:
+        logger.info("feature_engineering | torch/transformers unavailable for multitask loader (%s)", exc)
+        return None
+
+    cfg = json.loads(model_cfg.read_text(encoding="utf-8"))
+    class_map = json.loads(label_classes.read_text(encoding="utf-8"))
+    base_model_name = str(cfg.get("base_model") or "").strip()
+    if not base_model_name:
+        logger.warning("feature_engineering | multitask model config missing base_model")
+        return None
+
+    num_labels_per_task = {col: len(values) for col, values in class_map.items()}
+
+    class MultiTaskDeBERTa(nn.Module):
+        def __init__(self, base_model_name: str, num_labels_per_task: dict):
+            super().__init__()
+            self.encoder = AutoModel.from_pretrained(base_model_name)
+            hidden_size = self.encoder.config.hidden_size
+            self.heads = nn.ModuleDict({
+                col: nn.Sequential(
+                    nn.Dropout(0.1),
+                    nn.Linear(hidden_size, hidden_size // 2),
+                    nn.GELU(),
+                    nn.Dropout(0.1),
+                    nn.Linear(hidden_size // 2, n_classes),
+                )
+                for col, n_classes in num_labels_per_task.items()
+            })
+
+        def forward(self, input_ids, attention_mask):
+            outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
+            pooled = outputs.last_hidden_state[:, 0, :]
+            logits = {}
+            for col, head in self.heads.items():
+                head_dtype = next(head.parameters()).dtype
+                logits[col] = head(pooled.to(dtype=head_dtype))
+            return logits
+
+    tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+    model = MultiTaskDeBERTa(base_model_name, num_labels_per_task).to("cpu")
+    model.load_state_dict(torch.load(model_pt, map_location="cpu"))
+    model = model.to(dtype=torch.float32)
+    model.eval()
+    logger.info("feature_engineering | loaded multitask checkpoint from %s", model_pt)
+    return {
+        "kind": "multitask_pt",
+        "tokenizer": tokenizer,
+        "model": model,
+        "torch": torch,
+        "class_map": class_map,
+        "max_length": int(cfg.get("max_length", 256)),
+    }
+
+
 @lru_cache(maxsize=1)
 def _load_feature_labeler():
     try:
@@ -183,6 +249,10 @@ def _load_feature_labeler():
         return None
 
     model_path = Path(model_name)
+    multitask_loaded = _load_multitask_feature_labeler(model_path)
+    if multitask_loaded is not None:
+        return multitask_loaded
+
     if not (model_path / "config.json").exists() and FEATURE_LABELER_AUTO_DOWNLOAD and FEATURE_LABELER_MODEL_NAME:
         try:
             from huggingface_hub import snapshot_download  # type: ignore
@@ -234,6 +304,36 @@ def _average_hypothesis_scores(
 
 
 def _classify_ticket(classifier, text: str) -> dict[str, Any]:
+    if isinstance(classifier, dict) and classifier.get("kind") == "multitask_pt":
+        torch = classifier["torch"]
+        tokenizer = classifier["tokenizer"]
+        model = classifier["model"]
+        class_map = classifier["class_map"]
+        max_length = classifier["max_length"]
+        encoded = tokenizer(
+            [text],
+            truncation=True,
+            padding="max_length",
+            max_length=max_length,
+            return_tensors="pt",
+        )
+        with torch.no_grad():
+            logits = model(
+                encoded["input_ids"].to("cpu"),
+                encoded["attention_mask"].to("cpu"),
+            )
+        output_labels: dict[str, Any] = {}
+        for label_name, task_logits in logits.items():
+            probs = torch.softmax(task_logits, dim=1)[0]
+            idx = int(torch.argmax(probs).item())
+            classes = class_map[label_name]
+            value = classes[idx]
+            if label_name == "safety_concern":
+                output_labels[label_name] = str(value).strip().lower() in {"true", "1", "yes"}
+            else:
+                output_labels[label_name] = str(value).strip().lower()
+        return output_labels
+
     output_labels: dict[str, Any] = {}
     for label_name, class_hypotheses in LABEL_CONFIGS.items():
         all_hypotheses = []
@@ -269,13 +369,24 @@ def _apply_labeling_step(state: dict, text: str) -> None:
 
 def get_feature_engineering_diagnostics() -> dict[str, object]:
     labeler_model = FEATURE_LABELER_MODEL_PATH or None
-    labeler_exists = bool(labeler_model and (Path(labeler_model) / "config.json").exists())
+    labeler_path = Path(labeler_model) if labeler_model else None
+    hf_labeler_exists = bool(labeler_path and (labeler_path / "config.json").exists())
+    multitask_labeler_exists = bool(
+        labeler_path
+        and (labeler_path / "model.pt").exists()
+        and (labeler_path / "model_config.json").exists()
+        and (labeler_path / "label_classes.json").exists()
+    )
+    labeler_exists = hf_labeler_exists or multitask_labeler_exists
     return {
         "feature_engineering_mode": "nli+rules",
         "feature_labeler_model": labeler_model,
         "feature_labeler_model_name": FEATURE_LABELER_MODEL_NAME or None,
         "feature_labeler_auto_download": FEATURE_LABELER_AUTO_DOWNLOAD,
         "feature_labeler_model_exists": labeler_exists,
+        "feature_labeler_artifact_type": (
+            "multitask_pt" if multitask_labeler_exists else "hf_zero_shot" if hf_labeler_exists else None
+        ),
         "feature_labeler_mode": "model" if labeler_exists else "mock",
     }
 
@@ -309,9 +420,7 @@ async def engineer_features(state: dict) -> dict:
     state["issue_urgency"] = _normalize_level(issue_urgency, default="medium")
 
     logger.info(
-        "feature_engineering | recurring=%s recurring_source=%s labels_source=%s impact=%s safety=%s severity=%s urgency=%s",
-        state.get("is_recurring"),
-        state.get("is_recurring_source"),
+        "feature_engineering | labels_source=%s impact=%s safety=%s severity=%s urgency=%s",
         state.get("feature_labels_source"),
         state["business_impact"],
         state["safety_concern"],

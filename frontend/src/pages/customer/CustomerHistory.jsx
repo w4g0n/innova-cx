@@ -169,9 +169,15 @@ export default function CustomerMyTickets() {
       {/* TOPBAR */}
       <header className="cs-topbar">
         <div className="cs-topbar-left">
-          <img src={novaLogo} alt="InnovaAI" className="cs-topbar-logo" />
+          <img src={novaLogo} alt="InnovaAI" className="cs-topbar-logo cs-topbar-logo--clickable" onClick={() => navigate("/customer")} style={{cursor:"pointer"}} />
           <div className="cs-topbar-divider" />
           <span className="cs-topbar-label">My Tickets</span>
+          <button type="button" className="cs-back-btn" onClick={() => navigate("/customer")}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+            Dashboard
+          </button>
         </div>
         <div className="cs-topbar-right">
           <ThemeToggleBtn theme={theme} onToggle={toggleTheme} />
@@ -265,21 +271,6 @@ export default function CustomerMyTickets() {
             )}
           </div>
 
-          <button type="button" className="cs-back-btn" onClick={() => navigate("/customer")}>
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M19 12H5M12 5l-7 7 7 7" />
-            </svg>
-            Dashboard
-          </button>
         </div>
       </header>
 
@@ -544,16 +535,12 @@ export default function CustomerMyTickets() {
 
       {/* LOGOUT MODAL */}
       {showLogoutConfirm && (
-        <div className="cmyt-modal-overlay">
-          <div className="cmyt-modal">
+        <div className="novaCloseModal" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="novaCloseModalContent" onClick={e => e.stopPropagation()}>
             <p>Are you sure you want to log out?</p>
-            <div className="cmyt-modal-btns">
-              <button type="button" className="cs-btn cs-btn-primary" onClick={confirmLogout}>
-                Log out
-              </button>
-              <button type="button" className="cs-btn cs-btn-ghost" onClick={() => setShowLogoutConfirm(false)}>
-                Cancel
-              </button>
+            <div className="novaCloseModalBtns">
+              <button onClick={confirmLogout}>Log out</button>
+              <button onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
             </div>
           </div>
         </div>

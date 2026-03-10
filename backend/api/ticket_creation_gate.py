@@ -1,11 +1,17 @@
 import os
 import time
+import uuid
 import urllib.parse
 import logging
+import json
 from datetime import datetime
 from typing import Any, Dict, Optional
 
 import httpx
+try:
+    from api.event_logger import log_application_event
+except Exception:
+    from event_logger import log_application_event
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +39,19 @@ def create_ticket_via_gate(
     Single DB gate for ticket creation writes.
     """
     ticket_code = f"CX-{int(time.time() * 1000)}-{os.urandom(2).hex().upper()}"
-    logger.info(
-        "ticket_gate_create_start | ticket_code=%s source=%s type=%s status=%s priority=%s",
-        ticket_code,
-        ticket_source,
-        ticket_type,
-        status,
-        priority,
+    # App-level SLA rule: do not start SLA clocks until routed + assigned.
+    effective_priority_assigned_at = None
+    log_application_event(
+        service="backend",
+        event_key="ticket_gate_create_start",
+        ticket_code=ticket_code,
+        payload={
+            "source": ticket_source,
+            "type": ticket_type,
+            "status": status,
+            "priority": priority,
+        },
+        cur=cur,
     )
     cur.execute(
         """
@@ -82,17 +94,44 @@ def create_ticket_via_gate(
             model_priority,
             model_department_id,
             model_confidence,
-            priority_assigned_at,
+            effective_priority_assigned_at,
         ),
     )
     row = cur.fetchone()
-    logger.info(
-        "ticket_gate_create_done | ticket_code=%s id=%s status=%s priority=%s priority_assigned_at=%s",
-        row[1],
-        row[0],
-        row[2],
-        row[3],
-        row[4],
+    cur.execute(
+        """
+        UPDATE tickets
+        SET
+          priority_assigned_at = NULL,
+          respond_due_at = NULL,
+          resolve_due_at = NULL,
+          respond_time_left_seconds = NULL,
+          resolve_time_left_seconds = NULL,
+          respond_breached = FALSE,
+          resolve_breached = FALSE,
+          status = CASE WHEN status = 'Overdue'::ticket_status THEN 'Open'::ticket_status ELSE status END
+        WHERE id = %s
+          AND status <> 'Resolved'::ticket_status
+          AND (department_id IS NULL OR assigned_to_user_id IS NULL)
+        RETURNING status, priority, priority_assigned_at, respond_due_at, resolve_due_at;
+        """,
+        (row[0],),
+    )
+    normalized = cur.fetchone()
+    if normalized:
+        row = (row[0], row[1], normalized[0], normalized[1], normalized[2], normalized[3], normalized[4])
+    execution_id = str(uuid.uuid4())
+    log_application_event(
+        service="backend",
+        event_key="ticket_gate_create_done",
+        ticket_id=row[0],
+        ticket_code=row[1],
+        payload={
+            "status": row[2],
+            "priority": row[3],
+            "priority_assigned_at": row[4],
+        },
+        cur=cur,
     )
     return {
         "id": row[0],
@@ -102,6 +141,7 @@ def create_ticket_via_gate(
         "priority_assigned_at": row[4],
         "respond_due_at": row[5],
         "resolve_due_at": row[6],
+        "execution_id": execution_id,
     }
 
 
@@ -113,6 +153,9 @@ def dispatch_ticket_to_orchestrator(
     orchestrator_url_local: str,
     ticket_type: Optional[str] = None,
     subject: Optional[str] = None,
+    execution_id: Optional[str] = None,
+    has_audio: bool = False,
+    audio_features: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Best-effort dispatch to orchestrator post-submit pipeline.
@@ -131,10 +174,14 @@ def dispatch_ticket_to_orchestrator(
         "text": text_value,
         "ticket_id": ticket_code,
         "ticket_type": type_value,
-        "has_audio": "false",
+        "has_audio": "true" if has_audio else "false",
     }
     if subject and subject.strip():
         payload["subject"] = subject.strip()
+    if execution_id and str(execution_id).strip():
+        payload["execution_id"] = str(execution_id).strip()
+    if has_audio and isinstance(audio_features, dict) and audio_features:
+        payload["audio_features"] = json.dumps(audio_features)
 
     encoded = urllib.parse.urlencode(payload).encode("utf-8")
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -149,24 +196,40 @@ def dispatch_ticket_to_orchestrator(
 
     for base in bases:
         try:
-            logger.info(
-                "ticket_gate_dispatch_attempt | ticket_code=%s target=%s type=%s has_audio=%s",
-                ticket_code,
-                base,
-                type_value,
-                payload.get("has_audio"),
+            log_application_event(
+                service="backend",
+                event_key="ticket_gate_dispatch_attempt",
+                ticket_code=ticket_code,
+                payload={
+                    "target": base,
+                    "type": type_value,
+                    "has_audio": payload.get("has_audio"),
+                },
             )
             with httpx.Client(timeout=dispatch_timeout) as client:
                 response = client.post(f"{base}/process/text", content=encoded, headers=headers)
                 response.raise_for_status()
-                logger.info(
-                    "ticket_gate_dispatch_done | ticket_code=%s target=%s status_code=%s",
-                    ticket_code,
-                    base,
-                    response.status_code,
+                log_application_event(
+                    service="backend",
+                    event_key="ticket_gate_dispatch_done",
+                    ticket_code=ticket_code,
+                    payload={
+                        "target": base,
+                        "status_code": response.status_code,
+                    },
                 )
                 return True
         except Exception as exc:
+            log_application_event(
+                service="backend",
+                event_key="ticket_gate_dispatch_failed",
+                level="WARNING",
+                ticket_code=ticket_code,
+                payload={
+                    "target": base,
+                    "error": str(exc),
+                },
+            )
             logger.warning(
                 "ticket_gate_dispatch_failed | ticket_code=%s target=%s err=%s",
                 ticket_code,
@@ -174,5 +237,12 @@ def dispatch_ticket_to_orchestrator(
                 exc,
             )
             continue
+    log_application_event(
+        service="backend",
+        event_key="ticket_gate_dispatch_exhausted",
+        level="ERROR",
+        ticket_code=ticket_code,
+        payload={},
+    )
     logger.error("ticket_gate_dispatch_exhausted | ticket_code=%s", ticket_code)
     return False

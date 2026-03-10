@@ -91,6 +91,8 @@ _AGGRESSION_WORDS = {
     "unacceptable", "disgusting", "horrible", "terrible",
     "worst", "garbage", "trash", "sue", "lawyer", "legal",
     "threatening", "kill", "die", "hate",
+    "furious", "outrageous", "irate", "appalling", "atrocious",
+    "infuriating", "fuming", "livid", "enraged", "outraged",
 }
 
 _THREAT_PHRASES = [
@@ -98,6 +100,8 @@ _THREAT_PHRASES = [
     "go to the press", "go to media", "report you",
     "escalate to", "speak to your manager", "your supervisor",
     "fire you", "get you fired",
+    "want a human", "speak to a human", "talk to a human",
+    "real person", "actual person", "human agent", "human now",
 ]
 
 
@@ -273,3 +277,42 @@ def detect_aggression(user_text: str, history: list) -> tuple[bool, float]:
     if 0.3 <= score <= 0.7 and llm_available():
         return _llm_detect_aggression(user_text, history)
     return is_agg, score
+
+
+_HUMAN_ESCALATION_PHRASES = [
+    "want a human", "need a human", "speak to a human", "talk to a human",
+    "speak with a human", "talk with a human", "want to speak to a human",
+    "want to talk to a human", "real person", "actual person", "live agent",
+    "human agent", "human support", "human now", "speak to someone",
+    "talk to someone", "speak to an agent", "talk to an agent",
+    "speak to a person", "talk to a person", "connect me to a human",
+    "transfer me", "escalate this", "want to escalate",
+]
+
+
+def is_human_escalation_request(user_text: str) -> bool:
+    """
+    Detects explicit requests to speak with a human agent.
+    Always runs regardless of state — never subject to aggression threshold.
+    """
+    text_lower = user_text.strip().lower()
+    return any(phrase in text_lower for phrase in _HUMAN_ESCALATION_PHRASES)
+
+
+_CANCELLATION_PHRASES = [
+    "changed my mind", "change my mind", "never mind", "nevermind",
+    "forget it", "forget about it", "forget this", "cancel",
+    "start over", "start again", "restart", "reset",
+    "actually no", "actually never mind", "don't want to", "dont want to",
+    "don't bother", "dont bother", "no thanks", "not anymore",
+    "stop", "quit", "exit", "go back", "nvm",
+]
+
+
+def is_cancellation_request(user_text: str) -> bool:
+    """
+    Detects when the user wants to cancel the current flow and start fresh.
+    Only meaningful when the user is mid-flow (collecting fields, etc.).
+    """
+    text_lower = user_text.strip().lower()
+    return any(phrase in text_lower for phrase in _CANCELLATION_PHRASES)

@@ -21,6 +21,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [voiceStage, setVoiceStage] = useState("idle");
   const [draftTranscript, setDraftTranscript] = useState("");
+  const [draftAudioFeatures, setDraftAudioFeatures] = useState(null);
 
   // Validation state
   const [errors, setErrors] = useState({});
@@ -80,6 +81,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     setIsTranscribing(false);
     setVoiceStage("idle");
     setDraftTranscript("");
+    setDraftAudioFeatures(null);
     setErrors({});
     cleanupStream();
   };
@@ -116,6 +118,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
         details,
         subject: "",
         asset_type: "General",
+        has_audio: wasAudio,
+        audio_features: wasAudio ? draftAudioFeatures : null,
         attachments: attachments.map((f) => ({
           name: f.name,
           type: f.type || null,
@@ -172,6 +176,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
           const filename = mimeType.includes("mp4") ? "mic.mp4" : "mic.webm";
           const data = await transcribeAudio(blob, filename);
           setDraftTranscript(data?.transcript || "");
+          setDraftAudioFeatures(data?.audio_features || null);
           setVoiceStage("review");
         } catch (err) {
           console.error("Transcription failed:", err);
@@ -212,10 +217,10 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     }
   };
 
-  const discardTranscript = () => { setDraftTranscript(""); setVoiceStage("idle"); };
+  const discardTranscript = () => { setDraftTranscript(""); setDraftAudioFeatures(null); setVoiceStage("idle"); };
   const insertTranscript = () => {
     const t = (draftTranscript || "").trim();
-    if (!t) { setVoiceStage("idle"); return; }
+    if (!t) { setDraftAudioFeatures(null); setVoiceStage("idle"); return; }
     setMessage((prev) => (prev ? `${prev}\n${t}` : t));
     setDraftTranscript("");
     setVoiceStage("idle");

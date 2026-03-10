@@ -95,6 +95,10 @@ ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/data/process
 ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent/deployment_state/*
 !ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent/deployment_state/.gitkeep
 
+# Chatbot model files (downloaded locally, never committed)
+ai-models/chatbot/*
+!ai-models/chatbot/.gitkeep
+
 # Terraform
 terraform.tfvars
 *.tfvars
@@ -102,7 +106,8 @@ terraform.tfvars
 # Project-specific
 ai-models/legacy/MultiAgentPipeline/SentimentAnalysisAgent_runtime/src/models/sentiment-v7/model.pt
 backend/services/chatbot/hf_cache/
-backend/services/chatbot/models/
+backend/services/chatbot/model/
+backend/services/transcriber/model/
 ai-models/MultiAgentPipeline/Orchestrator/feature_labeler_model/
 ai-models/MultiAgentPipeline/Orchestrator/feature_engineering_models/
 ai-models/MultiAgentPipeline/Orchestrator/agents/*/model/*

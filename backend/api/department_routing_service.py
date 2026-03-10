@@ -4,6 +4,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import HTTPException
 from psycopg2.extras import RealDictCursor
+try:
+    from api.event_logger import log_application_event
+except Exception:
+    from event_logger import log_application_event
 
 
 def build_routing_meta(
@@ -53,6 +57,27 @@ def manager_targets_for_department(cur, department_id: Optional[str]) -> List[Di
     return _rows_as_dicts(cur.fetchall() or [])
 
 
+def all_manager_targets(cur) -> List[Dict[str, Any]]:
+    def _rows_as_dicts(rows: List[Any]) -> List[Dict[str, Any]]:
+        if not rows:
+            return []
+        if isinstance(rows[0], dict):
+            return rows
+        cols = [d[0] for d in (cur.description or [])]
+        return [dict(zip(cols, row)) for row in rows]
+
+    cur.execute(
+        """
+        SELECT u.id, up.full_name
+        FROM users u
+        JOIN user_profiles up ON up.user_id = u.id
+        WHERE u.role = 'manager'
+        ORDER BY up.full_name;
+        """
+    )
+    return _rows_as_dicts(cur.fetchall() or [])
+
+
 def record_department_routing_decision(
     cur,
     *,
@@ -95,6 +120,10 @@ def record_department_routing_decision(
         return False
 
     managers = manager_targets_for_department(cur, department_id)
+    fallback_to_any_manager = False
+    if not managers:
+        managers = all_manager_targets(cur)
+        fallback_to_any_manager = bool(managers)
     for manager in managers:
         insert_notification(
             cur,
@@ -109,11 +138,26 @@ def record_department_routing_decision(
             priority=priority,
         )
     logger.info(
-        "department_routing | ticket=%s suggested=%s confidence_pct=%.2f is_confident=%s queued=True",
+        "department_routing | ticket=%s suggested=%s confidence_pct=%.2f is_confident=%s queued=True fallback_any_manager=%s",
         ticket_code,
         suggested_department,
         routing_confidence_pct,
         routing_is_confident,
+        fallback_to_any_manager,
+    )
+    log_application_event(
+        service="backend",
+        event_key="department_routing",
+        ticket_id=ticket_uuid,
+        ticket_code=ticket_code,
+        payload={
+            "suggested_department": suggested_department,
+            "confidence_pct": routing_confidence_pct,
+            "is_confident": routing_is_confident,
+            "queued": True,
+            "fallback_any_manager": fallback_to_any_manager,
+        },
+        cur=cur,
     )
     return True
 
@@ -132,7 +176,19 @@ def get_routing_review_payload(
     where = "WHERE dr.is_confident = FALSE"
     params: List[Any] = []
     if manager_department_name:
-        where += " AND LOWER(dr.suggested_department) = LOWER(%s)"
+        where += """
+            AND (
+              LOWER(dr.suggested_department) = LOWER(%s)
+              OR NOT EXISTS (
+                SELECT 1
+                FROM users u2
+                JOIN user_profiles up2 ON up2.user_id = u2.id
+                JOIN departments d2 ON d2.id = up2.department_id
+                WHERE u2.role = 'manager'
+                  AND LOWER(d2.name) = LOWER(dr.suggested_department)
+              )
+            )
+        """
         params.append(manager_department_name)
     else:
         where += " AND 1=0"
@@ -216,7 +272,17 @@ def decide_routing_review(
         FROM department_routing
         WHERE id::text = %s
           AND is_confident = FALSE
-          AND LOWER(suggested_department) = LOWER(%s)
+          AND (
+            LOWER(suggested_department) = LOWER(%s)
+            OR NOT EXISTS (
+              SELECT 1
+              FROM users u2
+              JOIN user_profiles up2 ON up2.user_id = u2.id
+              JOIN departments d2 ON d2.id = up2.department_id
+              WHERE u2.role = 'manager'
+                AND LOWER(d2.name) = LOWER(department_routing.suggested_department)
+            )
+          )
         LIMIT 1
         """,
         (review_id, manager_department_name),
@@ -339,5 +405,16 @@ def decide_routing_review(
         effective_decision,
         final_dept,
         user["id"],
+    )
+    log_application_event(
+        service="backend",
+        event_key="routing_review_decision",
+        ticket_id=rrq["ticket_id"],
+        payload={
+            "review_id": review_id,
+            "decision": effective_decision,
+            "department": final_dept,
+            "by": str(user["id"]),
+        },
     )
     return {"ok": True, "reviewId": review_id, "decision": effective_decision, "finalDepartment": final_dept}

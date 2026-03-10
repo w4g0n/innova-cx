@@ -1,14 +1,25 @@
 import sys
 import json
+import os
+from pathlib import Path
 from faster_whisper import WhisperModel
 
 # -----------------------------------
 # Model initialization (once per run)
 # -----------------------------------
-MODEL_NAME = "base"
+TRANSCRIBER_DIR = Path(__file__).resolve().parent
+DEFAULT_WHISPER_MODEL_NAME = "base"
+DEFAULT_WHISPER_MODEL_PATH = TRANSCRIBER_DIR / "model"
+
+
+def resolve_whisper_model() -> str:
+    configured_path = os.environ.get("WHISPER_MODEL_PATH", str(DEFAULT_WHISPER_MODEL_PATH)).strip()
+    if configured_path and Path(configured_path).exists():
+        return configured_path
+    return os.environ.get("WHISPER_MODEL_NAME", DEFAULT_WHISPER_MODEL_NAME).strip() or DEFAULT_WHISPER_MODEL_NAME
 
 model = WhisperModel(
-    MODEL_NAME,
+    resolve_whisper_model(),
     device="cpu",
     compute_type="int8",
 )

@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Suspense, lazy, useEffect } from "react";
-
+import { isStaffHost } from "./utils/hostUtils";
 import ProtectedRoute from "./auth/ProtectedRoute";
 
 const PublicLanding = lazy(() => import("./pages/PublicLanding"));
@@ -61,6 +61,7 @@ const OperatorNotifications = lazy(() =>
 );
 const QualityControl = lazy(() => import("./pages/operator/QualityControl"));
 const ModelHealth = lazy(() => import("./pages/operator/ModelHealth"));
+const AIExplainability = lazy(() => import("./pages/operator/AIExplainability"));
 const OperatorDashboard = lazy(() =>
   import("./pages/operator/OperatorDashboard")
 );
@@ -69,8 +70,6 @@ const OperatorSettings = lazy(() => import("./pages/operator/OperatorSettings"))
 const TicketReviewDetail = lazy(() =>
   import("./pages/operator/TicketReviewDetail")
 );
-
-const isStaffHost = () => window.location.hostname.startsWith("staff.");
 
 function RootGate() {
   return isStaffHost() ? <Navigate to="/login" replace /> : <PublicLanding />;
@@ -317,12 +316,10 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          {/* Routing review list — no param, redirects to approvals RRQ tab */}
           <Route
             path="/manager/routing-review"
             element={<Navigate to="/manager/approvals" replace />}
           />
-          {/* Routing review detail — with reviewId param */}
           <Route
             path="/manager/routing-review/:reviewId"
             element={
@@ -346,6 +343,22 @@ export default function App() {
             element={
               <ProtectedRoute role="operator">
                 <ModelHealth />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operator/ai-explainability"
+            element={
+              <ProtectedRoute role="operator">
+                <AIExplainability />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operator/ai-explainability/:ticketCode"
+            element={
+              <ProtectedRoute role="operator">
+                <AIExplainability />
               </ProtectedRoute>
             }
           />
