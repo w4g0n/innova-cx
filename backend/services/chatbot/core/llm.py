@@ -7,8 +7,8 @@ logger = logging.getLogger(__name__)
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
-# Provider: "template" (default, no LLM) | "local" (transformers model)
-CHATBOT_LLM_PROVIDER = os.environ.get("CHATBOT_LLM_PROVIDER", "template").strip().lower()
+# Provider: "local" (default, Qwen/HF model) | "template" (rule-based, no model required)
+CHATBOT_LLM_PROVIDER = os.environ.get("CHATBOT_LLM_PROVIDER", "local").strip().lower()
 
 MAX_NEW_TOKENS = int(os.environ.get("CHATBOT_MAX_NEW_TOKENS", "128"))
 DO_SAMPLE = os.environ.get("CHATBOT_DO_SAMPLE", "true").lower() == "true"
@@ -25,8 +25,6 @@ CHATBOT_MODEL_NAME = os.environ.get(
 ).strip()
 CHATBOT_AUTO_DOWNLOAD = os.environ.get("CHATBOT_AUTO_DOWNLOAD", "true").lower() in {"1", "true", "yes"}
 
-# Legacy env var — now ignored in favour of CHATBOT_LLM_PROVIDER
-CHATBOT_USE_MOCK = os.environ.get("CHATBOT_USE_MOCK", "true").lower() in {"1", "true", "yes"}
 
 _tokenizer = None
 _model = None

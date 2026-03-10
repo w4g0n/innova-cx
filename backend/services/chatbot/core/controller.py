@@ -1,5 +1,9 @@
+import logging
 import re
-from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression
+
+logger = logging.getLogger(__name__)
+
+from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression, is_human_escalation_request, is_cancellation_request
 from .llm import generate_response
 from .logger import log_bot_response, log_user_message
 from .retriever import retrieve_context
@@ -19,9 +23,49 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
 
     is_init = user_text == "__init__"
 
-    # ── Aggression check (skip on init and early states where false positives are high) ──
+    # ── Human escalation — always check, all states, no threshold ────────────
+    if not is_init and is_human_escalation_request(user_text):
+        response = (
+            "I understand you'd like to speak with a human agent. "
+            "I'm unable to transfer you directly, but I can immediately create a ticket "
+            "or track an existing one so a team member can follow up with you. "
+            "Would you like to create a ticket or track an existing one?"
+        )
+        log_user_message(
+            session_id=session_id,
+            user_id=user_id,
+            message=user_text,
+            aggression_flag=False,
+            aggression_score=0.0,
+        )
+        append_history(session, "user", user_text)
+        _log_and_save(session, response, "escalation")
+        return _result(response, "escalation", session_id,
+                       buttons=["create_ticket", "track_ticket"])
+
+    # ── Cancellation — reset to start if mid-flow ────────────────────────────
+    _mid_flow_states = {
+        "await_secondary_intent", "inquiry", "inquiry_confirm",
+        "complaint", "collecting_complaint", "await_ticket_id",
+    }
+    if not is_init and state in _mid_flow_states and is_cancellation_request(user_text):
+        log_user_message(
+            session_id=session_id,
+            user_id=user_id,
+            message=user_text,
+            aggression_flag=False,
+            aggression_score=0.0,
+        )
+        append_history(session, "user", user_text)
+        response = "No problem! Is there anything else I can help you with today?"
+        transition(session, "await_primary_intent")
+        session["context"] = {}
+        _log_and_save(session, response, "cancelled")
+        return _result(response, "cancelled", session_id)
+
+    # ── Aggression check (skip on init and greeting — only used for __init__) ──
     is_aggressive, agg_score = False, 0.0
-    if not is_init and state not in ("greeting", "await_primary_intent"):
+    if not is_init and state != "greeting":
         is_aggressive, agg_score = detect_aggression(user_text, history)
 
     # ── Log and append user message ───────────────────────────────────────────
@@ -204,8 +248,8 @@ def _handle_inquiry(session: dict, user_text: str) -> dict:
     if attempts > MAX_INQUIRY_ATTEMPTS:
         response = (
             "I have not been able to resolve this for you through chat. "
-            "Let me create a support ticket so the team can follow up. "
-            "What type of asset does this relate to — Office, Warehouse, or Retail?"
+            "Let me create a support ticket so the team can follow up with you directly. "
+            "Could you briefly describe the issue so I can log it for you?"
         )
         context["category"] = "inquiry"
         transition(session, "collecting_inquiry_ticket")
@@ -359,11 +403,13 @@ def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
 
     # Step 1: collect description
     if "description" not in context:
-        if not user_text.strip():
-            response = "Could you describe the issue in a bit more detail please?"
+        text_clean = user_text.strip()
+        # Reject empty, too-short, or question-like inputs as descriptions
+        if not text_clean or len(text_clean) < 10 or text_clean.endswith("?"):
+            response = "Could you describe the issue you're experiencing in a bit more detail please?"
             _log_and_save(session, response, "prompt_description_retry")
             return _result(response, "prompt_description_retry", session_id)
-        context["description"] = user_text.strip()
+        context["description"] = text_clean
 
     # Step 3: create ticket
     result = create_ticket(
@@ -382,9 +428,10 @@ def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
         transition(session, "ticket_created")
         rtype = "ticket_created"
     else:
+        logger.error("ticket_create_error session=%s err=%s", session_id, result.get("error"))
         response = (
-            f"I encountered an issue creating your ticket: {result['error']}. "
-            "Please try again."
+            "I was unable to create your ticket at this time. "
+            "Please try again or use the complaint form directly."
         )
         rtype = "ticket_create_error"
 
@@ -402,7 +449,13 @@ def _extract_ticket_id(text: str) -> str | None:
     if uuid_match:
         return uuid_match.group(0)
     code_match = re.search(r"\b(CX-[A-Z0-9-]{4,32}|[A-Z]{0,3}\d{3,8})\b", text.upper())
-    return code_match.group(1) if code_match else None
+    if not code_match:
+        return None
+    matched = code_match.group(1)
+    # Normalise bare numeric IDs like "4780" → "CX-4780"
+    if matched.isdigit():
+        matched = f"CX-{matched}"
+    return matched
 
 
 def _log_and_save(

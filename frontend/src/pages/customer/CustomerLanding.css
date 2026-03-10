@@ -235,7 +235,12 @@
 .novaMsg{display:flex;margin-bottom:8px;}
 .novaMsg--bot{justify-content:flex-start;}
 .novaMsg--user{justify-content:flex-end;}
-.novaBubble{max-width:80%;padding:11px 15px;border-radius:14px;font-size:14px;font-family:"Outfit",sans-serif;line-height:1.55;font-weight:400;animation:clBubbleIn .22s var(--ease) both;}
+.novaBubble{max-width:80%;padding:11px 15px;border-radius:14px;font-size:14px;font-family:"Outfit",sans-serif;line-height:1.55;font-weight:400;animation:clBubbleIn .22s var(--ease) both;white-space:pre-wrap;}
+.novaQuickRow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.novaQuickRow button{background:transparent;border:1px solid rgba(192,132,252,.35);border-radius:14px;color:rgba(192,132,252,.9);cursor:pointer;font-size:12px;padding:4px 12px;transition:background .15s,color .15s;}
+.novaQuickRow button:hover{background:rgba(192,132,252,.15);color:#e9d5ff;}
+[data-theme="light"] .novaQuickRow button{border-color:rgba(109,40,217,.35);color:rgba(109,40,217,.85);}
+[data-theme="light"] .novaQuickRow button:hover{background:rgba(109,40,217,.1);color:#6d28d9;}
 @keyframes clBubbleIn{from{opacity:0;transform:translateY(5px) scale(.97);}to{opacity:1;transform:none;}}
 .novaMsg--bot .novaBubble{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.8);border-bottom-left-radius:4px;}
 [data-theme="light"] .novaMsg--bot .novaBubble{background:rgba(109,40,217,.07);border-color:rgba(109,40,217,.14);color:var(--text);}

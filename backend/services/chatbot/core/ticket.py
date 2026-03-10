@@ -26,7 +26,15 @@ def create_ticket(
     if not description:
         return {"success": False, "ticket_id": None, "error": "Description cannot be empty"}
 
-    title = (title or "").strip() or description[:80]
+    if not title:
+        if len(description) <= 80:
+            title = description
+        else:
+            truncated = description[:80]
+            last_space = truncated.rfind(" ")
+            title = truncated[:last_space] if last_space > 0 else truncated
+    else:
+        title = str(title).strip()
 
     api_base = os.environ.get("BACKEND_API_URL", "http://backend:8000")
     local_fallback = os.environ.get("BACKEND_API_URL_LOCAL", "http://localhost:8000")
