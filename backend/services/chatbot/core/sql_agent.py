@@ -11,7 +11,7 @@ _ro_engine = create_engine(READONLY_DB_URL, pool_pre_ping=True)
 
 def _format_ts(value):
     if isinstance(value, datetime):
-        return value.isoformat()
+        return value.strftime("%b %d, %Y")
     return str(value) if value is not None else "-"
 
 
@@ -35,12 +35,10 @@ def get_ticket_status(ticket_id: str, user_id: str) -> dict:
                 "query": query,
             }
 
-        assigned_to = row.assigned_to_user_id or "Unassigned"
         response = (
             f"Ticket {row.ticket_code}:\n"
             f"- Status: {row.status}\n"
             f"- Subject: {row.subject}\n"
-            f"- Assigned to: {assigned_to}\n"
             f"- Last updated: {_format_ts(row.updated_at)}"
         )
         return {"found": True, "raw": response, "query": query}
@@ -67,10 +65,10 @@ def get_open_tickets(user_id: str) -> dict:
                 "query": query,
             }
 
-        lines = ["Here are your open tickets:"]
+        lines = []
         for i, row in enumerate(rows, start=1):
             lines.append(
-                f"{i}. {row.ticket_code} | {row.status} | {row.subject} | created {_format_ts(row.created_at)}"
+                f"{i}. {row.ticket_code} — {row.subject} ({row.status}, {_format_ts(row.created_at)})"
             )
 
         return {"found": True, "raw": "\n".join(lines), "query": query}
