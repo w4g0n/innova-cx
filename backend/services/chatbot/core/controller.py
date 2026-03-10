@@ -1,8 +1,6 @@
 import logging
 import re
 
-logger = logging.getLogger(__name__)
-
 from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression, is_human_escalation_request, is_cancellation_request
 from .llm import generate_response
 from .logger import log_bot_response, log_user_message
@@ -10,6 +8,8 @@ from .retriever import retrieve_context
 from .session import append_history, load_session, save_session, transition
 from .sql_agent import get_open_tickets, get_ticket_status
 from .ticket import create_ticket
+
+logger = logging.getLogger(__name__)
 
 MAX_INQUIRY_ATTEMPTS = 3
 
