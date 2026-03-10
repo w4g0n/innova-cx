@@ -896,6 +896,24 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
 
 -- -------------------------
+-- Ticket Messages (employee <-> customer conversation)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS ticket_messages (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id   UUID        NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  sender_id   UUID        NOT NULL REFERENCES users(id)   ON DELETE RESTRICT,
+  sender_role TEXT        NOT NULL CHECK (sender_role IN ('customer', 'employee')),
+  body        TEXT        NOT NULL CHECK (btrim(body) <> ''),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket
+  ON ticket_messages(ticket_id, created_at ASC);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_messages_sender
+  ON ticket_messages(sender_id);
+
+-- -------------------------
 -- Employee Monthly Reports
 -- -------------------------
 CREATE TABLE IF NOT EXISTS employee_reports (

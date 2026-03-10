@@ -143,7 +143,7 @@ def auto_assign_ticket_if_needed(
           assigned_to_user_id = %s,
           assigned_at = COALESCE(assigned_at, now()),
           priority_assigned_at = COALESCE(priority_assigned_at, now()),
-          status = 'In Progress',
+          status = 'Assigned',
           updated_at = now()
         WHERE ticket_code = %s
           AND assigned_to_user_id IS NULL
