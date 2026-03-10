@@ -1,132 +1,127 @@
 import { useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState} from "react";
+import { useEffect, useRef, useState } from "react";
 import novaLogo from "../assets/nova-logo.png";
 import "./PublicLanding.css";
 
-/* ── Agents with full doc details ── */
+/* ── Agents ── */
 const AGENTS_DATA = [
   {
-    name: "Transcriber",
-    role: "Audio → Text",
-    model: "OpenAI Whisper",
-    color: "#818cf8",
-    icon: "mic",
-    details: "Handles live transcription of English-language voice complaints. When a ticket is submitted via audio recording, the Transcriber converts it to text before passing it downstream. The audio log is discarded after transcription to protect privacy.",
-    inputs: ["Audio_Log"],
-    outputs: ["Transcribed text (Details)"],
+    name: "Transcriber", role: "Audio → Text", model: "OpenAI Whisper",
+    color: "#818cf8", icon: "mic",
+    details: "Converts voice complaint recordings to text before passing downstream — audio is discarded after transcription.",
+    inputs: ["Audio_Log"], outputs: ["Transcribed text"],
     stat: "<2s", statLabel: "Latency",
   },
   {
-    name: "Chatbot",
-    role: "Resolves & Routes",
-    model: "Falcon 1B Instruct",
-    color: "#c084fc",
-    icon: "settings",
-    details: "The front-line agent users interact with directly. Uses intent classification to determine if a user has an inquiry or a complaint. Can create tickets, track existing tickets, and resolve inquiries using a connected knowledge base. If unresolved, it redirects users into the complaint pipeline. Also auto-generates a subject line if the user doesn't provide one.",
-    inputs: ["User message", "Audio or Text"],
-    outputs: ["Ticket creation", "Inquiry resolution", "Subject generation"],
+    name: "Chatbot", role: "Resolves & Routes", model: "Falcon 1B Instruct",
+    color: "#c084fc", icon: "settings",
+    details: "Front-line agent that handles inquiries, creates tickets, and routes unresolved complaints into the pipeline.",
+    inputs: ["User message", "Audio or Text"], outputs: ["Ticket creation", "Inquiry resolution"],
     stat: "98%", statLabel: "Accuracy",
   },
   {
-    name: "Classifier",
-    role: "Complaint vs Inquiry",
-    model: "NLI Model",
-    color: "#a78bfa",
-    icon: "tag",
-    details: "Skipped if the user already selected a ticket type. Otherwise, this agent reads the complaint details and classifies whether it is a Complaint or an Inquiry. This classification gates the rest of the pipeline and determines which downstream agents are activated.",
-    inputs: ["Details (text)"],
-    outputs: ["Ticket_Type: Complaint or Inquiry"],
+    name: "Classifier", role: "Complaint vs Inquiry", model: "NLI Model",
+    color: "#a78bfa", icon: "tag",
+    details: "Reads complaint details and classifies the ticket as a Complaint or Inquiry, gating all downstream agents.",
+    inputs: ["Details (text)"], outputs: ["Ticket_Type"],
     stat: "2", statLabel: "Classes",
   },
   {
-    name: "Sentiment",
-    role: "Emotion Detection",
-    model: "RoBERTa + Librosa",
-    color: "#e879f9",
-    icon: "heart",
-    details: "Analyses the emotional tone of the complaint text using RoBERTa. If audio was submitted, Librosa analyses the voice recording for audio sentiment separately. A Sentiment Combiner module then merges both into a unified Sentiment_Score. Triggers ticket status change to 'In Progress'.",
-    inputs: ["Details", "Audio_Log (optional)"],
-    outputs: ["text_sentiment", "audio_sentiment", "Sentiment_Score"],
+    name: "Sentiment", role: "Emotion Detection", model: "RoBERTa + Librosa",
+    color: "#e879f9", icon: "heart",
+    details: "Analyses text tone via RoBERTa and voice tone via Librosa, merging both into a unified Sentiment_Score.",
+    inputs: ["Details", "Audio_Log (optional)"], outputs: ["Sentiment_Score"],
     stat: "99.2%", statLabel: "Precision",
   },
   {
-    name: "Features",
-    role: "Urgency & Impact",
-    model: "NLI + Database",
-    color: "#f0abfc",
-    icon: "settings",
-    details: "A multi-signal agent that determines four key attributes: whether the issue is recurring (via database lookup), whether there's a safety concern, the business impact level, and issue urgency and severity. These signals feed directly into the Prioritizer for accurate scoring.",
-    inputs: ["Details"],
-    outputs: ["is_recurring", "safety_concern", "business_impact", "issue_severity", "issue_urgency"],
+    name: "Features", role: "Urgency & Impact", model: "NLI + Database",
+    color: "#f0abfc", icon: "settings",
+    details: "Determines recurrence, safety concern, business impact, severity, and urgency to feed into the Prioritizer.",
+    inputs: ["Details"], outputs: ["is_recurring", "safety_concern", "issue_severity"],
     stat: "5", statLabel: "Signals",
   },
   {
-    name: "Prioritizer",
-    role: "Fuzzy Logic Scoring",
-    model: "Fuzzy Logic Engine",
-    color: "#c026d3",
-    icon: "scale",
-    details: "Combines all upstream signals using fuzzy logic to produce a single Priority score. Takes into account ticket type, recurrence, business impact, safety concern, combined sentiment, severity, and urgency. Outputs one of four priority levels: Critical, High, Medium, or Low.",
-    inputs: ["ticket_type", "is_recurring", "business_impact", "safety_concern", "sentiment_score", "issue_severity", "issue_urgency"],
-    outputs: ["Priority: Critical / High / Medium / Low"],
+    name: "Prioritizer", role: "Fuzzy Logic Scoring", model: "Fuzzy Logic Engine",
+    color: "#c026d3", icon: "scale",
+    details: "Combines all upstream signals using fuzzy logic to output a Priority level: Critical, High, Medium, or Low.",
+    inputs: ["All feature signals"], outputs: ["Priority level"],
     stat: "4", statLabel: "Priority Levels",
   },
   {
-    name: "Router",
-    role: "Department Assignment",
-    model: "NLI DeBERTa",
-    color: "#d946ef",
-    icon: "building",
-    details: "Uses DeBERTa with a confidence threshold of 0.7 to route tickets to the correct department. Requires no training. If the confidence score falls below 0.7, the ticket is escalated to management for manual routing. Departments include: Facilities, Legal, Safety, HR, Leasing, Maintenance, and IT.",
-    inputs: ["Complaint details"],
-    outputs: ["Assigned department (or escalation to management)"],
+    name: "Router", role: "Department Assignment", model: "NLI DeBERTa",
+    color: "#d946ef", icon: "building",
+    details: "Routes tickets to the correct department using a 0.7 confidence threshold — escalates to management if uncertain.",
+    inputs: ["Complaint details"], outputs: ["Assigned department"],
     stat: "0.7", statLabel: "Threshold",
   },
   {
-    name: "Resolver",
-    role: "Suggested Fixes",
-    model: "Flan-T5-Base",
-    color: "#a855f7",
-    icon: "lightbulb",
-    details: "A mini-agent that generates suggested resolutions based on the complaint text. Features a built-in relearning loop: every time an employee submits their actual resolution, the model retrains on the difference between its suggestion and the real fix — continuously improving over time.",
-    inputs: ["Complaint text"],
-    outputs: ["Suggested resolution (improves with each employee correction)"],
+    name: "Resolver", role: "Suggested Fixes", model: "Flan-T5-Base",
+    color: "#a855f7", icon: "lightbulb",
+    details: "Generates resolution suggestions and retrains on every employee correction, improving continuously over time.",
+    inputs: ["Complaint text"], outputs: ["Suggested resolution"],
     stat: "∞", statLabel: "Relearning",
   },
 ];
 
 const PIPELINE = [
-  
-  { icon: "mic",       label: "Transcribe",        sub: "Whisper (if audio)",      color: "#818cf8", step: 0 },
-  { icon: "inbox",     label: "Ticket Submitted",  sub: "Text or Audio",           color: "#c084fc", step: 1 },
-  { icon: "tag",       label: "Classify",          sub: "Complaint / Inquiry",     color: "#a78bfa", step: 2 },
-  { icon: "heart",     label: "Sentiment",         sub: "RoBERTa + Librosa",       color: "#e879f9", step: 3 },
-  { icon: "settings",  label: "Feature Eng.",      sub: "Urgency · Impact · Risk", color: "#f0abfc", step: 4 },
-  { icon: "scale",     label: "Prioritise",        sub: "Fuzzy Logic",             color: "#c026d3", step: 5 },
-  { icon: "clock",     label: "SLA",               sub: "Auto-escalation",         color: "#d946ef", step: 6 },
-  { icon: "building",  label: "Route",             sub: "DeBERTa 0.7",             color: "#a855f7", step: 7 },
-  { icon: "lightbulb", label: "Resolution",        sub: "Flan-T5 + relearn",       color: "#c084fc", step: 8 },
+  { icon: "mic",       label: "Transcribe",       sub: "Whisper (if audio)",      color: "#818cf8" },
+  { icon: "inbox",     label: "Ticket Submitted", sub: "Text or Audio",           color: "#c084fc" },
+  { icon: "tag",       label: "Classify",         sub: "Complaint / Inquiry",     color: "#a78bfa" },
+  { icon: "heart",     label: "Sentiment",        sub: "RoBERTa + Librosa",       color: "#e879f9" },
+  { icon: "settings",  label: "Feature Eng.",     sub: "Urgency · Impact · Risk", color: "#f0abfc" },
+  { icon: "scale",     label: "Prioritise",       sub: "Fuzzy Logic",             color: "#c026d3" },
+  { icon: "clock",     label: "SLA",              sub: "Auto-escalation",         color: "#d946ef" },
+  { icon: "building",  label: "Route",            sub: "DeBERTa 0.7",             color: "#a855f7" },
+  { icon: "lightbulb", label: "Resolution",       sub: "Flan-T5 + relearn",       color: "#c084fc" },
 ];
 
-/* ── Professional SVG Icon component ── */
+/* ── Orbit config — each planet has a distinct visual personality ── */
+const PLANET_3D = [
+  // 0: Transcriber — Mercury-like: small, grey, heavily cratered, close orbit
+  { color: "#818cf8", radius: 0.42, orbitR: 3.4,  speed: 0.011,  tiltX: 0.20,  tiltZ:  0.08, startAngle: 0.0,
+    personality: 'mercury' },
+  // 1: Chatbot — Venus-like: creamy orange-yellow, thick cloud swirls, bright
+  { color: "#f5c842", radius: 0.58, orbitR: 5.2,  speed: 0.008,  tiltX:-0.18,  tiltZ: -0.10, startAngle: 0.9,
+    personality: 'venus' },
+  // 2: Classifier — Earth-like: blue oceans, green/brown continents, white clouds, polar caps
+  { color: "#4fc3f7", radius: 0.60, orbitR: 7.1,  speed: 0.007,  tiltX: 0.28,  tiltZ:  0.12, startAngle: 1.8,
+    personality: 'earth' },
+  // 3: Sentiment — Mars-like: rust red, dark canyons, thin polar ice
+  { color: "#e85d26", radius: 0.50, orbitR: 9.1,  speed: 0.006,  tiltX:-0.12,  tiltZ: -0.07, startAngle: 2.7,
+    personality: 'mars' },
+  // 4: Features — Jupiter-like: large, amber/cream bands, great red storm
+  { color: "#e8b87a", radius: 0.95, orbitR: 11.4, speed: 0.005,  tiltX: 0.22,  tiltZ:  0.15, startAngle: 3.6,
+    personality: 'jupiter' },
+  // 5: Prioritizer — Saturn-like: pale gold, prominent rings
+  { color: "#d4b96a", radius: 0.80, orbitR: 13.8, speed: 0.004,  tiltX:-0.30,  tiltZ: -0.12, startAngle: 4.4,
+    personality: 'saturn' },
+  // 6: Router — Uranus-like: cyan-teal, smooth icy, subtle bands
+  { color: "#7de8e8", radius: 0.70, orbitR: 16.4, speed: 0.0034, tiltX: 0.17,  tiltZ:  0.09, startAngle: 5.2,
+    personality: 'uranus' },
+  // 7: Resolver — Neptune-like: deep blue, violent storm swirls, white cloud streaks
+  { color: "#4169e1", radius: 0.68, orbitR: 19.0, speed: 0.0028, tiltX:-0.24,  tiltZ: -0.14, startAngle: 6.1,
+    personality: 'neptune' },
+];
+
+/* ── SVG Icons ── */
 function Icon({ name, size = 20 }) {
   const s = { width: size, height: size };
   const p = { fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" };
   const icons = {
-    inbox: <svg {...s} viewBox="0 0 24 24" {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>,
-    mic: <svg {...s} viewBox="0 0 24 24" {...p}><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v3M8 22h8"/></svg>,
-    tag: <svg {...s} viewBox="0 0 24 24" {...p}><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
-    heart: <svg {...s} viewBox="0 0 24 24" {...p}><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>,
-    settings: <svg {...s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
-    scale: <svg {...s} viewBox="0 0 24 24" {...p}><path d="M12 3v18M3 9l4-3 5 4 5-4 4 3M5 20h14"/><path d="M6 12H2l4 7h12l4-7h-4"/></svg>,
-    clock: <svg {...s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-    building: <svg {...s} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h18M3 15h18M15 3v18"/></svg>,
+    inbox:     <svg {...s} viewBox="0 0 24 24" {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>,
+    mic:       <svg {...s} viewBox="0 0 24 24" {...p}><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v3M8 22h8"/></svg>,
+    tag:       <svg {...s} viewBox="0 0 24 24" {...p}><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
+    heart:     <svg {...s} viewBox="0 0 24 24" {...p}><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>,
+    settings:  <svg {...s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
+    scale:     <svg {...s} viewBox="0 0 24 24" {...p}><path d="M12 3v18M3 9l4-3 5 4 5-4 4 3M5 20h14"/><path d="M6 12H2l4 7h12l4-7h-4"/></svg>,
+    clock:     <svg {...s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+    building:  <svg {...s} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h18M3 15h18M15 3v18"/></svg>,
     lightbulb: <svg {...s} viewBox="0 0 24 24" {...p}><path d="M9 21h6M12 3a6 6 0 016 6c0 2.22-1.21 4.16-3 5.2V17H9v-2.8A6.002 6.002 0 0112 3z"/></svg>,
   };
   return icons[name] || null;
 }
 
-/* ══ STARFIELD — more shooting stars ══ */
+/* ══ STARFIELD ══ */
 function Starfield() {
   const ref = useRef(null);
   useEffect(() => {
@@ -146,9 +141,7 @@ function Starfield() {
       x: Math.random() * 0.6, y: Math.random() * 0.5,
       len: Math.random() * 180 + 80, speed: Math.random() * 5 + 3,
       angle: Math.PI / 5.5 + (Math.random() - 0.5) * 0.35,
-      active: false,
-      timer: Math.random() * 260 + 50 + idx * 90,
-      alpha: 0,
+      active: false, timer: Math.random() * 260 + 50 + idx * 90, alpha: 0,
     }));
     const draw = () => {
       ctx.clearRect(0, 0, c.width, c.height);
@@ -169,26 +162,20 @@ function Starfield() {
           s.y += Math.sin(s.angle) * s.speed / c.height;
           s.alpha -= 0.012;
           if (s.alpha <= 0 || s.x > 1.1) {
-            s.active = false;
-            s.x = Math.random() * 0.55;
-            s.y = Math.random() * 0.45;
+            s.active = false; s.x = Math.random() * 0.55; s.y = Math.random() * 0.45;
             s.timer = Math.random() * 350 + 80;
             s.angle = Math.PI / 5.5 + (Math.random() - 0.5) * 0.35;
             s.len = Math.random() * 180 + 80;
           }
           ctx.save(); ctx.globalAlpha = s.alpha;
-          const g = ctx.createLinearGradient(
-            s.x*c.width, s.y*c.height,
-            (s.x - Math.cos(s.angle)*s.len/c.width)*c.width,
-            (s.y - Math.sin(s.angle)*s.len/c.height)*c.height
-          );
+          const g = ctx.createLinearGradient(s.x*c.width, s.y*c.height,
+            (s.x-Math.cos(s.angle)*s.len/c.width)*c.width,
+            (s.y-Math.sin(s.angle)*s.len/c.height)*c.height);
           g.addColorStop(0, "#e9d5ff"); g.addColorStop(1, "transparent");
           ctx.beginPath();
           ctx.moveTo(s.x*c.width, s.y*c.height);
-          ctx.lineTo(
-            (s.x - Math.cos(s.angle)*s.len/c.width)*c.width,
-            (s.y - Math.sin(s.angle)*s.len/c.height)*c.height
-          );
+          ctx.lineTo((s.x-Math.cos(s.angle)*s.len/c.width)*c.width,
+            (s.y-Math.sin(s.angle)*s.len/c.height)*c.height);
           ctx.strokeStyle = g; ctx.lineWidth = 1.8; ctx.stroke();
           ctx.restore();
         }
@@ -202,183 +189,784 @@ function Starfield() {
   return <canvas ref={ref} className="pl-starfield" />;
 }
 
-const PLANET_CFG = [
-  { color: "#c084fc", size: 15, orbitRx: 95,  orbitRy: 38,  speed: 0.012 },
-  { color: "#818cf8", size: 18, orbitRx: 148, orbitRy: 59,  speed: 0.009 },
-  { color: "#a78bfa", size: 20, orbitRx: 198, orbitRy: 79,  speed: 0.007 },
-  { color: "#e879f9", size: 18, orbitRx: 248, orbitRy: 99,  speed: 0.006 },
-  { color: "#f0abfc", size: 30, orbitRx: 295, orbitRy: 118, speed: 0.005 },
-  { color: "#c026d3", size: 25, orbitRx: 342, orbitRy: 137, speed: 0.0042 },
-  { color: "#d946ef", size: 28, orbitRx: 386, orbitRy: 154, speed: 0.0036 },
-  { color: "#a855f7", size: 23, orbitRx: 428, orbitRy: 171, speed: 0.003 },
-];
-
-/* ══ SOLAR SYSTEM — larger canvas, vignette for smooth edges ══ */
+/* ══ SOLAR SYSTEM ══ */
 function SolarSystem() {
-  const ref = useRef(null);
-  const anglesRef = useRef(AGENTS_DATA.map((_, i) => (i / AGENTS_DATA.length) * Math.PI * 2));
-  const hoverRef = useRef(-1);
+  const mountRef  = useRef(null);
+  const labelsRef = useRef(null);
   const [hovered, setHovered] = useState(null);
-  const tRef = useRef(0);
 
   useEffect(() => {
-    const c = ref.current; if (!c) return;
-    const ctx = c.getContext("2d");
-    let raf;
-    const SIZE = 1060;
-    c.width = SIZE; c.height = SIZE;
-    const cx = SIZE / 2, cy = SIZE / 2;
+    const mount    = mountRef.current;
+    const labelDiv = labelsRef.current;
+    if (!mount || !labelDiv) return;
 
-    const draw = () => {
-      tRef.current += 0.008;
-      const t = tRef.current;
-      ctx.clearRect(0, 0, SIZE, SIZE);
+    let renderer, scene, camera, raf;
+    let planetObjects = [];
+    let orbitMeshes   = [];
+    let meteorObjects = [];
+    let raycaster, mouse;
+    let hoveredIdx = -1;
+    let autoRotY   = 0;
+    let isDragging = false;
+    let prevMouse  = { x: 0, y: 0 };
+    let camTheta   = 0.6;
+    let camPhi     = 1.18;
+    const camDist  = 44;
+    let t          = 0;
+    const angles   = PLANET_3D.map(p => p.startAngle);
+    const labelEls = [];
 
-      const neb = ctx.createRadialGradient(cx, cy, 0, cx, cy, 430);
-      neb.addColorStop(0,   "rgba(147,51,234,0.18)");
-      neb.addColorStop(0.5, "rgba(88,28,135,0.08)");
-      neb.addColorStop(1,   "transparent");
-      ctx.fillStyle = neb;
-      ctx.fillRect(0, 0, SIZE, SIZE);
+    function setCamPos() {
+      const THREE = window.THREE;
+      camera.position.set(
+        camDist * Math.sin(camPhi) * Math.cos(camTheta),
+        camDist * Math.cos(camPhi),
+        camDist * Math.sin(camPhi) * Math.sin(camTheta)
+      );
+      camera.lookAt(0, 0, 0);
+    }
 
-      PLANET_CFG.forEach(p => {
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.beginPath();
-        ctx.ellipse(0, 0, p.orbitRx, p.orbitRy, 0, 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(167,139,250,0.08)";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 12]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-      });
+    function toScreen(worldPos, W, H) {
+      const THREE = window.THREE;
+      const v = worldPos.clone().project(camera);
+      return {
+        x: (v.x *  0.5 + 0.5) * W,
+        y: (v.y * -0.5 + 0.5) * H,
+        behind: v.z > 1,
+      };
+    }
 
-      const sunSizes = [100, 70, 50, 32];
-      const sunAlphas = [0.06, 0.12, 0.25, 1];
-      sunSizes.forEach((r, i) => {
-        const sg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        sg.addColorStop(0,   `rgba(255,255,255,${sunAlphas[i]})`);
-        sg.addColorStop(0.4, `rgba(232,210,255,${sunAlphas[i] * 0.6})`);
-        sg.addColorStop(0.7, `rgba(168,85,247,${sunAlphas[i] * 0.3})`);
-        sg.addColorStop(1,   "transparent");
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fillStyle = sg;
-        ctx.fill();
-      });
+    function init() {
+      const THREE = window.THREE;
+      const W = mount.clientWidth  || 600;
+      const H = mount.clientHeight || 600;
 
-      const coronaR = 38 + Math.sin(t * 2.5) * 4;
-      ctx.beginPath();
-      ctx.arc(cx, cy, coronaR, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(192,132,252,${0.35 + Math.sin(t * 2) * 0.15})`;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(W, H);
+      renderer.setClearColor(0x000000, 0);
+      mount.appendChild(renderer.domElement);
 
-      ctx.font = "bold 13px Outfit, sans-serif";
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillStyle = "rgba(255,255,255,0.9)";
-      ctx.fillText("InnovaCX", cx, cy - 6);
-      ctx.font = "10px JetBrains Mono, monospace";
-      ctx.fillStyle = "rgba(255,255,255,0.45)";
-      ctx.fillText("Orchestrator", cx, cy + 10);
+      scene  = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(52, W / H, 0.1, 600);
+      setCamPos();
 
-      const positions = PLANET_CFG.map((p, i) => {
-        const angle = anglesRef.current[i] + p.speed;
-        anglesRef.current[i] = angle;
-        const px = cx + Math.cos(angle) * p.orbitRx;
-        const py = cy + Math.sin(angle) * p.orbitRy;
-        return { px, py, angle, p, i };
-      });
+      raycaster = new THREE.Raycaster();
+      mouse     = new THREE.Vector2(-9999, -9999);
 
-      const sorted = [...positions].sort((a, b) => a.py - b.py);
+      /* ── Lighting — sun illuminates planets, does NOT shade itself ── */
+      const sunLight = new THREE.PointLight(0xfff4d6, 6.5, 320);
+      scene.add(sunLight);
+      /* Raised ambient — deep space scatter, keeps dark sides visible */
+      scene.add(new THREE.AmbientLight(0x8866aa, 0.45));
 
-      sorted.forEach(({ px, py, p, i }) => {
-        const isH = hoverRef.current === i;
-        const r = isH ? p.size * 1.4 : p.size;
-
-        const g = ctx.createRadialGradient(px, py, 0, px, py, r * 4);
-        g.addColorStop(0,   p.color + (isH ? "99" : "55"));
-        g.addColorStop(1,   p.color + "00");
-        ctx.beginPath();
-        ctx.arc(px, py, r * 4, 0, Math.PI * 2);
-        ctx.fillStyle = g;
-        ctx.fill();
-
-        const hx = px - r * 0.35, hy = py - r * 0.35;
-        const sphere = ctx.createRadialGradient(hx, hy, 0, px, py, r);
-        sphere.addColorStop(0,   "#ffffff");
-        sphere.addColorStop(0.25, p.color + "ff");
-        sphere.addColorStop(0.7,  p.color + "cc");
-        sphere.addColorStop(1,    "#000000aa");
-        ctx.beginPath();
-        ctx.arc(px, py, r, 0, Math.PI * 2);
-        ctx.fillStyle = sphere;
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(px, py, r, 0, Math.PI * 2);
-        ctx.strokeStyle = isH ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.25)";
-        ctx.lineWidth = isH ? 2 : 0.8;
-        ctx.stroke();
-
-        ctx.font = `${isH ? "bold " : ""}${isH ? 13 : 12}px Outfit, sans-serif`;
-        ctx.textAlign = "center"; ctx.textBaseline = "top";
-        ctx.fillStyle = isH ? "#fff" : "rgba(255,255,255,0.65)";
-        ctx.fillText(AGENTS_DATA[i].name, px, py + r + 7);
-
-        if (isH) {
-          ctx.font = "10px JetBrains Mono, monospace";
-          ctx.fillStyle = "rgba(255,255,255,0.4)";
-          ctx.fillText(AGENTS_DATA[i].role, px, py + r + 23);
+      /* ══ SUN — self-luminous fire shader ══
+         Key principle: the sun emits light, it is NOT lit by anything.
+         Uses ShaderMaterial with no lighting, pure emission.
+         All detail sampled in 3-D sphere space — zero UV banding.
+      ══════════════════════════════════════ */
+      const sunVS = `
+        varying vec3 vPos;
+        void main(){
+          vPos = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
         }
+      `;
+      const sunFS = `
+        uniform float uTime;
+        varying vec3 vPos;
+
+        /* ── Hash & noise ── */
+        float hash(vec3 p){
+          p = fract(p * vec3(443.897, 441.423, 437.195));
+          p += dot(p, p.yzx + 19.19);
+          return fract((p.x+p.y)*p.z);
+        }
+        float n3(vec3 p){
+          vec3 i=floor(p), f=fract(p), u=f*f*(3.0-2.0*f);
+          return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),u.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),u.x),u.y),
+                     mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),u.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),u.x),u.y),u.z);
+        }
+        /* Rotated FBM — breaks up axis-aligned patterns */
+        float fbm(vec3 p){
+          mat3 m = mat3( 0.00, 0.80, 0.60,
+                        -0.80, 0.36,-0.48,
+                        -0.60,-0.48, 0.64);
+          float v=0.0, a=0.5;
+          for(int i=0;i<7;i++){ v+=a*n3(p); p=m*p*2.01; a*=0.5; }
+          return v;
+        }
+        /* Domain-warped FBM — gives fire's churning, billowing look */
+        float fireFbm(vec3 p){
+          vec3 q = vec3(fbm(p + vec3(0.0,0.0,0.0)),
+                        fbm(p + vec3(5.2,1.3,2.8)),
+                        fbm(p + vec3(1.7,9.2,3.4)));
+          return fbm(p + 2.8*q);
+        }
+
+        /* 3-D Voronoi for granulation */
+        float voronoi(vec3 p){
+          vec3 b=floor(p); float d=8.0;
+          for(int z=-1;z<=1;z++)for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){
+            vec3 n=b+vec3(x,y,z);
+            vec3 r=vec3(hash(n),hash(n+3.7),hash(n+7.3));
+            r=0.5+0.5*sin(uTime*0.10+6.28*r);
+            d=min(d,length(vec3(x,y,z)+r-fract(p)));
+          }
+          return d;
+        }
+
+        void main(){
+          vec3 sp = normalize(vPos); /* unit sphere — 3-D texture coords */
+
+          /* ── TRUE limb darkening ──
+             The sun IS bright all over. Limb darkening is just ~20% reduction
+             at the very edge because we see cooler, less dense atmosphere.
+             We measure it by how "edge-on" this surface point is to the camera. */
+          float r2d = length(vPos.xy) / 1.8;         /* 0=centre, 1=limb in screen */
+          r2d = clamp(r2d, 0.0, 1.0);
+          /* Quadratic limb darkening law (Eddington): I(r) = 1 - u(1 - sqrt(1-r²)) */
+          float u_ld = 0.55;
+          float limbDark = 1.0 - u_ld*(1.0 - sqrt(max(0.0, 1.0 - r2d*r2d)));
+          /* Boost the centre, pull edge down only slightly — sun is bright EVERYWHERE */
+          limbDark = mix(0.78, 1.0, limbDark);
+
+          /* ── Surface fire / plasma turbulence ──
+             Domain-warped FBM gives the billowing, churning fire look. */
+          float speed = uTime * 0.08;
+          vec3 fc1 = sp*3.5 + vec3(speed*0.9, speed*0.7, speed*0.5);
+          vec3 fc2 = sp*7.0 + vec3(-speed*1.1, speed*0.8, -speed*0.6);
+          float fire1 = fireFbm(fc1);
+          float fire2 = fireFbm(fc2);
+          float fire  = fire1*0.65 + fire2*0.35;
+
+          /* ── Granulation cells (convection) ── */
+          vec3 gp = sp*5.5 + vec3(uTime*0.015, uTime*0.011, uTime*0.009);
+          float gran = voronoi(gp);
+          /* Cell borders bright (rising hot plasma), centres slightly darker */
+          gran = 1.0 - smoothstep(0.04, 0.40, gran)*0.25;
+
+          /* ── Sunspots (3-D arc distance) — much smaller, subtle ── */
+          vec3 sc1=normalize(vec3(sin(uTime*0.05),      sin(uTime*0.03)*0.55,  cos(uTime*0.05)));
+          vec3 sc2=normalize(vec3(sin(uTime*0.04+2.09), sin(uTime*0.035)*0.50, cos(uTime*0.04+2.09)));
+          float a1=acos(clamp(dot(sp,sc1),-1.0,1.0));
+          float a2=acos(clamp(dot(sp,sc2),-1.0,1.0));
+          /* Tiny spots: umbra radius ~0.04 rad, penumbra to ~0.08 — not giant blobs */
+          float spot1 = mix(0.72, 1.0, smoothstep(0.02, 0.08, a1));
+          float spot2 = mix(0.76, 1.0, smoothstep(0.02, 0.07, a2));
+          float spots = spot1 * spot2;
+
+          /* ── Fire colour palette — fully smooth, no if/else branches ──
+             Use smoothstep blends so there are zero sharp colour transitions.
+             Everything stays in warm orange-yellow-white range. */
+          vec3 cWhite  = vec3(1.00, 0.95, 0.78);  /* bright yellow-white core */
+          vec3 cYellow = vec3(1.00, 0.80, 0.35);  /* warm golden yellow */
+          vec3 cOrange = vec3(1.00, 0.55, 0.10);  /* deep orange */
+
+          float f = clamp(fire, 0.0, 1.0);
+          /* Smooth two-stage blend — no hard edges */
+          vec3 col = mix(cOrange, cYellow, smoothstep(0.25, 0.60, f));
+          col       = mix(col,    cWhite,  smoothstep(0.55, 0.90, f));
+
+          /* ── Compose ── */
+          /* Gran as luminance-only — don't let it pull colours toward grey */
+          float granLum = 0.82 + gran * 0.18;
+          col *= granLum;
+          col *= spots;
+          col *= limbDark;
+
+          /* Fiery hot veins — additive bright channels, warm only */
+          float veins = max(0.0, fire1 - 0.65) * 2.5;
+          col += veins * vec3(1.0, 0.75, 0.30) * 0.22;
+
+          /* Rim glow — additive warm orange at edge only */
+          float rim = smoothstep(0.55, 1.0, r2d);
+          col += rim * vec3(0.85, 0.30, 0.04) * 0.18;
+
+          /* Hard clamp to warm colours — zero chance of grey/green/blue */
+          col.r = max(col.r, 0.52);
+          col.g = max(col.g, col.r * 0.38);
+          col.b = max(col.b, 0.0);
+          col.b = min(col.b, col.g * 0.35);   /* kill any blue creep */
+
+          col *= 0.97 + 0.03*sin(uTime*1.1);
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `;
+      const sunUniforms = { uTime: { value: 0 } };
+      const sun = new THREE.Mesh(
+        new THREE.SphereGeometry(1.8, 96, 96),
+        new THREE.ShaderMaterial({
+          vertexShader: sunVS,
+          fragmentShader: sunFS,
+          uniforms: sunUniforms,
+          lights: false,
+        })
+      );
+      scene.add(sun);
+
+      /* ── Corona — single smooth radial glow shader, no harsh sphere layers ── */
+      const coronaVS = `
+        varying vec3 vPos;
+        void main(){ vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }
+      `;
+      const coronaFS = `
+        varying vec3 vPos;
+        void main(){
+          /* r = 0 at sun surface (scale 1.0), 1 at outer edge of this sphere */
+          float r = (length(vPos) - 1.8) / (1.8 * 3.0); /* normalised 0→1 over 3× radius */
+          r = clamp(r, 0.0, 1.0);
+          /* Exponential falloff — bright near surface, fades to nothing smoothly */
+          float alpha = exp(-r * 4.5) * 0.55;
+          /* Warm amber-white corona colour */
+          vec3 col = mix(vec3(1.0, 0.90, 0.60), vec3(1.0, 0.65, 0.20), r);
+          gl_FragColor = vec4(col, alpha);
+        }
+      `;
+      const coronaMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(1.8 * 4.8, 48, 48),
+        new THREE.ShaderMaterial({
+          vertexShader: coronaVS,
+          fragmentShader: coronaFS,
+          transparent: true,
+          side: THREE.BackSide,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          lights: false,
+        })
+      );
+      scene.add(coronaMesh);
+
+      /* ══ PLANET TEXTURE ENGINE ══
+         Each planet has a handcrafted personality matching a real solar system body.
+         Uses 3D sphere-mapped FBM noise — no axis-aligned banding ever.
+         Contrast is kept subtle so surfaces look painterly, not noisy.
+      ══════════════════════════════ */
+
+      function h21(x, y, s) {
+        // deterministic hash → [0,1]
+        const n = Math.sin(x * 127.1 + y * 311.7 + s * 74.3) * 43758.5453;
+        return n - Math.floor(n);
+      }
+
+      // 3-D value noise (sphere coords, never bands)
+      function sn(lat, lon, sc, s) {
+        const cx = Math.cos(lat)*Math.cos(lon)*sc;
+        const cy = Math.cos(lat)*Math.sin(lon)*sc;
+        const cz = Math.sin(lat)*sc;
+        const ix=Math.floor(cx),iy=Math.floor(cy),iz=Math.floor(cz);
+        const fx=cx-ix,fy=cy-iy,fz=cz-iz;
+        const ux=fx*fx*(3-2*fx),uy=fy*fy*(3-2*fy),uz=fz*fz*(3-2*fz);
+        const v = (dx,dy,dz) => h21(ix+dx+(iy+dy)*7+(iz+dz)*13, s, 0);
+        return v(0,0,0)*(1-ux)*(1-uy)*(1-uz)+v(1,0,0)*ux*(1-uy)*(1-uz)
+              +v(0,1,0)*(1-ux)*uy*(1-uz)     +v(1,1,0)*ux*uy*(1-uz)
+              +v(0,0,1)*(1-ux)*(1-uy)*uz     +v(1,0,1)*ux*(1-uy)*uz
+              +v(0,1,1)*(1-ux)*uy*uz         +v(1,1,1)*ux*uy*uz;
+      }
+
+      // FBM from sphere noise — gentle falloff to keep contrast moderate
+      function fbm(lat, lon, oct, sc, s) {
+        let v=0,a=0.5,sm=sc,mx=0;
+        for(let i=0;i<oct;i++){v+=a*sn(lat,lon,sm,s+i*31);mx+=a;a*=0.48;sm*=2.05;}
+        return v/mx;
+      }
+
+      // Smooth mix helper
+      const sm = (a,b,t) => a+(b-a)*Math.max(0,Math.min(1,t));
+
+      function makePlanetTexture(THREE, personality, seed) {
+        const TW=512, TH=256;
+        const px4 = new Uint8Array(TW*TH*4);
+        const bm4 = new Uint8Array(TW*TH*4);
+
+        for(let py=0;py<TH;py++) for(let lpx=0;lpx<TW;lpx++) {
+          const lat = ((py/TH)-0.5)*Math.PI;
+          const lon = (lpx/TW)*Math.PI*2;
+          const absLat = Math.abs(lat)/(Math.PI/2); // 0 equator → 1 pole
+          let r,g,b;
+
+          if(personality==='mercury') {
+            // ── Mercury: grey-tan, heavy cratering, no atmosphere ──
+            const terrain = fbm(lat,lon,5,3.0,seed);
+            const detail  = fbm(lat,lon,3,7.0,seed+50);
+            const h = terrain*0.6+detail*0.4;
+            // Base: warm grey
+            const base = 0.38+h*0.38;
+            r = base*1.05; g = base*0.98; b = base*0.90;
+            // Crater pits: high-freq noise spikes → dark rings
+            const cr = fbm(lat,lon,2,11.0,seed+200);
+            if(cr>0.72) { const d=(cr-0.72)/0.28; r*=1-d*0.6; g*=1-d*0.6; b*=1-d*0.55; }
+            // Bright ejecta rays around craters
+            const ray = fbm(lat,lon,2,15.0,seed+300);
+            if(ray>0.80) { const e=(ray-0.80)/0.20; r=sm(r,0.85,e*0.5); g=sm(g,0.80,e*0.5); b=sm(b,0.72,e*0.5); }
+
+          } else if(personality==='venus') {
+            // ── Venus: thick creamy sulfuric clouds, yellow-orange swirls ──
+            const c1 = fbm(lat,lon*0.9+lat*0.3,5,2.0,seed);
+            const c2 = fbm(lat+c1*0.5,lon,4,4.0,seed+80);
+            const cloud = c1*0.55+c2*0.45;
+            // Cream-yellow base, darker swirl troughs
+            r = 0.82+cloud*0.17;
+            g = 0.68+cloud*0.18;
+            b = 0.22+cloud*0.14;
+            // Bright pole hazes
+            if(absLat>0.72) { const p=(absLat-0.72)/0.28; r=sm(r,0.95,p); g=sm(g,0.88,p); b=sm(b,0.55,p); }
+
+          } else if(personality==='earth') {
+            // ── Earth: blue oceans, green/brown land, white clouds, polar ice ──
+            const cont = fbm(lat,lon,6,2.2,seed);      // continent mask
+            const cld  = fbm(lat,lon,4,3.5,seed+400);  // cloud layer
+            const isLand = cont > 0.52;
+            if(isLand) {
+              // Land: mix green lowlands → brown highlands
+              const h = (cont-0.52)/0.48;
+              r = sm(0.30,0.52,h); g = sm(0.42,0.36,h); b = sm(0.18,0.20,h);
+            } else {
+              // Ocean: deep blue, shallows slightly lighter
+              const depth = cont/0.52;
+              r = sm(0.04,0.12,depth); g = sm(0.18,0.38,depth); b = sm(0.55,0.72,depth);
+            }
+            // Cloud overlay — white patches
+            if(cld>0.58) { const cv=(cld-0.58)/0.42; r=sm(r,0.90,cv*0.85); g=sm(g,0.92,cv*0.85); b=sm(b,0.95,cv*0.85); }
+            // Polar ice caps with noisy edge
+            if(absLat>0.76) { const ic=fbm(lat,lon,3,4,seed+600); const p=(absLat-0.76)/0.24*(0.7+ic*0.3); r=sm(r,0.92,p); g=sm(g,0.95,p); b=sm(b,1.0,p); }
+
+          } else if(personality==='mars') {
+            // ── Mars: rusty red-orange, dark basalt lowlands, dust-covered highlands ──
+            const terrain = fbm(lat,lon,5,2.5,seed);
+            const detail  = fbm(lat,lon,4,6.0,seed+60);
+            const h = terrain*0.65+detail*0.35;
+            // Rust base
+            r = 0.62+h*0.28;
+            g = 0.22+h*0.16;
+            b = 0.10+h*0.08;
+            // Dark volcanic lowlands
+            if(h<0.38) { const d=(0.38-h)/0.38; r*=1-d*0.35; g*=1-d*0.3; b*=1-d*0.2; }
+            // Valles Marineris-like canyon — dark scar near equator
+            const canyonLat = Math.abs(lat)<0.18 ? 1 : 0;
+            const canyonNoise = fbm(lat,lon,3,5,seed+150);
+            if(canyonLat && canyonNoise>0.70) { const cn=(canyonNoise-0.70)/0.30; r*=1-cn*0.5; g*=1-cn*0.45; b*=1-cn*0.3; }
+            // Small polar CO2 caps — white-ish
+            if(absLat>0.82) { const p=(absLat-0.82)/0.18; r=sm(r,0.88,p); g=sm(g,0.82,p); b=sm(b,0.78,p); }
+
+          } else if(personality==='jupiter') {
+            // ── Jupiter: amber/cream/brown bands, organic warping, great red storm ──
+            // Warp latitude with FBM for organic band edges
+            const warp = fbm(lat,lon,3,1.5,seed+10)*1.2-0.6;
+            const wlat = lat+warp*0.55;
+            // Wide gentle bands via smooth sin (low freq = fewer stripes)
+            const band = Math.sin(wlat*4.5)*0.5+0.5;
+            const turb = fbm(lat,lon,4,3.0,seed+100)*0.28;
+            const mix  = band*0.72+turb;
+            // Color palette: cream ↔ warm brown ↔ amber
+            r = sm(0.68,0.92,mix);
+            g = sm(0.38,0.74,mix);
+            b = sm(0.18,0.50,mix);
+            // Great Red Spot — warm oval near -20° lat
+            const grsLat=-0.34, grsLon=Math.PI*1.1;
+            const dL=(lat-grsLat)*4.0;
+            const dO=Math.min(Math.abs(lon-grsLon),Math.PI*2-Math.abs(lon-grsLon))*2.2;
+            const grs=dL*dL+dO*dO;
+            if(grs<0.20) { const gi=(0.20-grs)/0.20; r=sm(r,0.82,gi*0.9); g=sm(g,0.28,gi*0.7); b=sm(b,0.18,gi*0.5); }
+
+          } else if(personality==='saturn') {
+            // ── Saturn: pale gold/beige, softer bands than Jupiter ──
+            const warp = fbm(lat,lon,3,1.2,seed+15)*0.8-0.4;
+            const wlat = lat+warp*0.4;
+            const band = Math.sin(wlat*3.5)*0.5+0.5;
+            const turb = fbm(lat,lon,3,2.5,seed+120)*0.20;
+            const mix  = band*0.80+turb;
+            // Pale golden palette
+            r = sm(0.72,0.90,mix);
+            g = sm(0.62,0.80,mix);
+            b = sm(0.30,0.48,mix);
+            // Subtle polar hexagon-ish darkening
+            if(absLat>0.85) { const p=(absLat-0.85)/0.15; r*=1-p*0.15; g*=1-p*0.18; }
+
+          } else if(personality==='uranus') {
+            // ── Uranus: smooth pale cyan-teal, almost featureless, faint banding ──
+            const smooth = fbm(lat,lon,3,1.5,seed)*0.18; // very low contrast
+            const faint  = Math.sin(lat*3.0)*0.08;       // barely visible bands
+            const h = 0.50+smooth+faint;
+            // Cyan-teal palette — uniform and calm
+            r = sm(0.42,0.62,h)*0.80;
+            g = sm(0.72,0.90,h);
+            b = sm(0.78,0.95,h);
+            // Faint polar brightening
+            if(absLat>0.70) { const p=(absLat-0.70)/0.30; r=sm(r,0.72,p*0.4); g=sm(g,0.95,p*0.3); b=sm(b,1.0,p*0.3); }
+
+          } else { // neptune
+            // ── Neptune: deep royal blue, violent white cloud streaks, dark storm ──
+            const turb = fbm(lat,lon,5,2.8,seed);
+            const streak = fbm(lat,lon*1.4,3,5.0,seed+200);
+            // Deep blue base
+            r = 0.05+turb*0.12;
+            g = 0.12+turb*0.20;
+            b = 0.62+turb*0.28;
+            // Bright white cloud streaks (high-freq, elongated along longitude)
+            if(streak>0.68) { const s=(streak-0.68)/0.32; r=sm(r,0.85,s*0.7); g=sm(g,0.88,s*0.7); b=sm(b,0.95,s*0.5); }
+            // Great Dark Spot — deep blue-black oval
+            const gdsLat=0.22, gdsLon=Math.PI*0.5;
+            const dL=(lat-gdsLat)*5.0;
+            const dO=Math.min(Math.abs(lon-gdsLon),Math.PI*2-Math.abs(lon-gdsLon))*2.8;
+            const gds=dL*dL+dO*dO;
+            if(gds<0.15) { const gi=(0.15-gds)/0.15; r*=1-gi*0.7; g*=1-gi*0.6; b=sm(b,0.38,gi*0.5); }
+          }
+
+          // Clamp
+          const idx=(py*TW+lpx)*4;
+          px4[idx]  =Math.max(0,Math.min(255,Math.round(r*255)));
+          px4[idx+1]=Math.max(0,Math.min(255,Math.round(g*255)));
+          px4[idx+2]=Math.max(0,Math.min(255,Math.round(b*255)));
+          px4[idx+3]=255;
+        }
+
+        // Bump map — always from same FBM for consistent relief
+        for(let py=0;py<TH;py++) for(let lpx=0;lpx<TW;lpx++) {
+          const lat=((py/TH)-0.5)*Math.PI;
+          const lon=(lpx/TW)*Math.PI*2;
+          const h=fbm(lat,lon,4,3.0,seed+500);
+          const v=Math.round(h*255);
+          const bi=(py*TW+lpx)*4;
+          bm4[bi]=v;bm4[bi+1]=v;bm4[bi+2]=v;bm4[bi+3]=255;
+        }
+
+        const tex =new THREE.DataTexture(px4,TW,TH,THREE.RGBAFormat); tex.needsUpdate=true;
+        const bump=new THREE.DataTexture(bm4,TW,TH,THREE.RGBAFormat); bump.needsUpdate=true;
+        return {tex,bump};
+      }
+
+      /* ══ PLANETS ══ */
+      PLANET_3D.forEach((cfg, i) => {
+        const hex = cfg.color;
+        const r   = parseInt(hex.slice(1,3),16)/255;
+        const g   = parseInt(hex.slice(3,5),16)/255;
+        const b   = parseInt(hex.slice(5,7),16)/255;
+
+        const pts = [];
+        for (let s = 0; s <= 256; s++) {
+          const a = (s / 256) * Math.PI * 2;
+          pts.push(new THREE.Vector3(Math.cos(a)*cfg.orbitR, 0, Math.sin(a)*cfg.orbitR));
+        }
+        const orbitLine = new THREE.LineLoop(
+          new THREE.BufferGeometry().setFromPoints(pts),
+          new THREE.LineBasicMaterial({
+            color: new THREE.Color(0.48, 0.18, 0.80),
+            transparent: true, opacity: 0.38,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+          })
+        );
+        orbitLine.rotation.x = cfg.tiltX;
+        orbitLine.rotation.z = cfg.tiltZ;
+        scene.add(orbitLine);
+        orbitMeshes.push(orbitLine);
+
+        const orbitPivot = new THREE.Object3D();
+        orbitPivot.rotation.x = cfg.tiltX;
+        orbitPivot.rotation.z = cfg.tiltZ;
+        scene.add(orbitPivot);
+        const innerPivot = new THREE.Object3D();
+        orbitPivot.add(innerPivot);
+
+        // Per-personality material properties
+        const matProps = {
+          mercury: { bumpScale:0.8, shininess:8,  specular:[0.20,0.18,0.15] },
+          venus:   { bumpScale:0.2, shininess:45, specular:[0.55,0.45,0.20] },
+          earth:   { bumpScale:0.5, shininess:30, specular:[0.20,0.35,0.60] },
+          mars:    { bumpScale:0.7, shininess:10, specular:[0.25,0.12,0.08] },
+          jupiter: { bumpScale:0.15,shininess:18, specular:[0.30,0.22,0.12] },
+          saturn:  { bumpScale:0.12,shininess:22, specular:[0.35,0.28,0.15] },
+          uranus:  { bumpScale:0.08,shininess:60, specular:[0.40,0.65,0.75] },
+          neptune: { bumpScale:0.25,shininess:40, specular:[0.20,0.30,0.70] },
+        };
+        const mp = matProps[cfg.personality] || matProps.mercury;
+
+        const { tex, bump } = makePlanetTexture(THREE, cfg.personality, i + 1);
+        const mat = new THREE.MeshPhongMaterial({
+          map: tex, bumpMap: bump, bumpScale: mp.bumpScale,
+          emissive: new THREE.Color(r*0.05, g*0.03, b*0.08),
+          specular: new THREE.Color(...mp.specular),
+          shininess: mp.shininess,
+        });
+
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(cfg.radius, 64, 64), mat);
+        mesh.position.set(cfg.orbitR, 0, 0);
+        innerPivot.add(mesh);
+
+        // Saturn-style rings on planet index 5 (saturn personality)
+        if (i === 5) {
+          const ringMat = new THREE.MeshBasicMaterial({
+            color: new THREE.Color(0.72, 0.60, 0.35),
+            transparent: true, opacity: 0.55, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+          });
+          const ring = new THREE.Mesh(new THREE.RingGeometry(cfg.radius*1.52, cfg.radius*2.55, 80), ringMat);
+          ring.rotation.x = Math.PI * 0.38;
+          mesh.add(ring);
+          const ring2 = new THREE.Mesh(
+            new THREE.RingGeometry(cfg.radius*2.6, cfg.radius*3.1, 80),
+            new THREE.MeshBasicMaterial({ color: new THREE.Color(0.55, 0.44, 0.22),
+              transparent: true, opacity: 0.25, side: THREE.DoubleSide,
+              blending: THREE.AdditiveBlending, depthWrite: false })
+          );
+          ring2.rotation.x = Math.PI * 0.38;
+          mesh.add(ring2);
+        }
+
+        const labelAnchor = new THREE.Object3D();
+        labelAnchor.position.set(cfg.orbitR, cfg.radius + 0.7, 0);
+        innerPivot.add(labelAnchor);
+
+        // HTML label — purple theme, slightly larger
+        const el = document.createElement("div");
+        el.className = "pl-planet-label";
+        el.textContent = AGENTS_DATA[i].name;
+        el.style.setProperty("--pc", "#a855f7");
+        el.style.fontSize = "10px";
+        el.style.padding = "2px 7px";
+        el.style.borderRadius = "5px";
+        el.style.background = "rgba(20, 4, 40, 0.88)";
+        el.style.border = "1px solid rgba(168, 85, 247, 0.65)";
+        el.style.boxShadow = "0 0 10px rgba(168, 85, 247, 0.35)";
+        el.style.color = "#e9d5ff";
+        el.style.fontWeight = "700";
+        el.style.letterSpacing = "0.04em";
+        labelDiv.appendChild(el);
+        labelEls.push(el);
+
+        planetObjects.push({ mesh, labelAnchor, orbitPivot, innerPivot, cfg, idx: i, mat, r, g, b });
       });
 
-      // Smooth radial vignette to fade edges naturally
-      const vignette = ctx.createRadialGradient(cx, cy, SIZE * 0.30, cx, cy, SIZE * 0.50);
-      vignette.addColorStop(0, "transparent");
-      vignette.addColorStop(1, "rgba(3,1,10,0.95)");
-      ctx.fillStyle = vignette;
-      ctx.fillRect(0, 0, SIZE, SIZE);
+      /* ══ REALISTIC ASTEROIDS ══
+         Uses deformed geometry (perturbed vertices) + a rocky material.
+         Each asteroid is a unique irregular chunk, not a smooth sphere.
+      ══════════════════════════════ */
 
-      raf = requestAnimationFrame(draw);
-    };
-    draw();
+      // Seeded pseudo-random
+      function srand(seed) {
+        let s = seed | 0;
+        return () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
+      }
 
-    const onMove = (e) => {
-      const rect = c.getBoundingClientRect();
-      const scaleX = SIZE / rect.width, scaleY = SIZE / rect.height;
-      const mx = (e.clientX - rect.left) * scaleX;
-      const my = (e.clientY - rect.top) * scaleY;
-      let found = -1;
-      PLANET_CFG.forEach((p, i) => {
-        const angle = anglesRef.current[i];
-        const px = cx + Math.cos(angle) * p.orbitRx;
-        const py = cy + Math.sin(angle) * p.orbitRy;
-        if (Math.hypot(mx - px, my - py) < p.size + 14) found = i;
-      });
-      hoverRef.current = found;
-      setHovered(found >= 0 ? AGENTS_DATA[found] : null);
-    };
-    c.addEventListener("mousemove", onMove);
-    c.addEventListener("mouseleave", () => { hoverRef.current = -1; setHovered(null); });
-    return () => { cancelAnimationFrame(raf); };
+      // Create an irregular asteroid geometry by deforming a low-poly sphere
+      function makeAsteroidGeometry(THREE, baseRadius, seed) {
+        const rand = srand(seed);
+        // Use an icosahedron for natural faceted look
+        const detail = Math.floor(rand() * 2); // 0 or 1 subdivisions
+        const geo = new THREE.IcosahedronGeometry(baseRadius, detail);
+
+        // Deform vertices randomly for organic rock shape
+        const pos = geo.attributes.position;
+        for (let vi = 0; vi < pos.count; vi++) {
+          const x = pos.getX(vi), y = pos.getY(vi), z = pos.getZ(vi);
+          const len = Math.sqrt(x*x + y*y + z*z);
+          // Perturbation: ±30% of radius, seeded per vertex
+          const noise = 0.70 + rand() * 0.60;
+          pos.setXYZ(vi, x/len * len * noise, y/len * len * noise, z/len * len * noise);
+        }
+        pos.needsUpdate = true;
+        geo.computeVertexNormals();
+
+        // Non-uniform scale to make it look more like a tumbling rock
+        const sx = 0.7 + rand() * 0.7;
+        const sy = 0.5 + rand() * 0.6;
+        const sz = 0.6 + rand() * 0.8;
+        geo.scale(sx, sy, sz);
+        return geo;
+      }
+
+      const asteroidBelt = [];
+      const NUM_ASTEROIDS = 60;
+
+      for (let ai = 0; ai < NUM_ASTEROIDS; ai++) {
+        const rand = srand(ai * 7919 + 1337);
+
+        // Belt occupies the space around orbits 4–6 (roughly 10–15 units)
+        const beltR = 10.5 + rand() * 4.5;
+        const angle = rand() * Math.PI * 2;
+        const yOff  = (rand() - 0.5) * 1.8;  // slight vertical spread
+
+        const scale = 0.06 + rand() * 0.14;
+        const geo = makeAsteroidGeometry(THREE, scale, ai + 1);
+
+        // Rocky grey-brown material with subtle color tints
+        const greyVal = 0.28 + rand() * 0.22;
+        const warmTint = rand() * 0.08;
+        const mat = new THREE.MeshPhongMaterial({
+          color: new THREE.Color(greyVal + warmTint, greyVal + warmTint * 0.5, greyVal),
+          emissive: new THREE.Color(0.02, 0.01, 0.03),
+          specular: new THREE.Color(0.12, 0.10, 0.14),
+          shininess: 4 + rand() * 8,
+          flatShading: rand() > 0.4, // some have flat faces for craggy look
+        });
+
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(
+          Math.cos(angle) * beltR,
+          yOff,
+          Math.sin(angle) * beltR
+        );
+
+        // Random initial rotation
+        mesh.rotation.set(rand() * Math.PI * 2, rand() * Math.PI * 2, rand() * Math.PI * 2);
+
+        scene.add(mesh);
+        asteroidBelt.push({
+          mesh,
+          orbitR:    beltR,
+          angle,
+          orbitSpeed: (0.0006 + rand() * 0.0014) * (rand() > 0.5 ? 1 : -1),
+          yOff,
+          spinAxis:  new THREE.Vector3(rand()-0.5, rand()-0.5, rand()-0.5).normalize(),
+          spinSpeed: (rand() - 0.5) * 0.8,
+        });
+      }
+
+      /* ── Animation ── */
+      let last = performance.now();
+      function animate() {
+        raf = requestAnimationFrame(animate);
+        const now = performance.now();
+        const dt  = Math.min((now-last)/1000, 0.05);
+        last = now; t += dt;
+
+        sunUniforms.uTime.value = t;
+        sun.rotation.y += dt * 0.055;
+        autoRotY += dt * 0.07;
+        scene.rotation.y = autoRotY;
+
+        // Subtle sun light flicker — solar variability
+        sunLight.intensity = 5.8 + Math.sin(t*1.3)*0.3 + Math.sin(t*2.9)*0.12;
+
+        planetObjects.forEach(({ mesh, labelAnchor, innerPivot, cfg, idx, mat }) => {
+          angles[idx] += cfg.speed;
+          innerPivot.rotation.y = angles[idx];
+          mesh.rotation.y += dt * 0.3;
+          const isH = hoveredIdx === idx;
+          const hv = isH ? 1 : 0;
+          // Gentle hover glow — doesn't distort the planet's natural color
+          mat.emissive.setRGB(hv*0.12, hv*0.06, hv*0.18);
+          const ts = 1 + hv * 0.3;
+          mesh.scale.lerp({ x: ts, y: ts, z: ts }, 0.12);
+        });
+
+        // Animate asteroids
+        asteroidBelt.forEach(a => {
+          a.angle += a.orbitSpeed;
+          a.mesh.position.set(
+            Math.cos(a.angle) * a.orbitR,
+            a.yOff,
+            Math.sin(a.angle) * a.orbitR
+          );
+          a.mesh.rotateOnAxis(a.spinAxis, dt * a.spinSpeed);
+        });
+
+        orbitMeshes.forEach((o, i) => {
+          o.material.opacity = 0.25 + Math.sin(t*0.5+i*0.45)*0.12;
+        });
+
+        renderer.render(scene, camera);
+
+        // Project planet labels to 2D
+        const CW = mount.clientWidth;
+        const CH = mount.clientHeight;
+        planetObjects.forEach(({ labelAnchor }, i) => {
+          const el = labelEls[i];
+          if (!el) return;
+          const wp = new THREE.Vector3();
+          labelAnchor.getWorldPosition(wp);
+          const s = toScreen(wp, CW, CH);
+          if (s.behind) {
+            el.style.opacity = "0";
+            el.style.pointerEvents = "none";
+          } else {
+            el.style.opacity = "1";
+            el.style.pointerEvents = "auto";
+            el.style.transform = `translate(-50%,-100%) translate(${s.x.toFixed(1)}px,${s.y.toFixed(1)}px)`;
+          }
+        });
+      }
+      animate();
+
+      /* ── Input ── */
+      const onMouseMove = (e) => {
+        const rect = mount.getBoundingClientRect();
+        mouse.x =  ((e.clientX-rect.left)/rect.width)*2-1;
+        mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObjects(planetObjects.map(p => p.mesh), true);
+        if (hits.length) {
+          const found = planetObjects.find(p => p.mesh===hits[0].object);
+          if (found) { hoveredIdx=found.idx; setHovered(AGENTS_DATA[found.idx]); mount.style.cursor="pointer"; return; }
+        }
+        hoveredIdx=-1; setHovered(null);
+        mount.style.cursor = isDragging ? "grabbing" : "grab";
+      };
+      const onMouseDown = (e) => { isDragging=true; prevMouse={x:e.clientX,y:e.clientY}; mount.style.cursor="grabbing"; };
+      const onMouseUp   = ()    => { isDragging=false; mount.style.cursor="grab"; };
+      const onDrag      = (e)   => {
+        if (!isDragging) return;
+        autoRotY += (e.clientX-prevMouse.x)*0.004;
+        camPhi = Math.max(0.25, Math.min(Math.PI-0.25, camPhi-(e.clientY-prevMouse.y)*0.004));
+        prevMouse={x:e.clientX,y:e.clientY};
+        setCamPos();
+      };
+      let lastTouch=null;
+      const onTouchStart = (e) => { lastTouch=e.touches[0]; };
+      const onTouchMove  = (e) => { if(!lastTouch)return; autoRotY+=(e.touches[0].clientX-lastTouch.clientX)*0.004; lastTouch=e.touches[0]; };
+      const onResize = () => {
+        const W2=mount.clientWidth, H2=mount.clientHeight;
+        camera.aspect=W2/H2; camera.updateProjectionMatrix(); renderer.setSize(W2,H2);
+      };
+      mount.addEventListener("mousemove", onMouseMove);
+      mount.addEventListener("mousedown", onMouseDown);
+      mount.addEventListener("touchstart",onTouchStart,{passive:true});
+      mount.addEventListener("touchmove", onTouchMove, {passive:true});
+      window.addEventListener("mouseup",  onMouseUp);
+      window.addEventListener("mousemove",onDrag);
+      window.addEventListener("resize",   onResize);
+
+      mount._cleanup = () => {
+        cancelAnimationFrame(raf); renderer.dispose();
+        if (renderer.domElement.parentNode===mount) mount.removeChild(renderer.domElement);
+        labelEls.forEach(el => { if (el.parentNode) el.parentNode.removeChild(el); });
+        mount.removeEventListener("mousemove", onMouseMove);
+        mount.removeEventListener("mousedown", onMouseDown);
+        mount.removeEventListener("touchstart",onTouchStart);
+        mount.removeEventListener("touchmove", onTouchMove);
+        window.removeEventListener("mouseup",  onMouseUp);
+        window.removeEventListener("mousemove",onDrag);
+        window.removeEventListener("resize",   onResize);
+      };
+    }
+
+    if (window.THREE) { init(); }
+    else {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+      script.onload = init;
+      document.head.appendChild(script);
+      return () => { if (mount._cleanup) mount._cleanup(); if (script.parentNode) script.parentNode.removeChild(script); };
+    }
+    return () => { if (mount._cleanup) mount._cleanup(); };
   }, []);
 
   return (
     <div className="pl-solar-wrap">
-      <canvas ref={ref} className="pl-solar-canvas" />
+      <div ref={mountRef} className="pl-solar-canvas" />
+      <div ref={labelsRef} className="pl-label-layer" />
       {hovered && (
-        <div className="pl-planet-tooltip">
-          <div className="pl-pt-name" style={{ color: hovered.color }}>
-            <Icon name={hovered.icon} size={16} style={{ display: "inline-block", marginRight: "6px", verticalAlign: "middle" }} />
-            {hovered.name}
+        <div className="pl-planet-tooltip" style={{ borderColor: hovered.color + "66" }}>
+          <div className="pl-pt-icon-row">
+            <Icon name={hovered.icon} size={14} />
+            <span className="pl-pt-name" style={{ color: hovered.color }}>{hovered.name}</span>
+            <span className="pl-pt-role">{hovered.role}</span>
           </div>
-          <div className="pl-pt-role">{hovered.role}</div>
+          <p className="pl-pt-desc">{hovered.details}</p>
           <div className="pl-pt-model">{hovered.model}</div>
         </div>
       )}
-      <p className="pl-solar-hint">Hover a planet · each is an AI agent</p>
+      <p className="pl-solar-hint">Drag to rotate · hover planets</p>
     </div>
   );
 }
@@ -399,34 +987,15 @@ function Typewriter({ words }) {
   return <span className="pl-tw">{txt}<span className="pl-caret">|</span></span>;
 }
 
-/* ══ COUNTER ══ */
-function Counter({ end, suffix }) {
-  const [v, setV] = useState(0);
-  const ref = useRef(null);
-  const done = useRef(false);
-  useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && !done.current) {
-        done.current = true;
-        let cur = 0; const n = parseFloat(end);
-        const t = setInterval(() => { cur += n/55; if(cur>=n){setV(n);clearInterval(t);}else setV(Math.floor(cur)); }, 28);
-      }
-    }, { threshold: 0.4 });
-    if (ref.current) obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [end]);
-  return <span ref={ref}>{v}{suffix}</span>;
-}
-
 /* ══ REVEAL HOOK ══ */
-function useReveal(t = 0.1) {
+function useReveal(threshold = 0.1) {
   const ref = useRef(null);
   const [vis, setVis] = useState(false);
   useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => { if(e.isIntersecting)setVis(true); }, {threshold:t});
-    if(ref.current)obs.observe(ref.current);
-    return ()=>obs.disconnect();
-  }, [t]);
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVis(true); }, { threshold });
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, [threshold]);
   return [ref, vis];
 }
 
@@ -436,7 +1005,6 @@ function PipelineFlow() {
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const [manualStep, setManualStep] = useState(null);
-
   const currentStep = manualStep !== null ? manualStep : active;
 
   useEffect(() => {
@@ -445,28 +1013,20 @@ function PipelineFlow() {
     return () => clearInterval(id);
   }, [vis, paused]);
 
-  const handleStepClick = (i) => { setPaused(true); setManualStep(i); };
-  const handleResume = () => { setPaused(false); setManualStep(null); setActive(0); };
   const step = PIPELINE[currentStep];
-
   return (
     <div ref={ref} className="pl-pipeline-outer">
       <div className="pl-pipeline-track">
         {PIPELINE.map((s, i) => {
-          const isDone = i < currentStep;
-          const isActive = i === currentStep;
+          const isDone = i < currentStep, isActive = i === currentStep;
           return (
-            <button
-              key={i}
-              className={`pl-pipe-node ${vis ? "is-vis" : ""} ${isActive ? "is-active" : ""} ${isDone ? "is-done" : ""}`}
-              style={{ "--d": `${i * 0.07}s`, "--ac": s.color }}
-              onClick={() => handleStepClick(i)}
-            >
-              <div className="pl-pipe-node-dot">
-                <Icon name={s.icon} size={20} />
-              </div>
+            <button key={i}
+              className={`pl-pipe-node ${vis?"is-vis":""} ${isActive?"is-active":""} ${isDone?"is-done":""}`}
+              style={{"--d":`${i*0.07}s`,"--ac":s.color}}
+              onClick={() => { setPaused(true); setManualStep(i); }}>
+              <div className="pl-pipe-node-dot"><Icon name={s.icon} size={20}/></div>
               <div className="pl-pipe-node-connector">
-                <div className={`pl-pipe-node-line ${isDone || isActive ? "is-lit" : ""}`} />
+                <div className={`pl-pipe-node-line ${isDone||isActive?"is-lit":""}`}/>
               </div>
               <span className="pl-pipe-node-label">{s.label}</span>
               <span className="pl-pipe-node-sub">{s.sub}</span>
@@ -474,31 +1034,28 @@ function PipelineFlow() {
           );
         })}
       </div>
-
-      <div className={`pl-pipe-detail ${vis ? "is-vis" : ""}`} key={currentStep}>
-        <div className="pl-pipe-detail-icon" style={{ color: step.color }}>
-          <Icon name={step.icon} size={38} />
-        </div>
+      <div className={`pl-pipe-detail ${vis?"is-vis":""}`} key={currentStep}>
+        <div className="pl-pipe-detail-icon" style={{color:step.color}}><Icon name={step.icon} size={38}/></div>
         <div className="pl-pipe-detail-content">
-          <div className="pl-pipe-detail-step" style={{ color: step.color }}>Step {currentStep + 1} of {PIPELINE.length}</div>
+          <div className="pl-pipe-detail-step" style={{color:step.color}}>Step {currentStep+1} of {PIPELINE.length}</div>
           <h3 className="pl-pipe-detail-name">{step.label}</h3>
           <p className="pl-pipe-detail-sub">{step.sub}</p>
         </div>
         <div className="pl-pipe-detail-progress">
           <div className="pl-pipe-detail-bar">
-            <div className="pl-pipe-detail-fill" style={{ width: `${((currentStep + 1) / PIPELINE.length) * 100}%`, background: `linear-gradient(90deg, #7c3aed, ${step.color})` }} />
+            <div className="pl-pipe-detail-fill" style={{width:`${((currentStep+1)/PIPELINE.length)*100}%`,background:`linear-gradient(90deg,#7c3aed,${step.color})`}}/>
           </div>
-          <span className="pl-pipe-detail-pct">{Math.round(((currentStep + 1) / PIPELINE.length) * 100)}% complete</span>
+          <span className="pl-pipe-detail-pct">{Math.round(((currentStep+1)/PIPELINE.length)*100)}% complete</span>
         </div>
-        {paused && <button className="pl-pipe-resume-btn" onClick={handleResume}>▶ Resume Auto</button>}
+        {paused && <button className="pl-pipe-resume-btn" onClick={() => { setPaused(false); setManualStep(null); setActive(0); }}>▶ Resume Auto</button>}
       </div>
-
       <div className="pl-pipe-dots">
         {PIPELINE.map((s, i) => (
-          <button key={i} className={`pl-pipe-dot ${i === currentStep ? "active" : ""} ${i < currentStep ? "done" : ""}`} style={{ "--ac": s.color }} onClick={() => handleStepClick(i)} />
+          <button key={i}
+            className={`pl-pipe-dot ${i===currentStep?"active":""} ${i<currentStep?"done":""}`}
+            style={{"--ac":s.color}} onClick={() => { setPaused(true); setManualStep(i); }}/>
         ))}
       </div>
-
       {!paused && <button className="pl-pipe-pause-btn" onClick={() => setPaused(true)}>⏸ Pause</button>}
     </div>
   );
@@ -509,24 +1066,19 @@ function AgentsShowcase() {
   const [ref, vis] = useReveal(0.05);
   const [selected, setSelected] = useState(null);
   const [hoveredIdx, setHoveredIdx] = useState(null);
-
   return (
     <div ref={ref} className="pl-agents-showcase">
       <div className="pl-agents-grid">
         {AGENTS_DATA.map((agent, i) => (
-          <div
-            key={agent.name}
-            className={`pl-agent-hex ${vis ? "is-vis" : ""} ${selected?.name === agent.name ? "is-selected" : ""} ${hoveredIdx === i ? "is-hovered" : ""}`}
-            style={{ "--ac": agent.color, "--d": `${i * 0.08}s` }}
-            onClick={() => setSelected(selected?.name === agent.name ? null : agent)}
-            onMouseEnter={() => setHoveredIdx(i)}
-            onMouseLeave={() => setHoveredIdx(null)}
-          >
-            <div className="pl-agent-hex-bg" />
-            <div className="pl-agent-hex-glow" />
+          <div key={agent.name}
+            className={`pl-agent-hex ${vis?"is-vis":""} ${selected?.name===agent.name?"is-selected":""} ${hoveredIdx===i?"is-hovered":""}`}
+            style={{"--ac":agent.color,"--d":`${i*0.08}s`}}
+            onClick={() => setSelected(selected?.name===agent.name?null:agent)}
+            onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)}>
+            <div className="pl-agent-hex-bg"/>
+            <div className="pl-agent-hex-glow"/>
             <div className="pl-agent-hex-content">
-              <div className="pl-agent-hex-num">0{i + 1}</div>
-              <div className="pl-agent-hex-emoji">{agent.emoji}</div>
+              <div className="pl-agent-hex-num">0{i+1}</div>
               <div className="pl-agent-hex-name">{agent.name}</div>
               <div className="pl-agent-hex-role">{agent.role}</div>
               <div className="pl-agent-hex-stat">
@@ -534,17 +1086,15 @@ function AgentsShowcase() {
                 <span className="pl-agent-hex-stat-l">{agent.statLabel}</span>
               </div>
             </div>
-            <div className="pl-agent-hex-ring" />
+            <div className="pl-agent-hex-ring"/>
           </div>
         ))}
       </div>
-
       {selected ? (
-        <div className="pl-agent-panel" key={selected.name} style={{ "--ac": selected.color }}>
+        <div className="pl-agent-panel" key={selected.name} style={{"--ac":selected.color}}>
           <div className="pl-agent-panel-header">
-            <div className="pl-agent-panel-emoji">{selected.emoji}</div>
             <div>
-              <div className="pl-agent-panel-tag" style={{ color: selected.color }}>{selected.model}</div>
+              <div className="pl-agent-panel-tag" style={{color:selected.color}}>{selected.model}</div>
               <h3 className="pl-agent-panel-name">{selected.name}</h3>
               <div className="pl-agent-panel-role">{selected.role}</div>
             </div>
@@ -556,14 +1106,14 @@ function AgentsShowcase() {
               <div className="pl-agent-panel-col-label">→ Inputs</div>
               {selected.inputs.map((inp, i) => <div key={i} className="pl-agent-panel-item pl-api-in">{inp}</div>)}
             </div>
-            <div className="pl-agent-panel-divider" />
+            <div className="pl-agent-panel-divider"/>
             <div className="pl-agent-panel-col">
               <div className="pl-agent-panel-col-label">← Outputs</div>
               {selected.outputs.map((out, i) => <div key={i} className="pl-agent-panel-item pl-api-out">{out}</div>)}
             </div>
           </div>
           <div className="pl-agent-panel-stat-strip">
-            <div className="pl-agent-panel-stat-n" style={{ color: selected.color }}>{selected.stat}</div>
+            <div className="pl-agent-panel-stat-n" style={{color:selected.color}}>{selected.stat}</div>
             <div className="pl-agent-panel-stat-l">{selected.statLabel}</div>
           </div>
         </div>
@@ -581,7 +1131,6 @@ function AgentsShowcase() {
 export default function PublicLanding() {
   const navigate = useNavigate();
   const [scrollY, setScrollY] = useState(0);
-
   useEffect(() => {
     const fn = () => setScrollY(window.scrollY);
     window.addEventListener("scroll", fn, { passive: true });
@@ -591,25 +1140,23 @@ export default function PublicLanding() {
   return (
     <div className="pl-root">
 
-      {/* ══ HERO ══ */}
+      {/* HERO */}
       <section className="pl-hero">
         <Starfield />
-        <div className="pl-neb pl-neb1" style={{transform:`translateY(${scrollY*0.12}px)`}} />
-        <div className="pl-neb pl-neb2" style={{transform:`translateY(${scrollY*0.07}px)`}} />
-        <div className="pl-neb pl-neb3" style={{transform:`translateY(${scrollY*0.18}px)`}} />
-
+        <div className="pl-neb pl-neb1" style={{transform:`translateY(${scrollY*0.12}px)`}}/>
+        <div className="pl-neb pl-neb2" style={{transform:`translateY(${scrollY*0.07}px)`}}/>
+        <div className="pl-neb pl-neb3" style={{transform:`translateY(${scrollY*0.18}px)`}}/>
         <nav className="pl-nav">
-          <img src={novaLogo} alt="InnovaCX" className="pl-logo" />
+          <img src={novaLogo} alt="InnovaCX" className="pl-logo"/>
           <button className="pl-login-btn" onClick={() => navigate("/login")}>Log In →</button>
         </nav>
-
         <div className="pl-hero-body">
           <div className="pl-hero-left">
             <p className="pl-eyebrow">InnovaAI · Dubai CommerCity</p>
             <h1 className="pl-headline">
               <span className="pl-hl1">Every Complaint</span>
               <span className="pl-hl2">Handled by</span>
-              <span className="pl-hl3"><Typewriter words={["AI Agents.","InnovaCX.","Nova."]} /></span>
+              <span className="pl-hl3"><Typewriter words={["AI Agents.","InnovaCX.","Nova."]}/></span>
             </h1>
             <p className="pl-hero-sub">
               InnovaCX is a multi-agent pipeline that analyzes text and audio complaints to detect customer emotions and urgency. It automatically prioritizes and routes cases to the right department delivering real-time dashboard insights that improve response times and customer satisfaction, adaptable across any communication channel.
@@ -622,7 +1169,7 @@ export default function PublicLanding() {
               <button className="pl-btn-ghost" onClick={() => navigate("/about")}>About Us</button>
             </div>
             <button className="pl-nova-pill" onClick={() => navigate("/login")}>
-              <span className="pl-nova-dot" />
+              <span className="pl-nova-dot"/>
               Chat with Nova AI
               <span className="pl-nova-arrow">Try Now →</span>
             </button>
@@ -635,13 +1182,11 @@ export default function PublicLanding() {
               ))}
             </div>
           </div>
-          <div className="pl-hero-right">
-            <SolarSystem />
-          </div>
+          <div className="pl-hero-right"><SolarSystem /></div>
         </div>
       </section>
 
-      {/* ══ MARQUEE ══ */}
+      {/* MARQUEE */}
       <div className="pl-marquee">
         <div className="pl-marquee-track">
           {[...Array(4)].map((_,r) =>
@@ -653,7 +1198,7 @@ export default function PublicLanding() {
         </div>
       </div>
 
-      {/* ══ PIPELINE ══ */}
+      {/* PIPELINE */}
       <section className="pl-pipeline-section">
         <div className="pl-section-tag">How It Works</div>
         <h2 className="pl-section-h light">The Agent Pipeline</h2>
@@ -661,27 +1206,20 @@ export default function PublicLanding() {
         <PipelineFlow />
       </section>
 
-      {/* ══ CTA ══ */}
-      <section className="pl-cta">
-        <Starfield />
-        <div className="pl-cta-neb" />
-        <div className="pl-cta-inner">
-          <div className="pl-section-tag" style={{color:"#c084fc"}}>Ready for Liftoff?</div>
-          <h2 className="pl-cta-h">Every complaint resolved.<br/>Every customer retained.</h2>
-          <p className="pl-cta-p">InnovaAI's AI-powered complaint management platform. Built for scale. Designed for humans.</p>
-          <div className="pl-cta-btns">
-            <button className="pl-btn-primary pl-btn-lg" onClick={() => navigate("/login")}>
-              Start Now
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-            <button className="pl-btn-ghost pl-btn-lg" onClick={() => navigate("/about")}>Learn More</button>
-          </div>
+      {/* AGENTS */}
+      <section className="pl-agents-section">
+        <div className="pl-agents-section-bg"/>
+        <div className="pl-agents-section-inner">
+          <div className="pl-section-tag">The Team</div>
+          <h2 className="pl-section-h light">Meet the Agents</h2>
+          <p className="pl-section-p light">Eight specialized AI models working in concert. Click any agent to explore its role.</p>
+          <AgentsShowcase />
         </div>
       </section>
 
-      {/* ══ FOOTER ══ */}
+      {/* FOOTER */}
       <footer className="pl-footer">
-        <img src={novaLogo} alt="InnovaCX" className="pl-footer-logo" />
+        <img src={novaLogo} alt="InnovaCX" className="pl-footer-logo"/>
         <div className="pl-footer-links">
           <button className="pl-footer-link" onClick={() => navigate("/about")}>About</button>
           <button className="pl-footer-link" onClick={() => navigate("/login")}>Log In</button>
