@@ -101,11 +101,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Suspense
-        fallback={
-          <div style={{ padding: 20, fontFamily: "system-ui" }}>Loading…</div>
-        }
-      >
+      <Suspense fallback={<div style={{ background: "#06010f", height: "100vh" }} />}>
         <Routes>
           {/* Root split */}
           <Route path="/" element={<RootGate />} />
