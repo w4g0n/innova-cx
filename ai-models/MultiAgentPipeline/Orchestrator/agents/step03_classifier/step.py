@@ -137,15 +137,18 @@ async def classify(state: dict) -> dict:
         # Empty transcript — treat as complaint so it gets a ticket
         state["label"] = "complaint"
         state["class_confidence"] = 0.0
+        state["classification_source"] = "heuristic"
         logger.info("classifier | empty text fallback -> complaint")
         return state
 
     model_result = _model_classify(state.get("text", ""))
     if model_result:
         label, conf = model_result
+        state["classification_source"] = "model"
         logger.info("classifier | using optional model from %s", os.getenv(MODEL_PATH_ENV, "").strip())
     else:
         label, conf = _heuristic_classify(state.get("text", ""))
+        state["classification_source"] = "heuristic"
         logger.info("classifier | using local in-process heuristic")
     state["label"] = label
     state["class_confidence"] = conf

@@ -3650,6 +3650,7 @@ END $$;
 -- ---------------------------------------------------------------------------
 -- Department staffing seed (7 departments, each 1 manager + 10 employees)
 -- ---------------------------------------------------------------------------
+\ir scripts/AI_Explainability.sql
 \ir seeds/seed_department_staffing.sql
 
 COMMIT;

@@ -6,7 +6,6 @@ Inquiries skip this step.
 """
 
 import os
-import re
 import sys
 import logging
 from pathlib import Path
@@ -19,20 +18,6 @@ logger = logging.getLogger(__name__)
 
 # Local sentiment pipeline source copied into orchestrator image.
 sys.path.insert(0, "/app/sentiment_pipeline")
-
-
-def _categorize_sentiment(score: float) -> str:
-    if score < -0.25:
-        return "negative"
-    if score <= 0.25:
-        return "neutral"
-    return "positive"
-
-
-_KEYWORD_REGEX = re.compile(
-    r"\b(ac|air conditioning|leak|flood|pipe|power|electricity|alarm|internet|wifi|network|urgent|emergency|broken|not working)\b",
-    re.IGNORECASE,
-)
 
 
 class _FallbackPredictor:
@@ -81,18 +66,17 @@ def get_sentiment_diagnostics() -> dict[str, Any]:
 
 async def analyze_sentiment(state: dict) -> dict:
     predictor = _load_predictor()
+    state["sentiment_mode"] = "mock" if isinstance(predictor, _FallbackPredictor) else "model"
     data = predictor.predict(state["text"])
 
     sentiment = float(data.get("text_sentiment", 0.0) or 0.0)
     state["text_sentiment"] = sentiment
-    state["sentiment_category"] = _categorize_sentiment(sentiment)
-    state["urgency"] = 0.5
-    state["keywords"] = list({m.group(0).lower() for m in _KEYWORD_REGEX.finditer(state["text"])})
+    state.pop("sentiment_category", None)
+    state.pop("urgency", None)
+    state.pop("keywords", None)
     logger.info(
-        "sentiment | text_sentiment=%.3f category=%s keywords=%d",
+        "sentiment | text_sentiment=%.3f",
         float(state.get("text_sentiment", 0.0) or 0.0),
-        state.get("sentiment_category"),
-        len(state.get("keywords", [])),
     )
 
     return state
