@@ -3,7 +3,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
-from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression, is_human_escalation_request
+from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression, is_human_escalation_request, is_cancellation_request
 from .llm import generate_response, llm_available
 from .logger import log_bot_response, log_user_message
 from .retriever import retrieve_context
@@ -42,6 +42,26 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
         _log_and_save(session, response, "escalation")
         return _result(response, "escalation", session_id,
                        buttons=["create_ticket", "track_ticket"])
+
+    # ── Cancellation — reset to start if mid-flow ────────────────────────────
+    _mid_flow_states = {
+        "await_secondary_intent", "inquiry", "inquiry_confirm",
+        "complaint", "collecting_complaint", "await_ticket_id",
+    }
+    if not is_init and state in _mid_flow_states and is_cancellation_request(user_text):
+        log_user_message(
+            session_id=session_id,
+            user_id=user_id,
+            message=user_text,
+            aggression_flag=False,
+            aggression_score=0.0,
+        )
+        append_history(session, "user", user_text)
+        response = "No problem! Is there anything else I can help you with today?"
+        transition(session, "await_primary_intent")
+        session["context"] = {}
+        _log_and_save(session, response, "cancelled")
+        return _result(response, "cancelled", session_id)
 
     # ── Aggression check (skip on init and greeting — only used for __init__) ──
     is_aggressive, agg_score = False, 0.0
@@ -378,11 +398,13 @@ def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
 
     # Step 1: collect description
     if "description" not in context:
-        if not user_text.strip():
-            response = "Could you describe the issue in a bit more detail please?"
+        text_clean = user_text.strip()
+        # Reject empty, too-short, or question-like inputs as descriptions
+        if not text_clean or len(text_clean) < 10 or text_clean.endswith("?"):
+            response = "Could you describe the issue you're experiencing in a bit more detail please?"
             _log_and_save(session, response, "prompt_description_retry")
             return _result(response, "prompt_description_retry", session_id)
-        context["description"] = user_text.strip()
+        context["description"] = text_clean
 
     # Step 3: create ticket
     result = create_ticket(

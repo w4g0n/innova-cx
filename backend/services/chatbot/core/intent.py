@@ -297,3 +297,22 @@ def is_human_escalation_request(user_text: str) -> bool:
     """
     text_lower = user_text.strip().lower()
     return any(phrase in text_lower for phrase in _HUMAN_ESCALATION_PHRASES)
+
+
+_CANCELLATION_PHRASES = [
+    "changed my mind", "change my mind", "never mind", "nevermind",
+    "forget it", "forget about it", "forget this", "cancel",
+    "start over", "start again", "restart", "reset",
+    "actually no", "actually never mind", "don't want to", "dont want to",
+    "don't bother", "dont bother", "no thanks", "not anymore",
+    "stop", "quit", "exit", "go back", "nvm",
+]
+
+
+def is_cancellation_request(user_text: str) -> bool:
+    """
+    Detects when the user wants to cancel the current flow and start fresh.
+    Only meaningful when the user is mid-flow (collecting fields, etc.).
+    """
+    text_lower = user_text.strip().lower()
+    return any(phrase in text_lower for phrase in _CANCELLATION_PHRASES)
