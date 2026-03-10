@@ -103,7 +103,6 @@ export default function OperatorDashboard() {
   }, [users]);
 
   const topKpis = [
-    { label: "Containment Rate", value: chatbot?.kpis?.containmentRate     != null ? `${chatbot.kpis.containmentRate}%`          : chatbotLoading   ? "…" : "—" },
     { label: "Escalation Rate",  value: chatbot?.kpis?.escalationRate      != null ? `${chatbot.kpis.escalationRate}%`           : chatbotLoading   ? "…" : "—" },
     { label: "Avg Sentiment",    value: sentiment?.kpis?.avgSentimentScore  != null ? sentiment.kpis.avgSentimentScore.toFixed(2) : sentimentLoading  ? "…" : "—" },
     { label: "QC Acceptance",    value: qcAccept?.kpis?.acceptanceRate     != null ? `${qcAccept.kpis.acceptanceRate}%`          : qcAcceptLoading   ? "…" : "—" },
