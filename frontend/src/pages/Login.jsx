@@ -445,7 +445,6 @@ export default function Login() {
   const emailInputState = touched.email && emailError ? "error" : "";
   const passwordInputState = touched.password && passwordError ? "error" : "";
 
-  const isStaff = isStaffHost() === true || isStaffHost() === null && window.location.hostname.startsWith("staff.");
   const bgClass = isStaffHost() ? "loginBg loginBg--staff" : "loginBg loginBg--customer";
 
   return (
