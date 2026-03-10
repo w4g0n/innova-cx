@@ -3,7 +3,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
-from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression
+from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression, is_human_escalation_request
 from .llm import generate_response, llm_available
 from .logger import log_bot_response, log_user_message
 from .retriever import retrieve_context
@@ -23,9 +23,29 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
 
     is_init = user_text == "__init__"
 
-    # ── Aggression check (skip on init and early states where false positives are high) ──
+    # ── Human escalation — always check, all states, no threshold ────────────
+    if not is_init and is_human_escalation_request(user_text):
+        response = (
+            "I understand you'd like to speak with a human agent. "
+            "I'm unable to transfer you directly, but I can immediately create a ticket "
+            "or track an existing one so a team member can follow up with you. "
+            "Would you like to create a ticket or track an existing one?"
+        )
+        log_user_message(
+            session_id=session_id,
+            user_id=user_id,
+            message=user_text,
+            aggression_flag=False,
+            aggression_score=0.0,
+        )
+        append_history(session, "user", user_text)
+        _log_and_save(session, response, "escalation")
+        return _result(response, "escalation", session_id,
+                       buttons=["create_ticket", "track_ticket"])
+
+    # ── Aggression check (skip on init and greeting — only used for __init__) ──
     is_aggressive, agg_score = False, 0.0
-    if not is_init and state not in ("greeting", "await_primary_intent"):
+    if not is_init and state != "greeting":
         is_aggressive, agg_score = detect_aggression(user_text, history)
 
     # ── Log and append user message ───────────────────────────────────────────

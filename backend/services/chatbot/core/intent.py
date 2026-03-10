@@ -277,3 +277,23 @@ def detect_aggression(user_text: str, history: list) -> tuple[bool, float]:
     if 0.3 <= score <= 0.7 and llm_available():
         return _llm_detect_aggression(user_text, history)
     return is_agg, score
+
+
+_HUMAN_ESCALATION_PHRASES = [
+    "want a human", "need a human", "speak to a human", "talk to a human",
+    "speak with a human", "talk with a human", "want to speak to a human",
+    "want to talk to a human", "real person", "actual person", "live agent",
+    "human agent", "human support", "human now", "speak to someone",
+    "talk to someone", "speak to an agent", "talk to an agent",
+    "speak to a person", "talk to a person", "connect me to a human",
+    "transfer me", "escalate this", "want to escalate",
+]
+
+
+def is_human_escalation_request(user_text: str) -> bool:
+    """
+    Detects explicit requests to speak with a human agent.
+    Always runs regardless of state — never subject to aggression threshold.
+    """
+    text_lower = user_text.strip().lower()
+    return any(phrase in text_lower for phrase in _HUMAN_ESCALATION_PHRASES)
