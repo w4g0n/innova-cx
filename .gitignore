@@ -95,6 +95,10 @@ ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent_runtime/data/process
 ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent/deployment_state/*
 !ai-models/legacy/MultiAgentPipeline/FeatureEngineeringAgent/deployment_state/.gitkeep
 
+# Chatbot model files (downloaded locally, never committed)
+ai-models/chatbot/*
+!ai-models/chatbot/.gitkeep
+
 # Terraform
 terraform.tfvars
 *.tfvars

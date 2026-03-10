@@ -1,19 +1,36 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { sendChatMessage } from "../../services/api";
 
-export default function useNovaChatbot() {
+const SESSION_KEY = "chatbot_session_id";
+
+export default function useNovaChatbot({ onGoToForm, onTicketCreated } = {}) {
   const listRef = useRef(null);
   const initialMessage = () => [
     {
       id: `b-${Date.now()}`,
       from: "bot",
-      text: "Hi! I’m Nova. How can I help you today?",
+      text: "Hi! I'm Nova. How can I help you today?",
     },
   ];
 
   const [text, setText] = useState("");
   const [messages, setMessages] = useState(initialMessage);
-  const [sessionId, setSessionId] = useState(null);
+  const [sessionId, setSessionId] = useState(() => {
+    try {
+      return localStorage.getItem(SESSION_KEY) || null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (sessionId) localStorage.setItem(SESSION_KEY, sessionId);
+      else localStorage.removeItem(SESSION_KEY);
+    } catch {
+      // ignore storage errors
+    }
+  }, [sessionId]);
 
   const user = (() => {
     try {
@@ -62,7 +79,11 @@ export default function useNovaChatbot() {
     if (data?.session_id && data.session_id !== sid) {
       setSessionId(data.session_id);
     }
-    return data?.response || data?.reply || "";
+    return {
+      reply: data?.response || data?.reply || "",
+      buttons: data?.show_buttons || [],
+      responseType: data?.response_type || "",
+    };
   };
 
   const handleSend = async (value) => {
@@ -75,22 +96,33 @@ export default function useNovaChatbot() {
     const typingId = `b-${Date.now()}`;
     setMessages((prev) => [
       ...prev,
-      { id: typingId, from: "bot", text: "…" },
+      { id: typingId, from: "bot", typing: true },
     ]);
 
     try {
-      const reply = await sendToChatbot(t);
+      const { reply, buttons, responseType } = await sendToChatbot(t);
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === typingId ? { ...m, text: reply } : m
+          m.id === typingId
+            ? { ...m, typing: false, text: reply, buttons }
+            : m
         )
       );
+
+      if (responseType === "ticket_created" && onTicketCreated) {
+        const match = reply.match(/ticket ID is (CX-[A-Za-z0-9_-]+)/i);
+        onTicketCreated({ ticketId: match ? match[1] : null, replyText: reply });
+      }
+
+      if (responseType === "go_to_form" && onGoToForm) {
+        onGoToForm();
+      }
     } catch (err) {
       console.error(err);
       setMessages((prev) =>
         prev.map((m) =>
           m.id === typingId
-            ? { ...m, text: "Sorry — the chatbot service is unavailable." }
+            ? { ...m, typing: false, text: "Sorry — the chatbot service is unavailable." }
             : m
         )
       );
