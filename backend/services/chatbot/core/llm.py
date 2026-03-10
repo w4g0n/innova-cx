@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+CHATBOT_SERVICE_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_CHATBOT_MODEL_PATH = CHATBOT_SERVICE_DIR / "model"
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -18,7 +20,7 @@ QUANTIZATION = os.environ.get("CHATBOT_QUANTIZATION", "4bit").strip().lower()
 HF_TOKEN = os.environ.get("HF_TOKEN") or None
 
 CHATBOT_MODEL_PATH = os.environ.get(
-    "CHATBOT_MODEL_PATH", ""
+    "CHATBOT_MODEL_PATH", str(DEFAULT_CHATBOT_MODEL_PATH)
 ).strip()
 CHATBOT_MODEL_NAME = os.environ.get(
     "CHATBOT_MODEL_NAME", "Qwen/Qwen2.5-0.5B-Instruct"
@@ -54,7 +56,7 @@ def get_llm_diagnostics() -> dict[str, Any]:
         "chatbot_model_loaded": _model is not None and _tokenizer is not None,
         "chatbot_quantization": QUANTIZATION,
         "chatbot_max_new_tokens": MAX_NEW_TOKENS,
-        "chatbot_mode": "model" if (_model is not None and _tokenizer is not None) else "mock",
+        "chatbot_mode": "model" if (_model is not None and _tokenizer is not None) else "template",
     }
 
 

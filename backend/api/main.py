@@ -36,18 +36,6 @@ try:
 except Exception:
     from auto_assign_employee import auto_assign_ticket_if_needed
 try:
-    from api.suggested_resolution_service import (
-        generate_resolution_suggestion,
-        get_resolution_model_label,
-        retrain_resolution_examples_from_rows,
-    )
-except Exception:
-    from suggested_resolution_service import (
-        generate_resolution_suggestion,
-        get_resolution_model_label,
-        retrain_resolution_examples_from_rows,
-    )
-try:
     from api.department_routing_service import (
         build_routing_meta,
         decide_routing_review as decide_routing_review_service,
@@ -779,37 +767,24 @@ def _insert_notification(
 
 def _trigger_resolution_retraining() -> None:
     max_examples = max(1, min(int(os.getenv("SUGGESTED_RESOLUTION_RETRAIN_MAX_EXAMPLES", "12")), 50))
-    rows = fetch_all(
-        """
-        SELECT
-          trf.decision,
-          trf.suggested_resolution,
-          trf.employee_resolution,
-          trf.final_resolution,
-          trf.created_at,
-          t.ticket_code,
-          t.ticket_type,
-          t.priority,
-          t.subject,
-          t.details
-        FROM ticket_resolution_feedback trf
-        JOIN tickets t ON t.id = trf.ticket_id
-        WHERE trf.final_resolution IS NOT NULL
-          AND btrim(trf.final_resolution) <> ''
-        ORDER BY trf.created_at DESC
-        LIMIT 500;
-        """
-    )
-    try:
-        result = retrain_resolution_examples_from_rows(rows or [], max_examples=max_examples)
-        logger.info(
-            "resolution_retrain | ok examples_written=%s feedback_rows=%s path=%s",
-            result.get("examples_written"),
-            result.get("feedback_rows"),
-            result.get("path"),
-        )
-    except Exception as exc:
-        logger.warning("resolution_retrain | failed err=%s", exc)
+    payload = {"max_examples": max_examples}
+    for base in [ORCHESTRATOR_URL, ORCHESTRATOR_URL_LOCAL]:
+        try:
+            with httpx.Client(timeout=8.0) as client:
+                response = client.post(f"{base}/suggested-resolution/relearn", json=payload)
+                response.raise_for_status()
+                result = response.json() if response.content else {}
+                logger.info(
+                    "resolution_retrain | triggered via %s examples_written=%s feedback_rows=%s path=%s",
+                    base,
+                    result.get("examples_written"),
+                    result.get("feedback_rows"),
+                    result.get("path"),
+                )
+                return
+        except Exception:
+            continue
+    logger.warning("resolution_retrain | failed to trigger orchestrator relearning")
 
 
 def _trigger_priority_relearning(ticket_id: str, approved_priority: str, retrain_now: bool = False) -> None:
@@ -849,55 +824,6 @@ def _trigger_priority_relearning(ticket_id: str, approved_priority: str, retrain
         "priority_relearn | failed to trigger for ticket=%s label=%s",
         normalized_ticket_id,
         approved_priority,
-    )
-
-
-def _generate_suggestion_if_ready(ticket_code: str) -> None:
-    """
-    Generate and persist suggested resolution once ticket has both:
-      - first priority assignment timestamp
-      - assigned department
-    """
-    row = fetch_one(
-        """
-        SELECT
-          t.id,
-          t.ticket_code,
-          t.ticket_type,
-          t.subject,
-          t.details,
-          t.asset_type,
-          t.priority,
-          t.status,
-          t.priority_assigned_at,
-          t.suggested_resolution,
-          d.name AS department_name
-        FROM tickets t
-        LEFT JOIN departments d ON d.id = t.department_id
-        WHERE t.ticket_code = %s
-        LIMIT 1;
-        """,
-        (ticket_code,),
-    )
-    if not row:
-        return
-    if not row.get("priority_assigned_at") or not row.get("department_name"):
-        return
-    if str(row.get("suggested_resolution") or "").strip():
-        return
-
-    suggestion = generate_resolution_suggestion(row, logger)
-    model_label = get_resolution_model_label()
-    execute(
-        """
-        UPDATE tickets
-        SET
-          suggested_resolution = %s,
-          suggested_resolution_model = %s,
-          suggested_resolution_generated_at = now()
-        WHERE id = %s;
-        """,
-        (suggestion, model_label, row["id"]),
     )
 
 
@@ -974,12 +900,6 @@ def _apply_mock_pipeline_outcome(ticket_code: str, details: str) -> None:
                 department_id=dept_id,
                 priority="Medium",
             )
-    try:
-        _generate_suggestion_if_ready(ticket_code)
-    except Exception as exc:
-        logger.warning("suggested_resolution | fallback generation failed ticket=%s err=%s", ticket_code, exc)
-
-
 # =========================================================
 # Helpers for response/resolution time
 # =========================================================
@@ -3059,6 +2979,8 @@ class CreateTicketRequest(BaseModel):
     asset_type: str
     subject: str
     details: str
+    has_audio: Optional[bool] = False
+    audio_features: Optional[dict] = None
     attachments: Optional[List[TicketAttachment]] = []
     sentiment: Optional[dict] = None
 
@@ -3079,6 +3001,8 @@ def _dispatch_orchestrator_after_submit(
     ticket_type: Optional[str],
     subject: Optional[str],
     execution_id: Optional[str],
+    has_audio: bool = False,
+    audio_features: Optional[dict] = None,
 ) -> None:
     ok = dispatch_ticket_to_orchestrator(
         ticket_code=ticket_code,
@@ -3088,6 +3012,8 @@ def _dispatch_orchestrator_after_submit(
         ticket_type=ticket_type,
         subject=subject,
         execution_id=execution_id,
+        has_audio=has_audio,
+        audio_features=audio_features,
     )
     if not ok:
         logger.warning("orchestrator_dispatch | failed for ticket=%s", ticket_code)
@@ -3241,6 +3167,8 @@ def create_customer_ticket(
         ticket_type=body.type,
         subject=body.subject,
         execution_id=execution_id,
+        has_audio=bool(body.has_audio),
+        audio_features=body.audio_features if isinstance(body.audio_features, dict) else None,
     )
     logger.info("orchestrator_dispatch | queued for ticket=%s", ticket_code)
     log_application_event(
@@ -4516,7 +4444,17 @@ def get_routing_review_item(
         LEFT JOIN user_profiles up ON up.user_id = dr.manager_id
         WHERE dr.id::text = %s
           AND dr.is_confident = FALSE
-          AND LOWER(dr.suggested_department) = LOWER(%s)
+          AND (
+            LOWER(dr.suggested_department) = LOWER(%s)
+            OR NOT EXISTS (
+              SELECT 1
+              FROM users u2
+              JOIN user_profiles up2 ON up2.user_id = u2.id
+              JOIN departments d2 ON d2.id = up2.department_id
+              WHERE u2.role = 'manager'
+                AND LOWER(d2.name) = LOWER(dr.suggested_department)
+            )
+          )
         LIMIT 1
         """,
         (review_id, manager_department_name),
@@ -4666,6 +4604,8 @@ class OrchestratorComplaintRequest(BaseModel):
     classification_confidence: Optional[float] = None
     created_by_user_id: Optional[str] = None
     ticket_source: Optional[str] = None
+    suggested_resolution: Optional[str] = None
+    suggested_resolution_model: Optional[str] = None
 
 
 class ChatbotProxyRequest(BaseModel):
@@ -4823,7 +4763,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             )
             existing = cur.fetchone()
             if existing:
-                    had_priority_before = existing[1] is not None
                     existing_department_id = existing[2]
                     previous_status = existing[3]
                     previous_priority = existing[4]
@@ -4858,6 +4797,12 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                           model_priority = COALESCE(%s, model_priority),
                           model_department_id = COALESCE(%s, model_department_id),
                           model_confidence = COALESCE(%s, model_confidence),
+                          suggested_resolution = COALESCE(%s, suggested_resolution),
+                          suggested_resolution_model = COALESCE(%s, suggested_resolution_model),
+                          suggested_resolution_generated_at = CASE
+                            WHEN %s IS NOT NULL THEN now()
+                            ELSE suggested_resolution_generated_at
+                          END,
                           priority_assigned_at = COALESCE(%s, priority_assigned_at)
                         WHERE ticket_code = %s
                         RETURNING ticket_code, status, priority, asset_type, priority_assigned_at, respond_due_at, resolve_due_at, department_id;
@@ -4875,6 +4820,9 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                             priority_label,
                             effective_department_id,
                             routing_confidence_raw,
+                            (body.suggested_resolution or "").strip() or None,
+                            (body.suggested_resolution_model or "").strip() or None,
+                            (body.suggested_resolution or "").strip() or None,
                             now_utc,
                             incoming_ticket_code,
                         ),
@@ -4993,16 +4941,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                             updated[2],
                         )
                     
-                    if (not had_priority_before) and updated[4]:
-                        try:
-                            _generate_suggestion_if_ready(updated[0])
-                        except Exception as exc:
-                            logger.warning(
-                                "suggested_resolution | generation failed at first priority assignment ticket=%s err=%s",
-                                updated[0],
-                                exc,
-                            )
-
                     queued_for_review = False
                     if has_routing_decision and existing:
                         ticket_uuid = str(existing[0])
@@ -5108,16 +5046,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         logger=logger,
                     )
 
-            if created.get("ticket_code"):
-                try:
-                    _generate_suggestion_if_ready(created["ticket_code"])
-                except Exception as exc:
-                    logger.warning(
-                        "suggested_resolution | generation failed at create ticket=%s err=%s",
-                        created.get("ticket_code"),
-                        exc,
-                    )
-
             return {
                 "ticket_id": created.get("ticket_code"),
                 "status": created.get("status"),
@@ -5140,8 +5068,8 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
 @api.post("/internal/tickets/{ticket_code}/generate-suggested-resolution")
 def internal_generate_suggested_resolution(ticket_code: str):
     """
-    Trigger suggested-resolution generation for a ticket code and return
-    the latest stored suggestion. Used by orchestrator pipeline step.
+    Return the latest stored suggestion for a ticket code.
+    Suggested resolution generation is owned by the orchestrator pipeline.
     """
     row = fetch_one(
         """
@@ -5168,11 +5096,6 @@ def internal_generate_suggested_resolution(ticket_code: str):
     if not row:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
-    try:
-        _generate_suggestion_if_ready(ticket_code)
-    except Exception as exc:
-        logger.warning("suggested_resolution | pipeline trigger failed ticket=%s err=%s", ticket_code, exc)
-
     refreshed = fetch_one(
         """
         SELECT suggested_resolution, suggested_resolution_model
@@ -5183,23 +5106,9 @@ def internal_generate_suggested_resolution(ticket_code: str):
         (ticket_code,),
     ) or {}
     suggestion = str(refreshed.get("suggested_resolution") or "").strip()
-    model_name = str(refreshed.get("suggested_resolution_model") or "mock_template").strip() or "mock_template"
-
-    # Fallback: force-generate even if priority/department guard wasn't met.
     if not suggestion:
-        suggestion = generate_resolution_suggestion(row, logger)
-        model_name = get_resolution_model_label()
-        execute(
-            """
-            UPDATE tickets
-            SET
-              suggested_resolution = %s,
-              suggested_resolution_model = %s,
-              suggested_resolution_generated_at = now()
-            WHERE ticket_code = %s;
-            """,
-            (suggestion, model_name, ticket_code),
-        )
+        raise HTTPException(status_code=409, detail="Suggested resolution is owned by orchestrator pipeline and is not available yet")
+    model_name = str(refreshed.get("suggested_resolution_model") or "orchestrator").strip() or "orchestrator"
 
     return {
         "ticketId": ticket_code,

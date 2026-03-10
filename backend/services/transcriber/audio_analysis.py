@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import librosa
@@ -9,7 +10,16 @@ from faster_whisper import WhisperModel
 
 DEFAULT_SAMPLE_RATE = 16000
 DEFAULT_VAD_AGGRESSIVENESS = 2
-WHISPER_MODEL_NAME = "base"
+TRANSCRIBER_DIR = Path(__file__).resolve().parent
+DEFAULT_WHISPER_MODEL_NAME = "base"
+DEFAULT_WHISPER_MODEL_PATH = TRANSCRIBER_DIR / "model"
+
+
+def resolve_whisper_model() -> str:
+    configured_path = os.environ.get("WHISPER_MODEL_PATH", str(DEFAULT_WHISPER_MODEL_PATH)).strip()
+    if configured_path and Path(configured_path).exists():
+        return configured_path
+    return os.environ.get("WHISPER_MODEL_NAME", DEFAULT_WHISPER_MODEL_NAME).strip() or DEFAULT_WHISPER_MODEL_NAME
 
 
 class AudioAnalysisPipeline:
@@ -33,7 +43,7 @@ class AudioAnalysisPipeline:
 
         self._log("Loading Whisper model (this may take a moment)...")
         self.whisper_model = WhisperModel(
-            WHISPER_MODEL_NAME,
+            resolve_whisper_model(),
             device="cpu",
             compute_type="int8",
         )

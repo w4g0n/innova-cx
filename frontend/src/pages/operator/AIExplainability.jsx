@@ -158,9 +158,12 @@ function normalizeStageIO(stage, ticket) {
   }
 
   if (stageName === "SentimentAgent") {
+    const score = Number(outputState.text_sentiment ?? 0);
     return {
       input: ticketDetailsInput,
-      output: { text_sentiment: outputState.text_sentiment ?? 0 },
+      output: {
+        text_sentiment: Number.isFinite(score) ? Number(score.toFixed(3)) : 0,
+      },
     };
   }
 
@@ -215,9 +218,15 @@ function normalizeStageIO(stage, ticket) {
       input: ticketDetailsInput,
       output: {
         is_recurring: asBool(overrides.is_recurring ?? outputState.is_recurring, false),
-        similar_ticket_code: overrides.similar_ticket_code || linkedCode,
-        similar_ticket_subject: linkedSubject,
-        similarity_score: linkedScore,
+        similar_ticket_code: asBool(overrides.is_recurring ?? outputState.is_recurring, false)
+          ? (overrides.similar_ticket_code || linkedCode)
+          : null,
+        similar_ticket_subject: asBool(overrides.is_recurring ?? outputState.is_recurring, false)
+          ? linkedSubject
+          : null,
+        similarity_score: asBool(overrides.is_recurring ?? outputState.is_recurring, false)
+          ? linkedScore
+          : null,
         recurrence_reason: unwrapValue(outputState.recurrence_reason) || "",
       },
     };
@@ -231,7 +240,6 @@ function normalizeStageIO(stage, ticket) {
         issue_severity: asLevel(overrides.issue_severity ?? outputState.issue_severity, "medium"),
         issue_urgency: asLevel(overrides.issue_urgency ?? outputState.issue_urgency, "medium"),
         safety_concern: asBool(overrides.safety_concern ?? outputState.safety_concern, false),
-        is_recurring: asBool(overrides.is_recurring ?? outputState.is_recurring, false),
       },
     };
   }
@@ -390,13 +398,13 @@ function inferStageMode(stage) {
 
   const stageSpecific = {
     SubjectGenerationAgent: read("subject_generation_mode"),
-    SuggestedResolutionAgent: read("suggested_resolution_model"),
+    SuggestedResolutionAgent: read("suggested_resolution_mode", "suggested_resolution_model"),
     ClassificationAgent: read("classification_source"),
     SentimentAgent: read("sentiment_mode"),
     AudioAnalysisAgent: read("audio_analysis_mode"),
     SentimentCombinerAgent: read("sentiment_combiner_source", "sentiment_combiner_mode"),
     RecurrenceAgent: read("is_recurring_source"),
-    FeatureEngineeringAgent: read("feature_labels_source"),
+    FeatureEngineeringAgent: read("feature_labeler_mode", "feature_labels_source"),
     PrioritizationAgent: read("priority_mode"),
     DepartmentRoutingAgent: read("department_routing_source"),
   };
@@ -409,6 +417,7 @@ function inferStageMode(stage) {
     "classification_source",
     "priority_mode",
     "feature_labels_source",
+    "feature_labeler_mode",
     "department_routing_source",
     "subject_generation_mode",
     "sentiment_mode",
@@ -416,12 +425,14 @@ function inferStageMode(stage) {
   );
 
   if (!hint) return "Mock";
+  if (hint.includes("deterministic")) {
+    return "Deterministic";
+  }
   if (
     hint.includes("mock") ||
     hint.includes("heuristic") ||
     hint.includes("fallback") ||
     hint.includes("rule") ||
-    hint.includes("deterministic") ||
     hint.includes("text_only")
   ) {
     return "Mock";
@@ -431,7 +442,8 @@ function inferStageMode(stage) {
     hint.includes("ml") ||
     hint.includes("neural") ||
     hint.includes("transformer") ||
-    hint.includes("bert")
+    hint.includes("bert") ||
+    hint.includes("nli")
   ) {
     return "Real";
   }

@@ -186,6 +186,8 @@ export async function submitTextComplaint(text, options = {}) {
  *   details: string,
  *   subject?: string,
  *   asset_type?: string,
+ *   has_audio?: boolean,
+ *   audio_features?: object|null,
  *   attachments?: Array<{name: string, type?: string, size?: number, lastModified?: number}>
  * }} payload
  * @returns {Promise<{ok: boolean, message?: string, ticket?: {ticketId?: string}}>}
@@ -208,6 +210,8 @@ export async function submitCustomerTicket(payload = {}) {
     asset_type: String(payload.asset_type || "General"),
     subject: String(payload.subject ?? ""),
     details,
+    has_audio: Boolean(payload.has_audio),
+    audio_features: payload.audio_features || null,
     attachments: Array.isArray(payload.attachments) ? payload.attachments : [],
   };
 
