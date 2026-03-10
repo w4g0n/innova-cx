@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import "./Sidebar.css";
 import logo from "../assets/nova-logo.png";
 import ConfirmDialog from "./common/ConfirmDialog";
-import { clearAllAuth } from "../utils/auth";
 
 /* SVG icon set */
 const Icon = {
@@ -143,7 +142,7 @@ const menus = {
   ],
 };
 
-export default function Sidebar({ role }) {
+export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, pendingRrq = 0 }) {
   const navigate = useNavigate();
 
   /* Pinned = stays open without hover */
@@ -169,13 +168,24 @@ export default function Sidebar({ role }) {
 
   const menu = menus[role] || [];
 
+  const badges = {
+    "/manager/notifications":  unreadCount,
+    "/employee/notifications":  unreadCount,
+    "/customer/notifications":  unreadCount,
+    "/operator/notifications":  unreadCount,
+    "/manager/approvals":       pendingApprovals,
+  };
+
+  // RRQ gets its own purple badge alongside the approvals red badge
+  const rrqBadge = pendingRrq > 0 ? (pendingRrq > 99 ? "99+" : pendingRrq) : null;
+
   /* Open logout confirmation */
   const handleLogout = () => setLogoutOpen(true);
 
   /* Actually perform the logout */
   const doLogout = () => {
-    clearAllAuth();
-    navigate("/login");
+    localStorage.removeItem("user");
+    navigate("/");
   };
 
   return (
@@ -208,6 +218,16 @@ export default function Sidebar({ role }) {
                 {Icon[item.icon]}
               </span>
               <span className="sidebar__label">{item.label}</span>
+              {badges[item.to] > 0 && (
+                <span className="sidebar__badge">
+                  {badges[item.to] > 99 ? "99+" : badges[item.to]}
+                </span>
+              )}
+              {item.to === "/manager/approvals" && rrqBadge && (
+                <span className="sidebar__badge sidebar__badge--rrq" title="Pending AI routing reviews">
+                  {rrqBadge}
+                </span>
+              )}
             </div>
           </NavLink>
         ))}

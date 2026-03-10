@@ -66,6 +66,7 @@ function StatusBadge({ status }) {
     Pending:    { cls: "rrd-badge--pending",    icon: "●", label: "Pending" },
     Approved:   { cls: "rrd-badge--confirmed",  icon: "✓", label: "Confirmed" },
     Overridden: { cls: "rrd-badge--overridden", icon: "↺", label: "Overridden" },
+    Denied:     { cls: "rrd-badge--denied",     icon: "✕", label: "Denied" },
   }[status] || { cls: "rrd-badge--pending", icon: "●", label: status };
   return <span className={`rrd-badge ${cfg.cls}`}>{cfg.icon} {cfg.label}</span>;
 }
@@ -121,8 +122,9 @@ export default function RoutingReviewDetails() {
   const [departments, setDepts] = useState([]);
   const [flashClass, setFlash]  = useState("");
   const [toast, setToast]       = useState({ show: false, message: "", type: "success" });
-  const [confirm, setConfirm]   = useState({ open: false, decision: null });
+  const [confirm, setConfirm]       = useState({ open: false, decision: null });
   const closeConfirm = () => setConfirm({ open: false, decision: null });
+  const [overrideOpen, setOverrideOpen] = useState(false);
 
   const token   = getAuthToken();
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
@@ -136,15 +138,24 @@ export default function RoutingReviewDetails() {
     if (!token) { navigate("/login"); return; }
     setLoading(true);
 
+    const DEPT_FALLBACK = [
+      'Facilities Management', 'Legal & Compliance', 'Safety & Security',
+      'HR', 'Leasing', 'Maintenance', 'IT'
+    ];
+
     Promise.all([
       fetch(apiUrl(`/api/manager/routing-review?status_filter=All`), { headers }).then((r) => r.json()),
-      fetch(apiUrl("/api/manager/departments"), { headers }).then((r) => r.json()).catch(() => []),
+      // Try both common endpoint paths; fall back to hardcoded list if both fail
+      fetch(apiUrl("/api/manager/departments"), { headers })
+        .then((r) => r.ok ? r.json() : fetch(apiUrl("/manager/departments"), { headers }).then((r2) => r2.json()))
+        .catch(() => DEPT_FALLBACK),
     ])
       .then(([data, depts]) => {
         const found = (data.items || []).find((i) => i.reviewId === reviewId);
         if (!found) { setError("Routing review item not found."); return; }
         setItem(found);
-        setDepts(Array.isArray(depts) ? depts : []);
+        const deptList = Array.isArray(depts) && depts.length > 0 ? depts : DEPT_FALLBACK;
+        setDepts(deptList);
 
         // Fetch linked ticket for subject/details/keywords
         if (found.ticketCode) {
@@ -159,13 +170,17 @@ export default function RoutingReviewDetails() {
   }, [reviewId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const triggerFlash = (decision) => {
-    setFlash(decision === "Approved" ? "rrd-flash--confirm" : "rrd-flash--override");
+    const cls = decision === "Approved" ? "rrd-flash--confirm"
+              : decision === "Denied"   ? "rrd-flash--override"
+              :                          "rrd-flash--override";
+    setFlash(cls);
     setTimeout(() => setFlash(""), 900);
   };
 
-  const decide = async (decision) => {
+  const decide = async (decision, explicitDept) => {
     if (!token) { navigate("/login"); return; }
-    if (decision === "Overridden" && !selDept) {
+    const dept = explicitDept || selDept;
+    if (decision === "Overridden" && !dept) {
       showToast("Please select a department to override to.", "error");
       return;
     }
@@ -179,7 +194,10 @@ export default function RoutingReviewDetails() {
         headers,
         body: JSON.stringify({
           decision,
-          approved_department: decision === "Overridden" ? selDept : item.predictedDepartment,
+          // For Denied, send no approved_department (ticket keeps current dept)
+          approved_department: decision === "Overridden" ? dept
+                             : decision === "Approved"   ? item.predictedDepartment
+                             : undefined,
         }),
       });
       if (!res.ok) {
@@ -189,13 +207,15 @@ export default function RoutingReviewDetails() {
       setItem((prev) => ({
         ...prev,
         status:             decision,
-        approvedDepartment: decision === "Overridden" ? selDept : prev.predictedDepartment,
+        approvedDepartment: decision === "Overridden" ? dept
+                          : decision === "Approved"   ? prev.predictedDepartment
+                          : null,
       }));
       showToast(
-        decision === "Approved"
-          ? `✓ AI routing confirmed → ${item.predictedDepartment}`
-          : `↺ Routing overridden → ${selDept}`,
-        "success"
+        decision === "Approved"   ? `✓ AI routing confirmed → ${item.predictedDepartment}`
+        : decision === "Denied"   ? "✕ Routing suggestion denied. Ticket keeps its current department."
+        :                           `↺ Routing overridden → ${dept}`,
+        decision === "Denied" ? "error" : "success"
       );
     } catch (e) {
       showToast(e.message || "Failed to save decision.", "error");
@@ -239,7 +259,7 @@ export default function RoutingReviewDetails() {
 
   return (
     <Layout role="manager">
-      <div className="rrd-page">
+      <div className="rrd-page" onClick={() => setOverrideOpen(false)}>
 
         {/* Back */}
         <div className="rrd-topBar">
@@ -256,7 +276,9 @@ export default function RoutingReviewDetails() {
 
           <div className="rrd-heroContent">
             <div className="rrd-heroLeft">
-              <div className="rrd-heroIcon">🧭</div>
+              <div className="rrd-heroIcon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+              </div>
               <div>
                 <div className="rrd-heroSub">Routing Review</div>
                 <h1 className="rrd-heroTitle">{item.ticketCode}</h1>
@@ -293,24 +315,47 @@ export default function RoutingReviewDetails() {
 
               {isPending && (
                 <div className="rrd-heroActions">
-                  {/* Override department picker */}
-                  <select
-                    className="rrd-deptSelect"
-                    value={selDept}
-                    onChange={(e) => setSelDept(e.target.value)}
-                  >
-                    <option value="">Override to dept…</option>
-                    {departments.filter((d) => d !== item.predictedDepartment).map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
+                  {/* Override — popup menu */}
+                  <div className="rrd-overrideWrap">
+                    <button
+                      className="rrd-btnOverride"
+                      type="button"
+                      disabled={deciding}
+                      onClick={(e) => { e.stopPropagation(); setOverrideOpen((o) => !o); }}
+                    >
+                      ↺ Override
+                    </button>
+                    {overrideOpen && (
+                      <div className="rrd-overrideMenu" onClick={(e) => e.stopPropagation()}>
+                        <div className="rrd-overrideMenuTitle">Override to department</div>
+                        {departments.map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            className="rrd-overrideMenuItem"
+                            onClick={() => {
+                              setSelDept(d);
+                              setOverrideOpen(false);
+                              setConfirm({ open: true, decision: "Overridden", overrideDept: d });
+                            }}
+                          >
+                            <span className="rrd-overrideMenuDot" />{d}
+                            {d === item.predictedDepartment && (
+                              <span className="rrd-overrideMenuAiBadge">AI pick</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* FIX (Issue 4): Deny button — rejects the AI routing suggestion */}
                   <button
-                    className="rrd-btnOverride"
+                    className="rrd-btnDeny"
                     type="button"
-                    disabled={deciding || !selDept}
-                    onClick={() => setConfirm({ open: true, decision: "Overridden" })}
+                    disabled={deciding}
+                    onClick={() => setConfirm({ open: true, decision: "Denied" })}
                   >
-                    {deciding ? "…" : "↺ Override"}
+                    {deciding ? "…" : "✕ Deny"}
                   </button>
                   <button
                     className="rrd-btnConfirm"
@@ -323,9 +368,13 @@ export default function RoutingReviewDetails() {
                 </div>
               )}
 
-              {!isPending && finalDept && (
-                <div className="rrd-resolvedBanner">
-                  {item.status === "Approved" ? "✓ Confirmed →" : "↺ Overridden →"} <strong>{finalDept}</strong>
+              {/* Show resolved/denied banner when not pending */}
+              {!isPending && (finalDept || item?.status === "Denied") && (
+                <div className={`rrd-resolvedBanner${item.status === "Denied" ? " rrd-resolvedBanner--denied" : ""}`}>
+                  {item.status === "Approved"   ? "✓ Confirmed →"
+                   : item.status === "Denied"   ? "✕ Denied — ticket keeps current department"
+                   :                              "↺ Overridden →"}{" "}
+                  {finalDept && <strong>{finalDept}</strong>}
                   {item.decidedBy && <span style={{ opacity: 0.7 }}> by {item.decidedBy}</span>}
                 </div>
               )}
@@ -342,7 +391,9 @@ export default function RoutingReviewDetails() {
             {/* Confidence card */}
             <div className="rrd-card">
               <div className="rrd-cardHeader">
-                <span className="rrd-cardHeaderIcon">📊</span>
+                <span className="rrd-cardHeaderIcon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                </span>
                 <h2 className="rrd-cardTitle">Model Confidence Analysis</h2>
               </div>
               <div className="rrd-confidenceBody">
@@ -380,7 +431,9 @@ export default function RoutingReviewDetails() {
             {/* Model reasoning */}
             <div className="rrd-card">
               <div className="rrd-cardHeader">
-                <span className="rrd-cardHeaderIcon">🤖</span>
+                <span className="rrd-cardHeaderIcon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 3.5-2.5 5.5-3 8H8c-.5-2.5-3-4.5-3-8a7 7 0 0 1 7-7z"/><line x1="9" y1="21" x2="15" y2="21"/><line x1="10" y1="17" x2="14" y2="17"/></svg>
+                </span>
                 <h2 className="rrd-cardTitle">Why the Model Chose This Department</h2>
               </div>
 
@@ -425,11 +478,71 @@ export default function RoutingReviewDetails() {
               )}
             </div>
 
+            {/* Timeline — horizontal stepper */}
+            <div className="rrd-card">
+              <div className="rrd-cardHeader">
+                <span className="rrd-cardHeaderIcon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </span>
+                <h2 className="rrd-cardTitle">Timeline</h2>
+              </div>
+              <div className="rrd-stepper">
+                {[
+                  {
+                    color: "#7c3aed",
+                    title: "Review Created",
+                    sub: createdAt?.toLocaleString() || "—",
+                    done: true,
+                  },
+                  {
+                    color: "#fbbf24",
+                    title: "AI Routed",
+                    sub: `→ ${item.predictedDepartment}`,
+                    done: true,
+                  },
+                  {
+                    color: "#f97316",
+                    title: "Low Confidence",
+                    sub: `${confidence.toFixed(1)}% · below 75%`,
+                    done: true,
+                  },
+                  {
+                    color: "#60a5fa",
+                    title: "Sent for Review",
+                    sub: "Flagged to manager",
+                    done: true,
+                  },
+                  item.status === "Approved"
+                    ? { color: "#34d399", title: "Routing Confirmed", sub: `${item.decidedBy || "Manager"} · ${decidedAt?.toLocaleString() || "—"}`, done: true }
+                    : item.status === "Overridden"
+                    ? { color: "#818cf8", title: "Routing Overridden", sub: `→ ${item.approvedDepartment}`, done: true }
+                    : { color: "#d97706", title: "Awaiting Decision", sub: "Pending manager review", done: false, pending: true },
+                ].map((step, i) => (
+                  <div key={i} className="rrd-stepItem">
+                    {/* connector line before (skip first) */}
+                    {i > 0 && <div className={`rrd-stepLine ${step.done ? "rrd-stepLine--done" : "rrd-stepLine--pending"}`} />}
+                    <div className="rrd-stepDotWrap">
+                      <div
+                        className={`rrd-stepDot ${step.pending ? "rrd-stepDot--pending" : ""}`}
+                        style={step.pending ? {} : { background: step.color, boxShadow: `0 0 0 3px ${step.color}28` }}
+                      />
+                    </div>
+                    <div className="rrd-stepLabel">
+                      <div className="rrd-stepTitle" style={{ color: step.done && !step.pending ? step.color : undefined }}>{step.title}</div>
+                      <div className="rrd-stepSub">{step.sub}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Ticket details */}
             {ticket?.details && (
               <div className="rrd-card">
                 <div className="rrd-cardHeader">
-                  <span className="rrd-cardHeaderIcon">📋</span>
+                  <span className="rrd-cardHeaderIcon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  </span>
                   <h2 className="rrd-cardTitle">Ticket Content</h2>
                 </div>
                 <p className="rrd-ticketDetails">{ticket.details}</p>
@@ -440,7 +553,9 @@ export default function RoutingReviewDetails() {
             {item.decisionNotes && (
               <div className="rrd-card">
                 <div className="rrd-cardHeader">
-                  <span className="rrd-cardHeaderIcon">📝</span>
+                  <span className="rrd-cardHeaderIcon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </span>
                   <h2 className="rrd-cardTitle">Decision Notes</h2>
                 </div>
                 <p className="rrd-ticketDetails">{item.decisionNotes}</p>
@@ -451,19 +566,25 @@ export default function RoutingReviewDetails() {
           {/* RIGHT ─ ticket info + timeline */}
           <div className="rrd-rightCol">
 
-            {/* Linked ticket */}
-            {ticket && (
+            {/* Linked ticket — always show when we have a ticketCode */}
+            {item.ticketCode && (
               <div className="rrd-sideCard">
                 <h3 className="rrd-sideCardTitle">Linked Ticket</h3>
                 <div className="rrd-ticketSnippetCode">{item.ticketCode}</div>
-                <div className="rrd-ticketSnippetSubject">{ticket.subject || "—"}</div>
+                <div className="rrd-ticketSnippetSubject">
+                  {ticket?.subject || item.subject || item.ticketCode}
+                </div>
                 <div className="rrd-ticketSnippetMeta">
-                  <span className={`rrd-priorityDot rrd-priorityDot--${(ticket.priority || "").toLowerCase()}`} />
-                  <span>{ticket.priority || "—"}</span>
+                  {(ticket?.priority || item.priority) && (
+                    <span className={`rrd-priorityDot rrd-priorityDot--${((ticket?.priority || item.priority) || "").toLowerCase()}`} />
+                  )}
+                  {(ticket?.priority || item.priority) && (
+                    <span>{ticket?.priority || item.priority}</span>
+                  )}
+                  {(ticket?.priority || item.priority) && <span className="rrd-dot">·</span>}
+                  <span>{ticket?.status || item.status || "Pending"}</span>
                   <span className="rrd-dot">·</span>
-                  <span>{ticket.status || "—"}</span>
-                  <span className="rrd-dot">·</span>
-                  <span>{ticket.department || item.currentDepartment || "—"}</span>
+                  <span>{ticket?.department || item.currentDepartment || item.predictedDepartment || "—"}</span>
                 </div>
                 <button
                   className="rrd-viewTicketBtn"
@@ -501,7 +622,6 @@ export default function RoutingReviewDetails() {
               <h3 className="rrd-sideCardTitle">Details</h3>
               <div className="rrd-detailGrid">
                 {[
-                  { label: "Review ID",   val: reviewId?.slice(0, 8) + "…" },
                   { label: "Ticket",      val: item.ticketCode },
                   { label: "Submitted",   val: createdAt?.toLocaleString() || "—" },
                   { label: "Decided At",  val: decidedAt?.toLocaleString() || "—" },
@@ -516,53 +636,6 @@ export default function RoutingReviewDetails() {
               </div>
             </div>
 
-            {/* Timeline */}
-            <div className="rrd-sideCard">
-              <h3 className="rrd-sideCardTitle">Timeline</h3>
-              <div className="rrd-timeline">
-                <div className="rrd-tlItem">
-                  <div className="rrd-tlDot rrd-tlDot--purple" />
-                  <div>
-                    <div className="rrd-tlTitle">Routing review created</div>
-                    <div className="rrd-tlDate">{createdAt?.toLocaleString() || "—"}</div>
-                  </div>
-                </div>
-                <div className="rrd-tlItem">
-                  <div className="rrd-tlDot rrd-tlDot--yellow" />
-                  <div>
-                    <div className="rrd-tlTitle">AI routed → {item.predictedDepartment}</div>
-                    <div className="rrd-tlDate">Confidence: {confidence.toFixed(1)}% (below 75% threshold)</div>
-                  </div>
-                </div>
-                {item.status === "Approved" && (
-                  <div className="rrd-tlItem">
-                    <div className="rrd-tlDot rrd-tlDot--green" />
-                    <div>
-                      <div className="rrd-tlTitle">Routing confirmed by {item.decidedBy || "manager"}</div>
-                      <div className="rrd-tlDate">{decidedAt?.toLocaleString() || "—"}</div>
-                    </div>
-                  </div>
-                )}
-                {item.status === "Overridden" && (
-                  <div className="rrd-tlItem">
-                    <div className="rrd-tlDot rrd-tlDot--indigo" />
-                    <div>
-                      <div className="rrd-tlTitle">Overridden → {item.approvedDepartment} by {item.decidedBy || "manager"}</div>
-                      <div className="rrd-tlDate">{decidedAt?.toLocaleString() || "—"}</div>
-                    </div>
-                  </div>
-                )}
-                {isPending && (
-                  <div className="rrd-tlItem rrd-tlItem--pending">
-                    <div className="rrd-tlDot rrd-tlDot--pending" />
-                    <div>
-                      <div className="rrd-tlTitle">Awaiting manager review</div>
-                      <div className="rrd-tlDate">Pending</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -577,18 +650,29 @@ export default function RoutingReviewDetails() {
 
       <ConfirmDialog
         open={confirm.open}
-        title={confirm.decision === "Approved" ? "Confirm AI Routing" : "Override Routing"}
+        title={
+          confirm.decision === "Approved"   ? "Confirm AI Routing"
+          : confirm.decision === "Denied"   ? "Deny Routing Suggestion"
+          :                                   "Override Routing"
+        }
         message={
           confirm.decision === "Approved"
             ? `Confirm that this ticket should stay routed to "${item.predictedDepartment}"?`
-            : `Override AI routing and assign this ticket to "${selDept}"?`
+            : confirm.decision === "Denied"
+            ? `Deny this routing suggestion? The ticket will keep its current department assignment.`
+            : `Override AI routing and assign this ticket to "${confirm.overrideDept || selDept}"?`
         }
         variant={confirm.decision === "Approved" ? "success" : "danger"}
-        confirmLabel={confirm.decision === "Approved" ? "Yes, Confirm" : "Yes, Override"}
+        confirmLabel={
+          confirm.decision === "Approved" ? "Yes, Confirm"
+          : confirm.decision === "Denied" ? "Yes, Deny"
+          :                                 "Yes, Override"
+        }
         onConfirm={() => {
           const d = confirm.decision;
+          const dept = confirm.overrideDept || selDept;
           closeConfirm();
-          decide(d);
+          decide(d, dept);
         }}
         onCancel={closeConfirm}
       />

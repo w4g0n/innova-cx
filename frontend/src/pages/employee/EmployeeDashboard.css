@@ -1,13 +1,14 @@
 .empDash {
   width: 100%;
   max-width: none;
-  font-size: 18px;
+  font-size: 14px;
 }
 
 .empDash__header {
   margin-bottom: 22px;
 }
 
+/* Page title — matches Manager PageHeader pattern */
 .empDash__title {
   font-size: 38px;
   margin: 0;
@@ -16,20 +17,22 @@
   letter-spacing: 0.2px;
 }
 
+/* Subtitle — matches Manager managerIntro (14px / 0.60 opacity) */
 .empDash__subtitle {
   margin-top: 10px;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 500;
-  color: rgba(17, 17, 17, 0.7);
+  color: rgba(17, 17, 17, 0.60);
   line-height: 1.5;
 }
 
+/* KPI row — gap matches Manager managerKpiRow (16px) */
 .empDash__kpis {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 22px;
+  gap: 16px;
   margin-top: 16px;
-  margin-bottom: 22px;
+  margin-bottom: 24px;
 }
 
 @media (max-width: 1200px) {
@@ -43,6 +46,7 @@
   }
 }
 
+/* KPI card — aligns with shared KpiCard component */
 .empKpi {
   background: #fff;
   border-radius: 18px;
@@ -61,11 +65,12 @@
 .empKpi__label {
   display: block;
   margin-top: 10px;
-  font-size: 15px;
+  font-size: 13px;
   color: rgba(17, 17, 17, 0.65);
-  font-weight: 750;
+  font-weight: 700;
 }
 
+/* Content grid */
 .empDash__grid {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -78,27 +83,30 @@
   }
 }
 
+/* Content cards — border-radius 22px, padding 22px, shadow to match Manager */
 .empCard {
   background: #fff;
-  border-radius: 16px;
-  padding: 24px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+  border-radius: 22px;
+  padding: 22px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  box-shadow: 0px 12px 30px rgba(0, 0, 0, 0.06);
 }
 
+/* Card title — matches Manager managerBubbleTitle (18px / 700) */
 .empCard__title {
-  font-size: 22px;
+  font-size: 18px;
   margin: 0;
-  font-weight: 750;
-  color: var(--text-dark);
+  font-weight: 700;
+  color: var(--btn-primary);
 }
 
+/* Card subtitle — matches Manager managerBubbleMetric (14px) */
 .empCard__subtitle {
   margin-top: 10px;
   margin-bottom: 18px;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 500;
-  color: rgba(17, 17, 17, 0.7);
+  color: rgba(17, 17, 17, 0.65);
   line-height: 1.5;
 }
 
@@ -106,16 +114,18 @@
   margin-top: 18px;
 }
 
+/* Inner table wrapper */
 .empTableWrap {
   overflow: auto;
   border-radius: 14px;
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
+/* Table — font-size matches Manager ve-table (14px) */
 .empTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: 16px;
+  font-size: 14px;
   background: #fff;
 }
 
@@ -126,20 +136,22 @@
   white-space: nowrap;
 }
 
+/* Table header — matches Manager ve-table thead (11px / 700 / uppercase) */
 .empTable th {
-  font-size: 13px;
-  font-weight: 750;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(17, 17, 17, 0.55);
+  color: #9ca3af;
   background: rgba(0, 0, 0, 0.02);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid #f3e8ff;
 }
 
 .empTable tbody tr:nth-child(even) {
   background: rgba(64, 28, 81, 0.04);
 }
 
+/* Reports sidebar */
 .empReports {
   display: flex;
   flex-direction: column;
@@ -154,23 +166,23 @@
 }
 
 .empReportCard__month {
-  font-size: 16px;
-  font-weight: 850;
+  font-size: 14px;
+  font-weight: 800;
   color: var(--btn-primary);
 }
 
 .empReportCard__desc {
   margin-top: 8px;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 500;
-  color: rgba(17, 17, 17, 0.7);
+  color: rgba(17, 17, 17, 0.65);
 }
 
 .empReportCard__link {
   display: inline-block;
   margin-top: 12px;
-  font-size: 15px;
-  font-weight: 750;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--btn-primary);
   text-decoration: none;
 }
@@ -179,17 +191,18 @@
   text-decoration: underline;
 }
 
+/* Link button — matches Manager managerBubbleLink (13px / 700) */
 .empLinkBtn {
   display: inline-flex;
   align-items: center;
-  padding: 14px 18px;
+  padding: 10px 16px;
   border-radius: 999px;
   border: 1px solid rgba(89, 36, 180, 0.18);
   background: rgba(89, 36, 180, 0.08);
   color: var(--btn-primary);
-  font-weight: 750;
+  font-weight: 700;
   text-decoration: none;
-  font-size: 16px;
+  font-size: 13px;
 }
 
 .empLinkBtn:hover {

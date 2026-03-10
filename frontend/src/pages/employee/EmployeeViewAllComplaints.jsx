@@ -76,6 +76,15 @@ function getStoredToken() {
   );
 }
 
+const STATUS_CLASS = {
+  "Open":        "ev-status-open",
+  "Assigned":    "ev-status-assigned",
+  "In Progress": "ev-status-inprogress",
+  "Escalated":   "ev-status-escalated",
+  "Overdue":     "ev-status-overdue",
+  "Resolved":    "ev-status-resolved",
+};
+
 export default function EmployeeViewAllComplaints() {
   const revealRef = useScrollReveal();
   const [tickets, setTickets] = useState([]);
@@ -165,15 +174,15 @@ export default function EmployeeViewAllComplaints() {
         t.resolve_time_left_seconds ?? t.resolveTimeLeftSeconds ?? null;
       const responseTimeRaw =
         formatTimeLeft(responseLeftRaw) ||
-        t.metrics?.meanTimeToRespond ||
-        t.response_time ||
-        t.responseTime ||
+        t.metrics?.minTimeToRespond ||
+        t.min_time_to_respond ||
+        t.minTimeToRespond ||
         "";
       const resolutionTimeRaw =
         formatTimeLeft(resolveLeftRaw) ||
-        t.metrics?.meanTimeToResolve ||
-        t.resolution_time ||
-        t.resolutionTime ||
+        t.metrics?.minTimeToResolve ||
+        t.min_time_to_resolve ||
+        t.minTimeToResolve ||
         "";
 
       return {
@@ -361,8 +370,8 @@ export default function EmployeeViewAllComplaints() {
                   <th onClick={() => _handleSort("status")}>Status</th>
                   <th>Source</th>
                   <th onClick={() => _handleSort("issueDate")}>Issue Date</th>
-                  <th onClick={() => _handleSort("responseTime")}>Response Time</th>
-                  <th onClick={() => _handleSort("resolutionTime")}>Resolution Time</th>
+                  <th onClick={() => _handleSort("responseTime")}>Min Time To Respond</th>
+                  <th onClick={() => _handleSort("resolutionTime")}>Min Time To Resolve</th>
                 </tr>
               </thead>
               <tbody>
@@ -376,7 +385,11 @@ export default function EmployeeViewAllComplaints() {
                     </td>
                     <td>{t.subject}</td>
                     <td><PriorityPill priority={t.priority} /></td>
-                    <td>{t.status}</td>
+                    <td>
+                      <span className={`ev-status-badge ${STATUS_CLASS[t.status] || "ev-status-assigned"}`}>
+                        {t.status}
+                      </span>
+                    </td>
                     <td>{t._ticketSourceRaw}</td>
                     <td>{t._issueDateRaw}</td>
                     <td>{t._responseTimeRaw || "—"}</td>
