@@ -2,20 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import logo from "../assets/nova-logo.png";
 import { apiUrl } from "../config/apiBase";
+import { isStaffHost } from "../utils/hostUtils";
 import "./Login.css";
-
-/* ── Domain helper (shared logic) ── */
-// Returns: null = local dev (no enforcement), true = staff subdomain, false = customer domain
-export function isStaffHost() {
-  const host = window.location.hostname;
-  if (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host.startsWith("192.168.")
-  )
-    return null;
-  return host.startsWith("staff.");
-}
 
 /* ── Validation helpers ── */
 const validators = {
@@ -290,8 +278,7 @@ export default function Login() {
           ? decodeURIComponent(rawNext)
           : null;
       navigate(
-        nextPath ??
-          (role === "customer" ? "/customer/dashboard" : `/${role}`),
+        nextPath ?? (role === "customer" ? "/customer/dashboard" : `/${role}`),
         { replace: true }
       );
     } catch {
@@ -340,10 +327,7 @@ export default function Login() {
 
           {sessionExpired && (
             <div className="login-session-banner" role="alert">
-              <div
-                className="login-session-banner__icon"
-                aria-hidden="true"
-              >
+              <div className="login-session-banner__icon" aria-hidden="true">
                 <svg
                   width="16"
                   height="16"

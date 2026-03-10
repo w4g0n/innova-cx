@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Suspense, lazy, useEffect } from "react";
-
+import { isStaffHost } from "./utils/hostUtils";
 import ProtectedRoute from "./auth/ProtectedRoute";
 
 const PublicLanding = lazy(() => import("./pages/PublicLanding"));
