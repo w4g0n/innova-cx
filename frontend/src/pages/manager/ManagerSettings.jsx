@@ -175,6 +175,8 @@ function ChangePasswordModal({ onClose }) {
 export default function ManagerSettings() {
   const [showPwModal, setShowPwModal] = useState(false);
 
+  useEffect(() => { document.documentElement.removeAttribute("data-theme"); }, []);
+
   const user         = useMemo(() => getUser() || {}, []);
   const displayName  = user.name || user.full_name || user.fullName || user.username || "Manager";
   const displayEmail = user.email || "manager@innova.cx";

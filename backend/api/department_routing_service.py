@@ -4,6 +4,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import HTTPException
 from psycopg2.extras import RealDictCursor
+try:
+    from api.event_logger import log_application_event
+except Exception:
+    from event_logger import log_application_event
 
 
 def build_routing_meta(
@@ -114,6 +118,19 @@ def record_department_routing_decision(
         suggested_department,
         routing_confidence_pct,
         routing_is_confident,
+    )
+    log_application_event(
+        service="backend",
+        event_key="department_routing",
+        ticket_id=ticket_uuid,
+        ticket_code=ticket_code,
+        payload={
+            "suggested_department": suggested_department,
+            "confidence_pct": routing_confidence_pct,
+            "is_confident": routing_is_confident,
+            "queued": True,
+        },
+        cur=cur,
     )
     return True
 
@@ -339,5 +356,16 @@ def decide_routing_review(
         effective_decision,
         final_dept,
         user["id"],
+    )
+    log_application_event(
+        service="backend",
+        event_key="routing_review_decision",
+        ticket_id=rrq["ticket_id"],
+        payload={
+            "review_id": review_id,
+            "decision": effective_decision,
+            "department": final_dept,
+            "by": str(user["id"]),
+        },
     )
     return {"ok": True, "reviewId": review_id, "decision": effective_decision, "finalDepartment": final_dept}

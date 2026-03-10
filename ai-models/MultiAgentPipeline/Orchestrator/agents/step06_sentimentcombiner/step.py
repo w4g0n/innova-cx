@@ -57,6 +57,7 @@ async def combine_sentiment(state: dict) -> dict:
     state["sentiment_score_numeric"] = combined
     state["sentiment_score"] = _bucket(combined)
     state["sentiment_combiner_mode"] = mode
+    state["sentiment_combiner_source"] = "deterministic"
     logger.info(
         "sentiment_combiner | mode=%s text=%.3f audio=%.3f combined=%.3f bucket=%s",
         mode,

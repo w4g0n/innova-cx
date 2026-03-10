@@ -74,6 +74,7 @@ async def score_priority(state: dict) -> dict:
     try:
         if not _PRIORITY_MODEL_AVAILABLE or model_prioritize is None:
             raise RuntimeError("priority runtime unavailable")
+        state["priority_mode"] = "model"
         result = model_prioritize(
             sentiment_score=sentiment_input,
             issue_severity_val=issue_severity,
@@ -96,6 +97,7 @@ async def score_priority(state: dict) -> dict:
         )
     except Exception as exc:
         logger.warning("priority | runtime unavailable/failed (%s) — defaulting medium", exc)
+        state["priority_mode"] = "mock"
         state["priority_label"] = "medium"
         state["priority_score"] = 3
 

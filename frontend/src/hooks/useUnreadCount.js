@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { apiUrl } from "../config/apiBase";
+import { onNotifRefresh } from "../utils/notifRefresh";
 
 function getAuthToken() {
   try {
@@ -21,35 +22,33 @@ function getAuthToken() {
 export function useUnreadCount(role, intervalMs = 60_000) {
   const [count, setCount] = useState(0);
 
+  const load = useCallback(() => {
+    if (!role) return;
+    const token = getAuthToken();
+    if (!token) return;
+
+    fetch(apiUrl(`/api/${role}/notifications`), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        const unread = (data.notifications || []).filter((n) => !n.read).length;
+        setCount(unread);
+      })
+      .catch(() => {});
+  }, [role]);
+
   useEffect(() => {
     if (!role) return;
-
-    let cancelled = false;
-
-    const load = () => {
-      const token = getAuthToken();
-      if (!token) return;
-
-      fetch(apiUrl(`/api/${role}/notifications`), {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (cancelled || !data) return;
-          const unread = (data.notifications || []).filter((n) => !n.read).length;
-          setCount(unread);
-        })
-        .catch(() => {});
-    };
-
     const id = setInterval(load, intervalMs);
     load();
-
+    const unsub = onNotifRefresh(load);
     return () => {
-      cancelled = true;
       clearInterval(id);
+      unsub();
     };
-  }, [role, intervalMs]);
+  }, [role, intervalMs, load]);
 
   return [count, setCount];
 }

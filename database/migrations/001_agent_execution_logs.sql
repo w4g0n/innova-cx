@@ -77,7 +77,6 @@ CREATE TABLE IF NOT EXISTS agent_output_log (
     step_order        INTEGER     NOT NULL,
     input_state       JSONB       NOT NULL DEFAULT '{}'::jsonb,
     output_state      JSONB       NOT NULL DEFAULT '{}'::jsonb,
-    state_diff        JSONB       NOT NULL DEFAULT '{}'::jsonb,
     inference_time_ms INTEGER     NOT NULL DEFAULT 0,
     error_flag        BOOLEAN     NOT NULL DEFAULT FALSE,
     error_message     TEXT,

@@ -61,6 +61,14 @@ except Exception:
         get_routing_review_payload,
         record_department_routing_decision,
     )
+try:
+    from api.ai_explainability import router as ai_explainability_router
+except Exception:
+    from ai_explainability import router as ai_explainability_router
+try:
+    from api.event_logger import log_application_event
+except Exception:
+    from event_logger import log_application_event
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
@@ -80,7 +88,8 @@ except Exception as _analytics_import_err:
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "WARNING").upper()
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.WARNING), format="%(asctime)s | %(levelname)s | %(message)s")
 SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
 # Keep backward compatibility with ROUTING_CONFIDENCE_THRESHOLD while standardizing on
 # DEPARTMENT_ROUTING_THRESHOLD used by orchestrator/.env.
@@ -189,7 +198,6 @@ def _ensure_runtime_schema_compatibility() -> None:
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
-
                 # FIX (Issue 3 — department_routing table missing):
                 # The live DB volume may pre-date when department_routing was added to init.sql.
                 # Create it here idempotently so the routing review feature works on all envs.
@@ -313,6 +321,37 @@ def _detect_sla_policy_function() -> bool:
         return False
 
 
+def _clear_unassigned_sla_once() -> None:
+    """
+    App-level SLA gate:
+    if department or assignee is missing, SLA must be unset and ticket cannot be Overdue.
+    """
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE tickets
+                    SET
+                      priority_assigned_at = NULL,
+                      respond_due_at = NULL,
+                      resolve_due_at = NULL,
+                      respond_time_left_seconds = NULL,
+                      resolve_time_left_seconds = NULL,
+                      respond_breached = FALSE,
+                      resolve_breached = FALSE,
+                      status = CASE
+                                 WHEN status = 'Overdue'::ticket_status THEN 'Open'::ticket_status
+                                 ELSE status
+                               END
+                    WHERE status <> 'Resolved'::ticket_status
+                      AND (department_id IS NULL OR assigned_to_user_id IS NULL)
+                    """
+                )
+    except Exception:
+        return
+
+
 def _apply_sla_policies_once(log_result: bool = False, source: str = "request") -> None:
     """
     Applies time-based SLA policies (escalation/overdue) if migration is installed.
@@ -321,6 +360,7 @@ def _apply_sla_policies_once(log_result: bool = False, source: str = "request") 
     if not _has_sla_policy_fn:
         return
     try:
+        _clear_unassigned_sla_once()
         with db_connect() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT apply_ticket_sla_policies() AS result;")
@@ -651,6 +691,9 @@ def require_operator(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[s
     if user.get("role") != "operator":
         raise HTTPException(status_code=403, detail="Forbidden")
     return user
+
+
+api.include_router(ai_explainability_router, dependencies=[Depends(require_operator)])
 
 # =========================================================
 # Recurring complaint prediction
@@ -1842,51 +1885,25 @@ def employee_resolve_ticket(
                 """,
                 (existing["id"],),
             )
-            t_extra = cur.fetchone() or {}
-            t_priority   = t_extra.get("priority")
-            customer_uid = t_extra.get("created_by_user_id")
-
-            # Notify the resolving employee (confirmation)
-            _insert_notification(
-                cur,
-                user_id=str(user_id),
-                notif_type="status_change",
-                title=f"Ticket Resolved: {row['ticket_code']}",
-                message=f"You resolved ticket {row['ticket_code']}. Resolution: {final_resolution[:120]}",
-                ticket_id=str(existing["id"]),
-                priority=t_priority,
-            )
-
-            # Notify manager
-            manager_row = fetch_one("SELECT id FROM users WHERE role = 'manager' LIMIT 1;")
-            if manager_row and str(manager_row["id"]) != str(user_id):
-                _insert_notification(
-                    cur,
-                    user_id=str(manager_row["id"]),
-                    notif_type="status_change",
-                    title=f"Ticket Resolved by Employee: {row['ticket_code']}",
-                    message=f"Employee resolved ticket {row['ticket_code']}. Resolution: {final_resolution[:120]}",
-                    ticket_id=str(existing["id"]),
-                    priority=t_priority,
-                )
-
-            # Notify customer
-            if customer_uid and str(customer_uid) != str(user_id):
-                _insert_notification(
-                    cur,
-                    user_id=str(customer_uid),
-                    notif_type="status_change",
-                    title=f"Your Ticket Has Been Resolved: {row['ticket_code']}",
-                    message=f"Ticket {row['ticket_code']} has been resolved. Resolution: {final_resolution[:120]}",
-                    ticket_id=str(existing["id"]),
-                    priority=t_priority,
-                )
+            # Notifications handled by DB triggers:
+            #   trg_notify_on_ticket_resolved     → resolver + assigned employee + managers
+            #   trg_notify_customer_status_change → customer
 
     logger.info(
         "ticket_status_update | ticket_id=%s status=%s resolved_at=%s",
         row["ticket_code"],
         row["status"],
         row["resolved_at"],
+    )
+    log_application_event(
+        service="backend",
+        event_key="ticket_status_update",
+        ticket_id=existing["id"],
+        ticket_code=row["ticket_code"],
+        payload={
+            "status": row["status"],
+            "resolved_at": row["resolved_at"],
+        },
     )
     _trigger_resolution_retraining()
 
@@ -2029,33 +2046,9 @@ def employee_rescore_ticket(
                 ),
             )
             result = cur.fetchone()
-
-            profile = fetch_one(
-                "SELECT full_name FROM user_profiles WHERE user_id = %s", (user_id,)
-            ) or {}
-            employee_name = profile.get("full_name") or user.get("email", "An employee")
-
-            manager_row = fetch_one("SELECT id FROM users WHERE role = 'manager' LIMIT 1;")
-            if manager_row and str(manager_row["id"]) != str(user_id):
-                _insert_notification(
-                    cur,
-                    user_id=str(manager_row["id"]),
-                    notif_type="ticket_assignment",
-                    title=f"Rescoring Request — {ticket_code}",
-                    message=f"{employee_name} requested a priority change for {ticket_code}: {current_priority} → {new_priority}. Reason: {reason}",
-                    ticket_id=str(row["id"]),
-                    priority=new_priority,
-                )
-
-            _insert_notification(
-                cur,
-                user_id=str(user_id),
-                notif_type="ticket_assignment",
-                title=f"Rescoring Request Submitted — {ticket_code}",
-                message=f"You requested a priority change for {ticket_code}: {current_priority} → {new_priority}. Reason: {reason}. Awaiting manager approval.",
-                ticket_id=str(row["id"]),
-                priority=new_priority,
-            )
+            # Notifications handled by DB triggers:
+            #   trg_notify_manager_approval_request  → manager
+            #   trg_notify_employee_approval_submit  → submitting employee
 
     logger.info(
         "employee_rescore | ticket=%s from=%s to=%s request=%s by=%s",
@@ -2124,18 +2117,9 @@ def employee_reroute_ticket(
                 ),
             )
             result = cur.fetchone()
-
-            # Only notify the employee themselves (confirmation)
-            # Manager is notified by the DB trigger notify_manager_on_approval_request
-            _insert_notification(
-                cur,
-                user_id=str(user_id),
-                notif_type="ticket_assignment",
-                title=f"Rerouting Request Submitted — {ticket_code}",
-                message=f"You requested a department change for {ticket_code}: {current_dept} → {new_dept_name}. Reason: {reason}. Awaiting manager approval.",
-                ticket_id=str(row["id"]),
-                priority=None,
-            )
+            # Notifications handled by DB triggers:
+            #   trg_notify_manager_approval_request → manager
+            #   trg_notify_employee_approval_submit → submitting employee
 
     logger.info(
         "employee_reroute | ticket=%s from=%s to=%s request=%s",
@@ -3094,6 +3078,7 @@ def _dispatch_orchestrator_after_submit(
     details: str,
     ticket_type: Optional[str],
     subject: Optional[str],
+    execution_id: Optional[str],
 ) -> None:
     ok = dispatch_ticket_to_orchestrator(
         ticket_code=ticket_code,
@@ -3102,23 +3087,25 @@ def _dispatch_orchestrator_after_submit(
         orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
         ticket_type=ticket_type,
         subject=subject,
+        execution_id=execution_id,
     )
     if not ok:
-        logger.warning(
-            "orchestrator_dispatch | failed for ticket=%s — applying mock pipeline fallback",
-            ticket_code,
+        logger.warning("orchestrator_dispatch | failed for ticket=%s", ticket_code)
+        log_application_event(
+            service="backend",
+            event_key="orchestrator_dispatch",
+            level="WARNING",
+            ticket_code=ticket_code,
+            payload={"status": "failed"},
         )
-        try:
-            _apply_mock_pipeline_outcome(ticket_code, details or subject or "")
-            logger.info("orchestrator_dispatch | mock fallback applied for ticket=%s", ticket_code)
-        except Exception as exc:
-            logger.error(
-                "orchestrator_dispatch | mock fallback also failed ticket=%s err=%s",
-                ticket_code,
-                exc,
-            )
     else:
         logger.info("orchestrator_dispatch | accepted for ticket=%s", ticket_code)
+        log_application_event(
+            service="backend",
+            event_key="orchestrator_dispatch",
+            ticket_code=ticket_code,
+            payload={"status": "accepted"},
+        )
 
 
 @api.post("/internal/tickets/create")
@@ -3160,6 +3147,7 @@ def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
         orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
         ticket_type=ticket_type,
         subject=subject,
+        execution_id=created.get("execution_id"),
     )
     if not orchestrator_dispatched:
         logger.warning(
@@ -3190,6 +3178,7 @@ def create_customer_ticket(
     # Insert ticket into database through centralized gate.
     ticket_id = None
     ticket_code = None
+    execution_id = None
     with db_connect() as conn:
         with conn.cursor() as cur:
             normalized_ticket_type = (
@@ -3210,6 +3199,7 @@ def create_customer_ticket(
             )
             ticket_id = created["id"]
             ticket_code = created["ticket_code"]
+            execution_id = created.get("execution_id")
             logger.info(
                 "customer_ticket_submit | ticket_code=%s user_id=%s type=%s status=%s priority=%s",
                 ticket_code,
@@ -3217,6 +3207,19 @@ def create_customer_ticket(
                 normalized_ticket_type,
                 created.get("status"),
                 created.get("priority"),
+            )
+            log_application_event(
+                service="backend",
+                event_key="customer_ticket_submit",
+                ticket_id=ticket_id,
+                ticket_code=ticket_code,
+                payload={
+                    "user_id": str(user["id"]),
+                    "type": normalized_ticket_type,
+                    "status": created.get("status"),
+                    "priority": created.get("priority"),
+                },
+                cur=cur,
             )
 
             # Insert attachments if any
@@ -3237,8 +3240,16 @@ def create_customer_ticket(
         details=body.details,
         ticket_type=body.type,
         subject=body.subject,
+        execution_id=execution_id,
     )
     logger.info("orchestrator_dispatch | queued for ticket=%s", ticket_code)
+    log_application_event(
+        service="backend",
+        event_key="orchestrator_dispatch",
+        ticket_id=ticket_id,
+        ticket_code=ticket_code,
+        payload={"status": "queued"},
+    )
 
     return {
         "ok": True,
@@ -3489,6 +3500,7 @@ def assign_ticket(
             SET
                 assigned_to_user_id = %s,
                 assigned_at         = NOW(),
+                priority_assigned_at = COALESCE(priority_assigned_at, NOW()),
                 updated_at          = NOW(),
                 status              = CASE
                                         WHEN status = 'Resolved' THEN status
@@ -3507,6 +3519,13 @@ def assign_ticket(
             SET
                 assigned_to_user_id = NULL,
                 assigned_at         = NULL,
+                priority_assigned_at = NULL,
+                respond_due_at = NULL,
+                resolve_due_at = NULL,
+                respond_time_left_seconds = NULL,
+                resolve_time_left_seconds = NULL,
+                respond_breached = FALSE,
+                resolve_breached = FALSE,
                 updated_at          = NOW(),
                 status              = 'Open'
             WHERE id = %s
@@ -3603,60 +3622,9 @@ def manager_resolve_ticket(
                     (ticket_id, ticket_id, user["id"], body.steps_taken.strip()),
                 )
             
-            # 4. Fetch assigned employee + customer user IDs and ticket priority
-            cur.execute(
-                """
-                SELECT
-                    t.assigned_to_user_id,
-                    t.created_by_user_id,
-                    t.priority,
-                    t.ticket_code
-                FROM tickets t
-                WHERE t.id = %s
-                LIMIT 1;
-                """,
-                (ticket_id,),
-            )
-            t_info = cur.fetchone()
-            ticket_code   = (t_info or {}).get("ticket_code") or ticket_id
-            t_priority    = (t_info or {}).get("priority")
-            assigned_uid  = (t_info or {}).get("assigned_to_user_id")
-            customer_uid  = (t_info or {}).get("created_by_user_id")
-
-            # Notify manager (confirmation)
-            _insert_notification(
-                cur,
-                user_id=str(user["id"]),
-                notif_type="status_change",
-                title=f"Resolved: {ticket_code}",
-                message=f"You resolved ticket {ticket_code}. Resolution: {final_resolution[:120]}",
-                ticket_id=ticket_id,
-                priority=t_priority,
-            )
-
-            # Notify assigned employee
-            if assigned_uid and str(assigned_uid) != str(user["id"]):
-                _insert_notification(
-                    cur,
-                    user_id=str(assigned_uid),
-                    notif_type="status_change",
-                    title=f"Ticket Resolved: {ticket_code}",
-                    message=f"Your ticket {ticket_code} was resolved by the manager. Resolution: {final_resolution[:120]}",
-                    ticket_id=ticket_id,
-                    priority=t_priority,
-                )
-
-            # Notify customer
-            if customer_uid and str(customer_uid) != str(user["id"]):
-                _insert_notification(
-                    cur,
-                    user_id=str(customer_uid),
-                    notif_type="status_change",
-                    title=f"Your Ticket Has Been Resolved: {ticket_code}",
-                    message=f"Ticket {ticket_code} has been resolved. Resolution: {final_resolution[:120]}",
-                    ticket_id=ticket_id,
-                    priority=t_priority,
-                )
+            # 4. Notifications handled by DB triggers:
+            #   trg_notify_on_ticket_resolved     → resolver (manager) + assigned employee + managers
+            #   trg_notify_customer_status_change → customer
 
     logger.info(
         "manager_resolve | ticket=%s from=%s resolved_at=%s by=%s",
@@ -3751,37 +3719,8 @@ def manager_rescore_ticket(
                 ),
             )
 
-            # 4. Fetch assigned employee + priority for notifications
-            cur.execute(
-                "SELECT assigned_to_user_id, priority FROM tickets WHERE id = %s LIMIT 1;",
-                (ticket_id,),
-            )
-            t_info = cur.fetchone()
-            assigned_uid = (t_info or {}).get("assigned_to_user_id")
-            t_priority   = (t_info or {}).get("priority")
-
-            # Notify manager (confirmation)
-            _insert_notification(
-                cur,
-                user_id=str(user["id"]),
-                notif_type="status_change",
-                title=f"Priority Updated: {ticket_code}",
-                message=f"You changed priority of {ticket_code} from {current_priority} to {new_priority}. Reason: {reason}",
-                ticket_id=ticket_id,
-                priority=t_priority,
-            )
-
-            # Notify assigned employee
-            if assigned_uid and str(assigned_uid) != str(user["id"]):
-                _insert_notification(
-                    cur,
-                    user_id=str(assigned_uid),
-                    notif_type="status_change",
-                    title=f"Priority Changed: {ticket_code}",
-                    message=f"The priority of your ticket {ticket_code} was changed from {current_priority} to {new_priority} by the manager.",
-                    ticket_id=ticket_id,
-                    priority=t_priority,
-                )
+            # Notifications handled by DB trigger:
+            #   trg_notify_on_manager_rescore → manager self-confirmation + assigned employee
 
     logger.info(
         "manager_rescore | ticket=%s from=%s to=%s request=%s by=%s",
@@ -4101,69 +4040,22 @@ def decide_approval(
                             ),
                         )
 
-            # ── Notifications for approval decision ──────────────────────────
-            # NOTE: This block is OUTSIDE the "if decision == Approved" block
-            #       so it fires for BOTH Approved AND Rejected decisions.
-            cur.execute(
-                """
-                SELECT
-                    t.ticket_code,
-                    t.priority,
-                    ar.submitted_by_user_id,
-                    ar.request_type,
-                    ar.current_value,
-                    ar.requested_value
-                FROM approval_requests ar
-                JOIN tickets t ON t.id = ar.ticket_id
-                WHERE ar.id::text = %s
-                LIMIT 1;
-                """,
-                (request_id,),
-            )
-            ar_info = cur.fetchone() or {}
-            notif_ticket_code = ar_info.get("ticket_code") or ""
-            notif_priority    = ar_info.get("priority")
-            submitter_uid     = ar_info.get("submitted_by_user_id")
-            notif_req_type    = (ar_info.get("request_type") or "").lower()
-            notif_current     = ar_info.get("current_value") or ""
-            notif_requested   = ar_info.get("requested_value") or ""
-            notif_ticket_id   = ar["ticket_id"]
-
-            decision_word = "approved" if decision == "Approved" else "rejected"
-
-            # Notify the employee who submitted the request
-            if submitter_uid and str(submitter_uid) != str(user["id"]):
-                _insert_notification(
-                    cur,
-                    user_id=str(submitter_uid),
-                    notif_type="status_change",
-                    title=f"Request {decision}: {notif_ticket_code}",
-                    message=(
-                        f"Your {notif_req_type} request for ticket {notif_ticket_code} "
-                        f"was {decision_word} by the manager. "
-                        f"Change: {notif_current} → {notif_requested}."
-                    ),
-                    ticket_id=str(notif_ticket_id),
-                    priority=notif_priority,
-                )
-
-            # Notify the manager (confirmation to themselves)
-            _insert_notification(
-                cur,
-                user_id=str(user["id"]),
-                notif_type="status_change",
-                title=f"You {decision} a Request: {notif_ticket_code}",
-                message=(
-                    f"You {decision_word} the {notif_req_type} request for ticket "
-                    f"{notif_ticket_code}. Change: {notif_current} → {notif_requested}."
-                ),
-                ticket_id=str(notif_ticket_id),
-                priority=notif_priority,
-            )
+            # Notifications handled by DB triggers:
+            #   trg_notify_manager_approval_decision  → manager self-confirmation
+            #   trg_notify_employee_approval_decision → submitting employee
 
     logger.info(
         "approval_decision | request=%s decision=%s by=%s",
         request_id, decision, user["id"],
+    )
+    log_application_event(
+        service="backend",
+        event_key="approval_decision",
+        payload={
+            "request_id": str(request_id),
+            "decision": decision,
+            "by": str(user["id"]),
+        },
     )
     if decision == "Approved" and relearn_ticket_id and relearn_priority:
         _trigger_priority_relearning(
@@ -5068,6 +4960,22 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         updated[5],
                         updated[6],
                     )
+                    log_application_event(
+                        service="backend",
+                        event_key="orchestrator_ticket_update",
+                        ticket_id=existing[0],
+                        ticket_code=updated[0],
+                        payload={
+                            "status": updated[1],
+                            "priority": updated[2],
+                            "asset_type": updated[3],
+                            "department": requested_department if routing_is_confident else None,
+                            "priority_assigned_at": updated[4],
+                            "respond_due_at": updated[5],
+                            "resolve_due_at": updated[6],
+                        },
+                        cur=cur,
+                    )
 
                     auto_assigned_user_id = auto_assign_ticket_if_needed(
                         cur,
@@ -5810,6 +5718,7 @@ def get_operator_complaint_detail(
         """,
         (tid,),
     ) or []
+
 
     # ── ticket updates ────────────────────────────────────────────────────────
     ticket_updates = fetch_all(

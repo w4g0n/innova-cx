@@ -18,6 +18,8 @@ export function useTheme() {
   useEffect(() => {
     // Apply stored theme immediately on mount (covers page navigation)
     applyTheme(getStoredTheme());
+    // Remove data-theme when customer page unmounts so staff views are unaffected
+    return () => document.documentElement.removeAttribute("data-theme");
   }, []);
 
   useEffect(() => {
