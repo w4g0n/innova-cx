@@ -4,7 +4,6 @@ import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
-import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
 import "./EmployeeNotifications.css";
 
@@ -240,7 +239,6 @@ export default function EmployeeNotifications() {
                   <div className="empNotifs__content">
                     <div className="empNotifs__topRow">
                       <div className="empNotifs__title">{n.title}</div>
-                      {n.priority && <PriorityPill priority={n.priority} />}
                     </div>
 
                     <div className="empNotifs__message">{n.message}</div>
