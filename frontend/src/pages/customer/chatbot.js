@@ -57,7 +57,10 @@ export default function useNovaChatbot() {
     if (data?.session_id && data.session_id !== sid) {
       setSessionId(data.session_id);
     }
-    return data?.response || data?.reply || "";
+    return {
+      reply: data?.response || data?.reply || "",
+      buttons: data?.show_buttons || [],
+    };
   };
 
   const handleSend = async (value) => {
@@ -70,14 +73,16 @@ export default function useNovaChatbot() {
     const typingId = `b-${Date.now()}`;
     setMessages((prev) => [
       ...prev,
-      { id: typingId, from: "bot", text: "…" },
+      { id: typingId, from: "bot", typing: true },
     ]);
 
     try {
-      const reply = await sendToChatbot(t);
+      const { reply, buttons } = await sendToChatbot(t);
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === typingId ? { ...m, text: reply } : m
+          m.id === typingId
+            ? { ...m, typing: false, text: reply, buttons }
+            : m
         )
       );
     } catch (err) {
@@ -85,7 +90,7 @@ export default function useNovaChatbot() {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === typingId
-            ? { ...m, text: "Sorry — the chatbot service is unavailable." }
+            ? { ...m, typing: false, text: "Sorry — the chatbot service is unavailable." }
             : m
         )
       );

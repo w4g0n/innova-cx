@@ -73,7 +73,12 @@ def create_ticket(
         return {"success": False, "ticket_id": None, "error": "Description cannot be empty"}
 
     if not title:
-        title = description[:80]
+        if len(description) <= 80:
+            title = description
+        else:
+            truncated = description[:80]
+            last_space = truncated.rfind(" ")
+            title = truncated[:last_space] if last_space > 0 else truncated
 
     ticket_code = f"CX-{int(time.time() * 1000)}-{os.urandom(2).hex().upper()}"
 

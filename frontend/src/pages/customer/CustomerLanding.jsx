@@ -698,6 +698,31 @@ export default function CustomerLanding() {
                           m.text
                         )}
                       </div>
+                      {!m.typing && m.buttons?.length > 0 && (
+                        <div className="novaQuickReplies">
+                          {m.buttons.map((btn) => (
+                            <button
+                              key={btn}
+                              className="novaQuickReplyBtn"
+                              onClick={() =>
+                                handleSend(
+                                  btn === "create_ticket"
+                                    ? "I want to create a ticket"
+                                    : btn === "track_ticket"
+                                    ? "I want to track a ticket"
+                                    : btn
+                                )
+                              }
+                            >
+                              {btn === "create_ticket"
+                                ? "Create a ticket"
+                                : btn === "track_ticket"
+                                ? "Track a ticket"
+                                : btn}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
