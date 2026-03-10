@@ -3,6 +3,25 @@ import { useEffect, useRef, useState } from "react";
 import novaLogo from "../assets/nova-logo.png";
 import "./PublicLanding.css";
 
+const AGENTS_DATA = [
+  { name: "Transcriber", role: "Audio → Text",          model: "OpenAI Whisper",       color: "#818cf8", icon: "mic",
+    details: "Converts voice complaint recordings to text before passing downstream." },
+  { name: "Chatbot",     role: "Resolves & Routes",      model: "Falcon 1B Instruct",   color: "#c084fc", icon: "inbox",
+    details: "Front-line agent that handles inquiries and routes unresolved complaints." },
+  { name: "Classifier",  role: "Complaint vs Inquiry",   model: "NLI Model",            color: "#a78bfa", icon: "tag",
+    details: "Classifies the ticket as a Complaint or Inquiry, gating downstream agents." },
+  { name: "Sentiment",   role: "Emotion Detection",      model: "RoBERTa + Librosa",    color: "#e879f9", icon: "heart",
+    details: "Analyses text tone via RoBERTa and voice tone via Librosa." },
+  { name: "Features",    role: "Urgency & Impact",       model: "NLI + Database",       color: "#f0abfc", icon: "settings",
+    details: "Determines recurrence, safety concern, impact, severity and urgency." },
+  { name: "Prioritizer", role: "Fuzzy Logic Scoring",    model: "Fuzzy Logic Engine",   color: "#c026d3", icon: "scale",
+    details: "Combines upstream signals to output Critical / High / Medium / Low priority." },
+  { name: "Router",      role: "Department Assignment",  model: "NLI DeBERTa",          color: "#d946ef", icon: "building",
+    details: "Routes tickets to the correct department at 0.7 confidence threshold." },
+  { name: "Resolver",    role: "Suggested Fixes",        model: "Flan-T5-Base",         color: "#a855f7", icon: "lightbulb",
+    details: "Generates resolution suggestions and retrains on every correction." },
+];
+
 
 const PIPELINE = [
   { icon: "mic",       label: "Transcribe",       sub: "Whisper (if audio)",      color: "#818cf8" },
@@ -661,7 +680,7 @@ function SolarSystem({ onReady }) {
         // HTML label — purple theme
         const el = document.createElement("div");
         el.className = "pl-planet-label";
-        el.textContent = PIPELINE[i] ? PIPELINE[i].label : cfg.personality;
+        el.textContent = AGENTS_DATA[i].name;
         el.style.setProperty("--pc", "#a855f7");
         el.style.fontSize = "10px";
         el.style.padding = "2px 7px";
@@ -842,7 +861,7 @@ function SolarSystem({ onReady }) {
         const hits = raycaster.intersectObjects(planetObjects.map(p => p.mesh), true);
         if (hits.length) {
           const found = planetObjects.find(p => p.mesh===hits[0].object);
-          if (found) { hoveredIdx=found.idx; setHovered(found.cfg); mount.style.cursor="pointer"; return; }
+          if (found) { hoveredIdx=found.idx; setHovered(AGENTS_DATA[found.idx]); mount.style.cursor="pointer"; return; }
         }
         hoveredIdx=-1; setHovered(null);
         mount.style.cursor = isDragging ? "grabbing" : "grab";
@@ -903,8 +922,12 @@ function SolarSystem({ onReady }) {
       {hovered && (
         <div className="pl-planet-tooltip" style={{ borderColor: hovered.color + "66" }}>
           <div className="pl-pt-icon-row">
-            <span className="pl-pt-name" style={{ color: hovered.color }}>{hovered.personality}</span>
+            <Icon name={hovered.icon} size={14} />
+            <span className="pl-pt-name" style={{ color: hovered.color }}>{hovered.name}</span>
+            <span className="pl-pt-role">{hovered.role}</span>
           </div>
+          <p className="pl-pt-desc">{hovered.details}</p>
+          <div className="pl-pt-model">{hovered.model}</div>
         </div>
       )}
       <p className="pl-solar-hint">Drag to rotate · hover planets</p>
