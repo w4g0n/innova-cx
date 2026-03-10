@@ -117,9 +117,13 @@ export default function CustomerTicketDetails() {
       {/* ── TOPBAR ── */}
       <header className="cs-topbar">
         <div className="cs-topbar-left">
-          <img src={novaLogo} alt="InnovaAI" className="cs-topbar-logo" />
+          <img src={novaLogo} alt="InnovaAI" className="cs-topbar-logo cs-topbar-logo--clickable" onClick={() => navigate("/customer")} style={{cursor:"pointer"}} />
           <div className="cs-topbar-divider" />
           <span className="cs-topbar-label">Ticket Details</span>
+          <button type="button" className="cs-back-btn" onClick={() => navigate("/customer/mytickets")}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+            My Tickets
+          </button>
         </div>
         <div className="cs-topbar-right">
           <ThemeToggleBtn theme={theme} onToggle={toggleTheme} />
@@ -144,10 +148,6 @@ export default function CustomerTicketDetails() {
             )}
           </div>
 
-          <button type="button" className="cs-back-btn" onClick={() => navigate("/customer/mytickets")}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-            My Tickets
-          </button>
         </div>
       </header>
 
@@ -299,20 +299,12 @@ export default function CustomerTicketDetails() {
 
       {/* ── LOGOUT CONFIRM ── */}
       {showLogoutConfirm && (
-        <div className="cspw-overlay" onClick={() => setShowLogoutConfirm(false)}>
-          <div className="cspw-modal" onClick={e => e.stopPropagation()}>
-            <div className="cspw-header">
-              <h3 className="cspw-title">Log out?</h3>
-              <button type="button" className="cspw-close" onClick={() => setShowLogoutConfirm(false)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-            <div style={{ padding: "22px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
-              <p style={{ color: "var(--muted)", fontSize: 14, margin: 0 }}>Are you sure you want to log out?</p>
-              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                <button type="button" className="cs-btn cs-btn-ghost" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
-                <button type="button" className="cs-btn cs-btn-primary" onClick={confirmLogout}>Log out</button>
-              </div>
+        <div className="novaCloseModal" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="novaCloseModalContent" onClick={e => e.stopPropagation()}>
+            <p>Are you sure you want to log out?</p>
+            <div className="novaCloseModalBtns">
+              <button onClick={confirmLogout}>Log out</button>
+              <button onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
             </div>
           </div>
         </div>

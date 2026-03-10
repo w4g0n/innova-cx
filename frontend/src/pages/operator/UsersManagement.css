@@ -86,7 +86,7 @@
   letter-spacing: .09em;
   color: #6b7280;
   font-weight: 600;
-  font-family: "DM Mono", monospace;
+  font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
 }
 .umKpiValue {
   margin-top: 10px;
@@ -134,7 +134,7 @@
   letter-spacing: .09em;
   color: #6b7280;
   font-weight: 600;
-  font-family: "DM Mono", monospace;
+  font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
   padding: 14px 16px;
   border-bottom: 1px solid #f0f0f5;
   background: #fafafa;
@@ -164,7 +164,7 @@
   color: #7c3aed;
   font-weight: 600;
   font-size: 12px;
-  font-family: "DM Mono", monospace;
+  font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
   letter-spacing: .03em;
 }
 
@@ -180,7 +180,7 @@
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: 999px;
   font-weight: 600;
   font-size: 11.5px;
   text-transform: capitalize;
@@ -407,7 +407,7 @@
   color: #374151;
   letter-spacing: .04em;
   text-transform: uppercase;
-  font-family: "DM Mono", monospace;
+  font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
 }
 .umField input,
 .umField select {

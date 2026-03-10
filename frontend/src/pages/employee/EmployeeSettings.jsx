@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 
@@ -15,6 +15,9 @@ import { getUser } from "../../utils/auth";
 
 export default function EmployeeSettings() {
   const [showPwModal, setShowPwModal] = useState(false);
+
+  // Ensure customer dark-mode class does not bleed into staff views
+  useEffect(() => { document.documentElement.removeAttribute("data-theme"); }, []);
 
   const user = useMemo(() => getUser() || {}, []);
   const displayName =

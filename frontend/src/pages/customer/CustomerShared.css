@@ -455,3 +455,56 @@
 .cs-footer-logo:hover { opacity:.8; }
 [data-theme="light"] .cs-footer-logo { filter:none; opacity:.6; }
 .cs-footer-copy { font-size:11px; color:var(--dim); margin:0; }
+/* ── SHARED LOGOUT CONFIRM MODAL (used by all customer pages) ── */
+.novaCloseModal {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  animation: clFadeIn .2s var(--ease, cubic-bezier(.25,1,.5,1)) both;
+}
+@keyframes clFadeIn { from{opacity:0;} to{opacity:1;} }
+.novaCloseModalContent {
+  width: 100%; max-width: 320px;
+  background: var(--popover-bg, #1a0e35);
+  border-radius: 18px;
+  border: 1px solid var(--popover-border, rgba(139,92,246,.2));
+  box-shadow: 0 32px 80px rgba(0,0,0,.5);
+  padding: 30px 24px 22px;
+  animation: clModalIn .22s var(--ease, cubic-bezier(.25,1,.5,1)) both;
+  color: var(--text);
+}
+@keyframes clModalIn { from{opacity:0;transform:scale(.93) translateY(10px);} to{opacity:1;transform:none;} }
+.novaCloseModalContent p {
+  margin: 0 0 22px; font-size: 15px; font-weight: 500;
+  font-family: "Outfit", sans-serif; text-align: center;
+  color: var(--muted); line-height: 1.5;
+}
+.novaCloseModalBtns {
+  display: flex; justify-content: center; gap: 10px; width: 100%;
+}
+.novaCloseModalBtns button {
+  flex: 1; padding: 12px 18px; border-radius: 10px;
+  font-size: 13px; font-weight: 700;
+  font-family: "Outfit", sans-serif;
+  cursor: pointer; transition: all .2s; border: 1px solid transparent;
+}
+.novaCloseModalBtns button:first-child {
+  background: linear-gradient(135deg, #6d28d9, #9333ea);
+  border-color: rgba(147,51,234,.5); color: #fff;
+  box-shadow: 0 4px 16px rgba(147,51,234,.35);
+}
+.novaCloseModalBtns button:first-child:hover {
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  transform: translateY(-1px);
+}
+.novaCloseModalBtns button:last-child {
+  background: transparent;
+  border-color: var(--border-subtle, rgba(139,92,246,.2));
+  color: var(--muted);
+}
+.novaCloseModalBtns button:last-child:hover {
+  background: rgba(147,51,234,.07);
+  color: var(--text);
+}
