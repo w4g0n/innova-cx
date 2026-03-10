@@ -594,6 +594,13 @@ export default function CustomerLanding() {
             <div className="novaWidgetHeaderRight">
               <button
                 type="button"
+                className="novaTextBtn"
+                onClick={resetSession}
+              >
+                New Chat
+              </button>
+              <button
+                type="button"
                 className={`novaTextBtn ${novaView === "form" ? "active" : ""}`}
                 onClick={toggleFormInChat}
               >
@@ -813,7 +820,7 @@ export default function CustomerLanding() {
                     <input
                       value={text}
                       onChange={(e) => setText(e.target.value)}
-                      placeholder="Type a message…"
+                      placeholder="Type a message… (Enter to send)"
                     />
 
                     <button type="submit">Send</button>
