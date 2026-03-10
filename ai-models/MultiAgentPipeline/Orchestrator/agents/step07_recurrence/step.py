@@ -33,6 +33,7 @@ _RECURRING_PATTERNS = (
     r"\breported (this )?before\b",
 )
 _RECURRING_REGEX = re.compile("|".join(_RECURRING_PATTERNS), re.IGNORECASE)
+SIMILARITY_RECURRENCE_THRESHOLD = 0.72
 
 
 def _optional_bool(value):
@@ -46,6 +47,18 @@ def _optional_bool(value):
     if s in {"false", "0", "no", "n"}:
         return False
     return None
+
+
+def _normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", " ", str(value or "").lower())).strip()
+
+
+def _token_jaccard(a: str, b: str) -> float:
+    a_tokens = {token for token in _normalize_text(a).split() if len(token) > 2}
+    b_tokens = {token for token in _normalize_text(b).split() if len(token) > 2}
+    if not a_tokens or not b_tokens:
+        return 0.0
+    return len(a_tokens & b_tokens) / float(len(a_tokens | b_tokens))
 
 
 def _find_similar_ticket(text: str, current_ticket_code: str | None) -> tuple[str | None, str | None, float]:
@@ -81,12 +94,20 @@ def _find_similar_ticket(text: str, current_ticket_code: str | None) -> tuple[st
             continue
         details_score = SequenceMatcher(None, query_text, details).ratio() if details else 0.0
         subject_score = SequenceMatcher(None, query_text, subject_lc).ratio() if subject_lc else 0.0
-        score = max(details_score, subject_score)
+        details_jaccard = _token_jaccard(query_text, details) if details else 0.0
+        subject_jaccard = _token_jaccard(query_text, subject_lc) if subject_lc else 0.0
+        score = max(
+            details_score,
+            subject_score,
+            details_jaccard,
+            subject_jaccard,
+            (details_score + details_jaccard) / 2.0 if details else 0.0,
+            (subject_score + subject_jaccard) / 2.0 if subject_lc else 0.0,
+        )
         if score > best_score:
             best_score = score
             best_code = code
             best_subject = subject
-    # Keep threshold permissive so explainability can surface the linked prior ticket.
     if best_score < 0.25:
         return None, None, best_score
     return best_code, best_subject, best_score
@@ -98,26 +119,20 @@ async def check_recurrence(state: dict) -> dict:
         return state
 
     explicit = _optional_bool(state.get("is_recurring"))
-    if explicit is not None:
+    if explicit is True:
         state["is_recurring"] = explicit
         state["is_recurring_source"] = "state"
-        if explicit:
-            similar_code, similar_subject, similar_score = _find_similar_ticket(
-                str(state.get("text") or ""),
-                str(state.get("ticket_id") or "").strip() or None,
-            )
-            state["similar_ticket_code"] = similar_code
-            state["similar_ticket_subject"] = similar_subject
-            state["similarity_score"] = round(float(similar_score), 3) if similar_score else None
-            if similar_code:
-                state["recurrence_reason"] = f"Matched similar prior ticket {similar_code}"
-            else:
-                state["recurrence_reason"] = "Marked recurring by upstream state"
+        similar_code, similar_subject, similar_score = _find_similar_ticket(
+            str(state.get("text") or ""),
+            str(state.get("ticket_id") or "").strip() or None,
+        )
+        state["similar_ticket_code"] = similar_code
+        state["similar_ticket_subject"] = similar_subject
+        state["similarity_score"] = round(float(similar_score), 3) if similar_score else None
+        if similar_code:
+            state["recurrence_reason"] = f"Matched similar prior ticket {similar_code}"
         else:
-            state["similar_ticket_code"] = None
-            state["similar_ticket_subject"] = None
-            state["similarity_score"] = None
-            state["recurrence_reason"] = "No recurrence signal"
+            state["recurrence_reason"] = "Marked recurring by upstream state"
         logger.info(
             "recurrence_check | is_recurring=%s source=state",
             state["is_recurring"],
@@ -125,23 +140,23 @@ async def check_recurrence(state: dict) -> dict:
         return state
 
     text = str(state.get("text") or "")
-    recurring = bool(_RECURRING_REGEX.search(text))
+    text_pattern_match = bool(_RECURRING_REGEX.search(text))
+    similar_code, similar_subject, similar_score = _find_similar_ticket(
+        text,
+        str(state.get("ticket_id") or "").strip() or None,
+    )
+    similarity_match = bool(similar_code and similar_score >= SIMILARITY_RECURRENCE_THRESHOLD)
+    recurring = bool(text_pattern_match or similarity_match)
     state["is_recurring"] = recurring
     state["is_recurring_source"] = "heuristic"
-    similar_code = None
-    similar_subject = None
-    similar_score = 0.0
-    if recurring:
-        similar_code, similar_subject, similar_score = _find_similar_ticket(
-            text,
-            str(state.get("ticket_id") or "").strip() or None,
-        )
     state["similar_ticket_code"] = similar_code
     state["similar_ticket_subject"] = similar_subject
     state["similarity_score"] = round(float(similar_score), 3) if similar_score else None
-    if recurring and similar_code:
+    if text_pattern_match and similarity_match:
         state["recurrence_reason"] = f"Text matched recurrence pattern and similar ticket {similar_code}"
-    elif recurring:
+    elif similarity_match:
+        state["recurrence_reason"] = f"Matched similar prior ticket {similar_code}"
+    elif text_pattern_match:
         state["recurrence_reason"] = "Text matched recurrence pattern"
     else:
         state["recurrence_reason"] = "No recurrence pattern found"

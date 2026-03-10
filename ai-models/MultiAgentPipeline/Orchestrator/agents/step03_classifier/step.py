@@ -32,6 +32,7 @@ COMPLAINT_HINTS = (
 MODEL_PATH_ENV = "CLASSIFIER_MODEL_PATH"
 VECTORIZER_PATH_ENV = "CLASSIFIER_VECTORIZER_PATH"
 MODEL_DIR_ENV = "CLASSIFIER_MODEL_DIR"
+PT_MODEL_FILENAMES = ("model.pt", "classifier_model.pt")
 
 
 def _heuristic_classify(text: str) -> tuple[str, float]:
@@ -56,6 +57,55 @@ def _heuristic_classify(text: str) -> tuple[str, float]:
 def _load_optional_model():
     model_dir = os.getenv(MODEL_DIR_ENV, "/app/agents/step03_classifier/model").strip()
     model_path = os.getenv(MODEL_PATH_ENV, "").strip() or str(Path(model_dir) / "model.pkl")
+    model_dir_path = Path(model_dir)
+
+    pt_model_path = next((model_dir_path / name for name in PT_MODEL_FILENAMES if (model_dir_path / name).exists()), None)
+    if pt_model_path is not None:
+        try:
+            import torch  # type: ignore
+            import torch.nn as nn  # type: ignore
+            import torch.nn.functional as F  # type: ignore
+            from transformers import RobertaModel, RobertaTokenizer  # type: ignore
+
+            complaint_label = 0
+            inquiry_label = 1
+
+            class CallClassifier(nn.Module):
+                def __init__(self, dropout: float = 0.1):
+                    super().__init__()
+                    self.roberta = RobertaModel.from_pretrained("distilroberta-base")
+                    hidden_size = self.roberta.config.hidden_size
+                    self.dropout = nn.Dropout(dropout)
+                    self.classifier = nn.Linear(hidden_size, 2)
+
+                def forward(self, input_ids, attention_mask):
+                    outputs = self.roberta(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                    )
+                    cls = outputs.last_hidden_state[:, 0, :]
+                    cls = self.dropout(cls)
+                    return self.classifier(cls)
+
+            tokenizer = RobertaTokenizer.from_pretrained(model_dir)
+            model = CallClassifier()
+            model.load_state_dict(torch.load(pt_model_path, map_location="cpu"))
+            model = model.to("cpu")
+            model.eval()
+            logger.info("classifier | loaded torch checkpoint from %s", pt_model_path)
+            return {
+                "kind": "torch",
+                "model": model,
+                "tokenizer": tokenizer,
+                "torch": torch,
+                "F": F,
+                "complaint_label": complaint_label,
+                "inquiry_label": inquiry_label,
+                "model_path": str(pt_model_path),
+            }
+        except Exception as exc:
+            logger.warning("classifier | failed to load torch model (%s); using heuristic", exc)
+
     if not model_path:
         return None
     if not Path(model_path).exists():
@@ -77,8 +127,8 @@ def _load_optional_model():
                     "classifier | vectorizer file not found at %s; model input will be raw text",
                     vectorizer_path,
                 )
-        logger.info("classifier | loaded optional model from %s", model_path)
-        return {"model": model, "vectorizer": vectorizer}
+        logger.info("classifier | loaded optional sklearn model from %s", model_path)
+        return {"kind": "sklearn", "model": model, "vectorizer": vectorizer, "model_path": model_path}
     except Exception as exc:
         logger.warning("classifier | failed to load optional model (%s); using heuristic", exc)
         return None
@@ -87,14 +137,18 @@ def _load_optional_model():
 def get_classifier_diagnostics() -> dict[str, object]:
     model_dir = os.getenv(MODEL_DIR_ENV, "/app/agents/step03_classifier/model").strip()
     model_path = os.getenv(MODEL_PATH_ENV, "").strip() or str(Path(model_dir) / "model.pkl")
+    pt_model_path = next(
+        (str(Path(model_dir) / name) for name in PT_MODEL_FILENAMES if (Path(model_dir) / name).exists()),
+        None,
+    )
     vectorizer_path = os.getenv(VECTORIZER_PATH_ENV, "").strip() or str(
         Path(model_dir) / "vectorizer.pkl"
     )
-    model_exists = bool(model_path and Path(model_path).exists())
+    model_exists = bool((model_path and Path(model_path).exists()) or pt_model_path)
     vectorizer_exists = bool(vectorizer_path and Path(vectorizer_path).exists())
     return {
         "classifier_model_dir": model_dir or None,
-        "classifier_model_path": model_path or None,
+        "classifier_model_path": pt_model_path or model_path or None,
         "classifier_model_exists": model_exists,
         "classifier_vectorizer_path": vectorizer_path or None,
         "classifier_vectorizer_exists": vectorizer_exists,
@@ -106,9 +160,32 @@ def _model_classify(text: str) -> tuple[str, float] | None:
     loaded = _load_optional_model()
     if not loaded:
         return None
-    model = loaded["model"]
-    vectorizer = loaded["vectorizer"]
     try:
+        if loaded.get("kind") == "torch":
+            torch = loaded["torch"]
+            F = loaded["F"]
+            tokenizer = loaded["tokenizer"]
+            model = loaded["model"]
+            enc = tokenizer(
+                text,
+                max_length=128,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
+            )
+            input_ids = enc["input_ids"].to("cpu")
+            attention_mask = enc["attention_mask"].to("cpu")
+            with torch.no_grad():
+                logits = model(input_ids, attention_mask)
+                probs = F.softmax(logits, dim=1).squeeze(0)
+            complaint_score = float(probs[loaded["complaint_label"]].item())
+            inquiry_score = float(probs[loaded["inquiry_label"]].item())
+            if complaint_score >= inquiry_score:
+                return "complaint", complaint_score
+            return "inquiry", inquiry_score
+
+        model = loaded["model"]
+        vectorizer = loaded["vectorizer"]
         if vectorizer is not None:
             X = vectorizer.transform([text])
             pred = model.predict(X)[0]
@@ -145,7 +222,10 @@ async def classify(state: dict) -> dict:
     if model_result:
         label, conf = model_result
         state["classification_source"] = "model"
-        logger.info("classifier | using optional model from %s", os.getenv(MODEL_PATH_ENV, "").strip())
+        logger.info(
+            "classifier | using optional model from %s",
+            get_classifier_diagnostics().get("classifier_model_path"),
+        )
     else:
         label, conf = _heuristic_classify(state.get("text", ""))
         state["classification_source"] = "heuristic"

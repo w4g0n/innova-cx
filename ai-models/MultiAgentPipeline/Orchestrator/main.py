@@ -23,6 +23,10 @@ from agents.step04_sentimentanalysis.step import get_sentiment_diagnostics
 from agents.step03_classifier.step import get_classifier_diagnostics
 from agents.step08_featureengineering.step import get_feature_engineering_diagnostics
 from agents.step01_subjectgeneration.step import get_subject_generation_diagnostics
+from agents.step02_suggestedresolution.step import (
+    get_suggested_resolution_diagnostics,
+    retrain_resolution_examples_from_db,
+)
 from agents.step10_router.step import get_router_diagnostics
 from agents.step05_audioanalysis.step import get_audio_analysis_diagnostics
 from agents.step09_priority.step import record_manager_feedback_from_state, get_priority_diagnostics
@@ -60,6 +64,10 @@ class PriorityRelearnRequest(BaseModel):
     retrain_now: bool = False
 
 
+class SuggestedResolutionRelearnRequest(BaseModel):
+    max_examples: int = 12
+
+
 # ---------------------------------------------------------------------------
 # Startup — ensure logging tables exist (if db module is available)
 # ---------------------------------------------------------------------------
@@ -81,6 +89,7 @@ async def health():
         "status": "healthy",
         "service": "orchestrator",
         **get_subject_generation_diagnostics(),
+        **get_suggested_resolution_diagnostics(),
         **get_sentiment_diagnostics(),
         **get_classifier_diagnostics(),
         **get_audio_analysis_diagnostics(),
@@ -92,6 +101,7 @@ async def health():
 
 def _log_model_mode_summary() -> None:
     subject_diag = get_subject_generation_diagnostics()
+    suggested_resolution_diag = get_suggested_resolution_diagnostics()
     sentiment_diag = get_sentiment_diagnostics()
     classifier_diag = get_classifier_diagnostics()
     audio_diag = get_audio_analysis_diagnostics()
@@ -102,17 +112,20 @@ def _log_model_mode_summary() -> None:
     rows = [
         (
             "SubjectGeneration",
-            subject_diag.get("subject_generator_mode", "mock"),
-            (
-                "subject generation model artifact present"
-                if subject_diag.get("subject_generator_model_exists")
-                else f"model artifact missing at {subject_diag.get('subject_generator_model_path') or '(not configured)'}"
+            subject_diag.get("subject_generator_mode", "heuristic"),
+            subject_diag.get(
+                "subject_generator_mode_reason",
+                "built-in heuristic subject generation is active",
             ),
         ),
         (
             "SuggestedResolution",
-            "model_or_mock",
-            "delegated to backend suggested-resolution service (it applies model/mock fallback there)",
+            suggested_resolution_diag.get("suggested_resolution_mode", "template"),
+            (
+                "local suggested resolution model artifact present"
+                if suggested_resolution_diag.get("suggested_resolution_model_exists")
+                else f"local suggested resolution model artifact missing at {suggested_resolution_diag.get('suggested_resolution_model_path') or '(not configured)'}"
+            ),
         ),
         (
             "Classification",
@@ -134,18 +147,18 @@ def _log_model_mode_summary() -> None:
         ),
         (
             "AudioAnalysis",
-            audio_diag.get("audio_analysis_mode", "mock"),
-            audio_diag.get("audio_analysis_mode_reason", "audio analyzer unavailable; using mock fallback"),
+            audio_diag.get("audio_analysis_mode", "fallback"),
+            audio_diag.get("audio_analysis_mode_reason", "audio analyzer unavailable; using fallback"),
         ),
         (
             "SentimentCombiner",
-            "model",
+            "deterministic",
             "deterministic built-in combiner logic is active",
         ),
         (
             "Recurrence",
-            "mock",
-            "heuristic recurrence logic active (no external KNN model artifact loaded in orchestrator)",
+            "heuristic",
+            "heuristic recurrence logic is active; no per-agent model artifact is loaded in orchestrator",
         ),
         (
             "FeatureEngineering",
@@ -295,6 +308,16 @@ async def priority_relearn_from_manager_approval(body: PriorityRelearnRequest):
         "approved_priority": approved_priority,
         **feedback,
     }
+
+
+@app.post("/suggested-resolution/relearn")
+async def suggested_resolution_relearn(body: SuggestedResolutionRelearnRequest):
+    try:
+        result = retrain_resolution_examples_from_db(max_examples=body.max_examples)
+    except Exception as exc:
+        logger.error("suggested_resolution_relearn | failed err=%s", exc)
+        raise HTTPException(status_code=500, detail=f"Failed to rebuild suggested resolution examples: {exc}")
+    return result
 
 
 # ---------------------------------------------------------------------------
