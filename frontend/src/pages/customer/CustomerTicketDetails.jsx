@@ -29,7 +29,7 @@ const STATUS_STAGES = [
   { id: "escalated",  label: "Escalated"   },
   { id: "resolved",   label: "Resolved"    },
 ];
-const STATUS_KEY_IDX = { open:0, inprogress:1, assigned:2, overdue:3, escalated:4, resolved:5 };
+const STATUS_KEY_IDX = { open:0, assigned:1, inprogress:2, overdue:3, escalated:4, resolved:5 };
 
 function normalizeStatus(s) { return String(s || "").toLowerCase().replace(/\s+/g, ""); }
 

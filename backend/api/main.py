@@ -2148,6 +2148,231 @@ def employee_reroute_ticket(
 
 
 # =========================================================
+# Ticket Messages — employee ↔ customer conversation
+# =========================================================
+
+class TicketMessageRequest(BaseModel):
+    body: str
+
+@api.get("/employee/tickets/{ticket_code}/messages")
+def employee_get_ticket_messages(
+    ticket_code: str,
+    user: Dict[str, Any] = Depends(require_employee),
+):
+    user_id = user["id"]
+    ticket = fetch_one(
+        "SELECT id FROM tickets WHERE ticket_code = %s AND assigned_to_user_id = %s LIMIT 1;",
+        (ticket_code, user_id),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found or not assigned to you")
+    rows = fetch_all(
+        """
+        SELECT tm.id, tm.body, tm.sender_role, tm.created_at,
+               COALESCE(up.full_name, u.email) AS sender_name
+        FROM ticket_messages tm
+        JOIN users u ON u.id = tm.sender_id
+        LEFT JOIN user_profiles up ON up.user_id = tm.sender_id
+        WHERE tm.ticket_id = %s
+        ORDER BY tm.created_at ASC;
+        """,
+        (ticket["id"],),
+    )
+    return {"messages": [
+        {
+            "id": str(r["id"]),
+            "body": r["body"],
+            "senderRole": r["sender_role"],
+            "senderName": r["sender_name"],
+            "createdAt": r["created_at"].isoformat(),
+        }
+        for r in (rows or [])
+    ]}
+
+
+@api.post("/employee/tickets/{ticket_code}/messages")
+def employee_post_ticket_message(
+    ticket_code: str,
+    body: TicketMessageRequest,
+    user: Dict[str, Any] = Depends(require_employee),
+):
+    user_id = user["id"]
+    text = (body.body or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Message body cannot be empty")
+
+    ticket = fetch_one(
+        """
+        SELECT t.id, t.status, t.first_response_at, t.assigned_to_user_id,
+               t.created_by_user_id
+        FROM tickets t
+        WHERE t.ticket_code = %s AND t.assigned_to_user_id = %s
+        LIMIT 1;
+        """,
+        (ticket_code, user_id),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found or not assigned to you")
+
+    ticket_id = ticket["id"]
+    is_first = ticket["first_response_at"] is None
+    customer_user_id = ticket["created_by_user_id"]
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO ticket_messages (ticket_id, sender_id, sender_role, body)
+                VALUES (%s, %s, 'employee', %s)
+                RETURNING id, body, sender_role, created_at;
+                """,
+                (ticket_id, user_id, text),
+            )
+            msg = cur.fetchone()
+
+            if is_first:
+                cur.execute(
+                    """
+                    UPDATE tickets
+                    SET first_response_at = now(),
+                        status = CASE WHEN status = 'Assigned' THEN 'In Progress' ELSE status END
+                    WHERE id = %s;
+                    """,
+                    (ticket_id,),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO ticket_updates (ticket_id, update_type, message, created_at)
+                    VALUES (%s, 'status_change', 'Status updated to In Progress after first employee response', now());
+                    """,
+                    (ticket_id,),
+                )
+
+            if customer_user_id:
+                _insert_notification(
+                    cur,
+                    user_id=str(customer_user_id),
+                    notif_type="customer_reply",
+                    title=f"New reply on your ticket {ticket_code}",
+                    message=text[:200],
+                    ticket_id=str(ticket_id),
+                    priority=None,
+                )
+
+    logger.info(
+        "employee_message_sent | ticket=%s employee=%s first_response=%s",
+        ticket_code, user_id, is_first,
+    )
+    return {
+        "ok": True,
+        "message": {
+            "id": str(msg["id"]),
+            "body": msg["body"],
+            "senderRole": msg["sender_role"],
+            "createdAt": msg["created_at"].isoformat(),
+        },
+    }
+
+
+@api.get("/customer/tickets/{ticket_code}/messages")
+def customer_get_ticket_messages(
+    ticket_code: str,
+    user: Dict[str, Any] = Depends(require_customer),
+):
+    user_id = user["id"]
+    ticket = fetch_one(
+        "SELECT id FROM tickets WHERE ticket_code = %s AND created_by_user_id = %s LIMIT 1;",
+        (ticket_code, user_id),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    rows = fetch_all(
+        """
+        SELECT tm.id, tm.body, tm.sender_role, tm.created_at,
+               COALESCE(up.full_name, u.email) AS sender_name
+        FROM ticket_messages tm
+        JOIN users u ON u.id = tm.sender_id
+        LEFT JOIN user_profiles up ON up.user_id = tm.sender_id
+        WHERE tm.ticket_id = %s
+        ORDER BY tm.created_at ASC;
+        """,
+        (ticket["id"],),
+    )
+    return {"messages": [
+        {
+            "id": str(r["id"]),
+            "body": r["body"],
+            "senderRole": r["sender_role"],
+            "senderName": r["sender_name"],
+            "createdAt": r["created_at"].isoformat(),
+        }
+        for r in (rows or [])
+    ]}
+
+
+@api.post("/customer/tickets/{ticket_code}/messages")
+def customer_post_ticket_message(
+    ticket_code: str,
+    body: TicketMessageRequest,
+    user: Dict[str, Any] = Depends(require_customer),
+):
+    user_id = user["id"]
+    text = (body.body or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Message body cannot be empty")
+
+    ticket = fetch_one(
+        """
+        SELECT t.id, t.status, t.assigned_to_user_id
+        FROM tickets t
+        WHERE t.ticket_code = %s AND t.created_by_user_id = %s
+        LIMIT 1;
+        """,
+        (ticket_code, user_id),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    if ticket["status"] == "Resolved":
+        raise HTTPException(status_code=400, detail="Cannot reply to a resolved ticket")
+
+    ticket_id = ticket["id"]
+    assigned_to = ticket["assigned_to_user_id"]
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO ticket_messages (ticket_id, sender_id, sender_role, body)
+                VALUES (%s, %s, 'customer', %s)
+                RETURNING id, body, sender_role, created_at;
+                """,
+                (ticket_id, user_id, text),
+            )
+            msg = cur.fetchone()
+
+            if assigned_to:
+                _insert_notification(
+                    cur,
+                    user_id=str(assigned_to),
+                    notif_type="customer_reply",
+                    title=f"Customer replied on {ticket_code}",
+                    message=text[:200],
+                    ticket_id=str(ticket_id),
+                    priority=None,
+                )
+
+    return {
+        "ok": True,
+        "message": {
+            "id": str(msg["id"]),
+            "body": msg["body"],
+            "senderRole": msg["sender_role"],
+            "createdAt": msg["created_at"].isoformat(),
+        },
+    }
+
+
+# =========================================================
 # Employee Report Helpers
 # =========================================================
 
@@ -2879,7 +3104,19 @@ def _dispatch_orchestrator_after_submit(
         subject=subject,
     )
     if not ok:
-        logger.warning("orchestrator_dispatch | failed for ticket=%s", ticket_code)
+        logger.warning(
+            "orchestrator_dispatch | failed for ticket=%s — applying mock pipeline fallback",
+            ticket_code,
+        )
+        try:
+            _apply_mock_pipeline_outcome(ticket_code, details or subject or "")
+            logger.info("orchestrator_dispatch | mock fallback applied for ticket=%s", ticket_code)
+        except Exception as exc:
+            logger.error(
+                "orchestrator_dispatch | mock fallback also failed ticket=%s err=%s",
+                ticket_code,
+                exc,
+            )
     else:
         logger.info("orchestrator_dispatch | accepted for ticket=%s", ticket_code)
 
