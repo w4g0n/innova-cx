@@ -589,3 +589,323 @@
   animation: msgReveal .25s ease both;
 }
 .loginError::before { content: none; }
+/* ============================================================
+   STAFF THEME — staff.innovacx.net  ·  Luxury Edition
+   Rich, premium feel with animated accents & no grid.
+   All overrides scoped to .loginBg--staff
+   ============================================================ */
+
+/* ── Page shell ── */
+.loginBg--staff {
+  background: #f0ebff;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Large soft blobs for depth */
+.loginBg--staff::before {
+  content: "";
+  position: fixed;
+  width: 800px;
+  height: 800px;
+  top: -300px;
+  left: -250px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(89, 36, 180, 0.13), transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(10px);
+}
+
+.loginBg--staff::after {
+  content: "";
+  position: fixed;
+  width: 600px;
+  height: 600px;
+  bottom: -200px;
+  right: -150px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.1), transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(10px);
+  /* override galaxy halo blur */
+}
+
+/* ── Card wrapper — luxury shadow ── */
+.loginBg--staff .loginWrapper {
+  box-shadow:
+    0 0 0 1px rgba(89, 36, 180, 0.14),
+    0 2px 4px rgba(89, 36, 180, 0.06),
+    0 12px 40px rgba(89, 36, 180, 0.12),
+    0 40px 100px rgba(60, 20, 140, 0.18),
+    0 80px 160px rgba(0, 0, 0, 0.12);
+}
+
+/* ── Left panel — deep rich purple with shimmer ── */
+.loginBg--staff .loginLeft {
+  background: linear-gradient(145deg, #1e0a4a 0%, #3b1286 35%, #5924b4 65%, #3a0f8e 100%);
+  overflow: hidden;
+}
+
+/* Animated diagonal shimmer sweep */
+.loginBg--staff .loginLeft::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -60%;
+  width: 60%;
+  height: 200%;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.06) 50%,
+    transparent 70%
+  );
+  transform: skewX(-12deg);
+  animation: staffShimmer 4s ease-in-out infinite;
+  border-radius: 0;
+  border: none;
+  z-index: 3;
+}
+
+@keyframes staffShimmer {
+  0%   { left: -60%; opacity: 0; }
+  15%  { opacity: 1; }
+  50%  { left: 120%; opacity: 1; }
+  55%  { opacity: 0; }
+  100% { left: 120%; opacity: 0; }
+}
+
+/* Second ring — softer, larger */
+.loginBg--staff .loginLeft::after {
+  content: "";
+  position: absolute;
+  width: 380px;
+  height: 380px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: ringPulse 5s ease-in-out infinite;
+}
+
+/* Extra inner ring using a pseudo-sibling trick via loginLeft overlay */
+.loginBg--staff .loginOverlay {
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.11), transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(180, 120, 255, 0.14), transparent 55%),
+    radial-gradient(circle at 50% 50%, rgba(89, 36, 180, 0.2), transparent 80%);
+}
+
+/* Inner decorative ring */
+.loginBg--staff .loginLeftContent::before {
+  content: "";
+  position: absolute;
+  width: 230px;
+  height: 230px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: ringPulse 5s ease-in-out 1.5s infinite;
+}
+
+.loginBg--staff .welcomeTitle {
+  color: #ffffff;
+  text-shadow: 0 2px 20px rgba(180, 120, 255, 0.4);
+}
+
+.loginBg--staff .welcomeSub {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ── Right panel — clean white, NO grid ── */
+.loginBg--staff .loginRight {
+  background: #ffffff;
+  backdrop-filter: none;
+  border-left: 1px solid rgba(89, 36, 180, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Soft corner glow — replaces the grid */
+.loginBg--staff .loginRight::before {
+  content: "";
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  top: -100px;
+  right: -80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(89, 36, 180, 0.06), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.loginBg--staff .loginRight::after {
+  content: "";
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  bottom: -60px;
+  left: -60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.05), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.loginBg--staff .loginHeader,
+.loginBg--staff .loginForm,
+.loginBg--staff .login-session-banner {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Header tag — premium pill ── */
+.loginBg--staff .login-header-tag {
+  color: #5924b4;
+  background: linear-gradient(135deg, rgba(89, 36, 180, 0.08), rgba(124, 58, 237, 0.06));
+  border: 1px solid rgba(89, 36, 180, 0.18);
+  border-radius: 999px;
+  display: inline-block;
+  padding: 5px 14px;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 8px rgba(89, 36, 180, 0.08);
+}
+
+/* ── Login title ── */
+.loginBg--staff .loginTitle {
+  color: #0f0520;
+  font-size: clamp(24px, 2.8vw, 32px);
+  letter-spacing: -0.04em;
+}
+
+/* ── Labels ── */
+.loginBg--staff .label {
+  color: #6b7280;
+  letter-spacing: 0.1em;
+}
+
+/* ── Inputs — elevated with inner shadow ── */
+.loginBg--staff .input {
+  background: #faf8ff;
+  border: 1.5px solid #e4d9f7;
+  color: #0f0520;
+  caret-color: #5924b4;
+  box-shadow: inset 0 1px 3px rgba(89, 36, 180, 0.05);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.loginBg--staff .input::placeholder {
+  color: #b0a0cc;
+}
+
+.loginBg--staff .input:focus {
+  border-color: #5924b4;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 3px rgba(89, 36, 180, 0.1),
+    inset 0 1px 3px rgba(89, 36, 180, 0.04);
+}
+
+.loginBg--staff .input:not(:placeholder-shown):not(:focus) {
+  border-color: rgba(89, 36, 180, 0.35);
+}
+
+/* ── Password toggle ── */
+.loginBg--staff .passwordToggleBtn {
+  color: #b0a0cc;
+}
+
+.loginBg--staff .passwordToggleBtn:hover {
+  color: #5924b4;
+  background: rgba(89, 36, 180, 0.07);
+}
+
+/* ── Field error ── */
+.loginBg--staff .field--error .input {
+  border-color: rgba(220, 38, 38, 0.5) !important;
+  background: rgba(220, 38, 38, 0.02) !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.08) !important;
+}
+
+/* ── Forgot link ── */
+.loginBg--staff .forgotLink {
+  color: #5924b4;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.loginBg--staff .forgotLink:hover {
+  opacity: 1;
+}
+
+/* ── Submit button — glossy gradient ── */
+.loginBg--staff .loginBtn {
+  background: linear-gradient(135deg, #2d0f72 0%, #5924b4 45%, #7c3aed 100%);
+  background-size: 200% auto;
+  box-shadow:
+    0 4px 16px rgba(89, 36, 180, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  letter-spacing: 0.02em;
+}
+
+.loginBg--staff .loginBtn:hover:not(:disabled) {
+  background-position: right center;
+  box-shadow:
+    0 8px 30px rgba(89, 36, 180, 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.loginBg--staff .loginBtn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 4px 16px rgba(89, 36, 180, 0.35);
+}
+
+/* ── Server error banner ── */
+.loginBg--staff .loginError {
+  background: rgba(220, 38, 38, 0.04);
+  border: 1.5px solid rgba(220, 38, 38, 0.18);
+  color: #b91c1c;
+}
+
+/* ── Session expired banner ── */
+.loginBg--staff .login-session-banner {
+  background: rgba(245, 158, 11, 0.05);
+  border: 1.5px solid rgba(245, 158, 11, 0.18);
+}
+
+.loginBg--staff .login-session-banner__icon {
+  background: rgba(245, 158, 11, 0.1);
+}
+
+/* ── Hide customer-only decorations ── */
+.loginBg--staff .login-neb,
+.loginBg--staff .login-starfield {
+  display: none;
+}
+
+/* Staff canvas — visible, light blend mode */
+.loginBg--staff .staff-canvas {
+  display: block;
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+}
+
+/* ── Responsive ── */
+@media (max-width: 800px) {
+  .loginBg--staff .loginRight {
+    border-left: none;
+    border-top: 1px solid rgba(89, 36, 180, 0.08);
+  }
+}
