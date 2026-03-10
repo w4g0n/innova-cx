@@ -91,6 +91,8 @@ _AGGRESSION_WORDS = {
     "unacceptable", "disgusting", "horrible", "terrible",
     "worst", "garbage", "trash", "sue", "lawyer", "legal",
     "threatening", "kill", "die", "hate",
+    "furious", "outrageous", "irate", "appalling", "atrocious",
+    "infuriating", "fuming", "livid", "enraged", "outraged",
 }
 
 _THREAT_PHRASES = [
@@ -98,6 +100,8 @@ _THREAT_PHRASES = [
     "go to the press", "go to media", "report you",
     "escalate to", "speak to your manager", "your supervisor",
     "fire you", "get you fired",
+    "want a human", "speak to a human", "talk to a human",
+    "real person", "actual person", "human agent", "human now",
 ]
 
 

@@ -402,7 +402,13 @@ def _extract_ticket_id(text: str) -> str | None:
     if uuid_match:
         return uuid_match.group(0)
     code_match = re.search(r"\b(CX-[A-Z0-9-]{4,32}|[A-Z]{0,3}\d{3,8})\b", text.upper())
-    return code_match.group(1) if code_match else None
+    if not code_match:
+        return None
+    matched = code_match.group(1)
+    # Normalise bare numeric IDs like "4780" → "CX-4780"
+    if matched.isdigit():
+        matched = f"CX-{matched}"
+    return matched
 
 
 def _log_and_save(
