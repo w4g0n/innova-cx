@@ -175,6 +175,7 @@ async def _generate_subject(details: str) -> str:
 
 
 async def generate_subject(state: dict) -> dict:
+    state["subject_generation_mode"] = get_subject_generation_diagnostics().get("subject_generator_mode", "mock")
     current_subject = state.get("subject")
     details = str(state.get("text") or "").strip()
     if not details or not _is_empty_subject(current_subject):

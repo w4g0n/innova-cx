@@ -137,6 +137,7 @@ const menus = {
     { label: "Notifications",    to: "/operator/notifications",    icon: "bell" },
     { label: "Dashboard",        to: "/operator", end: true,       icon: "dashboard" },
     { label: "Model Health",   to: "/operator/model-health",   icon: "model" },
+    { label: "AI Explainability", to: "/operator/ai-explainability", icon: "reports" },
     { label: "Quality Control", to: "/operator/quality-control", icon: "chatbot" },
     { label: "Manage Users",     to: "/operator/users",            icon: "users" },
   ],

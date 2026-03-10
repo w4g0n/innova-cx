@@ -223,6 +223,11 @@ async def route_and_store(state: dict) -> dict:
         state["department_routing_source"] = source
         state["department_routing_calibration"] = calibration_source
         state["department_confidence"] = top_confidence
+        state["department_routing_candidates"] = [
+            {"department": label, "confidence": round(float(score), 4)}
+            for label, score in zip(labels, scores)
+        ]
+        state["department_selected"] = routed_department if auto_routed else top_department
         state["department"] = routed_department
         state["status"] = "Assigned" if auto_routed else "Open"
         state["chatbot_response"] = None if state.get("label") == "inquiry" else state.get("chatbot_response")

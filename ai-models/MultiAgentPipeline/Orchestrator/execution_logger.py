@@ -49,6 +49,14 @@ def _coerce_uuid_or_none(value: Any) -> str | None:
         return None
 
 
+def _ticket_refs(raw_ticket_value: Any, explicit_ticket_code: Any = None) -> tuple[str | None, str | None]:
+    db_ticket_id = _coerce_uuid_or_none(raw_ticket_value)
+    ticket_code = str(explicit_ticket_code or "").strip() or None
+    if not ticket_code and raw_ticket_value is not None and db_ticket_id is None:
+        ticket_code = str(raw_ticket_value).strip() or None
+    return db_ticket_id, ticket_code
+
+
 def _to_model_execution_agent_name(agent_name: str) -> str:
     """
     model_execution_log.agent_name is enum(agent_name_type):
@@ -66,29 +74,6 @@ def _to_model_execution_agent_name(agent_name: str) -> str:
     if "sentiment" in n or "audioanalysis" in n or "classif" in n:
         return "sentiment"
     return "feature"
-
-
-def _compute_diff(before: dict, after: dict) -> dict:
-    """Compute keys added or changed between two state dicts."""
-    diff = {}
-    for key in after:
-        if key not in before:
-            diff[key] = {"action": "added", "value": _safe_value(after[key])}
-        else:
-            try:
-                equal = before[key] == after[key]
-                # Handle numpy arrays where == returns an array instead of bool
-                if hasattr(equal, "__iter__") and not isinstance(equal, str):
-                    equal = all(equal)
-            except (ValueError, TypeError):
-                equal = False
-            if not equal:
-                diff[key] = {
-                    "action": "changed",
-                    "old": _safe_value(before[key]),
-                    "new": _safe_value(after[key]),
-                }
-    return diff
 
 
 def _safe_value(obj: Any) -> Any:
@@ -134,7 +119,7 @@ def _extract_confidence(state: dict) -> float | None:
     return None
 
 
-def _summarize_stage_output(output_state: dict, state_diff: dict) -> dict:
+def _summarize_stage_output(output_state: dict) -> dict:
     """
     Build a compact, terminal-friendly output summary for each stage.
     """
@@ -161,13 +146,11 @@ def _summarize_stage_output(output_state: dict, state_diff: dict) -> dict:
         "respond_due_at",
         "resolve_due_at",
     )
-    changed_keys = sorted(list(state_diff.keys()))
     important = {k: _safe_value(output_state.get(k)) for k in important_keys if k in output_state}
     # Keep log line readable when suggestion text is long.
     if "suggested_resolution" in important and isinstance(important["suggested_resolution"], str):
         important["suggested_resolution"] = important["suggested_resolution"][:180]
     return {
-        "changed_keys": changed_keys,
         "important": important,
     }
 
@@ -175,11 +158,11 @@ def _summarize_stage_output(output_state: dict, state_diff: dict) -> dict:
 def _write_logs(
     execution_id: str,
     ticket_id: str | None,
+    ticket_code: str | None,
     agent_name: str,
     step_order: int,
     input_state: dict,
     output_state: dict,
-    state_diff: dict,
     inference_time_ms: int,
     confidence_score: float | None,
     error_flag: bool,
@@ -187,10 +170,20 @@ def _write_logs(
 ) -> None:
     """Write to both model_execution_log and agent_output_log. Never raises."""
     try:
-        db_ticket_id = _coerce_uuid_or_none(ticket_id)
         mel_agent_name = _to_model_execution_agent_name(agent_name)
         with db_connect() as conn:
             with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO pipeline_executions
+                        (id, ticket_id, ticket_code, trigger_source, started_at, status)
+                    VALUES (%s, %s, %s, 'ingest', now(), 'running')
+                    ON CONFLICT (id) DO UPDATE
+                    SET ticket_id = COALESCE(pipeline_executions.ticket_id, EXCLUDED.ticket_id),
+                        ticket_code = COALESCE(pipeline_executions.ticket_code, EXCLUDED.ticket_code)
+                    """,
+                    (execution_id, ticket_id, ticket_code),
+                )
                 cur.execute(
                     """
                     INSERT INTO model_execution_log
@@ -200,7 +193,7 @@ def _write_logs(
                     """,
                     (
                         execution_id,
-                        db_ticket_id,
+                        ticket_id,
                         agent_name,
                         mel_agent_name,
                         inference_time_ms,
@@ -214,18 +207,17 @@ def _write_logs(
                     """
                     INSERT INTO agent_output_log
                         (execution_id, ticket_id, agent_name, step_order,
-                         input_state, output_state, state_diff,
+                         input_state, output_state,
                          inference_time_ms, error_flag, error_message)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         execution_id,
-                        db_ticket_id,
+                        ticket_id,
                         agent_name,
                         step_order,
                         json.dumps(_safe_json(input_state)),
                         json.dumps(_safe_json(output_state)),
-                        json.dumps(_safe_json(state_diff)),
                         inference_time_ms,
                         error_flag,
                         error_message,
@@ -233,6 +225,72 @@ def _write_logs(
                 )
     except Exception as exc:
         logger.error("execution_log | write failed agent=%s err=%s", agent_name, exc)
+
+
+def _write_stage_event(
+    *,
+    execution_id: str,
+    ticket_id: str | None,
+    ticket_code: str | None,
+    agent_name: str,
+    step_order: int,
+    event_type: str,
+    status: str,
+    input_state: dict,
+    output_state: dict,
+    inference_time_ms: int | None,
+    confidence_score: float | None,
+    error_message: str | None,
+) -> None:
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO pipeline_executions
+                        (id, ticket_id, ticket_code, trigger_source, started_at, status, error_message)
+                    VALUES (%s, %s, %s, 'ingest', now(), %s, %s)
+                    ON CONFLICT (id) DO UPDATE
+                    SET ticket_id = COALESCE(pipeline_executions.ticket_id, EXCLUDED.ticket_id),
+                        ticket_code = COALESCE(pipeline_executions.ticket_code, EXCLUDED.ticket_code),
+                        status = CASE
+                                    WHEN EXCLUDED.status = 'failed' THEN 'failed'
+                                    WHEN pipeline_executions.status = 'failed' THEN 'failed'
+                                    ELSE EXCLUDED.status
+                                 END,
+                        completed_at = CASE
+                                         WHEN EXCLUDED.status IN ('success', 'failed') THEN now()
+                                         ELSE pipeline_executions.completed_at
+                                       END,
+                        error_message = COALESCE(EXCLUDED.error_message, pipeline_executions.error_message)
+                    """,
+                    (execution_id, ticket_id, ticket_code, status, error_message),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO pipeline_stage_events
+                        (execution_id, ticket_id, ticket_code, step_order, stage_name,
+                         event_type, status, inference_time_ms, confidence_score,
+                         input_state, output_state, error_message)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        execution_id,
+                        ticket_id,
+                        ticket_code,
+                        step_order,
+                        agent_name,
+                        event_type,
+                        status,
+                        inference_time_ms,
+                        confidence_score,
+                        json.dumps(_safe_json(input_state)),
+                        json.dumps(_safe_json(output_state)),
+                        error_message,
+                    ),
+                )
+    except Exception as exc:
+        logger.error("stage_event | write failed agent=%s err=%s", agent_name, exc)
 
 
 def logged_step(
@@ -247,17 +305,33 @@ def logged_step(
 
     async def wrapper(state: dict) -> dict:
         execution_id = state.get("_execution_id", str(uuid.uuid4()))
-        ticket_id = state.get("ticket_id")
+        raw_ticket_id = state.get("ticket_id")
+        db_ticket_id, ticket_code = _ticket_refs(raw_ticket_id, state.get("ticket_code"))
+        total_steps = int(state.get("_pipeline_total_steps", 0) or 0)
 
         # Strip internal keys from the snapshot we log (keep state clean)
         input_snapshot = {k: v for k, v in copy.deepcopy(state).items() if not k.startswith("_")}
+        _write_stage_event(
+            execution_id=execution_id,
+            ticket_id=db_ticket_id,
+            ticket_code=ticket_code,
+            agent_name=agent_name,
+            step_order=step_order,
+            event_type="start",
+            status="running",
+            input_state=input_snapshot,
+            output_state={},
+            inference_time_ms=None,
+            confidence_score=None,
+            error_message=None,
+        )
 
         logger.info(
             "STAGE_START | execution_id=%s step=%d agent=%s ticket_id=%s",
             execution_id,
             step_order,
             agent_name,
-            ticket_id,
+            raw_ticket_id,
         )
 
         start = time.monotonic()
@@ -269,15 +343,29 @@ def logged_step(
             error_msg = f"{type(exc).__name__}: {exc}"
             _write_logs(
                 execution_id=execution_id,
-                ticket_id=ticket_id,
+                ticket_id=db_ticket_id,
+                ticket_code=ticket_code,
                 agent_name=agent_name,
                 step_order=step_order,
                 input_state=input_snapshot,
                 output_state=input_snapshot,
-                state_diff={},
                 inference_time_ms=elapsed_ms,
                 confidence_score=None,
                 error_flag=True,
+                error_message=error_msg,
+            )
+            _write_stage_event(
+                execution_id=execution_id,
+                ticket_id=db_ticket_id,
+                ticket_code=ticket_code,
+                agent_name=agent_name,
+                step_order=step_order,
+                event_type="error",
+                status="failed",
+                input_state=input_snapshot,
+                output_state=input_snapshot,
+                inference_time_ms=elapsed_ms,
+                confidence_score=None,
                 error_message=error_msg,
             )
             logger.error(
@@ -285,28 +373,45 @@ def logged_step(
                 execution_id,
                 step_order,
                 agent_name,
-                ticket_id,
+                raw_ticket_id,
                 error_msg,
             )
             raise
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
         output_snapshot = {k: v for k, v in copy.deepcopy(result).items() if not k.startswith("_")}
-        state_diff = _compute_diff(input_snapshot, output_snapshot)
+        out_db_ticket_id, out_ticket_code = _ticket_refs(result.get("ticket_id"), result.get("ticket_code") or ticket_code)
         confidence = _extract_confidence(result)
-        stage_summary = _summarize_stage_output(output_snapshot, state_diff)
+        stage_summary = _summarize_stage_output(output_snapshot)
 
         _write_logs(
             execution_id=execution_id,
-            ticket_id=ticket_id,
+            ticket_id=out_db_ticket_id,
+            ticket_code=out_ticket_code,
             agent_name=agent_name,
             step_order=step_order,
             input_state=input_snapshot,
             output_state=output_snapshot,
-            state_diff=state_diff,
             inference_time_ms=elapsed_ms,
             confidence_score=confidence,
             error_flag=False,
+            error_message=None,
+        )
+        run_status = "running"
+        if total_steps and step_order >= total_steps:
+            run_status = "success"
+        _write_stage_event(
+            execution_id=execution_id,
+            ticket_id=out_db_ticket_id,
+            ticket_code=out_ticket_code,
+            agent_name=agent_name,
+            step_order=step_order,
+            event_type="output",
+            status=run_status,
+            input_state=input_snapshot,
+            output_state=output_snapshot,
+            inference_time_ms=elapsed_ms,
+            confidence_score=confidence,
             error_message=None,
         )
 

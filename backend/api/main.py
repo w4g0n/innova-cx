@@ -61,6 +61,14 @@ except Exception:
         get_routing_review_payload,
         record_department_routing_decision,
     )
+try:
+    from api.ai_explainability import router as ai_explainability_router
+except Exception:
+    from ai_explainability import router as ai_explainability_router
+try:
+    from api.event_logger import log_application_event
+except Exception:
+    from event_logger import log_application_event
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
@@ -80,7 +88,8 @@ except Exception as _analytics_import_err:
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "WARNING").upper()
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.WARNING), format="%(asctime)s | %(levelname)s | %(message)s")
 SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
 # Keep backward compatibility with ROUTING_CONFIDENCE_THRESHOLD while standardizing on
 # DEPARTMENT_ROUTING_THRESHOLD used by orchestrator/.env.
@@ -189,7 +198,6 @@ def _ensure_runtime_schema_compatibility() -> None:
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
-
                 # FIX (Issue 3 — department_routing table missing):
                 # The live DB volume may pre-date when department_routing was added to init.sql.
                 # Create it here idempotently so the routing review feature works on all envs.
@@ -313,6 +321,37 @@ def _detect_sla_policy_function() -> bool:
         return False
 
 
+def _clear_unassigned_sla_once() -> None:
+    """
+    App-level SLA gate:
+    if department or assignee is missing, SLA must be unset and ticket cannot be Overdue.
+    """
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE tickets
+                    SET
+                      priority_assigned_at = NULL,
+                      respond_due_at = NULL,
+                      resolve_due_at = NULL,
+                      respond_time_left_seconds = NULL,
+                      resolve_time_left_seconds = NULL,
+                      respond_breached = FALSE,
+                      resolve_breached = FALSE,
+                      status = CASE
+                                 WHEN status = 'Overdue'::ticket_status THEN 'Open'::ticket_status
+                                 ELSE status
+                               END
+                    WHERE status <> 'Resolved'::ticket_status
+                      AND (department_id IS NULL OR assigned_to_user_id IS NULL)
+                    """
+                )
+    except Exception:
+        return
+
+
 def _apply_sla_policies_once(log_result: bool = False, source: str = "request") -> None:
     """
     Applies time-based SLA policies (escalation/overdue) if migration is installed.
@@ -321,6 +360,7 @@ def _apply_sla_policies_once(log_result: bool = False, source: str = "request") 
     if not _has_sla_policy_fn:
         return
     try:
+        _clear_unassigned_sla_once()
         with db_connect() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT apply_ticket_sla_policies() AS result;")
@@ -651,6 +691,9 @@ def require_operator(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[s
     if user.get("role") != "operator":
         raise HTTPException(status_code=403, detail="Forbidden")
     return user
+
+
+api.include_router(ai_explainability_router, dependencies=[Depends(require_operator)])
 
 # =========================================================
 # Recurring complaint prediction
@@ -1852,6 +1895,16 @@ def employee_resolve_ticket(
         row["status"],
         row["resolved_at"],
     )
+    log_application_event(
+        service="backend",
+        event_key="ticket_status_update",
+        ticket_id=existing["id"],
+        ticket_code=row["ticket_code"],
+        payload={
+            "status": row["status"],
+            "resolved_at": row["resolved_at"],
+        },
+    )
     _trigger_resolution_retraining()
 
     return {
@@ -3025,6 +3078,7 @@ def _dispatch_orchestrator_after_submit(
     details: str,
     ticket_type: Optional[str],
     subject: Optional[str],
+    execution_id: Optional[str],
 ) -> None:
     ok = dispatch_ticket_to_orchestrator(
         ticket_code=ticket_code,
@@ -3033,23 +3087,25 @@ def _dispatch_orchestrator_after_submit(
         orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
         ticket_type=ticket_type,
         subject=subject,
+        execution_id=execution_id,
     )
     if not ok:
-        logger.warning(
-            "orchestrator_dispatch | failed for ticket=%s — applying mock pipeline fallback",
-            ticket_code,
+        logger.warning("orchestrator_dispatch | failed for ticket=%s", ticket_code)
+        log_application_event(
+            service="backend",
+            event_key="orchestrator_dispatch",
+            level="WARNING",
+            ticket_code=ticket_code,
+            payload={"status": "failed"},
         )
-        try:
-            _apply_mock_pipeline_outcome(ticket_code, details or subject or "")
-            logger.info("orchestrator_dispatch | mock fallback applied for ticket=%s", ticket_code)
-        except Exception as exc:
-            logger.error(
-                "orchestrator_dispatch | mock fallback also failed ticket=%s err=%s",
-                ticket_code,
-                exc,
-            )
     else:
         logger.info("orchestrator_dispatch | accepted for ticket=%s", ticket_code)
+        log_application_event(
+            service="backend",
+            event_key="orchestrator_dispatch",
+            ticket_code=ticket_code,
+            payload={"status": "accepted"},
+        )
 
 
 @api.post("/internal/tickets/create")
@@ -3091,6 +3147,7 @@ def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
         orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
         ticket_type=ticket_type,
         subject=subject,
+        execution_id=created.get("execution_id"),
     )
     if not orchestrator_dispatched:
         logger.warning(
@@ -3121,6 +3178,7 @@ def create_customer_ticket(
     # Insert ticket into database through centralized gate.
     ticket_id = None
     ticket_code = None
+    execution_id = None
     with db_connect() as conn:
         with conn.cursor() as cur:
             normalized_ticket_type = (
@@ -3141,6 +3199,7 @@ def create_customer_ticket(
             )
             ticket_id = created["id"]
             ticket_code = created["ticket_code"]
+            execution_id = created.get("execution_id")
             logger.info(
                 "customer_ticket_submit | ticket_code=%s user_id=%s type=%s status=%s priority=%s",
                 ticket_code,
@@ -3148,6 +3207,19 @@ def create_customer_ticket(
                 normalized_ticket_type,
                 created.get("status"),
                 created.get("priority"),
+            )
+            log_application_event(
+                service="backend",
+                event_key="customer_ticket_submit",
+                ticket_id=ticket_id,
+                ticket_code=ticket_code,
+                payload={
+                    "user_id": str(user["id"]),
+                    "type": normalized_ticket_type,
+                    "status": created.get("status"),
+                    "priority": created.get("priority"),
+                },
+                cur=cur,
             )
 
             # Insert attachments if any
@@ -3168,8 +3240,16 @@ def create_customer_ticket(
         details=body.details,
         ticket_type=body.type,
         subject=body.subject,
+        execution_id=execution_id,
     )
     logger.info("orchestrator_dispatch | queued for ticket=%s", ticket_code)
+    log_application_event(
+        service="backend",
+        event_key="orchestrator_dispatch",
+        ticket_id=ticket_id,
+        ticket_code=ticket_code,
+        payload={"status": "queued"},
+    )
 
     return {
         "ok": True,
@@ -3420,6 +3500,7 @@ def assign_ticket(
             SET
                 assigned_to_user_id = %s,
                 assigned_at         = NOW(),
+                priority_assigned_at = COALESCE(priority_assigned_at, NOW()),
                 updated_at          = NOW(),
                 status              = CASE
                                         WHEN status = 'Resolved' THEN status
@@ -3438,6 +3519,13 @@ def assign_ticket(
             SET
                 assigned_to_user_id = NULL,
                 assigned_at         = NULL,
+                priority_assigned_at = NULL,
+                respond_due_at = NULL,
+                resolve_due_at = NULL,
+                respond_time_left_seconds = NULL,
+                resolve_time_left_seconds = NULL,
+                respond_breached = FALSE,
+                resolve_breached = FALSE,
                 updated_at          = NOW(),
                 status              = 'Open'
             WHERE id = %s
@@ -3959,6 +4047,15 @@ def decide_approval(
     logger.info(
         "approval_decision | request=%s decision=%s by=%s",
         request_id, decision, user["id"],
+    )
+    log_application_event(
+        service="backend",
+        event_key="approval_decision",
+        payload={
+            "request_id": str(request_id),
+            "decision": decision,
+            "by": str(user["id"]),
+        },
     )
     if decision == "Approved" and relearn_ticket_id and relearn_priority:
         _trigger_priority_relearning(
@@ -4863,6 +4960,22 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         updated[5],
                         updated[6],
                     )
+                    log_application_event(
+                        service="backend",
+                        event_key="orchestrator_ticket_update",
+                        ticket_id=existing[0],
+                        ticket_code=updated[0],
+                        payload={
+                            "status": updated[1],
+                            "priority": updated[2],
+                            "asset_type": updated[3],
+                            "department": requested_department if routing_is_confident else None,
+                            "priority_assigned_at": updated[4],
+                            "respond_due_at": updated[5],
+                            "resolve_due_at": updated[6],
+                        },
+                        cur=cur,
+                    )
 
                     auto_assigned_user_id = auto_assign_ticket_if_needed(
                         cur,
@@ -5605,6 +5718,7 @@ def get_operator_complaint_detail(
         """,
         (tid,),
     ) or []
+
 
     # ── ticket updates ────────────────────────────────────────────────────────
     ticket_updates = fetch_all(
