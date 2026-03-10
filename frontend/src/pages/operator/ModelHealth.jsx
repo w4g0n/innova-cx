@@ -482,10 +482,14 @@ export default function ModelHealth() {
                 onChange={handleFilterChange(setDeptFilter)}
                 ariaLabel="Filter by department"
                 options={[
-                  { label: "All departments", value: "All Departments" },
-                  { label: "Warehouse",        value: "Warehouse"      },
-                  { label: "Office",           value: "Office"         },
-                  { label: "Retail Store",     value: "Retail Store"   },
+                  { label: "All Departments",       value: "All Departments"       },
+                  { label: "Facilities Management", value: "Facilities Management" },
+                  { label: "Legal & Compliance",    value: "Legal & Compliance"    },
+                  { label: "Safety & Security",     value: "Safety & Security"     },
+                  { label: "HR",                    value: "HR"                    },
+                  { label: "Leasing",               value: "Leasing"               },
+                  { label: "Maintenance",           value: "Maintenance"           },
+                  { label: "IT",                    value: "IT"                    },
                 ]}
               />
               <DateRangePicker dateRange={dateRange} onChange={handleDateRangeChange} />
