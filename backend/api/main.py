@@ -4763,7 +4763,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             )
             existing = cur.fetchone()
             if existing:
-                    had_priority_before = existing[1] is not None
                     existing_department_id = existing[2]
                     previous_status = existing[3]
                     previous_priority = existing[4]
