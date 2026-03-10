@@ -32,6 +32,36 @@ function iconForType(type) {
   }
 }
 
+function Toast({ message, visible }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: "28px",
+        right: "28px",
+        background: "#1e1e2e",
+        color: "#fff",
+        padding: "12px 20px",
+        borderRadius: "10px",
+        fontSize: "14px",
+        fontWeight: 500,
+        boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : "translateY(12px)",
+        transition: "opacity 0.25s ease, transform 0.25s ease",
+        pointerEvents: "none",
+        zIndex: 9999,
+      }}
+    >
+      <span style={{ fontSize: "16px" }}>✅</span>
+      {message}
+    </div>
+  );
+}
+
 export default function OperatorNotifications() {
   const navigate = useNavigate();
 
@@ -41,14 +71,20 @@ export default function OperatorNotifications() {
   const [onlyUnread, setOnlyUnread]     = useState(false);
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState("");
+  const [toast, setToast]               = useState({ visible: false, message: "" });
 
   const token = localStorage.getItem("access_token");
+
+  const showToast = (message) => {
+    setToast({ visible: true, message });
+    setTimeout(() => setToast({ visible: false, message: "" }), 2500);
+  };
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(apiUrl("/operator/notifications"), {
+      const res = await fetch(apiUrl("/api/operator/notifications"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 401) { navigate("/login"); return; }
@@ -95,29 +131,38 @@ export default function OperatorNotifications() {
   const markAllRead = async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     try {
-      await fetch(apiUrl("/operator/notifications/read-all"), {
+      await fetch(apiUrl("/api/operator/notifications/read-all"), {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      showToast("All notifications marked as read");
     } catch (e) {
       console.error("Failed to mark all notifications as read:", e);
     }
   };
 
   const onNotificationClick = async (n) => {
+    if (n.read) {
+      // Already read — just navigate if applicable
+      if (n.userId)   navigate(`/operator/users`);
+      if (n.reportId) navigate(`/operator/model-analysis`);
+      return;
+    }
+
     setNotifications((prev) =>
       prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
     );
     try {
-      await fetch(apiUrl(`/operator/notifications/${n.id}/read`), {
+      await fetch(apiUrl(`/api/operator/notifications/${n.id}/read`), {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      showToast("Notification marked as read");
     } catch (e) {
       console.error("Failed to mark notification as read:", e);
     }
     if (n.userId)   navigate(`/operator/users`);
-    if (n.reportId) navigate(`/operator/model-analysis`);
+    if (n.reportId) navigate(`/operator/model-health`);
   };
 
   return (
@@ -182,12 +227,8 @@ export default function OperatorNotifications() {
             filtered.map((n) => (
               <div
                 key={n.id}
-                className={`empNotifs__item ${n.read ? "read" : "unread"} ${
-                  n.userId || n.reportId ? "clickable" : ""
-                }`}
-                onClick={() =>
-                  n.userId || n.reportId ? onNotificationClick(n) : null
-                }
+                className={`empNotifs__item ${n.read ? "read" : "unread"} clickable`}
+                onClick={() => onNotificationClick(n)}
               >
                 <div className="empNotifs__left">
                   <div className="empNotifs__icon">{iconForType(n.type)}</div>
@@ -214,6 +255,8 @@ export default function OperatorNotifications() {
           )}
         </div>
       </div>
+
+      <Toast message={toast.message} visible={toast.visible} />
     </Layout>
   );
 }

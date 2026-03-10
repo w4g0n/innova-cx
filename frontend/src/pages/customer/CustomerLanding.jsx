@@ -594,13 +594,6 @@ export default function CustomerLanding() {
             <div className="novaWidgetHeaderRight">
               <button
                 type="button"
-                className="novaTextBtn"
-                onClick={resetSession}
-              >
-                New Chat
-              </button>
-              <button
-                type="button"
                 className={`novaTextBtn ${novaView === "form" ? "active" : ""}`}
                 onClick={toggleFormInChat}
               >
@@ -699,11 +692,10 @@ export default function CustomerLanding() {
                         )}
                       </div>
                       {!m.typing && m.buttons?.length > 0 && (
-                        <div className="novaQuickReplies">
+                        <div className="novaQuickRow">
                           {m.buttons.map((btn) => (
                             <button
                               key={btn}
-                              className="novaQuickReplyBtn"
                               onClick={() =>
                                 handleSend(
                                   btn === "create_ticket"
@@ -845,7 +837,7 @@ export default function CustomerLanding() {
                     <input
                       value={text}
                       onChange={(e) => setText(e.target.value)}
-                      placeholder="Type a message… (Enter to send)"
+                      placeholder="Type a message…"
                     />
 
                     <button type="submit">Send</button>

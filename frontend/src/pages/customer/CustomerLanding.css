@@ -493,57 +493,10 @@ body {
   white-space: pre-wrap;
 }
 
-.novaQuickReplies {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.novaQuickReplyBtn {
-  background: transparent;
-  border: 1px solid rgba(64, 28, 81, 0.35);
-  border-radius: 14px;
-  color: rgba(64, 28, 81, 0.85);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 4px 12px;
-  transition: background 0.15s, color 0.15s;
-}
-
-.novaQuickReplyBtn:hover {
-  background: rgba(64, 28, 81, 0.1);
-  color: #2b1247;
-}
-
 .novaMsg--user .novaBubble {
   background: rgba(64, 28, 81, 0.12);
   border-color: rgba(64, 28, 81, 0.18);
   color: #2b1247;
-}
-
-/* ── Typing indicator (animated dots) ──────────────────── */
-.novaTyping {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 0;
-}
-
-.novaTyping span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: rgba(64, 28, 81, 0.55);
-  animation: novaTypingBounce 1.2s ease-in-out infinite;
-}
-
-.novaTyping span:nth-child(2) { animation-delay: 0.2s; }
-.novaTyping span:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes novaTypingBounce {
-  0%, 60%, 100% { transform: translateY(0);    opacity: 0.6; }
-  30%           { transform: translateY(-6px); opacity: 1;   }
 }
 
 .novaQuickRow {

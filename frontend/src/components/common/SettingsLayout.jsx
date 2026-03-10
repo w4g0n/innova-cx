@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { apiUrl } from "../../config/apiBase";
 import "./SettingsLayout.css";
 
 
@@ -216,8 +217,9 @@ export function ChangePasswordModal({ onClose }) {
   const [form, setForm] = useState({ current: "", next: "", confirm: "" });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     if (!form.current) {
@@ -232,8 +234,37 @@ export function ChangePasswordModal({ onClose }) {
       setError("Passwords do not match.");
       return;
     }
-    setSuccess(true);
-    setTimeout(onClose, 1800);
+    if (form.next === form.current) {
+      setError("New password must differ from your current password.");
+      return;
+    }
+
+    const token = localStorage.getItem("access_token");
+    setLoading(true);
+    try {
+      const res = await fetch(apiUrl("/api/auth/change-password"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          current_password: form.current,
+          new_password: form.next,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.detail || "Failed to change password.");
+        return;
+      }
+      setSuccess(true);
+      setTimeout(onClose, 1800);
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -308,8 +339,8 @@ export function ChangePasswordModal({ onClose }) {
               >
                 Cancel
               </button>
-              <button type="submit" className="ssb-btn ssb-btn--primary">
-                Update Password
+              <button type="submit" className="ssb-btn ssb-btn--primary" disabled={loading}>
+                {loading ? "Saving…" : "Update Password"}
               </button>
             </div>
           </form>

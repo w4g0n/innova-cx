@@ -50,6 +50,9 @@ const ManagerComplaintDetails = lazy(() =>
 const ApprovalRequestDetails = lazy(() =>
   import("./pages/manager/ApprovalRequestDetails")
 );
+const ManagerRoutingReview = lazy(() =>
+  import("./pages/manager/RoutingReviewDetails")
+);
 const ViewEmployees = lazy(() => import("./pages/manager/ManagerViewEmployees"));
 const ManagerSettings = lazy(() => import("./pages/manager/ManagerSettings"));
 
@@ -319,7 +322,14 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
+          <Route
+            path="/manager/routing-review"
+            element={
+              <ProtectedRoute role="manager">
+                <ManagerRoutingReview />
+              </ProtectedRoute>
+            }
+          />
           {/* Operator */}
           <Route
             path="/operator"
