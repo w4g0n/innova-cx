@@ -107,6 +107,14 @@ def _safe_json(obj: Any) -> Any:
             return {"_serialization_error": str(obj)[:500]}
 
 
+def _state_delta(before: dict, after: dict) -> dict:
+    delta: dict[str, Any] = {}
+    for key, value in after.items():
+        if key not in before or before.get(key) != value:
+            delta[key] = value
+    return delta
+
+
 def _extract_confidence(state: dict) -> float | None:
     """Extract the most relevant confidence score from the output state."""
     for key in ("class_confidence", "model_confidence", "classification_confidence", "confidence_score"):
@@ -380,9 +388,10 @@ def logged_step(
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
         output_snapshot = {k: v for k, v in copy.deepcopy(result).items() if not k.startswith("_")}
+        output_delta = _state_delta(input_snapshot, output_snapshot)
         out_db_ticket_id, out_ticket_code = _ticket_refs(result.get("ticket_id"), result.get("ticket_code") or ticket_code)
         confidence = _extract_confidence(result)
-        stage_summary = _summarize_stage_output(output_snapshot)
+        stage_summary = _summarize_stage_output(output_delta)
 
         _write_logs(
             execution_id=execution_id,
@@ -391,7 +400,7 @@ def logged_step(
             agent_name=agent_name,
             step_order=step_order,
             input_state=input_snapshot,
-            output_state=output_snapshot,
+            output_state=output_delta,
             inference_time_ms=elapsed_ms,
             confidence_score=confidence,
             error_flag=False,
@@ -409,7 +418,7 @@ def logged_step(
             event_type="output",
             status=run_status,
             input_state=input_snapshot,
-            output_state=output_snapshot,
+            output_state=output_delta,
             inference_time_ms=elapsed_ms,
             confidence_score=confidence,
             error_message=None,

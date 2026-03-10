@@ -1,10 +1,8 @@
 """
 Sentiment Combiner Agent
 ========================
-Combines text/audio sentiment according to VX rules:
-  A) with audio: (audio * 0.5) + (text * 0.5)
-  B) without audio: sentiment_score = text
-All sentiment values are normalized to [0, 1].
+Combines text/audio sentiment while preserving the native [-1, 1] polarity
+range used by the sentiment agent.
 """
 
 import logging
@@ -15,29 +13,30 @@ logger = logging.getLogger(__name__)
 
 def _normalize_unit(value: float | None) -> float:
     v = float(value or 0.0)
-    if v < 0.0:
-        return max(0.0, min(1.0, (v + 1.0) / 2.0))
-    if v > 1.0:
-        return 1.0
-    return v
+    return max(-1.0, min(1.0, v))
 
 
 def _bucket(score: float) -> str:
-    if score < 0.3:
+    if score < -0.25:
         return "negative"
-    if score < 0.65:
-        return "neutral"
-    return "positive"
+    if score > 0.25:
+        return "positive"
+    return "neutral"
+
+
+def _to_display_score(score: float) -> float:
+    return max(0.0, min(1.0, (score + 1.0) / 2.0))
 
 
 async def combine_sentiment(state: dict) -> dict:
     """
     Inputs:
-      - state["text_sentiment"]  in [0,1]
-      - state["audio_sentiment"] in [0,1] (optional)
+      - state["text_sentiment"]  in [-1,1]
+      - state["audio_sentiment"] in [-1,1] (optional)
 
     Outputs:
-      - state["sentiment_score_numeric"] in [0,1]
+      - state["sentiment_score_numeric"] in [-1,1]
+      - state["sentiment_score_display"] in [0,1] for UI friendliness
       - state["sentiment_score"] in {negative, neutral, positive}
     """
     text = _normalize_unit(state.get("text_sentiment", 0.0))
@@ -55,6 +54,7 @@ async def combine_sentiment(state: dict) -> dict:
     state["text_sentiment"] = text
     state["audio_sentiment"] = float(audio_sentiment) if audio_sentiment is not None else None
     state["sentiment_score_numeric"] = combined
+    state["sentiment_score_display"] = _to_display_score(combined)
     state["sentiment_score"] = _bucket(combined)
     state["sentiment_combiner_mode"] = mode
     state["sentiment_combiner_source"] = "deterministic"

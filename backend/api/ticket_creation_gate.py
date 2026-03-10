@@ -3,6 +3,7 @@ import time
 import uuid
 import urllib.parse
 import logging
+import json
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -153,6 +154,8 @@ def dispatch_ticket_to_orchestrator(
     ticket_type: Optional[str] = None,
     subject: Optional[str] = None,
     execution_id: Optional[str] = None,
+    has_audio: bool = False,
+    audio_features: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Best-effort dispatch to orchestrator post-submit pipeline.
@@ -171,12 +174,14 @@ def dispatch_ticket_to_orchestrator(
         "text": text_value,
         "ticket_id": ticket_code,
         "ticket_type": type_value,
-        "has_audio": "false",
+        "has_audio": "true" if has_audio else "false",
     }
     if subject and subject.strip():
         payload["subject"] = subject.strip()
     if execution_id and str(execution_id).strip():
         payload["execution_id"] = str(execution_id).strip()
+    if has_audio and isinstance(audio_features, dict) and audio_features:
+        payload["audio_features"] = json.dumps(audio_features)
 
     encoded = urllib.parse.urlencode(payload).encode("utf-8")
     headers = {"Content-Type": "application/x-www-form-urlencoded"}

@@ -25,7 +25,9 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
 
   console.log("🎙️ Received audio:", audioPath);
 
-  const py = spawn("python3", ["transcribe.py", audioPath]);
+  // Run the full audio analysis pipeline first, then remove the upload.
+  // The orchestrator consumes the derived audio_features, not the raw file.
+  const py = spawn("python3", ["analyze.py", audioPath]);
 
   let stdout = "";
   let stderr = "";
@@ -64,9 +66,12 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
     }
 
     return res.json({
-      transcript: result.transcript,
-      audio_score: 1.0,
-      audio_features: null,
+      transcript: result.transcript || "",
+      audio_score: typeof result.audio_score === "number" ? result.audio_score : null,
+      audio_features:
+        result.audio_features && typeof result.audio_features === "object"
+          ? result.audio_features
+          : null,
     });
   });
 });
