@@ -117,6 +117,158 @@ function Starfield() {
   return <canvas ref={ref} className="login-starfield" />;
 }
 
+/* ── Staff Background — floating orbs + aurora ribbons ── */
+function StaffBackground() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const ctx = c.getContext("2d");
+    let raf, t = 0;
+
+    const resize = () => { c.width = window.innerWidth; c.height = window.innerHeight; };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const orbs = [
+      { x: 0.15, y: 0.20, r: 0.18, ax: 0.00004, ay: 0.00003, phase: 0.0, color: [180, 150, 230] },
+      { x: 0.80, y: 0.15, r: 0.13, ax: 0.00003, ay: 0.00005, phase: 1.2, color: [200, 170, 255] },
+      { x: 0.65, y: 0.75, r: 0.16, ax: 0.00004, ay: 0.00002, phase: 2.5, color: [170, 140, 220] },
+      { x: 0.25, y: 0.80, r: 0.11, ax: 0.00005, ay: 0.00004, phase: 3.8, color: [210, 190, 255] },
+      { x: 0.50, y: 0.45, r: 0.09, ax: 0.00003, ay: 0.00004, phase: 0.7, color: [190, 160, 240] },
+      { x: 0.90, y: 0.60, r: 0.12, ax: 0.00002, ay: 0.00004, phase: 4.2, color: [220, 200, 255] },
+    ];
+
+    const ribbons = [
+      { baseY: 0.28, amp: 0.04, freq: 0.0018, speed: 0.00008, phase: 0.0, color: [180,150,220], alpha: 0.06, thickness: 0.12 },
+      { baseY: 0.55, amp: 0.03, freq: 0.0022, speed: 0.00006, phase: 2.1, color: [200,170,255], alpha: 0.04, thickness: 0.09 },
+      { baseY: 0.72, amp: 0.05, freq: 0.0015, speed: 0.00010, phase: 4.3, color: [170,140,220], alpha: 0.05, thickness: 0.10 },
+    ];
+
+    const particles = Array.from({ length: 55 }, () => ({
+      x: Math.random(), y: Math.random(),
+      r: Math.random() * 1.8 + 0.5,
+      speed: Math.random() * 0.000015 + 0.000005,
+      drift: Math.random() * 0.000008 - 0.000004,
+      phase: Math.random() * Math.PI * 2,
+      twinkleSpeed: Math.random() * 0.008 + 0.003,
+      color: Math.random() > 0.5 ? [210,190,255] : [230,215,255],
+    }));
+
+    const nodes = Array.from({ length: 22 }, () => ({
+      x: Math.random(), y: Math.random(),
+      vx: (Math.random() - 0.5) * 0.00002,
+      vy: (Math.random() - 0.5) * 0.00002,
+    }));
+
+    const drawOrb = (orb) => {
+      const cx = orb.x * c.width;
+      const cy = orb.y * c.height;
+      const rx = orb.r * Math.min(c.width, c.height);
+      const [r, g, b] = orb.color;
+      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, rx * 1.6);
+      glow.addColorStop(0,   `rgba(${r},${g},${b},0.13)`);
+      glow.addColorStop(0.5, `rgba(${r},${g},${b},0.05)`);
+      glow.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+      ctx.beginPath(); ctx.arc(cx, cy, rx * 1.6, 0, Math.PI * 2);
+      ctx.fillStyle = glow; ctx.fill();
+      const core = ctx.createRadialGradient(cx - rx * 0.25, cy - rx * 0.25, 0, cx, cy, rx);
+      core.addColorStop(0,    `rgba(255,255,255,0.22)`);
+      core.addColorStop(0.35, `rgba(${r},${g},${b},0.18)`);
+      core.addColorStop(0.75, `rgba(${r},${g},${b},0.08)`);
+      core.addColorStop(1,    `rgba(${r},${g},${b},0.02)`);
+      ctx.beginPath(); ctx.arc(cx, cy, rx, 0, Math.PI * 2);
+      ctx.fillStyle = core; ctx.fill();
+      const spec = ctx.createRadialGradient(cx - rx * 0.3, cy - rx * 0.3, 0, cx - rx * 0.3, cy - rx * 0.3, rx * 0.45);
+      spec.addColorStop(0, `rgba(255,255,255,0.35)`);
+      spec.addColorStop(1, `rgba(255,255,255,0)`);
+      ctx.beginPath(); ctx.arc(cx, cy, rx, 0, Math.PI * 2);
+      ctx.fillStyle = spec; ctx.fill();
+    };
+
+    const drawRibbon = (rib) => {
+      const W = c.width, H = c.height;
+      const [r, g, b] = rib.color;
+      const thick = rib.thickness * H;
+      ctx.save(); ctx.beginPath();
+      for (let px = 0; px <= W; px += 6) {
+        const nx = px / W;
+        const wave = Math.sin(nx * Math.PI * 2 * rib.freq * W + rib.phase + t * rib.speed * 1000);
+        const py = (rib.baseY + wave * rib.amp) * H - thick / 2;
+        px === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      for (let px = W; px >= 0; px -= 6) {
+        const nx = px / W;
+        const wave = Math.sin(nx * Math.PI * 2 * rib.freq * W + rib.phase + t * rib.speed * 1000);
+        const py = (rib.baseY + wave * rib.amp) * H + thick / 2;
+        ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      const midY = rib.baseY * H;
+      const grad = ctx.createLinearGradient(0, midY - thick / 2, 0, midY + thick / 2);
+      grad.addColorStop(0,    `rgba(${r},${g},${b},0)`);
+      grad.addColorStop(0.35, `rgba(${r},${g},${b},${rib.alpha})`);
+      grad.addColorStop(0.5,  `rgba(${r},${g},${b},${rib.alpha * 1.6})`);
+      grad.addColorStop(0.65, `rgba(${r},${g},${b},${rib.alpha})`);
+      grad.addColorStop(1,    `rgba(${r},${g},${b},0)`);
+      ctx.fillStyle = grad; ctx.fill(); ctx.restore();
+    };
+
+    const drawNodes = () => {
+      const W = c.width, H = c.height;
+      nodes.forEach((n) => {
+        n.x += n.vx; n.y += n.vy;
+        if (n.x < 0 || n.x > 1) n.vx *= -1;
+        if (n.y < 0 || n.y > 1) n.vy *= -1;
+      });
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = (nodes[i].x - nodes[j].x) * W;
+          const dy = (nodes[i].y - nodes[j].y) * H;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 180) {
+            ctx.beginPath();
+            ctx.moveTo(nodes[i].x * W, nodes[i].y * H);
+            ctx.lineTo(nodes[j].x * W, nodes[j].y * H);
+            ctx.strokeStyle = `rgba(120,60,220,${(1 - dist / 180) * 0.07})`;
+            ctx.lineWidth = 0.8; ctx.stroke();
+          }
+        }
+      }
+      nodes.forEach((n) => {
+        ctx.beginPath(); ctx.arc(n.x * W, n.y * H, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(160,100,255,0.15)`; ctx.fill();
+      });
+    };
+
+    const draw = () => {
+      t++;
+      ctx.clearRect(0, 0, c.width, c.height);
+      drawNodes();
+      ribbons.forEach((rib) => { rib.phase += rib.speed; drawRibbon(rib); });
+      orbs.forEach((orb) => {
+        const drift  = Math.sin(t * orb.ax * 1000 + orb.phase) * 0.04;
+        const driftY = Math.cos(t * orb.ay * 1000 + orb.phase * 1.3) * 0.035;
+        drawOrb({ ...orb, x: orb.x + drift, y: orb.y + driftY });
+      });
+      particles.forEach((p) => {
+        p.y -= p.speed; p.x += p.drift; p.phase += p.twinkleSpeed;
+        if (p.y < -0.02) { p.y = 1.02; p.x = Math.random(); }
+        if (p.x < 0 || p.x > 1) p.drift *= -1;
+        const alpha = Math.max(0.04, 0.12 + Math.sin(p.phase) * 0.1);
+        const [r, g, b] = p.color;
+        ctx.beginPath(); ctx.arc(p.x * c.width, p.y * c.height, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`; ctx.fill();
+      });
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, []);
+  return <canvas ref={ref} className="login-starfield staff-canvas" />;
+}
+
 /* ── Mouse-tracking glow on the card ── */
 function useCardGlow() {
   const cardRef = useRef(null);
@@ -293,12 +445,15 @@ export default function Login() {
   const emailInputState = touched.email && emailError ? "error" : "";
   const passwordInputState = touched.password && passwordError ? "error" : "";
 
+  const isStaff = isStaffHost() === true || isStaffHost() === null && window.location.hostname.startsWith("staff.");
+  const bgClass = isStaffHost() ? "loginBg loginBg--staff" : "loginBg loginBg--customer";
+
   return (
-    <div className="loginBg">
-      <Starfield />
-      <div className="login-neb login-neb1" />
-      <div className="login-neb login-neb2" />
-      <div className="login-neb login-neb3" />
+    <div className={bgClass}>
+      {isStaffHost() ? <StaffBackground /> : <Starfield />}
+      {!isStaffHost() && <div className="login-neb login-neb1" />}
+      {!isStaffHost() && <div className="login-neb login-neb2" />}
+      {!isStaffHost() && <div className="login-neb login-neb3" />}
 
       <div
         className="loginWrapper"
