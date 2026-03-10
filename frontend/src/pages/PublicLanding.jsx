@@ -3,65 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import novaLogo from "../assets/nova-logo.png";
 import "./PublicLanding.css";
 
-/* ── Agents ── */
-const AGENTS_DATA = [
-  {
-    name: "Transcriber", role: "Audio → Text", model: "OpenAI Whisper",
-    color: "#818cf8", icon: "mic",
-    details: "Converts voice complaint recordings to text before passing downstream — audio is discarded after transcription.",
-    inputs: ["Audio_Log"], outputs: ["Transcribed text"],
-    stat: "<2s", statLabel: "Latency",
-  },
-  {
-    name: "Chatbot", role: "Resolves & Routes", model: "Falcon 1B Instruct",
-    color: "#c084fc", icon: "settings",
-    details: "Front-line agent that handles inquiries, creates tickets, and routes unresolved complaints into the pipeline.",
-    inputs: ["User message", "Audio or Text"], outputs: ["Ticket creation", "Inquiry resolution"],
-    stat: "98%", statLabel: "Accuracy",
-  },
-  {
-    name: "Classifier", role: "Complaint vs Inquiry", model: "NLI Model",
-    color: "#a78bfa", icon: "tag",
-    details: "Reads complaint details and classifies the ticket as a Complaint or Inquiry, gating all downstream agents.",
-    inputs: ["Details (text)"], outputs: ["Ticket_Type"],
-    stat: "2", statLabel: "Classes",
-  },
-  {
-    name: "Sentiment", role: "Emotion Detection", model: "RoBERTa + Librosa",
-    color: "#e879f9", icon: "heart",
-    details: "Analyses text tone via RoBERTa and voice tone via Librosa, merging both into a unified Sentiment_Score.",
-    inputs: ["Details", "Audio_Log (optional)"], outputs: ["Sentiment_Score"],
-    stat: "99.2%", statLabel: "Precision",
-  },
-  {
-    name: "Features", role: "Urgency & Impact", model: "NLI + Database",
-    color: "#f0abfc", icon: "settings",
-    details: "Determines recurrence, safety concern, business impact, severity, and urgency to feed into the Prioritizer.",
-    inputs: ["Details"], outputs: ["is_recurring", "safety_concern", "issue_severity"],
-    stat: "5", statLabel: "Signals",
-  },
-  {
-    name: "Prioritizer", role: "Fuzzy Logic Scoring", model: "Fuzzy Logic Engine",
-    color: "#c026d3", icon: "scale",
-    details: "Combines all upstream signals using fuzzy logic to output a Priority level: Critical, High, Medium, or Low.",
-    inputs: ["All feature signals"], outputs: ["Priority level"],
-    stat: "4", statLabel: "Priority Levels",
-  },
-  {
-    name: "Router", role: "Department Assignment", model: "NLI DeBERTa",
-    color: "#d946ef", icon: "building",
-    details: "Routes tickets to the correct department using a 0.7 confidence threshold — escalates to management if uncertain.",
-    inputs: ["Complaint details"], outputs: ["Assigned department"],
-    stat: "0.7", statLabel: "Threshold",
-  },
-  {
-    name: "Resolver", role: "Suggested Fixes", model: "Flan-T5-Base",
-    color: "#a855f7", icon: "lightbulb",
-    details: "Generates resolution suggestions and retrains on every employee correction, improving continuously over time.",
-    inputs: ["Complaint text"], outputs: ["Suggested resolution"],
-    stat: "∞", statLabel: "Relearning",
-  },
-];
 
 const PIPELINE = [
   { icon: "mic",       label: "Transcribe",       sub: "Whisper (if audio)",      color: "#818cf8" },
@@ -190,7 +131,7 @@ function Starfield() {
 }
 
 /* ══ SOLAR SYSTEM ══ */
-function SolarSystem() {
+function SolarSystem({ onReady }) {
   const mountRef  = useRef(null);
   const labelsRef = useRef(null);
   const [hovered, setHovered] = useState(null);
@@ -717,10 +658,10 @@ function SolarSystem() {
         labelAnchor.position.set(cfg.orbitR, cfg.radius + 0.7, 0);
         innerPivot.add(labelAnchor);
 
-        // HTML label — purple theme, slightly larger
+        // HTML label — purple theme
         const el = document.createElement("div");
         el.className = "pl-planet-label";
-        el.textContent = AGENTS_DATA[i].name;
+        el.textContent = PIPELINE[i] ? PIPELINE[i].label : cfg.personality;
         el.style.setProperty("--pc", "#a855f7");
         el.style.fontSize = "10px";
         el.style.padding = "2px 7px";
@@ -824,6 +765,7 @@ function SolarSystem() {
 
       /* ── Animation ── */
       let last = performance.now();
+      let readyCalled = false;
       function animate() {
         raf = requestAnimationFrame(animate);
         const now = performance.now();
@@ -867,6 +809,9 @@ function SolarSystem() {
 
         renderer.render(scene, camera);
 
+        // Signal page ready after first fully rendered frame
+        if (!readyCalled) { readyCalled = true; onReady && onReady(); }
+
         // Project planet labels to 2D
         const CW = mount.clientWidth;
         const CH = mount.clientHeight;
@@ -897,7 +842,7 @@ function SolarSystem() {
         const hits = raycaster.intersectObjects(planetObjects.map(p => p.mesh), true);
         if (hits.length) {
           const found = planetObjects.find(p => p.mesh===hits[0].object);
-          if (found) { hoveredIdx=found.idx; setHovered(AGENTS_DATA[found.idx]); mount.style.cursor="pointer"; return; }
+          if (found) { hoveredIdx=found.idx; setHovered(found.cfg); mount.style.cursor="pointer"; return; }
         }
         hoveredIdx=-1; setHovered(null);
         mount.style.cursor = isDragging ? "grabbing" : "grab";
@@ -958,12 +903,8 @@ function SolarSystem() {
       {hovered && (
         <div className="pl-planet-tooltip" style={{ borderColor: hovered.color + "66" }}>
           <div className="pl-pt-icon-row">
-            <Icon name={hovered.icon} size={14} />
-            <span className="pl-pt-name" style={{ color: hovered.color }}>{hovered.name}</span>
-            <span className="pl-pt-role">{hovered.role}</span>
+            <span className="pl-pt-name" style={{ color: hovered.color }}>{hovered.personality}</span>
           </div>
-          <p className="pl-pt-desc">{hovered.details}</p>
-          <div className="pl-pt-model">{hovered.model}</div>
         </div>
       )}
       <p className="pl-solar-hint">Drag to rotate · hover planets</p>
@@ -1061,76 +1002,28 @@ function PipelineFlow() {
   );
 }
 
-/* ══ AGENTS SHOWCASE ══ */
-function AgentsShowcase() {
-  const [ref, vis] = useReveal(0.05);
-  const [selected, setSelected] = useState(null);
-  const [hoveredIdx, setHoveredIdx] = useState(null);
-  return (
-    <div ref={ref} className="pl-agents-showcase">
-      <div className="pl-agents-grid">
-        {AGENTS_DATA.map((agent, i) => (
-          <div key={agent.name}
-            className={`pl-agent-hex ${vis?"is-vis":""} ${selected?.name===agent.name?"is-selected":""} ${hoveredIdx===i?"is-hovered":""}`}
-            style={{"--ac":agent.color,"--d":`${i*0.08}s`}}
-            onClick={() => setSelected(selected?.name===agent.name?null:agent)}
-            onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)}>
-            <div className="pl-agent-hex-bg"/>
-            <div className="pl-agent-hex-glow"/>
-            <div className="pl-agent-hex-content">
-              <div className="pl-agent-hex-num">0{i+1}</div>
-              <div className="pl-agent-hex-name">{agent.name}</div>
-              <div className="pl-agent-hex-role">{agent.role}</div>
-              <div className="pl-agent-hex-stat">
-                <span className="pl-agent-hex-stat-n">{agent.stat}</span>
-                <span className="pl-agent-hex-stat-l">{agent.statLabel}</span>
-              </div>
-            </div>
-            <div className="pl-agent-hex-ring"/>
-          </div>
-        ))}
-      </div>
-      {selected ? (
-        <div className="pl-agent-panel" key={selected.name} style={{"--ac":selected.color}}>
-          <div className="pl-agent-panel-header">
-            <div>
-              <div className="pl-agent-panel-tag" style={{color:selected.color}}>{selected.model}</div>
-              <h3 className="pl-agent-panel-name">{selected.name}</h3>
-              <div className="pl-agent-panel-role">{selected.role}</div>
-            </div>
-            <button className="pl-agent-panel-close" onClick={() => setSelected(null)}>✕</button>
-          </div>
-          <p className="pl-agent-panel-desc">{selected.details}</p>
-          <div className="pl-agent-panel-io">
-            <div className="pl-agent-panel-col">
-              <div className="pl-agent-panel-col-label">→ Inputs</div>
-              {selected.inputs.map((inp, i) => <div key={i} className="pl-agent-panel-item pl-api-in">{inp}</div>)}
-            </div>
-            <div className="pl-agent-panel-divider"/>
-            <div className="pl-agent-panel-col">
-              <div className="pl-agent-panel-col-label">← Outputs</div>
-              {selected.outputs.map((out, i) => <div key={i} className="pl-agent-panel-item pl-api-out">{out}</div>)}
-            </div>
-          </div>
-          <div className="pl-agent-panel-stat-strip">
-            <div className="pl-agent-panel-stat-n" style={{color:selected.color}}>{selected.stat}</div>
-            <div className="pl-agent-panel-stat-l">{selected.statLabel}</div>
-          </div>
-        </div>
-      ) : (
-        <div className="pl-agent-panel pl-agent-panel-empty">
-          <div className="pl-agent-panel-empty-icon">🛸</div>
-          <p className="pl-agent-panel-empty-txt">Select an agent to explore its capabilities</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ══ MAIN ══ */
 export default function PublicLanding() {
   const navigate = useNavigate();
   const [scrollY, setScrollY] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [splashDone, setSplashDone] = useState(false);
+  const readyRef = useRef(false);
+
+  // Minimum hold: 2.8s so text animations finish before fade-out
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSplashDone(true);
+      if (readyRef.current) setReady(true);
+    }, 2800);
+    return () => clearTimeout(t);
+  }, []);
+
+  const handleReady = () => {
+    readyRef.current = true;
+    if (splashDone) setReady(true);
+  };
+
   useEffect(() => {
     const fn = () => setScrollY(window.scrollY);
     window.addEventListener("scroll", fn, { passive: true });
@@ -1138,7 +1031,131 @@ export default function PublicLanding() {
   }, []);
 
   return (
-    <div className="pl-root">
+    <>
+      {/* ══ WELCOME SPLASH ══
+          Sequence: black → text fades in (0.9s) → holds → fades out with page (0.8s)
+          The landing beneath fades in simultaneously as splash fades out.
+      ══════════════════════ */}
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 9999,
+        background: "#06010f",
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        opacity: ready ? 0 : 1,
+        pointerEvents: ready ? "none" : "auto",
+        transition: ready ? "opacity 1.1s cubic-bezier(0.4,0,0.2,1)" : "none",
+      }}>
+
+        {/* Ambient nebula glow behind text */}
+        <div style={{
+          position: "absolute", width: 600, height: 600,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(124,58,237,0.18) 0%, rgba(168,85,247,0.07) 45%, transparent 70%)",
+          filter: "blur(40px)",
+          animation: "wcx-breathe 4s ease-in-out infinite",
+        }}/>
+
+        {/* Logo mark — sun + orbit */}
+        <div style={{
+          position: "relative", width: 64, height: 64, marginBottom: 36,
+          animation: "wcx-fadein 1s ease 0.1s both",
+        }}>
+          <div style={{
+            position: "absolute", inset: 0, borderRadius: "50%",
+            border: "1.5px solid rgba(168,85,247,0.40)",
+          }}/>
+          <div style={{
+            position: "absolute", inset: 6, borderRadius: "50%",
+            border: "1px solid rgba(168,85,247,0.20)",
+          }}/>
+          {/* Sun */}
+          <div style={{
+            position: "absolute", top: "50%", left: "50%",
+            transform: "translate(-50%,-50%)",
+            width: 18, height: 18, borderRadius: "50%",
+            background: "radial-gradient(circle, #fff8e1 0%, #ffb300 55%, #e65100 100%)",
+            boxShadow: "0 0 22px 8px rgba(255,140,0,0.55), 0 0 8px 2px rgba(255,200,50,0.8)",
+          }}/>
+          {/* Orbiting planet */}
+          <div style={{
+            position: "absolute", top: 0, left: "50%",
+            marginLeft: -5, marginTop: -5,
+            width: 10, height: 10, borderRadius: "50%",
+            background: "radial-gradient(circle, #c084fc, #7c3aed)",
+            boxShadow: "0 0 10px 3px rgba(168,85,247,0.7)",
+            animation: "wcx-orbit 3s linear infinite",
+            transformOrigin: "5px 37px",
+          }}/>
+        </div>
+
+        {/* Welcome text */}
+        <div style={{
+          textAlign: "center",
+          animation: "wcx-fadein 1s ease 0.3s both",
+        }}>
+          <div style={{
+            fontSize: "clamp(11px, 1.4vw, 13px)",
+            fontWeight: 600,
+            letterSpacing: "0.30em",
+            textTransform: "uppercase",
+            color: "rgba(167,139,250,0.75)",
+            marginBottom: 16,
+          }}>Welcome to</div>
+
+          <div style={{
+            fontSize: "clamp(36px, 6vw, 72px)",
+            fontWeight: 800,
+            letterSpacing: "-0.02em",
+            lineHeight: 1,
+            background: "linear-gradient(135deg, #ffffff 0%, #e9d5ff 40%, #a855f7 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+            marginBottom: 20,
+          }}>InnovaCX</div>
+
+          <div style={{
+            fontSize: "clamp(13px, 1.6vw, 17px)",
+            color: "rgba(196,165,255,0.70)",
+            letterSpacing: "0.04em",
+            fontWeight: 400,
+            maxWidth: 380,
+            lineHeight: 1.6,
+            animation: "wcx-fadein 1s ease 0.6s both",
+          }}>
+            AI-powered complaint intelligence.<br/>Every case resolved, every customer retained.
+          </div>
+        </div>
+
+        {/* Subtle bottom line */}
+        <div style={{
+          position: "absolute", bottom: 36,
+          fontSize: 11, letterSpacing: "0.12em",
+          color: "rgba(167,139,250,0.30)",
+          animation: "wcx-fadein 1s ease 0.9s both",
+        }}>InnovaAI X DUBAI COMMERCITY · 2026</div>
+
+        <style>{`
+          @keyframes wcx-fadein {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes wcx-orbit {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+          }
+          @keyframes wcx-breathe {
+            0%,100% { transform: scale(1);    opacity: 0.7; }
+            50%      { transform: scale(1.15); opacity: 1;   }
+          }
+        `}</style>
+      </div>
+
+      {/* ── Main page ── */}
+      <div className="pl-root" style={{
+        opacity: ready ? 1 : 0,
+        transition: ready ? "opacity 1.0s cubic-bezier(0.4,0,0.2,1) 0.3s" : "none",
+      }}>
 
       {/* HERO */}
       <section className="pl-hero">
@@ -1182,7 +1199,7 @@ export default function PublicLanding() {
               ))}
             </div>
           </div>
-          <div className="pl-hero-right"><SolarSystem /></div>
+          <div className="pl-hero-right"><SolarSystem onReady={handleReady} /></div>
         </div>
       </section>
 
@@ -1206,14 +1223,21 @@ export default function PublicLanding() {
         <PipelineFlow />
       </section>
 
-      {/* AGENTS */}
-      <section className="pl-agents-section">
-        <div className="pl-agents-section-bg"/>
-        <div className="pl-agents-section-inner">
-          <div className="pl-section-tag">The Team</div>
-          <h2 className="pl-section-h light">Meet the Agents</h2>
-          <p className="pl-section-p light">Eight specialized AI models working in concert. Click any agent to explore its role.</p>
-          <AgentsShowcase />
+      {/* CTA */}
+      <section className="pl-cta">
+        <Starfield />
+        <div className="pl-cta-neb"/>
+        <div className="pl-cta-inner">
+          <div className="pl-section-tag" style={{color:"#c084fc"}}>Ready for Liftoff?</div>
+          <h2 className="pl-cta-h">Every complaint resolved.<br/>Every customer retained.</h2>
+          <p className="pl-cta-p">InnovaAI's AI-powered complaint management platform. Built for scale. Designed for humans.</p>
+          <div className="pl-cta-btns">
+            <button className="pl-btn-primary pl-btn-lg" onClick={() => navigate("/login")}>
+              Start Now
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <button className="pl-btn-ghost pl-btn-lg" onClick={() => navigate("/about")}>Learn More</button>
+          </div>
         </div>
       </section>
 
@@ -1248,5 +1272,6 @@ export default function PublicLanding() {
         <p className="pl-footer-copy">Sponsored By Dubai CommerCity</p>
       </footer>
     </div>
+    </>
   );
 }
