@@ -1885,45 +1885,9 @@ def employee_resolve_ticket(
                 """,
                 (existing["id"],),
             )
-            t_extra = cur.fetchone() or {}
-            t_priority   = t_extra.get("priority")
-            customer_uid = t_extra.get("created_by_user_id")
-
-            # Notify the resolving employee (confirmation)
-            _insert_notification(
-                cur,
-                user_id=str(user_id),
-                notif_type="status_change",
-                title=f"Ticket Resolved: {row['ticket_code']}",
-                message=f"You resolved ticket {row['ticket_code']}. Resolution: {final_resolution[:120]}",
-                ticket_id=str(existing["id"]),
-                priority=t_priority,
-            )
-
-            # Notify manager
-            manager_row = fetch_one("SELECT id FROM users WHERE role = 'manager' LIMIT 1;")
-            if manager_row and str(manager_row["id"]) != str(user_id):
-                _insert_notification(
-                    cur,
-                    user_id=str(manager_row["id"]),
-                    notif_type="status_change",
-                    title=f"Ticket Resolved by Employee: {row['ticket_code']}",
-                    message=f"Employee resolved ticket {row['ticket_code']}. Resolution: {final_resolution[:120]}",
-                    ticket_id=str(existing["id"]),
-                    priority=t_priority,
-                )
-
-            # Notify customer
-            if customer_uid and str(customer_uid) != str(user_id):
-                _insert_notification(
-                    cur,
-                    user_id=str(customer_uid),
-                    notif_type="status_change",
-                    title=f"Your Ticket Has Been Resolved: {row['ticket_code']}",
-                    message=f"Ticket {row['ticket_code']} has been resolved. Resolution: {final_resolution[:120]}",
-                    ticket_id=str(existing["id"]),
-                    priority=t_priority,
-                )
+            # Notifications handled by DB triggers:
+            #   trg_notify_on_ticket_resolved     → resolver + assigned employee + managers
+            #   trg_notify_customer_status_change → customer
 
     logger.info(
         "ticket_status_update | ticket_id=%s status=%s resolved_at=%s",
@@ -2082,33 +2046,9 @@ def employee_rescore_ticket(
                 ),
             )
             result = cur.fetchone()
-
-            profile = fetch_one(
-                "SELECT full_name FROM user_profiles WHERE user_id = %s", (user_id,)
-            ) or {}
-            employee_name = profile.get("full_name") or user.get("email", "An employee")
-
-            manager_row = fetch_one("SELECT id FROM users WHERE role = 'manager' LIMIT 1;")
-            if manager_row and str(manager_row["id"]) != str(user_id):
-                _insert_notification(
-                    cur,
-                    user_id=str(manager_row["id"]),
-                    notif_type="ticket_assignment",
-                    title=f"Rescoring Request — {ticket_code}",
-                    message=f"{employee_name} requested a priority change for {ticket_code}: {current_priority} → {new_priority}. Reason: {reason}",
-                    ticket_id=str(row["id"]),
-                    priority=new_priority,
-                )
-
-            _insert_notification(
-                cur,
-                user_id=str(user_id),
-                notif_type="ticket_assignment",
-                title=f"Rescoring Request Submitted — {ticket_code}",
-                message=f"You requested a priority change for {ticket_code}: {current_priority} → {new_priority}. Reason: {reason}. Awaiting manager approval.",
-                ticket_id=str(row["id"]),
-                priority=new_priority,
-            )
+            # Notifications handled by DB triggers:
+            #   trg_notify_manager_approval_request  → manager
+            #   trg_notify_employee_approval_submit  → submitting employee
 
     logger.info(
         "employee_rescore | ticket=%s from=%s to=%s request=%s by=%s",
@@ -2177,18 +2117,9 @@ def employee_reroute_ticket(
                 ),
             )
             result = cur.fetchone()
-
-            # Only notify the employee themselves (confirmation)
-            # Manager is notified by the DB trigger notify_manager_on_approval_request
-            _insert_notification(
-                cur,
-                user_id=str(user_id),
-                notif_type="ticket_assignment",
-                title=f"Rerouting Request Submitted — {ticket_code}",
-                message=f"You requested a department change for {ticket_code}: {current_dept} → {new_dept_name}. Reason: {reason}. Awaiting manager approval.",
-                ticket_id=str(row["id"]),
-                priority=None,
-            )
+            # Notifications handled by DB triggers:
+            #   trg_notify_manager_approval_request → manager
+            #   trg_notify_employee_approval_submit → submitting employee
 
     logger.info(
         "employee_reroute | ticket=%s from=%s to=%s request=%s",
@@ -2198,6 +2129,231 @@ def employee_reroute_ticket(
         result["request_code"],
     )
     return {"ok": True, "requestCode": result["request_code"], "status": "Pending"}
+
+
+# =========================================================
+# Ticket Messages — employee ↔ customer conversation
+# =========================================================
+
+class TicketMessageRequest(BaseModel):
+    body: str
+
+@api.get("/employee/tickets/{ticket_code}/messages")
+def employee_get_ticket_messages(
+    ticket_code: str,
+    user: Dict[str, Any] = Depends(require_employee),
+):
+    user_id = user["id"]
+    ticket = fetch_one(
+        "SELECT id FROM tickets WHERE ticket_code = %s AND assigned_to_user_id = %s LIMIT 1;",
+        (ticket_code, user_id),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found or not assigned to you")
+    rows = fetch_all(
+        """
+        SELECT tm.id, tm.body, tm.sender_role, tm.created_at,
+               COALESCE(up.full_name, u.email) AS sender_name
+        FROM ticket_messages tm
+        JOIN users u ON u.id = tm.sender_id
+        LEFT JOIN user_profiles up ON up.user_id = tm.sender_id
+        WHERE tm.ticket_id = %s
+        ORDER BY tm.created_at ASC;
+        """,
+        (ticket["id"],),
+    )
+    return {"messages": [
+        {
+            "id": str(r["id"]),
+            "body": r["body"],
+            "senderRole": r["sender_role"],
+            "senderName": r["sender_name"],
+            "createdAt": r["created_at"].isoformat(),
+        }
+        for r in (rows or [])
+    ]}
+
+
+@api.post("/employee/tickets/{ticket_code}/messages")
+def employee_post_ticket_message(
+    ticket_code: str,
+    body: TicketMessageRequest,
+    user: Dict[str, Any] = Depends(require_employee),
+):
+    user_id = user["id"]
+    text = (body.body or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Message body cannot be empty")
+
+    ticket = fetch_one(
+        """
+        SELECT t.id, t.status, t.first_response_at, t.assigned_to_user_id,
+               t.created_by_user_id
+        FROM tickets t
+        WHERE t.ticket_code = %s AND t.assigned_to_user_id = %s
+        LIMIT 1;
+        """,
+        (ticket_code, user_id),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found or not assigned to you")
+
+    ticket_id = ticket["id"]
+    is_first = ticket["first_response_at"] is None
+    customer_user_id = ticket["created_by_user_id"]
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO ticket_messages (ticket_id, sender_id, sender_role, body)
+                VALUES (%s, %s, 'employee', %s)
+                RETURNING id, body, sender_role, created_at;
+                """,
+                (ticket_id, user_id, text),
+            )
+            msg = cur.fetchone()
+
+            if is_first:
+                cur.execute(
+                    """
+                    UPDATE tickets
+                    SET first_response_at = now(),
+                        status = CASE WHEN status = 'Assigned' THEN 'In Progress' ELSE status END
+                    WHERE id = %s;
+                    """,
+                    (ticket_id,),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO ticket_updates (ticket_id, update_type, message, created_at)
+                    VALUES (%s, 'status_change', 'Status updated to In Progress after first employee response', now());
+                    """,
+                    (ticket_id,),
+                )
+
+            if customer_user_id:
+                _insert_notification(
+                    cur,
+                    user_id=str(customer_user_id),
+                    notif_type="customer_reply",
+                    title=f"New reply on your ticket {ticket_code}",
+                    message=text[:200],
+                    ticket_id=str(ticket_id),
+                    priority=None,
+                )
+
+    logger.info(
+        "employee_message_sent | ticket=%s employee=%s first_response=%s",
+        ticket_code, user_id, is_first,
+    )
+    return {
+        "ok": True,
+        "message": {
+            "id": str(msg["id"]),
+            "body": msg["body"],
+            "senderRole": msg["sender_role"],
+            "createdAt": msg["created_at"].isoformat(),
+        },
+    }
+
+
+@api.get("/customer/tickets/{ticket_code}/messages")
+def customer_get_ticket_messages(
+    ticket_code: str,
+    user: Dict[str, Any] = Depends(require_customer),
+):
+    user_id = user["id"]
+    ticket = fetch_one(
+        "SELECT id FROM tickets WHERE ticket_code = %s AND created_by_user_id = %s LIMIT 1;",
+        (ticket_code, user_id),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    rows = fetch_all(
+        """
+        SELECT tm.id, tm.body, tm.sender_role, tm.created_at,
+               COALESCE(up.full_name, u.email) AS sender_name
+        FROM ticket_messages tm
+        JOIN users u ON u.id = tm.sender_id
+        LEFT JOIN user_profiles up ON up.user_id = tm.sender_id
+        WHERE tm.ticket_id = %s
+        ORDER BY tm.created_at ASC;
+        """,
+        (ticket["id"],),
+    )
+    return {"messages": [
+        {
+            "id": str(r["id"]),
+            "body": r["body"],
+            "senderRole": r["sender_role"],
+            "senderName": r["sender_name"],
+            "createdAt": r["created_at"].isoformat(),
+        }
+        for r in (rows or [])
+    ]}
+
+
+@api.post("/customer/tickets/{ticket_code}/messages")
+def customer_post_ticket_message(
+    ticket_code: str,
+    body: TicketMessageRequest,
+    user: Dict[str, Any] = Depends(require_customer),
+):
+    user_id = user["id"]
+    text = (body.body or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Message body cannot be empty")
+
+    ticket = fetch_one(
+        """
+        SELECT t.id, t.status, t.assigned_to_user_id
+        FROM tickets t
+        WHERE t.ticket_code = %s AND t.created_by_user_id = %s
+        LIMIT 1;
+        """,
+        (ticket_code, user_id),
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    if ticket["status"] == "Resolved":
+        raise HTTPException(status_code=400, detail="Cannot reply to a resolved ticket")
+
+    ticket_id = ticket["id"]
+    assigned_to = ticket["assigned_to_user_id"]
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO ticket_messages (ticket_id, sender_id, sender_role, body)
+                VALUES (%s, %s, 'customer', %s)
+                RETURNING id, body, sender_role, created_at;
+                """,
+                (ticket_id, user_id, text),
+            )
+            msg = cur.fetchone()
+
+            if assigned_to:
+                _insert_notification(
+                    cur,
+                    user_id=str(assigned_to),
+                    notif_type="customer_reply",
+                    title=f"Customer replied on {ticket_code}",
+                    message=text[:200],
+                    ticket_id=str(ticket_id),
+                    priority=None,
+                )
+
+    return {
+        "ok": True,
+        "message": {
+            "id": str(msg["id"]),
+            "body": msg["body"],
+            "senderRole": msg["sender_role"],
+            "createdAt": msg["created_at"].isoformat(),
+        },
+    }
 
 
 # =========================================================
@@ -3466,60 +3622,9 @@ def manager_resolve_ticket(
                     (ticket_id, ticket_id, user["id"], body.steps_taken.strip()),
                 )
             
-            # 4. Fetch assigned employee + customer user IDs and ticket priority
-            cur.execute(
-                """
-                SELECT
-                    t.assigned_to_user_id,
-                    t.created_by_user_id,
-                    t.priority,
-                    t.ticket_code
-                FROM tickets t
-                WHERE t.id = %s
-                LIMIT 1;
-                """,
-                (ticket_id,),
-            )
-            t_info = cur.fetchone()
-            ticket_code   = (t_info or {}).get("ticket_code") or ticket_id
-            t_priority    = (t_info or {}).get("priority")
-            assigned_uid  = (t_info or {}).get("assigned_to_user_id")
-            customer_uid  = (t_info or {}).get("created_by_user_id")
-
-            # Notify manager (confirmation)
-            _insert_notification(
-                cur,
-                user_id=str(user["id"]),
-                notif_type="status_change",
-                title=f"Resolved: {ticket_code}",
-                message=f"You resolved ticket {ticket_code}. Resolution: {final_resolution[:120]}",
-                ticket_id=ticket_id,
-                priority=t_priority,
-            )
-
-            # Notify assigned employee
-            if assigned_uid and str(assigned_uid) != str(user["id"]):
-                _insert_notification(
-                    cur,
-                    user_id=str(assigned_uid),
-                    notif_type="status_change",
-                    title=f"Ticket Resolved: {ticket_code}",
-                    message=f"Your ticket {ticket_code} was resolved by the manager. Resolution: {final_resolution[:120]}",
-                    ticket_id=ticket_id,
-                    priority=t_priority,
-                )
-
-            # Notify customer
-            if customer_uid and str(customer_uid) != str(user["id"]):
-                _insert_notification(
-                    cur,
-                    user_id=str(customer_uid),
-                    notif_type="status_change",
-                    title=f"Your Ticket Has Been Resolved: {ticket_code}",
-                    message=f"Ticket {ticket_code} has been resolved. Resolution: {final_resolution[:120]}",
-                    ticket_id=ticket_id,
-                    priority=t_priority,
-                )
+            # 4. Notifications handled by DB triggers:
+            #   trg_notify_on_ticket_resolved     → resolver (manager) + assigned employee + managers
+            #   trg_notify_customer_status_change → customer
 
     logger.info(
         "manager_resolve | ticket=%s from=%s resolved_at=%s by=%s",
@@ -3614,37 +3719,8 @@ def manager_rescore_ticket(
                 ),
             )
 
-            # 4. Fetch assigned employee + priority for notifications
-            cur.execute(
-                "SELECT assigned_to_user_id, priority FROM tickets WHERE id = %s LIMIT 1;",
-                (ticket_id,),
-            )
-            t_info = cur.fetchone()
-            assigned_uid = (t_info or {}).get("assigned_to_user_id")
-            t_priority   = (t_info or {}).get("priority")
-
-            # Notify manager (confirmation)
-            _insert_notification(
-                cur,
-                user_id=str(user["id"]),
-                notif_type="status_change",
-                title=f"Priority Updated: {ticket_code}",
-                message=f"You changed priority of {ticket_code} from {current_priority} to {new_priority}. Reason: {reason}",
-                ticket_id=ticket_id,
-                priority=t_priority,
-            )
-
-            # Notify assigned employee
-            if assigned_uid and str(assigned_uid) != str(user["id"]):
-                _insert_notification(
-                    cur,
-                    user_id=str(assigned_uid),
-                    notif_type="status_change",
-                    title=f"Priority Changed: {ticket_code}",
-                    message=f"The priority of your ticket {ticket_code} was changed from {current_priority} to {new_priority} by the manager.",
-                    ticket_id=ticket_id,
-                    priority=t_priority,
-                )
+            # Notifications handled by DB trigger:
+            #   trg_notify_on_manager_rescore → manager self-confirmation + assigned employee
 
     logger.info(
         "manager_rescore | ticket=%s from=%s to=%s request=%s by=%s",
@@ -3964,65 +4040,9 @@ def decide_approval(
                             ),
                         )
 
-            # ── Notifications for approval decision ──────────────────────────
-            # NOTE: This block is OUTSIDE the "if decision == Approved" block
-            #       so it fires for BOTH Approved AND Rejected decisions.
-            cur.execute(
-                """
-                SELECT
-                    t.ticket_code,
-                    t.priority,
-                    ar.submitted_by_user_id,
-                    ar.request_type,
-                    ar.current_value,
-                    ar.requested_value
-                FROM approval_requests ar
-                JOIN tickets t ON t.id = ar.ticket_id
-                WHERE ar.id::text = %s
-                LIMIT 1;
-                """,
-                (request_id,),
-            )
-            ar_info = cur.fetchone() or {}
-            notif_ticket_code = ar_info.get("ticket_code") or ""
-            notif_priority    = ar_info.get("priority")
-            submitter_uid     = ar_info.get("submitted_by_user_id")
-            notif_req_type    = (ar_info.get("request_type") or "").lower()
-            notif_current     = ar_info.get("current_value") or ""
-            notif_requested   = ar_info.get("requested_value") or ""
-            notif_ticket_id   = ar["ticket_id"]
-
-            decision_word = "approved" if decision == "Approved" else "rejected"
-
-            # Notify the employee who submitted the request
-            if submitter_uid and str(submitter_uid) != str(user["id"]):
-                _insert_notification(
-                    cur,
-                    user_id=str(submitter_uid),
-                    notif_type="status_change",
-                    title=f"Request {decision}: {notif_ticket_code}",
-                    message=(
-                        f"Your {notif_req_type} request for ticket {notif_ticket_code} "
-                        f"was {decision_word} by the manager. "
-                        f"Change: {notif_current} → {notif_requested}."
-                    ),
-                    ticket_id=str(notif_ticket_id),
-                    priority=notif_priority,
-                )
-
-            # Notify the manager (confirmation to themselves)
-            _insert_notification(
-                cur,
-                user_id=str(user["id"]),
-                notif_type="status_change",
-                title=f"You {decision} a Request: {notif_ticket_code}",
-                message=(
-                    f"You {decision_word} the {notif_req_type} request for ticket "
-                    f"{notif_ticket_code}. Change: {notif_current} → {notif_requested}."
-                ),
-                ticket_id=str(notif_ticket_id),
-                priority=notif_priority,
-            )
+            # Notifications handled by DB triggers:
+            #   trg_notify_manager_approval_decision  → manager self-confirmation
+            #   trg_notify_employee_approval_decision → submitting employee
 
     logger.info(
         "approval_decision | request=%s decision=%s by=%s",

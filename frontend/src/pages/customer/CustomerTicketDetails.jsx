@@ -4,7 +4,6 @@ import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
 import { getUser, authHeader } from "../../utils/auth";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { apiUrl } from "../../config/apiBase";
-import PriorityPill from "../../components/common/PriorityPill";
 import novaLogo from "../../assets/nova-logo.png";
 import TicketChat from "../../components/common/TicketChat";
 import "./CustomerTicketDetails.css";
@@ -24,13 +23,13 @@ function statusTone(s) {
 
 const STATUS_STAGES = [
   { id: "open",       label: "Opened"      },
-  { id: "inprogress", label: "In Progress" },
   { id: "assigned",   label: "Assigned"    },
+  { id: "inprogress", label: "In Progress" },
   { id: "overdue",    label: "Overdue"     },
   { id: "escalated",  label: "Escalated"   },
   { id: "resolved",   label: "Resolved"    },
 ];
-const STATUS_KEY_IDX = { open:0, inprogress:1, assigned:2, overdue:3, escalated:4, resolved:5 };
+const STATUS_KEY_IDX = { open:0, assigned:1, inprogress:2, overdue:3, escalated:4, resolved:5 };
 
 function normalizeStatus(s) { return String(s || "").toLowerCase().replace(/\s+/g, ""); }
 
@@ -209,10 +208,6 @@ export default function CustomerTicketDetails() {
               <h2 className="ctd-ticket-title">{ticket.title}</h2>
 
               <div className="ctd-meta-row">
-                <div className="ctd-meta-item">
-                  <span className="ctd-meta-label">Priority</span>
-                  <PriorityPill priority={ticket.priority}/>
-                </div>
                 <div className="ctd-meta-item">
                   <span className="ctd-meta-label">Created</span>
                   <span className="ctd-meta-value">{ticket.date}</span>

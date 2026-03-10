@@ -63,8 +63,9 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
   const fetchMessages = useCallback(async (silent = false) => {
     if (!silent) setLoadingMsgs(true);
     try {
+      const base = role === "employee" ? "/api/employee/tickets" : "/api/customer/tickets";
       const res = await fetch(
-        apiUrl(`/api/tickets/${encodeURIComponent(ticketId)}/messages`),
+        apiUrl(`${base}/${encodeURIComponent(ticketId)}/messages`),
         { headers: authHeader() }
       );
       if (!res.ok) throw new Error("Failed");
@@ -75,7 +76,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
     } finally {
       if (!silent) setLoadingMsgs(false);
     }
-  }, [ticketId, authHeader]);
+  }, [ticketId, role, authHeader]);
 
   useEffect(() => {
     fetchMessages(false);
@@ -101,7 +102,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
     const optimistic = {
       _id:       `opt-${Date.now()}`,
       senderRole: role,
-      content,
+      body:      content,
       createdAt: new Date().toISOString(),
       _optimistic: true,
     };
@@ -109,12 +110,13 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
     setText("");
 
     try {
+      const base = role === "employee" ? "/api/employee/tickets" : "/api/customer/tickets";
       const res = await fetch(
-        apiUrl(`/api/tickets/${encodeURIComponent(ticketId)}/messages`),
+        apiUrl(`${base}/${encodeURIComponent(ticketId)}/messages`),
         {
           method: "POST",
           headers: { ...authHeader(), "Content-Type": "application/json" },
-          body: JSON.stringify({ content, senderRole: role }),
+          body: JSON.stringify({ body: content }),
         }
       );
       if (!res.ok) throw new Error("Failed to send message.");
@@ -191,7 +193,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
                     <div key={msg._id || bi}
                       className={`tc-bubble ${isOwn ? "tc-bubble--own" : "tc-bubble--other"} ${msg._optimistic ? "tc-bubble--sending" : ""}`}
                     >
-                      <span className="tc-bubble-text">{msg.content}</span>
+                      <span className="tc-bubble-text">{msg.body}</span>
                     </div>
                   ))}
                   <span className="tc-time">{formatTime(run[run.length - 1].createdAt)}</span>
