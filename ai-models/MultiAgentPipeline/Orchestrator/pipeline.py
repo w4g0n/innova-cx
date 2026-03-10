@@ -8,19 +8,19 @@ otherwise the pipeline falls back to the standard runnable wrappers.
 
 Flow:
     submitted ticket details (text + optional audio features)
-        -> [1] SubjectGenerationAgent / subject_generation_step
+        -> [2] SubjectGenerationAgent / subject_generation_step
             : generate subject when ticket subject is empty
-        -> [2] SuggestedResolutionAgent / suggested_resolution_step
-        -> [3] ClassificationAgent / classifier_step
+        -> [3] SuggestedResolutionAgent / suggested_resolution_step
+        -> [4] ClassificationAgent / classifier_step
             : in-process heuristic; skip if type provided
-        -> [4] SentimentAgent / sentiment_step
-        -> [5] AudioAnalysisAgent / audio_analysis_step
+        -> [5] SentimentAgent / sentiment_step
+        -> [6] AudioAnalysisAgent / audio_analysis_step
             : complaint + audio ticket path
-        -> [6] SentimentCombinerAgent / sentiment_combiner_step
-        -> [7] RecurrenceAgent / recurrence_step
-        -> [8] FeatureEngineeringAgent / feature_engineering_step
-        -> [9] PrioritizationAgent / priority_step (XGBoost/mock fallback)
-        -> [10] DepartmentRoutingAgent / router_step
+        -> [7] SentimentCombinerAgent / sentiment_combiner_step
+        -> [8] RecurrenceAgent / recurrence_step
+        -> [9] FeatureEngineeringAgent / feature_engineering_step
+        -> [10] PrioritizationAgent / priority_step (XGBoost/mock fallback)
+        -> [11] DepartmentRoutingAgent / router_step
 """
 
 from langchain_core.runnables import RunnableLambda, RunnableSequence
@@ -49,14 +49,14 @@ def _step(name: str, fn, order: int):
 
 
 pipeline: RunnableSequence = (
-    _step("SubjectGenerationAgent", generate_subject, 1)
-    | _step("SuggestedResolutionAgent", generate_suggested_resolution, 2)
-    | _step("ClassificationAgent", classify, 3)
-    | _step("SentimentAgent", analyze_sentiment, 4)
-    | _step("AudioAnalysisAgent", analyze_audio, 5)
-    | _step("SentimentCombinerAgent", combine_sentiment, 6)
-    | _step("RecurrenceAgent", check_recurrence, 7)
-    | _step("FeatureEngineeringAgent", engineer_features, 8)
-    | _step("PrioritizationAgent", score_priority, 9)
-    | _step("DepartmentRoutingAgent", route_and_store, 10)
+    _step("SubjectGenerationAgent", generate_subject, 2)
+    | _step("SuggestedResolutionAgent", generate_suggested_resolution, 3)
+    | _step("ClassificationAgent", classify, 4)
+    | _step("SentimentAgent", analyze_sentiment, 5)
+    | _step("AudioAnalysisAgent", analyze_audio, 6)
+    | _step("SentimentCombinerAgent", combine_sentiment, 7)
+    | _step("RecurrenceAgent", check_recurrence, 8)
+    | _step("FeatureEngineeringAgent", engineer_features, 9)
+    | _step("PrioritizationAgent", score_priority, 10)
+    | _step("DepartmentRoutingAgent", route_and_store, 11)
 )

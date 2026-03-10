@@ -61,6 +61,7 @@ const OperatorNotifications = lazy(() =>
 );
 const QualityControl = lazy(() => import("./pages/operator/QualityControl"));
 const ModelHealth = lazy(() => import("./pages/operator/ModelHealth"));
+const AIExplainability = lazy(() => import("./pages/operator/AIExplainability"));
 const OperatorDashboard = lazy(() =>
   import("./pages/operator/OperatorDashboard")
 );
@@ -346,6 +347,22 @@ export default function App() {
             element={
               <ProtectedRoute role="operator">
                 <ModelHealth />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operator/ai-explainability"
+            element={
+              <ProtectedRoute role="operator">
+                <AIExplainability />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operator/ai-explainability/:ticketCode"
+            element={
+              <ProtectedRoute role="operator">
+                <AIExplainability />
               </ProtectedRoute>
             }
           />

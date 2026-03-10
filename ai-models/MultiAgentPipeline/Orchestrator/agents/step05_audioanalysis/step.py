@@ -45,9 +45,9 @@ def get_audio_analysis_diagnostics() -> dict[str, object]:
 async def analyze_audio(state: dict) -> dict:
     has_audio_ticket = bool(state.get("has_audio")) or bool(state.get("audio_features"))
     state["has_audio"] = has_audio_ticket
+    state["audio_analysis_mode"] = "model" if _analyzer is not None else "mock"
     if state["label"] != "complaint" or not has_audio_ticket:
         state["audio_sentiment"] = None
-        state["combined_sentiment"] = state.get("text_sentiment", 0.0)
         logger.info(
             "audio_analysis | skipped (label=%s has_audio=%s)",
             state.get("label"),
@@ -65,19 +65,14 @@ async def analyze_audio(state: dict) -> dict:
     }
     if _analyzer is None:
         state["audio_sentiment"] = 0.5
-        state["combined_sentiment"] = float(state.get("text_sentiment", 0.0) or 0.0)
         logger.info("audio_analysis | model unavailable, using mock audio_sentiment=0.5")
         return state
 
     signals = _analyzer.extract_sentiment_signals(features)
     state["audio_sentiment"] = float(signals.overall_audio_sentiment)
-    state["combined_sentiment"] = (0.7 * float(state.get("text_sentiment", 0.0) or 0.0)) + (
-        0.3 * state["audio_sentiment"]
-    )
     logger.info(
-        "audio_analysis | audio_sentiment=%.3f combined_sentiment=%.3f",
+        "audio_analysis | audio_sentiment=%.3f",
         float(state.get("audio_sentiment", 0.0) or 0.0),
-        float(state.get("combined_sentiment", 0.0) or 0.0),
     )
     return state
 

@@ -34,7 +34,7 @@ except Exception:  # pragma: no cover - optional dependency for backward compati
     db_connect = None
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, os.getenv("LOG_LEVEL", "WARNING").upper(), logging.WARNING),
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -177,6 +177,49 @@ def _log_model_mode_summary() -> None:
         logger.info("MODEL_MODE | stage=%s mode=%s reason=%s", stage, mode, reason)
 
 
+def _coerce_uuid_or_none(value):
+    if value is None:
+        return None
+    try:
+        return str(uuid.UUID(str(value)))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _log_application_event(
+    *,
+    event_key: str,
+    level: str = "INFO",
+    ticket_id=None,
+    ticket_code=None,
+    execution_id=None,
+    payload: dict | None = None,
+) -> None:
+    if not db_connect:
+        return
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO application_event_log
+                        (service, event_key, ticket_id, ticket_code, execution_id, level, payload)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                    """,
+                    (
+                        "orchestrator",
+                        event_key,
+                        _coerce_uuid_or_none(ticket_id),
+                        ticket_code,
+                        _coerce_uuid_or_none(execution_id),
+                        level,
+                        json.dumps(payload or {}, default=str),
+                    ),
+                )
+    except Exception:
+        return
+
+
 def _json_to_dict(value) -> dict:
     if isinstance(value, dict):
         return value
@@ -283,6 +326,7 @@ async def process_audio(
 async def process_text(
     text: str = Form(...),
     ticket_id: str | None = Form(default=None),
+    execution_id: str | None = Form(default=None),
     subject: str | None = Form(default=None),
     ticket_type: str | None = Form(default=None),
     created_by_user_id: str | None = Form(default=None),
@@ -336,6 +380,19 @@ async def process_text(
                 open_ticket.get("respond_due_at"),
                 open_ticket.get("resolve_due_at"),
             )
+            _log_application_event(
+                event_key="ticket_status_update",
+                ticket_id=ticket_id,
+                ticket_code=ticket_id if _coerce_uuid_or_none(ticket_id) is None else None,
+                payload={
+                    "status": open_ticket.get("status", "Open"),
+                    "department": open_ticket.get("department"),
+                    "priority": open_ticket.get("priority"),
+                    "priority_assigned_at": open_ticket.get("priority_assigned_at"),
+                    "respond_due_at": open_ticket.get("respond_due_at"),
+                    "resolve_due_at": open_ticket.get("resolve_due_at"),
+                },
+            )
     except Exception as exc:
         logger.error("failed to create initial open ticket: %s", exc)
         raise HTTPException(status_code=503, detail=f"Failed to create initial ticket: {exc}")
@@ -350,14 +407,30 @@ async def process_text(
         "ticket_type": selected_type,
         "has_audio": bool(has_audio),
         "audio_features": parsed_audio_features,
-        "_execution_id": str(uuid.uuid4()),
+        "_execution_id": str(execution_id or "").strip() or str(uuid.uuid4()),
+        "_pipeline_total_steps": 11,
     }
 
     execution_id = state["_execution_id"]
+    _log_application_event(
+        event_key="pipeline_start",
+        ticket_id=ticket_id,
+        ticket_code=ticket_id if _coerce_uuid_or_none(ticket_id) is None else None,
+        execution_id=execution_id,
+        payload={"has_audio": bool(has_audio)},
+    )
     try:
         result = await pipeline.ainvoke(state)
     except Exception as exc:
         logger.exception("pipeline_failed | ticket_id=%s err=%s", ticket_id, exc)
+        _log_application_event(
+            event_key="pipeline_failed",
+            level="ERROR",
+            ticket_id=ticket_id,
+            ticket_code=ticket_id if _coerce_uuid_or_none(ticket_id) is None else None,
+            execution_id=execution_id,
+            payload={"error": str(exc)},
+        )
         raise HTTPException(status_code=503, detail=f"Pipeline failed for ticket {ticket_id}: {exc}")
     if result.get("label") == "inquiry":
         logger.info(
@@ -401,6 +474,18 @@ async def process_text(
             result.get("respond_due_at"),
             result.get("resolve_due_at"),
         )
+    _log_application_event(
+        event_key="pipeline_done",
+        ticket_id=result.get("ticket_id"),
+        ticket_code=result.get("ticket_id") if _coerce_uuid_or_none(result.get("ticket_id")) is None else None,
+        execution_id=execution_id,
+        payload={
+            "label": result.get("label"),
+            "status": result.get("status"),
+            "department": result.get("department"),
+            "priority": result.get("priority_label"),
+        },
+    )
     return _build_response(result, execution_id)
 
 
