@@ -313,7 +313,7 @@ export default function QualityControl() {
               <PillSelect value={timeFilter} onChange={handleFilterChange(setTimeFilter)} ariaLabel="Filter by time range"
                 options={[{ label: "Last 7 days", value: "last7days" }, { label: "Last 30 days", value: "last30days" }, { label: "This quarter", value: "quarter" }]} />
               <PillSelect value={deptFilter} onChange={handleFilterChange(setDeptFilter)} ariaLabel="Filter by department"
-                options={[{ label: "All departments", value: "All Departments" }, { label: "Warehouse", value: "Warehouse" }, { label: "Office", value: "Office" }, { label: "Retail Store", value: "Retail Store" }]} />
+                options={[{ label: "All Departments", value: "All Departments" }, { label: "Facilities Management", value: "Facilities Management" }, { label: "Legal & Compliance", value: "Legal & Compliance" }, { label: "Safety & Security", value: "Safety & Security" }, { label: "HR", value: "HR" }, { label: "Leasing", value: "Leasing" }, { label: "Maintenance", value: "Maintenance" }, { label: "IT", value: "IT" }]} />
               <DateRangePicker dateRange={dateRange} onChange={handleDateRangeChange} />
             </div>
           }
