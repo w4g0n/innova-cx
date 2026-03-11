@@ -11,6 +11,9 @@ import logging
 import os
 import tarfile
 import gc
+import json
+import subprocess
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -49,6 +52,9 @@ CALIBRATION_WEIGHT = float(os.getenv("DEPARTMENT_ROUTER_CALIBRATION_WEIGHT", "0.
 CONFIDENCE_FLAT_BOOST = float(os.getenv("DEPARTMENT_ROUTER_CONFIDENCE_FLAT_BOOST", "0.30"))
 CONFIDENCE_MAX_CAP = float(os.getenv("DEPARTMENT_ROUTER_CONFIDENCE_MAX_CAP", "0.98"))
 ROUTER_TAR_NAME = "department_routing_agent.tar"
+ROUTER_RUNTIME_WORKER_PATH = Path(__file__).with_name("router_runtime_worker.py")
+ROUTER_TIMEOUT_SECONDS = float(os.getenv("ROUTER_TIMEOUT_SECONDS", "60"))
+ROUTER_RUNTIME_MODE = os.getenv("ROUTER_RUNTIME_MODE", "subprocess").strip().lower()
 UNLOAD_ROUTER_MODEL_AFTER_USE = os.getenv(
     "UNLOAD_ROUTER_MODEL_AFTER_USE",
     "true",
@@ -179,6 +185,8 @@ def get_router_diagnostics() -> dict[str, object]:
         "department_router_packaged_tar": str(tar_path) if tar_path and tar_path.exists() else None,
         "department_router_threshold": ROUTING_CONFIDENCE_THRESHOLD,
         "department_router_calibration_weight": CALIBRATION_WEIGHT,
+        "department_router_runtime_mode": ROUTER_RUNTIME_MODE,
+        "department_router_timeout_seconds": ROUTER_TIMEOUT_SECONDS,
         "department_router_mode": "model" if local_model_exists else "mock",
     }
 
@@ -200,15 +208,18 @@ def _mock_department_from_text(text: str) -> str:
     return "Facilities Management"
 
 
+def _mock_routing_result(text: str) -> tuple[list[str], list[float], str]:
+    top = _mock_department_from_text(text)
+    remaining = [dept for dept in DEPARTMENT_LABELS if dept != top]
+    labels = [top, *remaining]
+    scores = [0.49] + [0.51 / max(1, len(remaining))] * len(remaining)
+    return labels, scores, "mock"
+
+
 def _predict_department_from_text(text: str) -> tuple[list[str], list[float], str]:
     loaded = _load_department_router()
     if loaded is None:
-        top = _mock_department_from_text(text)
-        remaining = [dept for dept in DEPARTMENT_LABELS if dept != top]
-        labels = [top, *remaining]
-        # Keep mock routing below threshold so manager review is required.
-        scores = [0.49] + [0.51 / max(1, len(remaining))] * len(remaining)
-        return labels, scores, "mock"
+        return _mock_routing_result(text)
 
     try:
         tokenizer = loaded["tokenizer"]
@@ -246,11 +257,7 @@ def _predict_department_from_text(text: str) -> tuple[list[str], list[float], st
         return labels, scores, "deberta_pairwise_nli"
     except Exception as exc:
         logger.warning("department_router | inference failed (%s)", exc)
-        top = _mock_department_from_text(text)
-        remaining = [dept for dept in DEPARTMENT_LABELS if dept != top]
-        labels = [top, *remaining]
-        scores = [0.74] + [0.26 / max(1, len(remaining))] * len(remaining)
-        return labels, scores, "mock"
+        return _mock_routing_result(text)
 
 
 def _release_department_router() -> None:
@@ -360,7 +367,30 @@ def _build_orchestrator_payload(
 async def route_and_store(state: dict) -> dict:
     ticket_text = str(state.get("text") or "").strip()
     try:
-        labels, scores, source = _predict_department_from_text(ticket_text)
+        if ROUTER_RUNTIME_MODE == "subprocess":
+            try:
+                completed = subprocess.run(
+                    [sys.executable, str(ROUTER_RUNTIME_WORKER_PATH), ticket_text],
+                    capture_output=True,
+                    text=True,
+                    timeout=ROUTER_TIMEOUT_SECONDS,
+                    check=False,
+                )
+                if completed.returncode == 0:
+                    payload = json.loads((completed.stdout or "").strip())
+                    labels = [str(x) for x in (payload.get("labels") or [])]
+                    scores = [float(x) for x in (payload.get("scores") or [])]
+                    source = str(payload.get("source") or "mock").strip() or "mock"
+                else:
+                    raise RuntimeError((completed.stderr or "").strip() or f"rc={completed.returncode}")
+            except subprocess.TimeoutExpired:
+                logger.warning("department_router | subprocess timed out after %.1fs", ROUTER_TIMEOUT_SECONDS)
+                labels, scores, source = _mock_routing_result(ticket_text)
+            except Exception as exc:
+                logger.warning("department_router | subprocess failed (%s)", exc)
+                labels, scores, source = _mock_routing_result(ticket_text)
+        else:
+            labels, scores, source = _predict_department_from_text(ticket_text)
         top_department = labels[0] if labels else None
         top_confidence = scores[0] if scores else 0.0
 

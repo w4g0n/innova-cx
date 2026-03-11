@@ -12,6 +12,8 @@ import logging
 import os
 import json
 import gc
+import subprocess
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -30,6 +32,9 @@ FEATURE_LABELER_MODEL_NAME = os.getenv(
 ).strip()
 FEATURE_LABELER_AUTO_DOWNLOAD = os.getenv("FEATURE_LABELER_AUTO_DOWNLOAD", "false").lower() in {"1", "true", "yes"}
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip() or None
+FEATURE_RUNTIME_WORKER_PATH = Path(__file__).with_name("feature_labeler_runtime_worker.py")
+FEATURE_RUNTIME_TIMEOUT_SECONDS = float(os.getenv("FEATURE_RUNTIME_TIMEOUT_SECONDS", "60"))
+FEATURE_RUNTIME_MODE = os.getenv("FEATURE_RUNTIME_MODE", "subprocess").strip().lower()
 UNLOAD_FEATURE_LABELER_AFTER_USE = os.getenv(
     "UNLOAD_FEATURE_LABELER_AFTER_USE",
     "false",
@@ -352,18 +357,47 @@ def _classify_ticket(classifier, text: str) -> dict[str, Any]:
 
 
 def _apply_labeling_step(state: dict, text: str) -> None:
-    classifier = _load_feature_labeler()
-    if classifier is None:
-        labels = _mock_labels(text)
-        label_source = "mock"
-    else:
+    if FEATURE_RUNTIME_MODE == "subprocess":
         try:
-            labels = _classify_ticket(classifier, text)
-            label_source = "nli"
-        except Exception as exc:
-            logger.warning("feature_engineering | labeler inference failed (%s), using mock", exc)
+            completed = subprocess.run(
+                [sys.executable, str(FEATURE_RUNTIME_WORKER_PATH), text],
+                capture_output=True,
+                text=True,
+                timeout=FEATURE_RUNTIME_TIMEOUT_SECONDS,
+                check=False,
+            )
+            if completed.returncode == 0:
+                payload = json.loads((completed.stdout or "").strip())
+                labels = {
+                    "issue_severity": str(payload.get("issue_severity") or "medium").lower(),
+                    "issue_urgency": str(payload.get("issue_urgency") or "medium").lower(),
+                    "business_impact": str(payload.get("business_impact") or "medium").lower(),
+                    "safety_concern": bool(payload.get("safety_concern")),
+                }
+                label_source = str(payload.get("feature_labels_source") or "nli").strip().lower() or "nli"
+            else:
+                raise RuntimeError((completed.stderr or "").strip() or f"rc={completed.returncode}")
+        except subprocess.TimeoutExpired:
+            logger.warning("feature_engineering | subprocess timed out after %.1fs, using mock", FEATURE_RUNTIME_TIMEOUT_SECONDS)
             labels = _mock_labels(text)
             label_source = "mock"
+        except Exception as exc:
+            logger.warning("feature_engineering | subprocess failed (%s), using mock", exc)
+            labels = _mock_labels(text)
+            label_source = "mock"
+    else:
+        classifier = _load_feature_labeler()
+        if classifier is None:
+            labels = _mock_labels(text)
+            label_source = "mock"
+        else:
+            try:
+                labels = _classify_ticket(classifier, text)
+                label_source = "nli"
+            except Exception as exc:
+                logger.warning("feature_engineering | labeler inference failed (%s), using mock", exc)
+                labels = _mock_labels(text)
+                label_source = "mock"
 
     state["issue_severity"] = str(labels["issue_severity"]).lower()
     state["issue_urgency"] = str(labels["issue_urgency"]).lower()
@@ -402,6 +436,8 @@ def get_feature_engineering_diagnostics() -> dict[str, object]:
         "feature_labeler_model_name": FEATURE_LABELER_MODEL_NAME or None,
         "feature_labeler_auto_download": FEATURE_LABELER_AUTO_DOWNLOAD,
         "feature_labeler_model_exists": labeler_exists,
+        "feature_runtime_mode": FEATURE_RUNTIME_MODE,
+        "feature_runtime_timeout_seconds": FEATURE_RUNTIME_TIMEOUT_SECONDS,
         "feature_labeler_artifact_type": (
             "multitask_pt" if multitask_labeler_exists else "hf_zero_shot" if hf_labeler_exists else None
         ),

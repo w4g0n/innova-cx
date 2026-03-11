@@ -424,6 +424,15 @@ function inferStageMode(stage) {
     "audio_analysis_mode",
   );
 
+  if (
+    stageName === "SubjectGenerationAgent" &&
+    !hint &&
+    typeof out?.subject === "string" &&
+    out.subject.trim() !== ""
+  ) {
+    return "Real";
+  }
+
   if (!hint) return stageName === "RecurrenceAgent" ? "Heuristic" : "Mock";
   if (hint.includes("deterministic")) {
     return "Deterministic";
@@ -460,6 +469,12 @@ function getStageConfidence(stage) {
     return out.department_confidence ?? stage?.confidenceScore ?? null;
   }
   return null;
+}
+
+function formatProcessingTimeSeconds(inferenceTimeMs) {
+  const value = Number(inferenceTimeMs);
+  if (!Number.isFinite(value) || value < 0) return "—";
+  return `${(value / 1000).toFixed(1)}s`;
 }
 
 function stageHasAudio(stage) {
@@ -1187,7 +1202,7 @@ export default function AIExplainability() {
                     <div className="aix-meta">
                       <span>Execution: {selectedStage.executionId}</span>
                       <span>Time: {selectedStage.createdAt || "—"}</span>
-                      <span>Latency: {selectedStage.inferenceTimeMs ?? "—"} ms</span>
+                      <span>Processing time: {formatProcessingTimeSeconds(selectedStage.inferenceTimeMs)}</span>
                       <span>Confidence: {getStageConfidence(selectedStage) ?? "—"}</span>
                       <span>Mode: {inferStageMode(selectedStage)}</span>
                       {selectedStage.stageName === "AudioAnalysisAgent" ? (

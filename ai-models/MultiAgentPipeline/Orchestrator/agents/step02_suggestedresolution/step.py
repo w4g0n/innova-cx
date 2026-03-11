@@ -7,6 +7,7 @@ model artifact, with a deterministic template fallback if unavailable.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -47,6 +48,11 @@ SUGGESTED_RESOLUTION_PROMPT_EXAMPLES = max(
 )
 
 logger = logging.getLogger(__name__)
+SUGGESTED_RESOLUTION_TIMEOUT_SECONDS = max(
+    1.0,
+    float(os.getenv("SUGGESTED_RESOLUTION_TIMEOUT_SECONDS", "20")),
+)
+_BACKGROUND_SUGGESTED_RESOLUTION_TASKS: set[asyncio.Task] = set()
 UNLOAD_SUGGESTED_RESOLUTION_MODEL_AFTER_USE = os.getenv(
     "UNLOAD_SUGGESTED_RESOLUTION_MODEL_AFTER_USE",
     "false",
@@ -349,6 +355,7 @@ def get_suggested_resolution_diagnostics() -> dict[str, object]:
         "suggested_resolution_model_name": SUGGESTED_RESOLUTION_MODEL_NAME or None,
         "suggested_resolution_auto_download": SUGGESTED_RESOLUTION_AUTO_DOWNLOAD,
         "suggested_resolution_model_exists": model_exists,
+        "suggested_resolution_timeout_seconds": SUGGESTED_RESOLUTION_TIMEOUT_SECONDS,
         "suggested_resolution_examples_path": str(SUGGESTED_RESOLUTION_EXAMPLES_PATH),
         "suggested_resolution_mode": "model" if model_exists else "template",
     }
@@ -425,6 +432,10 @@ async def _generate_resolution_text(ticket: dict[str, Any]) -> tuple[str, str, s
     return fallback_resolution_suggestion(ticket), "template_fallback", "template"
 
 
+async def _generate_resolution_text_in_thread(ticket: dict[str, Any]) -> tuple[str, str, str]:
+    return await asyncio.to_thread(lambda: asyncio.run(_generate_resolution_text(ticket)))
+
+
 async def _persist_suggested_resolution(state: dict) -> None:
     payload = {
         "ticket_id": state.get("ticket_id"),
@@ -442,6 +453,34 @@ async def _persist_suggested_resolution(state: dict) -> None:
         response.raise_for_status()
 
 
+async def _complete_suggested_resolution_in_background(base_state: dict[str, Any], task: asyncio.Task) -> None:
+    ticket_id = str(base_state.get("ticket_id") or "").strip()
+    try:
+        suggestion, model_label, mode = await task
+        if not suggestion:
+            return
+        background_state = dict(base_state)
+        background_state["suggested_resolution"] = suggestion
+        background_state["suggested_resolution_model"] = model_label
+        background_state["suggested_resolution_mode"] = mode
+        await _persist_suggested_resolution(background_state)
+        logger.info(
+            "suggested_resolution | background completion persisted ticket_id=%s model=%s",
+            ticket_id,
+            model_label,
+        )
+    except Exception as exc:
+        logger.warning(
+            "suggested_resolution | background completion failed ticket_id=%s err=%s",
+            ticket_id,
+            exc,
+        )
+    finally:
+        if UNLOAD_SUGGESTED_RESOLUTION_MODEL_AFTER_USE:
+            _release_suggested_resolution_model()
+        _BACKGROUND_SUGGESTED_RESOLUTION_TASKS.discard(task)
+
+
 async def generate_suggested_resolution(state: dict) -> dict:
     ticket_id = str(state.get("ticket_id") or "").strip()
     if not ticket_id:
@@ -453,8 +492,30 @@ async def generate_suggested_resolution(state: dict) -> dict:
         return state
 
     ticket = _ticket_context_from_state(state)
+    base_state = dict(state)
+    generation_task = asyncio.create_task(_generate_resolution_text_in_thread(ticket))
     try:
-        suggestion, model_label, mode = await _generate_resolution_text(ticket)
+        try:
+            suggestion, model_label, mode = await asyncio.wait_for(
+                asyncio.shield(generation_task),
+                timeout=SUGGESTED_RESOLUTION_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "suggested_resolution | timed out after %.1fs ticket_id=%s; continuing in background",
+                SUGGESTED_RESOLUTION_TIMEOUT_SECONDS,
+                ticket_id,
+            )
+            state["suggested_resolution"] = None
+            state["suggested_resolution_model"] = None
+            state["suggested_resolution_mode"] = "timeout_background"
+            followup_task = asyncio.create_task(
+                _complete_suggested_resolution_in_background(base_state, generation_task)
+            )
+            _BACKGROUND_SUGGESTED_RESOLUTION_TASKS.add(followup_task)
+            followup_task.add_done_callback(_BACKGROUND_SUGGESTED_RESOLUTION_TASKS.discard)
+            return state
+
         state["suggested_resolution"] = suggestion
         state["suggested_resolution_model"] = model_label
         state["suggested_resolution_mode"] = mode
@@ -465,7 +526,7 @@ async def generate_suggested_resolution(state: dict) -> dict:
             logger.warning("suggested_resolution | failed to persist ticket_id=%s err=%s", ticket_id, exc)
             return state
     finally:
-        if UNLOAD_SUGGESTED_RESOLUTION_MODEL_AFTER_USE:
+        if UNLOAD_SUGGESTED_RESOLUTION_MODEL_AFTER_USE and generation_task.done():
             _release_suggested_resolution_model()
 
     logger.info(

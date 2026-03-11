@@ -11,6 +11,9 @@ If classifier confidence < CONFIDENCE_THRESHOLD, falls back to "complaint"
 import logging
 import os
 import gc
+import json
+import subprocess
+import sys
 from pathlib import Path
 from functools import lru_cache
 
@@ -34,6 +37,9 @@ MODEL_PATH_ENV = "CLASSIFIER_MODEL_PATH"
 VECTORIZER_PATH_ENV = "CLASSIFIER_VECTORIZER_PATH"
 MODEL_DIR_ENV = "CLASSIFIER_MODEL_DIR"
 PT_MODEL_FILENAMES = ("model.pt", "classifier_model.pt")
+CLASSIFIER_RUNTIME_WORKER_PATH = Path(__file__).with_name("classifier_runtime_worker.py")
+CLASSIFIER_TIMEOUT_SECONDS = float(os.getenv("CLASSIFIER_TIMEOUT_SECONDS", "60"))
+CLASSIFIER_RUNTIME_MODE = os.getenv("CLASSIFIER_RUNTIME_MODE", "subprocess").strip().lower()
 UNLOAD_CLASSIFIER_MODEL_AFTER_USE = os.getenv(
     "UNLOAD_CLASSIFIER_MODEL_AFTER_USE",
     "false",
@@ -157,6 +163,8 @@ def get_classifier_diagnostics() -> dict[str, object]:
         "classifier_model_exists": model_exists,
         "classifier_vectorizer_path": vectorizer_path or None,
         "classifier_vectorizer_exists": vectorizer_exists,
+        "classifier_runtime_mode": CLASSIFIER_RUNTIME_MODE,
+        "classifier_timeout_seconds": CLASSIFIER_TIMEOUT_SECONDS,
         "classifier_mode": "model" if model_exists else "mock",
     }
 
@@ -236,6 +244,41 @@ def _release_optional_model() -> None:
         gc.collect()
 
 
+def _predict_via_subprocess(text: str) -> tuple[str, float, str] | None:
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(CLASSIFIER_RUNTIME_WORKER_PATH), text],
+            capture_output=True,
+            text=True,
+            timeout=CLASSIFIER_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("classifier | subprocess timed out after %.1fs", CLASSIFIER_TIMEOUT_SECONDS)
+        return None
+    except Exception as exc:
+        logger.warning("classifier | subprocess launch failed (%s)", exc)
+        return None
+
+    if completed.returncode != 0:
+        logger.warning("classifier | subprocess failed rc=%s err=%s", completed.returncode, (completed.stderr or "").strip())
+        return None
+    try:
+        payload = json.loads((completed.stdout or "").strip())
+    except json.JSONDecodeError as exc:
+        logger.warning("classifier | invalid subprocess JSON (%s)", exc)
+        return None
+    label = str(payload.get("label") or "").strip().lower()
+    if label not in {"complaint", "inquiry"}:
+        return None
+    try:
+        confidence = float(payload.get("class_confidence", 0.0) or 0.0)
+    except Exception:
+        confidence = 0.0
+    source = str(payload.get("classification_source") or "model").strip().lower() or "model"
+    return label, confidence, source
+
+
 async def classify(state: dict) -> dict:
     """
     Classifies transcript in-process and sets state["label"].
@@ -249,8 +292,18 @@ async def classify(state: dict) -> dict:
         return state
 
     try:
-        model_result = _model_classify(state.get("text", ""))
-        if model_result:
+        subprocess_result = None
+        model_result = None
+        if CLASSIFIER_RUNTIME_MODE == "subprocess":
+            subprocess_result = _predict_via_subprocess(state.get("text", ""))
+        else:
+            model_result = _model_classify(state.get("text", ""))
+
+        if subprocess_result:
+            label, conf, source = subprocess_result
+            state["classification_source"] = source
+            logger.info("classifier | using subprocess runtime")
+        elif model_result:
             label, conf = model_result
             state["classification_source"] = "model"
             logger.info(
@@ -279,7 +332,7 @@ async def classify(state: dict) -> dict:
         "classifier_decision | ticket_type=%s confidence=%.3f source=%s threshold=%.2f",
         state["label"],
         float(state.get("class_confidence", 0.0) or 0.0),
-        "model" if model_result else "heuristic",
+        state.get("classification_source"),
         CONFIDENCE_THRESHOLD,
     )
 
