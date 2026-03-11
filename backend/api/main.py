@@ -3047,10 +3047,15 @@ def _dispatch_orchestrator_after_submit(
 
 
 @api.post("/internal/tickets/create")
-def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
+def create_internal_ticket_via_gate(
+    body: InternalCreateTicketRequest,
+    background_tasks: BackgroundTasks,
+):
     """
     Internal ticket creation endpoint for services (e.g., chatbot).
-    Flow: ticket_creation_gate insert -> orchestrator dispatch.
+    Flow: ticket_creation_gate insert -> orchestrator dispatched in background.
+    The orchestrator dispatch is fire-and-forget so this endpoint returns the
+    ticket_id immediately without blocking on the ML pipeline.
     """
     requester = fetch_one("SELECT id FROM users WHERE id = %s LIMIT 1;", (body.created_by_user_id,))
     if not requester:
@@ -3078,20 +3083,20 @@ def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
             )
 
     ticket_code = created["ticket_code"]
-    orchestrator_dispatched = dispatch_ticket_to_orchestrator(
+
+    # Dispatch orchestrator in the background — identical to /customer/tickets.
+    # The synchronous call was blocking for the full ML pipeline duration (60-180 s),
+    # causing the chatbot's TICKET_CREATE_TIMEOUT_SECONDS to fire and surfacing as
+    # a 500 from the chatbot → 503 to the user ("service unavailable").
+    background_tasks.add_task(
+        _dispatch_orchestrator_after_submit,
         ticket_code=ticket_code,
         details=details,
-        orchestrator_url=ORCHESTRATOR_URL,
-        orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
         ticket_type=ticket_type,
         subject=subject,
         execution_id=created.get("execution_id"),
     )
-    if not orchestrator_dispatched:
-        logger.warning(
-            "orchestrator_dispatch | failed for internal ticket=%s",
-            ticket_code,
-        )
+    logger.info("orchestrator_dispatch | queued for internal ticket=%s", ticket_code)
 
     return {
         "ok": True,
