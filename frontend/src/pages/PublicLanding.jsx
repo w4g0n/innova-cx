@@ -1157,7 +1157,7 @@ export default function PublicLanding() {
           fontSize: 11, letterSpacing: "0.12em",
           color: "rgba(167,139,250,0.30)",
           animation: "wcx-fadein 1s ease 0.9s both",
-        }}>DUBAI COMMERCITY · 2026</div>
+        }}>InnovaAI X DUBAI COMMERCITY · 2026</div>
 
         <style>{`
           @keyframes wcx-fadein {

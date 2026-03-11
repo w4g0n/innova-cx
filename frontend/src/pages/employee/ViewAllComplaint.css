@@ -14,9 +14,6 @@
   gap: 16px;
 }
 
-.search-section-EV-VAC {
-  /* gap on parent handles spacing */
-}
 
 .filters-row-EV-VAC {
   display: flex;
@@ -137,24 +134,118 @@
 }
 
 .ev-all-resolved {
-  min-height: 320px;
-  display: grid;
-  place-items: center;
+  min-height: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   background: #ffffff;
   border-radius: 24px;
   box-shadow: 0px 12px 30px rgba(0, 0, 0, 0.06);
+  padding: 48px 32px;
+  gap: 0;
+  animation: fadeUp 0.5s var(--ease-out) both;
 }
 
-.ev-all-resolved h2 {
-  margin: 0;
-  font-size: 42px;
+/* ── Concentric pulsing rings ── */
+.ev-all-resolved__rings {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.ev-all-resolved__ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(22, 163, 74, 0.18);
+  animation: evRingPulse 3s ease-in-out infinite;
+}
+.ev-all-resolved__ring--1 { width: 100px; height: 100px; animation-delay: 0s; }
+.ev-all-resolved__ring--2 { width: 130px; height: 130px; animation-delay: 0.4s; border-color: rgba(22,163,74,0.10); }
+.ev-all-resolved__ring--3 { width: 160px; height: 160px; animation-delay: 0.8s; border-color: rgba(22,163,74,0.06); }
+
+@keyframes evRingPulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%       { transform: scale(1.07); opacity: 0.5; }
+}
+
+/* ── Icon circle ── */
+.ev-all-resolved__iconwrap {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 0 0 8px rgba(22, 163, 74, 0.08),
+    0 8px 24px rgba(22, 163, 74, 0.2);
+  animation: evIconPop 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+}
+
+@keyframes evIconPop {
+  from { transform: scale(0.5); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+.ev-all-resolved__svg {
+  width: 44px;
+  height: 44px;
+}
+
+/* ── Animated checkmark draw ── */
+.ev-all-resolved__checkpath {
+  stroke-dasharray: 50;
+  stroke-dashoffset: 50;
+  animation: evCheckDraw 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.55s forwards;
+}
+
+@keyframes evCheckDraw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* ── Text ── */
+.ev-all-resolved__title {
+  margin: 0 0 10px;
+  font-size: 28px;
   font-weight: 800;
-  color: #166534;
+  color: #14532d;
+  letter-spacing: -0.03em;
+  animation: fadeUp 0.5s 0.3s both;
 }
 
-.ev-checkmark {
-  font-size: 84px;
-  line-height: 1;
-  color: #16a34a;
+.ev-all-resolved__sub {
+  margin: 0 0 24px;
+  font-size: 14px;
+  color: #6b7280;
+  max-width: 320px;
+  line-height: 1.55;
+  animation: fadeUp 0.5s 0.4s both;
+}
+
+/* ── CTA button ── */
+.ev-all-resolved__btn {
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(89, 36, 180, 0.2);
+  background: rgba(89, 36, 180, 0.06);
+  color: #5924b4;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+  animation: fadeUp 0.5s 0.5s both;
+}
+
+.ev-all-resolved__btn:hover {
+  background: rgba(89, 36, 180, 0.1);
+  box-shadow: 0 4px 14px rgba(89, 36, 180, 0.15);
+  transform: translateY(-1px);
 }
