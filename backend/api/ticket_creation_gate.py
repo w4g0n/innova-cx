@@ -74,7 +74,7 @@ def create_ticket_via_gate(
             priority_assigned_at,
             created_at
         ) VALUES (
-            %s, %s, %s, %s, %s::ticket_priority, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+            %s, %s, %s, %s, COALESCE(%s::ticket_priority, 'Medium'::ticket_priority), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
         )
         RETURNING id, ticket_code, status, priority, priority_assigned_at, respond_due_at, resolve_due_at;
         """,

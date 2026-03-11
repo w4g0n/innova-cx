@@ -166,6 +166,7 @@ def _ensure_runtime_schema_compatibility() -> None:
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority_assigned_at TIMESTAMPTZ;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS respond_time_left_seconds INTEGER;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolve_time_left_seconds INTEGER;")
+                cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_source TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;")

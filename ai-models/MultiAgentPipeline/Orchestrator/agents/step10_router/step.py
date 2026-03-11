@@ -358,6 +358,8 @@ def _build_orchestrator_payload(
         "department_candidate": top_department,
         "keywords": state.get("keywords", []),
         "label": state.get("label", "complaint"),
+        "suggested_resolution": state.get("suggested_resolution"),
+        "suggested_resolution_model": state.get("suggested_resolution_model"),
         "status": "Assigned" if should_auto_route else "Open",
         "classification_confidence": route_confidence,
         "routing_model": route_source,
