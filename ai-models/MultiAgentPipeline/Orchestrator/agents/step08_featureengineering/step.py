@@ -59,6 +59,82 @@ SAFETY_KEYWORDS = (
     "chemical",
     "toxic",
 )
+LOW_SEVERITY_KEYWORDS = (
+    "noise",
+    "noisy",
+    "loud",
+    "music",
+    "ceremony",
+    "cleaning",
+    "garbage",
+    "trash",
+    "parking",
+    "billing",
+    "invoice",
+)
+HIGH_SEVERITY_KEYWORDS = (
+    "outage",
+    "no power",
+    "power outage",
+    "elevator stuck",
+    "stuck in elevator",
+    "water leak",
+    "flood",
+    "flooding",
+    "gas leak",
+    "smoke",
+    "fire",
+)
+LOW_IMPACT_KEYWORDS = (
+    "noise",
+    "noisy",
+    "loud",
+    "music",
+    "cleaning",
+    "garbage",
+    "trash",
+    "parking",
+    "billing",
+    "invoice",
+    "minor",
+    "cosmetic",
+)
+HIGH_IMPACT_KEYWORDS = (
+    "cannot work",
+    "can't work",
+    "unable to work",
+    "operations stopped",
+    "operations are blocked",
+    "business halted",
+    "staff cannot",
+    "users cannot",
+    "cannot login",
+    "can't login",
+    "financial loss",
+    "client-facing",
+)
+HIGH_URGENCY_KEYWORDS = (
+    "urgent",
+    "asap",
+    "immediate",
+    "immediately",
+    "right now",
+    "today",
+    "emergency",
+    "third time",
+    "second time",
+    "again",
+    "repeated",
+    "repeatedly",
+    "outage",
+)
+LOW_URGENCY_KEYWORDS = (
+    "whenever possible",
+    "no rush",
+    "not urgent",
+    "scheduled maintenance",
+    "routine",
+)
 
 LABEL_CONFIGS = {
     "issue_severity": {
@@ -150,6 +226,45 @@ def _optional_bool(value):
 def _has_safety_signal(text: str) -> bool:
     t = str(text or "").lower()
     return any(keyword in t for keyword in SAFETY_KEYWORDS)
+
+
+def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
+    t = str(text or "").lower()
+    return any(keyword in t for keyword in keywords)
+
+
+def _apply_feature_calibration(state: dict, text: str) -> None:
+    severity = _normalize_level(state.get("issue_severity"), default="medium")
+    urgency = _normalize_level(state.get("issue_urgency"), default="medium")
+    impact = _normalize_level(state.get("business_impact"), default="medium")
+    t = str(text or "").lower()
+
+    if _contains_any(t, HIGH_SEVERITY_KEYWORDS):
+        severity = "high"
+    elif _contains_any(t, LOW_SEVERITY_KEYWORDS) and severity == "medium":
+        severity = "low"
+
+    if _contains_any(t, HIGH_IMPACT_KEYWORDS):
+        impact = "high"
+    elif _contains_any(t, LOW_IMPACT_KEYWORDS) and impact == "medium":
+        impact = "low"
+
+    if _contains_any(t, HIGH_URGENCY_KEYWORDS):
+        urgency = "high"
+    elif _contains_any(t, LOW_URGENCY_KEYWORDS):
+        urgency = "low"
+
+    # Noise/disturbance complaints are rarely severe business-impacting incidents
+    # unless the text explicitly says work is blocked.
+    if _contains_any(t, ("noise", "noisy", "loud", "music", "disturbance")) and not _contains_any(t, HIGH_IMPACT_KEYWORDS):
+        severity = "low"
+        impact = "low"
+        if urgency == "high" and not _contains_any(t, ("urgent", "emergency", "asap", "immediate")):
+            urgency = "medium"
+
+    state["issue_severity"] = severity
+    state["issue_urgency"] = urgency
+    state["business_impact"] = impact
 
 
 def _mock_labels(text: str) -> dict[str, Any]:
@@ -476,6 +591,9 @@ async def engineer_features(state: dict) -> dict:
         state["safety_concern"] = bool(safety_from_keywords or safety_from_severity)
     state["issue_severity"] = severity_norm
     state["issue_urgency"] = _normalize_level(issue_urgency, default="medium")
+    _apply_feature_calibration(state, text)
+    if state["issue_severity"] == "high" and explicit_safety is None:
+        state["safety_concern"] = bool(state["safety_concern"] or _has_safety_signal(text))
 
     logger.info(
         "feature_engineering | labels_source=%s impact=%s safety=%s severity=%s urgency=%s",

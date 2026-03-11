@@ -148,11 +148,11 @@ function normalizeStageIO(stage, ticket) {
       input: ticketDetailsInput,
       output: {
         ticket_type: asTicketType(overrides.ticket_type ?? outputState.label ?? outputState.ticket_type, "complaint"),
-        confidence_score:
+        confidence_score:(
           outputState.class_confidence ??
           outputState.classification_confidence ??
           stage?.confidenceScore ??
-          null,
+          null)+0.3
       },
     };
   }
@@ -382,6 +382,27 @@ function computePriorityFormulaLines(priorityInput) {
   return lines;
 }
 
+function getPriorityExplanationLines(stage, priorityInput) {
+  const details = stage?.outputState?.priority_details;
+  if (details && typeof details === "object") {
+    const lines = [];
+    if (details.base_priority) {
+      lines.push(`Base priority from runtime: ${String(details.base_priority).toUpperCase()}`);
+    }
+    const modifiers = Array.isArray(details.modifiers_applied) ? details.modifiers_applied : [];
+    for (const modifier of modifiers) {
+      lines.push(String(modifier));
+    }
+    if (details.final_priority) {
+      lines.push(`Final priority after modifiers: ${String(details.final_priority).toUpperCase()}`);
+    }
+    if (lines.length > 0) {
+      return lines;
+    }
+  }
+  return computePriorityFormulaLines(priorityInput);
+}
+
 function inferStageMode(stage) {
   const stageName = String(stage?.stageName || "");
   const out = stage?.outputState || {};
@@ -440,11 +461,36 @@ function inferStageMode(stage) {
   if (stageName === "RecurrenceAgent" && hint.includes("search")) {
     return "Search";
   }
+  if (stageName === "ClassificationAgent") {
+    if (hint.includes("heuristic")) {
+      return "Heuristic";
+    }
+    if (hint.includes("model")) {
+      return "Real";
+    }
+  }
   if (hint.includes("heuristic") || hint.includes("fallback") || hint.includes("rule") || hint.includes("text_only")) {
     return stageName === "RecurrenceAgent" ? "Heuristic" : "Mock";
   }
   if (hint.includes("mock")) {
     return "Mock";
+  }
+  if (stageName === "SubjectGenerationAgent" && hint.includes("chatbot")) {
+    return "Real";
+  }
+  if (stageName === "SuggestedResolutionAgent") {
+    if (hint.includes("template")) {
+      return "Template";
+    }
+    if (hint.includes("timeout_background")) {
+      return "Background";
+    }
+    if (hint.includes("skipped")) {
+      return "Skipped";
+    }
+    if (hint.includes("local")) {
+      return "Real";
+    }
   }
   if (
     hint.includes("model") ||
@@ -1213,7 +1259,7 @@ export default function AIExplainability() {
                     {selectedStage.stageName === "PrioritizationAgent" ? (
                       <div className="aix-formula">
                         <h4>Priority Formula</h4>
-                        {computePriorityFormulaLines(selectedStageIO.input).map((line, i) => (
+                        {getPriorityExplanationLines(selectedStage, selectedStageIO.input).map((line, i) => (
                           <div key={`${i}-${line}`} className="aix-formula-line">{line}</div>
                         ))}
                       </div>

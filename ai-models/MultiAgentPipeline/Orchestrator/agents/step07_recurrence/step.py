@@ -34,6 +34,44 @@ _RECURRING_PATTERNS = (
 )
 _RECURRING_REGEX = re.compile("|".join(_RECURRING_PATTERNS), re.IGNORECASE)
 SIMILARITY_RECURRENCE_THRESHOLD = 0.72
+_STOPWORDS = {
+    "the", "and", "for", "that", "this", "with", "have", "from", "into", "onto",
+    "your", "their", "there", "here", "some", "sort", "very", "are", "was", "were",
+    "been", "being", "it", "its", "our", "out", "not", "but", "too", "can", "still",
+    "seems", "seem", "seemed",
+}
+_TOKEN_CANONICAL_MAP = {
+    "neighbors": "neighbor",
+    "neighbour": "neighbor",
+    "neighbours": "neighbor",
+    "noisy": "noise",
+    "loud": "noise",
+    "music": "noise",
+    "disturbance": "noise",
+    "disturbances": "noise",
+    "wifi": "network",
+    "internet": "network",
+    "connectivity": "network",
+    "server": "network",
+    "servers": "network",
+    "login": "network",
+    "logins": "network",
+    "leaking": "leak",
+    "flooding": "leak",
+    "pipes": "pipe",
+    "electrical": "power",
+    "electricity": "power",
+    "lights": "power",
+    "cooling": "hvac",
+    "heating": "hvac",
+    "ventilation": "hvac",
+    "thermostat": "hvac",
+    "ac": "hvac",
+}
+_DOMAIN_SIGNAL_TOKENS = {
+    "neighbor", "noise", "network", "leak", "pipe", "hvac", "power", "elevator",
+    "parking", "pest", "security", "cleaning", "trash", "gate", "alarm",
+}
 
 
 def _optional_bool(value):
@@ -53,12 +91,32 @@ def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", " ", str(value or "").lower())).strip()
 
 
+def _tokenize_text(value: str) -> set[str]:
+    tokens = []
+    for token in _normalize_text(value).split():
+        if len(token) <= 2 or token in _STOPWORDS:
+            continue
+        tokens.append(_TOKEN_CANONICAL_MAP.get(token, token))
+    return set(tokens)
+
+
 def _token_jaccard(a: str, b: str) -> float:
-    a_tokens = {token for token in _normalize_text(a).split() if len(token) > 2}
-    b_tokens = {token for token in _normalize_text(b).split() if len(token) > 2}
+    a_tokens = _tokenize_text(a)
+    b_tokens = _tokenize_text(b)
     if not a_tokens or not b_tokens:
         return 0.0
     return len(a_tokens & b_tokens) / float(len(a_tokens | b_tokens))
+
+
+def _domain_overlap_score(a: str, b: str) -> float:
+    a_tokens = _tokenize_text(a)
+    b_tokens = _tokenize_text(b)
+    overlap = a_tokens & b_tokens
+    if len(overlap) < 2:
+        return 0.0
+    if not (_DOMAIN_SIGNAL_TOKENS & overlap):
+        return 0.0
+    return min(0.9, 0.45 + (0.18 * len(overlap)))
 
 
 def _find_similar_ticket(text: str, current_ticket_code: str | None) -> tuple[str | None, str | None, float]:
@@ -96,11 +154,15 @@ def _find_similar_ticket(text: str, current_ticket_code: str | None) -> tuple[st
         subject_score = SequenceMatcher(None, query_text, subject_lc).ratio() if subject_lc else 0.0
         details_jaccard = _token_jaccard(query_text, details) if details else 0.0
         subject_jaccard = _token_jaccard(query_text, subject_lc) if subject_lc else 0.0
+        details_domain = _domain_overlap_score(query_text, details) if details else 0.0
+        subject_domain = _domain_overlap_score(query_text, subject_lc) if subject_lc else 0.0
         score = max(
             details_score,
             subject_score,
             details_jaccard,
             subject_jaccard,
+            details_domain,
+            subject_domain,
             (details_score + details_jaccard) / 2.0 if details else 0.0,
             (subject_score + subject_jaccard) / 2.0 if subject_lc else 0.0,
         )
