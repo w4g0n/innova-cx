@@ -136,6 +136,18 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
             return _result(response, "prompt_ticket_id", session_id)
 
         if intent == "create_ticket":
+            # Try to resolve complaint vs inquiry from the same message.
+            # "I want to submit a complaint" already contains enough signal —
+            # running the secondary classifier now avoids an unnecessary
+            # disambiguation round-trip.
+            secondary = classify_secondary_intent(user_text, history)
+            if secondary == "complaint":
+                transition(session, "complaint")
+                return _handle_complaint(session, user_id, user_text)
+            if secondary == "inquiry":
+                transition(session, "inquiry")
+                return _handle_inquiry(session, user_text)
+            # Genuinely ambiguous — ask once.
             transition(session, "await_secondary_intent")
             response = (
                 "Of course. To help you better, is this an inquiry (you have a question) "
