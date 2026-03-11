@@ -110,7 +110,7 @@ export default function EmployeeViewAllComplaints() {
   // ────────────────────────────────────────────────────────────────────────────────────────────
   const _navigate = useNavigate();
   const [searchTerm, _setSearchTerm] = useState("");
-  const [statusFilter, _setStatusFilter] = useState("All Status");
+  const [statusFilter, _setStatusFilter] = useState("Hide Resolved");
   const [priorityFilter, _setPriorityFilter] = useState("All Priorities");
   const [sortConfig, _setSortConfig] = useState({ key: null, direction: null });
   const [dateRange, _setDateRange] = useState({ from: "", to: "" });
@@ -203,7 +203,11 @@ export default function EmployeeViewAllComplaints() {
       const subj = (t.subject ?? "").toLowerCase();
 
       const matchesSearch = !q || id.includes(q) || subj.includes(q);
-      const matchesStatus = statusFilter === "All Status" || t.status === statusFilter;
+      const matchesStatus = statusFilter === "All Status"
+        ? true
+        : statusFilter === "Hide Resolved"
+        ? t.status !== "Resolved"
+        : t.status === statusFilter;
       const matchesPriority =
         priorityFilter === "All Priorities" || t.priority === priorityFilter;
 
@@ -288,7 +292,14 @@ export default function EmployeeViewAllComplaints() {
   }, [filteredTickets]);
 
   if (loading) return <Layout role="employee"><div>Loading tickets...</div></Layout>;
-  const allResolved = filteredTickets.length > 0 && kpiCounts.openTickets === 0;
+  const hasActiveFilter = statusFilter !== "All Status" || priorityFilter !== "All Priorities" || searchTerm.trim() !== "";
+  const rawOpenCount = normalizedTickets.filter((t) => t.status !== "Resolved").length;
+  const allResolved = normalizedTickets.length > 0 && (
+    // No filters: genuinely all resolved
+    (!hasActiveFilter && kpiCounts.openTickets === 0) ||
+    // Filters active: nothing matches
+    (hasActiveFilter && filteredTickets.length === 0)
+  );
 
   return (
     <Layout role="employee">
@@ -323,6 +334,7 @@ export default function EmployeeViewAllComplaints() {
               onChange={_setStatusFilter}
               ariaLabel="Filter by status"
               options={[
+                { label: "Hide Resolved", value: "Hide Resolved" },
                 { label: "All Status", value: "All Status" },
                 { label: "Open", value: "Open" },
                 { label: "In Progress", value: "In Progress" },
@@ -346,7 +358,7 @@ export default function EmployeeViewAllComplaints() {
             <FilterPillButton
               onClick={() => {
                 _setSearchTerm("");
-                _setStatusFilter("All Status");
+                _setStatusFilter("Hide Resolved");
                 _setPriorityFilter("All Priorities");
               }}
               label="Reset"
@@ -356,8 +368,53 @@ export default function EmployeeViewAllComplaints() {
 
         {allResolved ? (
           <section className="ev-all-resolved">
-            <h2>All Tickets Resolved</h2>
-            <div className="ev-checkmark">✓</div>
+            <div className="ev-all-resolved__rings">
+              <div className="ev-all-resolved__ring ev-all-resolved__ring--3" />
+              <div className="ev-all-resolved__ring ev-all-resolved__ring--2" />
+              <div className="ev-all-resolved__ring ev-all-resolved__ring--1" />
+              <div className="ev-all-resolved__iconwrap">
+                <svg className="ev-all-resolved__svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="32" cy="32" r="30" stroke="url(#evGrad)" strokeWidth="2.5" />
+                  <polyline className="ev-all-resolved__checkpath" points="18,33 27,42 46,22" stroke="url(#evGrad)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                  <defs>
+                    <linearGradient id="evGrad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stopColor="#16a34a" />
+                      <stop offset="100%" stopColor="#4ade80" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+            </div>
+            {hasActiveFilter ? (
+              <>
+                <h2 className="ev-all-resolved__title">No Tickets Found</h2>
+                <p className="ev-all-resolved__sub">
+                  No tickets match your current filters.
+                  {rawOpenCount > 0 && ` There ${rawOpenCount === 1 ? "is" : "are"} still ${rawOpenCount} open ticket${rawOpenCount === 1 ? "" : "s"} in your queue.`}
+                </p>
+                <button
+                  className="ev-all-resolved__btn"
+                  onClick={() => {
+                    _setSearchTerm("");
+                    _setStatusFilter("Hide Resolved");
+                    _setPriorityFilter("All Priorities");
+                  }}
+                >
+                  Clear filters
+                </button>
+              </>
+            ) : (
+              <>
+                <h2 className="ev-all-resolved__title">All Caught Up!</h2>
+                <p className="ev-all-resolved__sub">Every ticket in your queue has been resolved. Great work.</p>
+                <button
+                  className="ev-all-resolved__btn"
+                  onClick={() => _setStatusFilter("All Status")}
+                >
+                  View all tickets including resolved
+                </button>
+              </>
+            )}
           </section>
         ) : (
           <section className="table-wrapper-EV-VAC">

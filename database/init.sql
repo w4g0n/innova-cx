@@ -778,6 +778,154 @@ FOR EACH ROW
 EXECUTE FUNCTION notify_customer_on_status_change();
 
 -- -------------------------
+-- Customer notifications for rescore / reroute requests
+-- -------------------------
+
+-- 1. Notify customer when they (or staff on their behalf) submit a rescore or reroute request
+CREATE OR REPLACE FUNCTION notify_customer_on_approval_submit()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_customer_id UUID;
+  v_ticket_code TEXT;
+  v_subject     TEXT;
+  v_title       TEXT;
+  v_message     TEXT;
+BEGIN
+  -- Resolve customer id + ticket details
+  SELECT t.created_by_user_id, t.ticket_code, t.subject
+    INTO v_customer_id, v_ticket_code, v_subject
+    FROM tickets t
+   WHERE t.id = NEW.ticket_id
+   LIMIT 1;
+
+  -- Only send if the ticket owner is a customer
+  IF NOT EXISTS (
+    SELECT 1 FROM users WHERE id = v_customer_id AND role = 'customer'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.request_type = 'Rescoring' THEN
+    v_title   := 'Rescoring Requested — ' || v_ticket_code;
+    v_message := 'A priority rescoring request has been submitted for your ticket "'
+      || v_subject || '" (from ' || NEW.current_value || ' to ' || NEW.requested_value
+      || '). It is now pending manager review.';
+  ELSIF NEW.request_type = 'Rerouting' THEN
+    v_title   := 'Rerouting Requested — ' || v_ticket_code;
+    v_message := 'A department rerouting request has been submitted for your ticket "'
+      || v_subject || '" (from ' || NEW.current_value || ' to ' || NEW.requested_value
+      || '). It is now pending manager review.';
+  ELSE
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO notifications (user_id, type, title, message, priority, ticket_id)
+  VALUES (
+    v_customer_id,
+    'status_change'::notification_type,
+    v_title,
+    v_message,
+    'Medium',
+    NEW.ticket_id
+  );
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_notify_customer_approval_submit ON approval_requests;
+CREATE TRIGGER trg_notify_customer_approval_submit
+AFTER INSERT ON approval_requests
+FOR EACH ROW
+EXECUTE FUNCTION notify_customer_on_approval_submit();
+
+
+-- 2. Notify customer when their rescore / reroute request is approved or rejected
+CREATE OR REPLACE FUNCTION notify_customer_on_approval_decision()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_customer_id UUID;
+  v_ticket_code TEXT;
+  v_subject     TEXT;
+  v_title       TEXT;
+  v_message     TEXT;
+BEGIN
+  -- Only fire when status actually changed to a decided state
+  IF OLD.status = NEW.status THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.status NOT IN ('Approved', 'Rejected') THEN
+    RETURN NEW;
+  END IF;
+
+  -- Resolve customer id + ticket details
+  SELECT t.created_by_user_id, t.ticket_code, t.subject
+    INTO v_customer_id, v_ticket_code, v_subject
+    FROM tickets t
+   WHERE t.id = NEW.ticket_id
+   LIMIT 1;
+
+  -- Only send if the ticket owner is a customer
+  IF NOT EXISTS (
+    SELECT 1 FROM users WHERE id = v_customer_id AND role = 'customer'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.request_type = 'Rescoring' THEN
+    IF NEW.status = 'Approved' THEN
+      v_title   := 'Priority Updated — ' || v_ticket_code;
+      v_message := 'Your ticket "' || v_subject || '" priority has been updated from '
+        || NEW.current_value || ' to ' || NEW.requested_value || ' following a rescoring review.';
+    ELSE
+      v_title   := 'Rescoring Request Declined — ' || v_ticket_code;
+      v_message := 'The rescoring request for your ticket "' || v_subject
+        || '" was reviewed and the priority will remain as ' || NEW.current_value || '.'
+        || CASE WHEN NEW.decision_notes IS NOT NULL
+             THEN ' Note: ' || NEW.decision_notes
+             ELSE '' END;
+    END IF;
+
+  ELSIF NEW.request_type = 'Rerouting' THEN
+    IF NEW.status = 'Approved' THEN
+      v_title   := 'Ticket Rerouted — ' || v_ticket_code;
+      v_message := 'Your ticket "' || v_subject || '" has been rerouted from '
+        || NEW.current_value || ' to the ' || NEW.requested_value || ' department.';
+    ELSE
+      v_title   := 'Rerouting Request Declined — ' || v_ticket_code;
+      v_message := 'The rerouting request for your ticket "' || v_subject
+        || '" was reviewed and it will remain with the ' || NEW.current_value || ' department.'
+        || CASE WHEN NEW.decision_notes IS NOT NULL
+             THEN ' Note: ' || NEW.decision_notes
+             ELSE '' END;
+    END IF;
+
+  ELSE
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO notifications (user_id, type, title, message, priority, ticket_id)
+  VALUES (
+    v_customer_id,
+    'status_change'::notification_type,
+    v_title,
+    v_message,
+    'Medium',
+    NEW.ticket_id
+  );
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_notify_customer_approval_decision ON approval_requests;
+CREATE TRIGGER trg_notify_customer_approval_decision
+AFTER UPDATE ON approval_requests
+FOR EACH ROW
+EXECUTE FUNCTION notify_customer_on_approval_decision();
+
+-- -------------------------
 -- Chat tables
 -- -------------------------
 CREATE TABLE IF NOT EXISTS chat_conversations (
