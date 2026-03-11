@@ -142,6 +142,8 @@ services:
         condition: service_healthy
     ports:
       - "8004:8004"
+    volumes:
+      - ./ai-models/MultiAgentPipeline/Orchestrator/agents:/app/agents
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8004/health', timeout=5)\""]
       interval: 20s

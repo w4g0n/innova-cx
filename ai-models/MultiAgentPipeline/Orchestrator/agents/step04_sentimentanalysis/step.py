@@ -158,7 +158,7 @@ async def analyze_sentiment(state: dict) -> dict:
     data = model_data or predictor.predict(state["text"])
 
     state["sentiment_mode"] = "model" if "processing_time_ms" in data else "mock"
-    state["text_sentiment"] = float(data.get("text_sentiment", 0.0) or 0.0)
+    state["text_sentiment"] = max(-1.0, min(1.0, float(data.get("text_sentiment", 0.0) or 0.0)))
     state.pop("sentiment_category", None)
     state.pop("urgency", None)
     state.pop("keywords", None)

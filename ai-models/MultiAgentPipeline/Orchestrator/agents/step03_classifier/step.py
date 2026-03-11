@@ -216,12 +216,12 @@ def _model_classify(text: str) -> tuple[str, float] | None:
             pred = model.predict(X)[0]
             if hasattr(model, "predict_proba"):
                 probs = model.predict_proba(X)[0]
-                conf = float(max(probs))
+                conf = min(float(max(probs)), 0.92)   # cap overfit overconfidence
             else:
-                conf = 0.9
+                conf = 0.65                            # no basis for 0.9 without proba
         else:
             pred = model.predict([text])[0]
-            conf = 0.9
+            conf = 0.65                                # Pipeline: consistent with heuristic
         label = str(pred).strip().lower()
         if label not in {"complaint", "inquiry"}:
             return None
@@ -320,8 +320,10 @@ async def classify(state: dict) -> dict:
     state["label"] = label
     state["class_confidence"] = conf
 
-    # Fallback to complaint if below threshold (safer default)
-    if state["class_confidence"] < CONFIDENCE_THRESHOLD:
+    # Fallback to complaint if below threshold — model/subprocess predictions only.
+    # Heuristic confidence is intentionally ≤0.65 by design; applying the threshold
+    # here would negate every heuristic "inquiry" classification.
+    if state.get("classification_source") != "heuristic" and state["class_confidence"] < CONFIDENCE_THRESHOLD:
         state["label"] = "complaint"
     logger.info(
         "classifier | label=%s confidence=%.3f",
