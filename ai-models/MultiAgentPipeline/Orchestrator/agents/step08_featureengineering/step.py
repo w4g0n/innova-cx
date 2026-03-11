@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import json
+import gc
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,10 @@ FEATURE_LABELER_MODEL_NAME = os.getenv(
 ).strip()
 FEATURE_LABELER_AUTO_DOWNLOAD = os.getenv("FEATURE_LABELER_AUTO_DOWNLOAD", "false").lower() in {"1", "true", "yes"}
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip() or None
+UNLOAD_FEATURE_LABELER_AFTER_USE = os.getenv(
+    "UNLOAD_FEATURE_LABELER_AFTER_USE",
+    "false",
+).lower() in {"1", "true", "yes"}
 
 SAFETY_KEYWORDS = (
     "fire",
@@ -367,6 +372,19 @@ def _apply_labeling_step(state: dict, text: str) -> None:
     state["feature_labels_source"] = label_source
 
 
+def _release_feature_labeler() -> None:
+    try:
+        loaded = _load_feature_labeler()
+    except Exception:
+        loaded = None
+    try:
+        if isinstance(loaded, dict):
+            loaded.clear()
+    finally:
+        _load_feature_labeler.cache_clear()
+        gc.collect()
+
+
 def get_feature_engineering_diagnostics() -> dict[str, object]:
     labeler_model = FEATURE_LABELER_MODEL_PATH or None
     labeler_path = Path(labeler_model) if labeler_model else None
@@ -398,8 +416,12 @@ async def engineer_features(state: dict) -> dict:
 
     text = str(state.get("text") or "").strip()
 
-    # Step 1: labeling (NLI model/mock)
-    _apply_labeling_step(state, text)
+    try:
+        # Step 1: labeling (NLI model/mock)
+        _apply_labeling_step(state, text)
+    finally:
+        if UNLOAD_FEATURE_LABELER_AFTER_USE:
+            _release_feature_labeler()
 
     # Step 2: deterministic safety/normalization rules on top of NLI labels
     business_impact = state.get("business_impact") or "medium"

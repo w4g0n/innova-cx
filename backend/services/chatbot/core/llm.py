@@ -31,6 +31,7 @@ CHATBOT_AUTO_DOWNLOAD = os.environ.get("CHATBOT_AUTO_DOWNLOAD", "true").lower() 
 _tokenizer = None
 _model = None
 _model_init_attempted = False
+_model_warmup_completed = False
 
 
 # ── Public helpers ───────────────────────────────────────────────────────────
@@ -43,6 +44,29 @@ def llm_available() -> bool:
     return _model is not None and _tokenizer is not None
 
 
+def warm_llm() -> bool:
+    """Load the configured model once and run a tiny warmup generation."""
+    global _model_warmup_completed
+
+    if not llm_available():
+        return False
+    if _model_warmup_completed:
+        return True
+
+    try:
+        _local_model_response(
+            [{"role": "user", "content": "Reply with OK"}],
+            max_new_tokens=4,
+            do_sample=False,
+        )
+        _model_warmup_completed = True
+        logger.info("chatbot_llm | warmup completed")
+        return True
+    except Exception as exc:
+        logger.warning("chatbot_llm | warmup failed (%s)", exc)
+        return False
+
+
 def get_llm_diagnostics() -> dict[str, Any]:
     local_model_exists = bool(CHATBOT_MODEL_PATH and (Path(CHATBOT_MODEL_PATH) / "config.json").exists())
     return {
@@ -52,6 +76,7 @@ def get_llm_diagnostics() -> dict[str, Any]:
         "chatbot_auto_download": CHATBOT_AUTO_DOWNLOAD,
         "chatbot_local_model_exists": local_model_exists,
         "chatbot_model_loaded": _model is not None and _tokenizer is not None,
+        "chatbot_model_warm": _model_warmup_completed,
         "chatbot_quantization": QUANTIZATION,
         "chatbot_max_new_tokens": MAX_NEW_TOKENS,
         "chatbot_mode": "model" if (_model is not None and _tokenizer is not None) else "template",
@@ -198,7 +223,14 @@ def _template_response(messages: list[dict]) -> str:
 
 # ── Local model response ─────────────────────────────────────────────────────
 
-def _local_model_response(messages: list[dict]) -> str:
+def _local_model_response(
+    messages: list[dict],
+    *,
+    max_new_tokens: int | None = None,
+    do_sample: bool | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+) -> str:
     _init_model_once()
     if _model is None or _tokenizer is None:
         return _template_response(messages)
@@ -213,13 +245,14 @@ def _local_model_response(messages: list[dict]) -> str:
 
     inputs = _tokenizer([text], return_tensors="pt").to(_model.device)
     with torch.no_grad():
+        effective_do_sample = DO_SAMPLE if do_sample is None else do_sample
         gen_kwargs: dict[str, Any] = {
-            "max_new_tokens": MAX_NEW_TOKENS,
-            "do_sample": DO_SAMPLE,
+            "max_new_tokens": MAX_NEW_TOKENS if max_new_tokens is None else max_new_tokens,
+            "do_sample": effective_do_sample,
         }
-        if DO_SAMPLE:
-            gen_kwargs["temperature"] = TEMPERATURE
-            gen_kwargs["top_p"] = TOP_P
+        if effective_do_sample:
+            gen_kwargs["temperature"] = TEMPERATURE if temperature is None else temperature
+            gen_kwargs["top_p"] = TOP_P if top_p is None else top_p
         output_ids = _model.generate(**inputs, **gen_kwargs)
 
     generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
@@ -229,12 +262,25 @@ def _local_model_response(messages: list[dict]) -> str:
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
-def generate_response(messages: list[dict]) -> str:
+def generate_response(
+    messages: list[dict],
+    *,
+    max_new_tokens: int | None = None,
+    do_sample: bool | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+) -> str:
     """
     Generate a chatbot response using the configured provider.
     - template: fast rule-based/KB responses (~1ms)
     - local: Qwen2.5-0.5B-Instruct or other HF model
     """
     if CHATBOT_LLM_PROVIDER == "local":
-        return _local_model_response(messages)
+        return _local_model_response(
+            messages,
+            max_new_tokens=max_new_tokens,
+            do_sample=do_sample,
+            temperature=temperature,
+            top_p=top_p,
+        )
     return _template_response(messages)

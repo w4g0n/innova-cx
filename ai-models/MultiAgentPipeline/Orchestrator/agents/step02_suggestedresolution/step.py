@@ -1,8 +1,8 @@
 """
 Step 11 — Suggested Resolution Agent
 ====================================
-Generates suggested resolution inside the orchestrator using a local model
-when present, otherwise a deterministic fallback template.
+Generates suggested resolution in the orchestrator using the dedicated local
+model artifact, with a deterministic template fallback if unavailable.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import gc
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -28,7 +29,7 @@ SUGGESTED_RESOLUTION_MODEL_PATH = os.getenv(
 ).strip()
 SUGGESTED_RESOLUTION_MODEL_NAME = os.getenv(
     "SUGGESTED_RESOLUTION_MODEL_NAME",
-    "google/flan-t5-small",
+    "Qwen/Qwen2.5-0.5B-Instruct",
 ).strip()
 SUGGESTED_RESOLUTION_AUTO_DOWNLOAD = os.getenv(
     "SUGGESTED_RESOLUTION_AUTO_DOWNLOAD",
@@ -46,6 +47,10 @@ SUGGESTED_RESOLUTION_PROMPT_EXAMPLES = max(
 )
 
 logger = logging.getLogger(__name__)
+UNLOAD_SUGGESTED_RESOLUTION_MODEL_AFTER_USE = os.getenv(
+    "UNLOAD_SUGGESTED_RESOLUTION_MODEL_AFTER_USE",
+    "false",
+).lower() in {"1", "true", "yes"}
 
 
 def _utc_now_iso() -> str:
@@ -77,6 +82,10 @@ def _infer_resolution_plan(ticket: dict[str, Any]) -> tuple[str, str, str]:
         first_action = "check the affected service status and restore connectivity for impacted users"
         department = "IT"
         verify_action = "confirm users can access the service normally again"
+    elif any(term in details for term in ("rat", "rodent", "mouse", "mice", "pest", "cockroach", "insect", "exterminator")):
+        first_action = "isolate the affected area and dispatch pest control immediately"
+        department = "Facilities"
+        verify_action = "confirm the infestation risk is removed and the area is safe for normal use"
     elif any(term in details for term in ("rent", "lease", "pricing", "cost", "office cost", "offices cost")):
         first_action = "review the customer’s pricing or leasing request and provide the correct commercial information"
         department = "Leasing"
@@ -94,8 +103,37 @@ def _clean_generated_resolution(text: str, ticket: dict[str, Any]) -> str:
     cleaned = re.sub(r"\s+", " ", str(text or "")).strip()
     if not cleaned:
         return ""
+    cleaned = cleaned.splitlines()[0].strip()
     cleaned = re.sub(r"^(suggested resolution|resolution)\s*:\s*", "", cleaned, flags=re.IGNORECASE)
-    return cleaned.strip()
+    cleaned = re.sub(r'(?:^|\s)(?:subject|details|ticket|input|output)\s*:\s*.*$', "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip(" -")
+
+
+def _is_low_quality_resolution(text: str) -> bool:
+    cleaned = str(text or "").strip().lower()
+    if not cleaned:
+        return True
+    banned_phrases = (
+        "investigate issue",
+        "appropriate team",
+        "relevant department",
+        "follow standard procedure",
+        "someone should",
+        "general team",
+        "general issue",
+        "assign to general",
+        "priority:",
+        "root-cause remediation",
+        "service recovery",
+        "verify and stabilize",
+    )
+    if any(phrase in cleaned for phrase in banned_phrases):
+        return True
+    if "(" in cleaned or ")" in cleaned:
+        return True
+    if "general" in cleaned and "facilities" not in cleaned and "maintenance" not in cleaned and "it" not in cleaned and "leasing" not in cleaned and "safety" not in cleaned:
+        return True
+    return len(cleaned.split()) < 8
 
 
 def _load_resolution_examples(limit: int = 3) -> list[dict[str, Any]]:
@@ -131,49 +169,29 @@ def _format_examples_for_prompt(limit: int) -> str:
 
 
 def _build_generation_prompt(ticket: dict[str, Any]) -> str:
-    subject = str(ticket.get("subject") or "").strip() or "No subject"
     details = str(ticket.get("details") or "").strip() or "No details"
-    ticket_type = str(ticket.get("ticket_type") or "Complaint").strip()
-    priority = str(ticket.get("priority") or "Medium").strip()
-    department = str(ticket.get("department_name") or "Unassigned").strip()
-    asset_type = str(ticket.get("asset_type") or "General").strip()
-    safety_flag = bool(ticket.get("safety_concern"))
-    recurring_flag = bool(ticket.get("is_recurring"))
-    department_hint = department if department and department.lower() not in {"general", "unassigned"} else "infer from issue"
 
     prompt = (
-        "Task: write one concise suggested resolution for a support employee handling a facilities/service ticket.\n"
+        "Write one resolution sentence for a support employee handling the following facilities ticket.\n\n"
         "Rules:\n"
-        "- Write only the resolution.\n"
-        "- Write one sentence in imperative style.\n"
-        "- Start with the first containment or triage action.\n"
-        "- Then name the responsible team.\n"
-        "- End with a verification step.\n"
-        "- For fire, exposed electrical wire, leak, flooding, gas, smoke, or injury risk: prioritize immediate isolation and site safety.\n"
-        "- If department is unknown, infer the most likely team from the issue instead of saying General or Unassigned.\n"
-        "- Do not repeat the subject or quote the ticket details verbatim.\n"
-        "- Do not write labels like Subject:, Details:, Ticket:, Input:, or Output:.\n"
-        "- Do not mention the priority explicitly in the answer.\n"
-        "- Do not use placeholders like General team, appropriate team, relevant department, someone should, or investigate issue.\n"
-        "- Keep it between 18 and 40 words.\n\n"
+        "1. Use imperative style.\n"
+        "2. Begin with the first containment or triage action.\n"
+        "3. Name the responsible team (infer from the issue if not stated).\n"
+        "4. End with a verification step.\n"
+        "5. For fire, flooding, gas, smoke, exposed wiring, or injury risk: lead with isolation or evacuation before any other step.\n"
+        "6. Do not repeat ticket wording verbatim.\n"
+        "7. Do not use vague terms like \"appropriate team,\" \"someone should,\" or \"investigate the issue.\"\n"
+        "8. Length: 18–40 words.\n\n"
     )
 
     learned_examples = _format_examples_for_prompt(SUGGESTED_RESOLUTION_PROMPT_EXAMPLES)
     if learned_examples:
-        prompt += f"{learned_examples}\n\n"
+        prompt += (
+            "Use these past successful resolutions as style guidance:\n\n"
+            f"{learned_examples}\n\n"
+        )
 
-    prompt += (
-        "Input: "
-        f"type={ticket_type}; "
-        f"priority={priority}; "
-        f"department_hint={department_hint}; "
-        f"asset_type={asset_type}; "
-        f"safety_concern={'true' if safety_flag else 'false'}; "
-        f"is_recurring={'true' if recurring_flag else 'false'}; "
-        f"subject={subject}; "
-        f"details={details}\n"
-        "Output:"
-    )
+    prompt += f"Ticket: {details}"
     return prompt
 
 
@@ -280,16 +298,47 @@ def _load_suggested_resolution_model() -> dict[str, Any] | None:
 
     try:
         import torch  # type: ignore
-        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer  # type: ignore
+        from transformers import AutoModelForCausalLM, AutoTokenizer  # type: ignore
 
-        tokenizer = AutoTokenizer.from_pretrained(SUGGESTED_RESOLUTION_MODEL_PATH)
-        model = AutoModelForSeq2SeqLM.from_pretrained(SUGGESTED_RESOLUTION_MODEL_PATH)
+        tokenizer = AutoTokenizer.from_pretrained(
+            SUGGESTED_RESOLUTION_MODEL_PATH,
+            trust_remote_code=True,
+            token=HF_TOKEN,
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            SUGGESTED_RESOLUTION_MODEL_PATH,
+            trust_remote_code=True,
+            token=HF_TOKEN,
+            torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+            low_cpu_mem_usage=True,
+        )
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model = model.to(device)
         return {"tokenizer": tokenizer, "model": model, "device": device}
     except Exception as exc:
         logger.warning("suggested_resolution | model load failed (%s), using fallback", exc)
         return None
+
+
+def _release_suggested_resolution_model() -> None:
+    try:
+        loaded = _load_suggested_resolution_model()
+    except Exception:
+        loaded = None
+    try:
+        if isinstance(loaded, dict):
+            loaded.pop("model", None)
+            loaded.pop("tokenizer", None)
+    finally:
+        _load_suggested_resolution_model.cache_clear()
+        gc.collect()
+        try:
+            import torch  # type: ignore
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
 
 
 def get_suggested_resolution_diagnostics() -> dict[str, object]:
@@ -303,16 +352,6 @@ def get_suggested_resolution_diagnostics() -> dict[str, object]:
         "suggested_resolution_examples_path": str(SUGGESTED_RESOLUTION_EXAMPLES_PATH),
         "suggested_resolution_mode": "model" if model_exists else "template",
     }
-
-
-def get_resolution_model_label() -> str:
-    loaded = _load_suggested_resolution_model()
-    if loaded is None:
-        return "mock_template"
-    if SUGGESTED_RESOLUTION_MODEL_NAME:
-        return SUGGESTED_RESOLUTION_MODEL_NAME
-    model_path = Path(SUGGESTED_RESOLUTION_MODEL_PATH)
-    return model_path.name or "local_seq2seq"
 
 
 def _ticket_context_from_state(state: dict) -> dict[str, Any]:
@@ -333,41 +372,57 @@ def _ticket_context_from_state(state: dict) -> dict[str, Any]:
     }
 
 
-def _generate_resolution_text(ticket: dict[str, Any]) -> str:
+async def _generate_resolution_text(ticket: dict[str, Any]) -> tuple[str, str, str]:
     loaded = _load_suggested_resolution_model()
     if loaded is None:
-        return fallback_resolution_suggestion(ticket)
+        return fallback_resolution_suggestion(ticket), "template_fallback", "template"
 
     try:
         import torch  # type: ignore
 
-        prompt = _build_generation_prompt(ticket)
         tokenizer = loaded["tokenizer"]
         model = loaded["model"]
         device = loaded["device"]
-        inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(device)
+        prompt = _build_generation_prompt(ticket)
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You generate one suggested resolution for the employee handling the ticket. "
+                    "Return plain text only."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+        if hasattr(tokenizer, "apply_chat_template"):
+            rendered_prompt = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            inputs = tokenizer([rendered_prompt], return_tensors="pt", truncation=True).to(device)
+        else:
+            inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(device)
         with torch.no_grad():
             output_ids = model.generate(
                 **inputs,
-                max_new_tokens=96,
-                min_new_tokens=12,
-                do_sample=True,
-                temperature=0.3,
-                top_p=0.9,
-                num_beams=4,
+                max_new_tokens=40,
+                do_sample=False,
                 no_repeat_ngram_size=3,
                 repetition_penalty=1.2,
-                early_stopping=True,
+                use_cache=torch.cuda.is_available(),
             )
-        text = tokenizer.decode(output_ids[0], skip_special_tokens=True).strip()
+        prompt_tokens = inputs["input_ids"].shape[1]
+        generated_ids = output_ids[0][prompt_tokens:] if output_ids.shape[1] > prompt_tokens else output_ids[0]
+        text = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
         text = _clean_generated_resolution(text, ticket)
-        if text:
-            return text
+        if text and not _is_low_quality_resolution(text):
+            return text, (SUGGESTED_RESOLUTION_MODEL_NAME or "local_causal_lm"), "local_model"
         logger.warning("suggested_resolution | generated empty output, using fallback")
     except Exception as exc:
         logger.warning("suggested_resolution | local model inference failed (%s), using fallback", exc)
 
-    return fallback_resolution_suggestion(ticket)
+    return fallback_resolution_suggestion(ticket), "template_fallback", "template"
 
 
 async def _persist_suggested_resolution(state: dict) -> None:
@@ -398,16 +453,20 @@ async def generate_suggested_resolution(state: dict) -> dict:
         return state
 
     ticket = _ticket_context_from_state(state)
-    suggestion = _generate_resolution_text(ticket)
-    state["suggested_resolution"] = suggestion
-    state["suggested_resolution_model"] = get_resolution_model_label()
-    state["suggested_resolution_mode"] = get_suggested_resolution_diagnostics().get("suggested_resolution_mode", "template")
-
     try:
-        await _persist_suggested_resolution(state)
-    except Exception as exc:
-        logger.warning("suggested_resolution | failed to persist ticket_id=%s err=%s", ticket_id, exc)
-        return state
+        suggestion, model_label, mode = await _generate_resolution_text(ticket)
+        state["suggested_resolution"] = suggestion
+        state["suggested_resolution_model"] = model_label
+        state["suggested_resolution_mode"] = mode
+
+        try:
+            await _persist_suggested_resolution(state)
+        except Exception as exc:
+            logger.warning("suggested_resolution | failed to persist ticket_id=%s err=%s", ticket_id, exc)
+            return state
+    finally:
+        if UNLOAD_SUGGESTED_RESOLUTION_MODEL_AFTER_USE:
+            _release_suggested_resolution_model()
 
     logger.info(
         "suggested_resolution | ticket_id=%s model=%s",

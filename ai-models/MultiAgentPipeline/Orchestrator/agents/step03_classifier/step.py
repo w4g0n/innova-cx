@@ -10,6 +10,7 @@ If classifier confidence < CONFIDENCE_THRESHOLD, falls back to "complaint"
 
 import logging
 import os
+import gc
 from pathlib import Path
 from functools import lru_cache
 
@@ -33,6 +34,10 @@ MODEL_PATH_ENV = "CLASSIFIER_MODEL_PATH"
 VECTORIZER_PATH_ENV = "CLASSIFIER_VECTORIZER_PATH"
 MODEL_DIR_ENV = "CLASSIFIER_MODEL_DIR"
 PT_MODEL_FILENAMES = ("model.pt", "classifier_model.pt")
+UNLOAD_CLASSIFIER_MODEL_AFTER_USE = os.getenv(
+    "UNLOAD_CLASSIFIER_MODEL_AFTER_USE",
+    "false",
+).lower() in {"1", "true", "yes"}
 
 
 def _heuristic_classify(text: str) -> tuple[str, float]:
@@ -156,6 +161,18 @@ def get_classifier_diagnostics() -> dict[str, object]:
     }
 
 
+def warm_classifier_model() -> None:
+    try:
+        loaded = _load_optional_model()
+        if loaded:
+            logger.info(
+                "classifier | warm startup load complete from %s",
+                get_classifier_diagnostics().get("classifier_model_path"),
+            )
+    except Exception as exc:
+        logger.warning("classifier | warm startup load failed (%s)", exc)
+
+
 def _model_classify(text: str) -> tuple[str, float] | None:
     loaded = _load_optional_model()
     if not loaded:
@@ -206,6 +223,19 @@ def _model_classify(text: str) -> tuple[str, float] | None:
         return None
 
 
+def _release_optional_model() -> None:
+    try:
+        loaded = _load_optional_model()
+    except Exception:
+        loaded = None
+    try:
+        if isinstance(loaded, dict):
+            loaded.clear()
+    finally:
+        _load_optional_model.cache_clear()
+        gc.collect()
+
+
 async def classify(state: dict) -> dict:
     """
     Classifies transcript in-process and sets state["label"].
@@ -218,18 +248,22 @@ async def classify(state: dict) -> dict:
         logger.info("classifier | empty text fallback -> complaint")
         return state
 
-    model_result = _model_classify(state.get("text", ""))
-    if model_result:
-        label, conf = model_result
-        state["classification_source"] = "model"
-        logger.info(
-            "classifier | using optional model from %s",
-            get_classifier_diagnostics().get("classifier_model_path"),
-        )
-    else:
-        label, conf = _heuristic_classify(state.get("text", ""))
-        state["classification_source"] = "heuristic"
-        logger.info("classifier | using local in-process heuristic")
+    try:
+        model_result = _model_classify(state.get("text", ""))
+        if model_result:
+            label, conf = model_result
+            state["classification_source"] = "model"
+            logger.info(
+                "classifier | using optional model from %s",
+                get_classifier_diagnostics().get("classifier_model_path"),
+            )
+        else:
+            label, conf = _heuristic_classify(state.get("text", ""))
+            state["classification_source"] = "heuristic"
+            logger.info("classifier | using local in-process heuristic")
+    finally:
+        if UNLOAD_CLASSIFIER_MODEL_AFTER_USE:
+            _release_optional_model()
     state["label"] = label
     state["class_confidence"] = conf
 

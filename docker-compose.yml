@@ -135,6 +135,8 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
+      chatbot:
+        condition: service_healthy
     ports:
       - "8004:8004"
     healthcheck:
