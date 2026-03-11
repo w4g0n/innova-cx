@@ -50,6 +50,10 @@ for noisy_logger in ("httpx", "httpcore", "urllib3", "uvicorn.access"):
 app = FastAPI(title="InnovaCX Orchestrator", version="1.0.0")
 
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
+CHATBOT_URL = os.getenv("CHATBOT_URL", "http://chatbot:8000").rstrip("/")
+CHATBOT_URL_LOCAL = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001").rstrip("/")
+CHATBOT_STARTUP_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_STARTUP_TIMEOUT_SECONDS", "240"))
+CHATBOT_STARTUP_POLL_INTERVAL_SECONDS = float(os.getenv("CHATBOT_STARTUP_POLL_INTERVAL_SECONDS", "5"))
 
 app.add_middleware(
     CORSMiddleware,
@@ -74,9 +78,58 @@ class SuggestedResolutionRelearnRequest(BaseModel):
 
 @app.on_event("startup")
 async def _startup():
+    await _wait_for_chatbot_health()
     if ensure_log_tables:
         ensure_log_tables()
     _log_model_mode_summary()
+
+
+async def _wait_for_chatbot_health() -> None:
+    import time
+
+    if CHATBOT_STARTUP_TIMEOUT_SECONDS <= 0:
+        logger.info("startup | chatbot health gate disabled")
+        return
+
+    timeout = httpx.Timeout(10.0)
+    last_error = None
+    started_at = time.monotonic()
+    health_urls = [f"{CHATBOT_URL}/health"]
+    if CHATBOT_URL_LOCAL and CHATBOT_URL_LOCAL != CHATBOT_URL:
+        health_urls.append(f"{CHATBOT_URL_LOCAL}/health")
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        while True:
+            for health_url in health_urls:
+                try:
+                    response = await client.get(health_url)
+                    response.raise_for_status()
+                    payload = response.json() or {}
+                    if str(payload.get("status") or "").lower() == "healthy":
+                        logger.info("startup | chatbot dependency ready url=%s", health_url)
+                        return
+                    last_error = RuntimeError(f"unhealthy response from {health_url}: {payload}")
+                except Exception as exc:
+                    last_error = exc
+
+            if (time.monotonic() - started_at) >= CHATBOT_STARTUP_TIMEOUT_SECONDS:
+                break
+
+            logger.info(
+                "startup | waiting for chatbot dependency timeout=%ss poll=%ss err=%s",
+                CHATBOT_STARTUP_TIMEOUT_SECONDS,
+                CHATBOT_STARTUP_POLL_INTERVAL_SECONDS,
+                last_error,
+            )
+            await _sleep_for_chatbot_poll()
+
+    raise RuntimeError(f"chatbot dependency did not become healthy before startup deadline: {last_error}")
+
+
+async def _sleep_for_chatbot_poll() -> None:
+    import asyncio
+
+    await asyncio.sleep(max(1.0, CHATBOT_STARTUP_POLL_INTERVAL_SECONDS))
 
 
 # ---------------------------------------------------------------------------
@@ -327,14 +380,12 @@ async def suggested_resolution_relearn(body: SuggestedResolutionRelearnRequest):
 @app.post("/process/audio")
 async def process_audio(
     audio: UploadFile = File(...),
-    ticket_type: str | None = Form(default=None),
 ):
     """
     Transcriber is not part of orchestrator.
     Frontend/backend transcriber service should produce transcript first.
     """
     _ = audio
-    _ = ticket_type
     raise HTTPException(
         status_code=400,
         detail="Audio endpoint is disabled. Submit transcript/details to /process/text with optional audio_features.",
@@ -351,7 +402,6 @@ async def process_text(
     ticket_id: str | None = Form(default=None),
     execution_id: str | None = Form(default=None),
     subject: str | None = Form(default=None),
-    ticket_type: str | None = Form(default=None),
     created_by_user_id: str | None = Form(default=None),
     ticket_source: str | None = Form(default=None),
     has_audio: bool | None = Form(default=None),
@@ -376,13 +426,11 @@ async def process_text(
         except json.JSONDecodeError:
             raise HTTPException(status_code=422, detail="audio_features must be valid JSON object")
 
-    selected_type = ticket_type.lower().strip() if ticket_type else None
-
     initial_payload = {
         "transcript": text.strip(),
         "ticket_id": ticket_id.strip() if ticket_id else None,
         "subject": subject.strip() if subject else None,
-        "label": selected_type if selected_type in {"complaint", "inquiry"} else "complaint",
+        "label": "complaint",
         "status": "Open",
         "created_by_user_id": created_by_user_id.strip() if created_by_user_id else None,
         "ticket_source": ticket_source.strip() if ticket_source else None,
@@ -427,7 +475,6 @@ async def process_text(
         "text": text.strip(),
         "ticket_id": ticket_id,
         "subject": subject.strip() if subject else None,
-        "ticket_type": selected_type,
         "has_audio": bool(has_audio),
         "audio_features": parsed_audio_features,
         "_execution_id": str(execution_id or "").strip() or str(uuid.uuid4()),

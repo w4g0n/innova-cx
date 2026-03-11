@@ -1,13 +1,17 @@
 from typing import Any, Dict, List, Optional
 import os
 import json
+import uuid
 
+import httpx
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 router = APIRouter()
+ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8004").rstrip("/")
+ORCHESTRATOR_URL_LOCAL = os.getenv("ORCHESTRATOR_URL_LOCAL", "http://localhost:8004").rstrip("/")
 
 PRIORITY_LEVELS = ["low", "medium", "high", "critical"]
 PRIORITY_TO_INDEX = {name: idx for idx, name in enumerate(PRIORITY_LEVELS)}
@@ -530,6 +534,66 @@ def get_operator_ai_explainability_ticket(ticket_id: str):
             for s in pipeline_stages
         ],
     }
+
+
+@router.post("/operator/ai-explainability/tickets/{ticket_id}/pipeline-rerun")
+def rerun_operator_ai_pipeline(ticket_id: str):
+    ticket_row = _fetch_one(
+        """
+        SELECT
+            t.id::text          AS ticket_id,
+            t.ticket_code       AS ticket_code,
+            t.ticket_type::text AS ticket_type,
+            t.details           AS details
+        FROM tickets t
+        WHERE t.ticket_code = %s OR t.id::text = %s
+        LIMIT 1
+        """,
+        (ticket_id, ticket_id),
+    )
+    if not ticket_row:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    ticket_code = str(ticket_row.get("ticket_code") or "").strip()
+    details = str(ticket_row.get("details") or "").strip()
+    ticket_type = str(ticket_row.get("ticket_type") or "Complaint").strip().lower()
+    if ticket_type not in {"complaint", "inquiry"}:
+        ticket_type = "complaint"
+    if not ticket_code or not details:
+        raise HTTPException(status_code=422, detail="Ticket is missing ticket_code or details")
+
+    execution_id = str(uuid.uuid4())
+    payload = {
+        "text": details,
+        "ticket_id": ticket_code,
+        "ticket_type": ticket_type,
+        "execution_id": execution_id,
+        # Blank subject forces step 1 to regenerate it from the beginning.
+        "subject": "",
+    }
+    timeout = float(os.getenv("AI_EXPLAINABILITY_RERUN_TIMEOUT_SECONDS", "240"))
+    last_error = None
+    for base in (ORCHESTRATOR_URL, ORCHESTRATOR_URL_LOCAL):
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                response = client.post(f"{base}/process/text", data=payload)
+                response.raise_for_status()
+                body = response.json() if response.content else {}
+                return {
+                    "ok": True,
+                    "ticketId": ticket_code,
+                    "executionId": execution_id,
+                    "orchestratorExecutionId": body.get("execution_id") or execution_id,
+                    "priority": body.get("priority"),
+                    "priorityLabel": body.get("priority_label"),
+                    "department": body.get("department"),
+                    "type": body.get("type"),
+                }
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    raise HTTPException(status_code=503, detail=f"Failed to rerun pipeline: {last_error}")
 
 
 @router.patch("/operator/ai-explainability/tickets/{ticket_id}/pipeline-overrides")

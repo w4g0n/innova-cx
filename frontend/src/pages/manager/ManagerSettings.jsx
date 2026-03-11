@@ -13,13 +13,6 @@ import { apiUrl } from "../../config/apiBase";
 
 // ─── Auth token helper (same pattern as all other manager pages) ──────────────
 function getAuthToken() {
-  try {
-    const raw = localStorage.getItem("user");
-    if (raw) {
-      const u = JSON.parse(raw);
-      if (u?.access_token) return u.access_token;
-    }
-  } catch { /* ignore */ }
   return (
     localStorage.getItem("access_token") ||
     localStorage.getItem("token") ||

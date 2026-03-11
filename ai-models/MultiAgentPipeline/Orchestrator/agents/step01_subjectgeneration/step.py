@@ -8,12 +8,18 @@ This agent is self-contained and does not depend on chatbot.
 from __future__ import annotations
 
 import logging
+import os
 import re
+import asyncio
 
 import httpx
 from langchain_core.runnables import RunnableLambda
 
 BACKEND_URL = "http://backend:8000"
+CHATBOT_URL = os.getenv("CHATBOT_URL", "http://chatbot:8000").rstrip("/")
+CHATBOT_URL_LOCAL = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001").rstrip("/")
+SUBJECT_ENDPOINT_TIMEOUT_SECONDS = float(os.getenv("SUBJECT_ENDPOINT_TIMEOUT_SECONDS", "75"))
+SUBJECT_ENDPOINT_RETRIES = max(1, int(os.getenv("SUBJECT_ENDPOINT_RETRIES", "2")))
 
 logger = logging.getLogger(__name__)
 
@@ -88,12 +94,38 @@ def get_subject_generation_diagnostics() -> dict[str, object]:
         "subject_generator_model_name": None,
         "subject_generator_auto_download": False,
         "subject_generator_model_exists": False,
-        "subject_generator_mode": "heuristic",
-        "subject_generator_mode_reason": "Built-in heuristic subject generation is active; chatbot endpoint integration is pending",
+        "subject_generator_mode": "chatbot_endpoint",
+        "subject_generator_mode_reason": "Chatbot subject generation endpoint is used first, with heuristic fallback if unavailable",
     }
 
 
+async def _generate_subject_via_chatbot(details: str) -> str:
+    payload = {"details": details}
+    last_error: Exception | None = None
+    timeout = httpx.Timeout(connect=5.0, read=SUBJECT_ENDPOINT_TIMEOUT_SECONDS, write=10.0, pool=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        for attempt in range(SUBJECT_ENDPOINT_RETRIES):
+            for base in (CHATBOT_URL, CHATBOT_URL_LOCAL):
+                try:
+                    response = await client.post(f"{base}/api/suggest-subject", json=payload)
+                    response.raise_for_status()
+                    data = response.json() or {}
+                    subject = _sanitize_subject(str(data.get("subject") or ""))
+                    if subject and not _is_low_quality_subject(subject):
+                        return subject
+                except Exception as exc:
+                    last_error = exc
+            if attempt < SUBJECT_ENDPOINT_RETRIES - 1:
+                await asyncio.sleep(1.5)
+    if last_error:
+        logger.warning("subject_generation | chatbot subject endpoint unavailable err=%s", last_error)
+    return ""
+
+
 async def _generate_subject(details: str) -> str:
+    subject = await _generate_subject_via_chatbot(details)
+    if subject:
+        return subject
     subject = _sanitize_subject(_heuristic_subject(details))
     if subject and not _is_low_quality_subject(subject):
         return subject
