@@ -237,11 +237,22 @@ def _local_model_response(
 
     import torch
 
-    text = _tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True,
-    )
+    last_role = messages[-1].get("role", "") if messages else ""
+    if last_role == "assistant":
+        # Continue the partial assistant message (prefix completion).
+        # add_generation_prompt=True would close the turn and start a new one,
+        # causing the model to generate a conversational reply instead of the label.
+        text = _tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            continue_final_message=True,
+        )
+    else:
+        text = _tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
 
     inputs = _tokenizer([text], return_tensors="pt").to(_model.device)
     with torch.no_grad():
