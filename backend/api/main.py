@@ -4357,7 +4357,7 @@ def get_manager_trends(
     # This matches the analytics_service.get_section_c() strategy.
     _fallback_dept_id = user.get("department_id")
     if _fallback_dept_id:
-        _emp_dept_clause = f" AND up.department_id = %s::uuid"
+        _emp_dept_clause = " AND up.department_id = %s::uuid"
         _emp_params = params + [str(_fallback_dept_id)]
         _acc_dept_clause = " AND up.department_id = %s::uuid"
         _acc_params = [period_start, period_end, str(_fallback_dept_id)]
