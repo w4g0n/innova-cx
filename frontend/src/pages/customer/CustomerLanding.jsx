@@ -10,6 +10,20 @@ import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { getToken} from "../../utils/auth";
 import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
 
+const CHATBOT_BUTTON_MESSAGES = {
+  create_ticket: "I want to create a ticket",
+  track_ticket: "I want to track a ticket",
+  confirm_ticket: "yes",
+  edit_ticket: "no",
+};
+
+const CHATBOT_BUTTON_LABELS = {
+  create_ticket: "Create a ticket",
+  track_ticket: "Track a ticket",
+  confirm_ticket: "Confirm Ticket",
+  edit_ticket: "Edit Details",
+};
+
 export default function CustomerLanding() {
   const navigate = useNavigate();
 
@@ -680,21 +694,9 @@ const QUICK_ACTIONS = [
                           {m.buttons.map((btn) => (
                             <button
                               key={btn}
-                              onClick={() =>
-                                handleSend(
-                                  btn === "create_ticket"
-                                    ? "I want to create a ticket"
-                                    : btn === "track_ticket"
-                                    ? "I want to track a ticket"
-                                    : btn
-                                )
-                              }
+                              onClick={() => handleSend(CHATBOT_BUTTON_MESSAGES[btn] || btn)}
                             >
-                              {btn === "create_ticket"
-                                ? "Create a ticket"
-                                : btn === "track_ticket"
-                                ? "Track a ticket"
-                                : btn}
+                              {CHATBOT_BUTTON_LABELS[btn] || btn}
                             </button>
                           ))}
                         </div>

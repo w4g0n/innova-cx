@@ -10,11 +10,15 @@ import "./CustomerChatbot.css";
 const BUTTON_TEXT = {
   create_ticket: "Create via Agent Pipeline",
   track_ticket: "Track My Ticket",
+  confirm_ticket: "Confirm Ticket",
+  edit_ticket: "Edit Details",
 };
 
 const BUTTON_MESSAGE = {
   create_ticket: "I want to create a new ticket",
   track_ticket: "I want to follow up on an existing ticket",
+  confirm_ticket: "yes",
+  edit_ticket: "no",
 };
 
 const SESSION_KEY = "chatbot_session_id";

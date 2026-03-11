@@ -424,17 +424,26 @@ function inferStageMode(stage) {
     "audio_analysis_mode",
   );
 
-  if (!hint) return "Mock";
+  if (
+    stageName === "SubjectGenerationAgent" &&
+    !hint &&
+    typeof out?.subject === "string" &&
+    out.subject.trim() !== ""
+  ) {
+    return "Real";
+  }
+
+  if (!hint) return stageName === "RecurrenceAgent" ? "Heuristic" : "Mock";
   if (hint.includes("deterministic")) {
     return "Deterministic";
   }
-  if (
-    hint.includes("mock") ||
-    hint.includes("heuristic") ||
-    hint.includes("fallback") ||
-    hint.includes("rule") ||
-    hint.includes("text_only")
-  ) {
+  if (stageName === "RecurrenceAgent" && hint.includes("search")) {
+    return "Search";
+  }
+  if (hint.includes("heuristic") || hint.includes("fallback") || hint.includes("rule") || hint.includes("text_only")) {
+    return stageName === "RecurrenceAgent" ? "Heuristic" : "Mock";
+  }
+  if (hint.includes("mock")) {
     return "Mock";
   }
   if (
@@ -447,7 +456,7 @@ function inferStageMode(stage) {
   ) {
     return "Real";
   }
-  return "Mock";
+  return stageName === "RecurrenceAgent" ? "Heuristic" : "Mock";
 }
 
 function getStageConfidence(stage) {
@@ -460,6 +469,12 @@ function getStageConfidence(stage) {
     return out.department_confidence ?? stage?.confidenceScore ?? null;
   }
   return null;
+}
+
+function formatProcessingTimeSeconds(inferenceTimeMs) {
+  const value = Number(inferenceTimeMs);
+  if (!Number.isFinite(value) || value < 0) return "—";
+  return `${(value / 1000).toFixed(1)}s`;
 }
 
 function stageHasAudio(stage) {
@@ -499,6 +514,7 @@ export default function AIExplainability() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [data, setData] = useState(null);
+  const [selectedExecutionId, setSelectedExecutionId] = useState("");
   const [selectedStageKey, setSelectedStageKey] = useState("");
   const [overrideForm, setOverrideForm] = useState({
     ticketType: "complaint",
@@ -510,6 +526,7 @@ export default function AIExplainability() {
     similarTicketCode: "",
   });
   const [overrideBusy, setOverrideBusy] = useState(false);
+  const [rerunBusy, setRerunBusy] = useState(false);
   const [overrideMsg, setOverrideMsg] = useState("");
   const [overrideErr, setOverrideErr] = useState("");
   const [recurrenceQuery, setRecurrenceQuery] = useState("");
@@ -537,9 +554,19 @@ export default function AIExplainability() {
     loadTicketList(activeStatus);
   }, [activeStatus, detailMode]);
 
+  const executionOptions = useMemo(() => {
+    const arr = Array.isArray(data?.pipelineExecutions) ? data.pipelineExecutions : [];
+    return [...arr].sort((a, b) => {
+      const ta = new Date(a?.startedAt || 0).getTime();
+      const tb = new Date(b?.startedAt || 0).getTime();
+      return tb - ta;
+    });
+  }, [data]);
+
   const stages = useMemo(() => {
     const arr = Array.isArray(data?.pipelineStages) ? data.pipelineStages : [];
     return [...arr]
+      .filter((s) => !selectedExecutionId || s?.executionId === selectedExecutionId)
       .filter((s) => String(s?.stageName || "") !== "TicketCreationGate")
       .sort((a, b) => {
       const sa = Number(a?.stepOrder || 0);
@@ -549,7 +576,7 @@ export default function AIExplainability() {
       const tb = new Date(b?.createdAt || 0).getTime();
       return ta - tb;
       });
-  }, [data]);
+  }, [data, selectedExecutionId]);
 
   const stageMenu = useMemo(() => {
     const byStage = new Map();
@@ -609,15 +636,53 @@ export default function AIExplainability() {
 
   useEffect(() => {
     if (!data) {
+      setSelectedExecutionId("");
       setSelectedStageKey("");
       return;
     }
+    const preferredExecutionId =
+      executionOptions.find((e) => e.executionId === selectedExecutionId)?.executionId ||
+      executionOptions[0]?.executionId ||
+      "";
+    setSelectedExecutionId(preferredExecutionId);
     if (stageMenu.length > 0) {
       setSelectedStageKey(`${stageMenu[0].stepOrder}-${stageMenu[0].stageName}`);
     } else {
       setSelectedStageKey("");
     }
-  }, [data, stageMenu]);
+  }, [data, stageMenu, executionOptions, selectedExecutionId]);
+
+  async function rerunPipeline() {
+    if (!detailTicket?.ticketId) return;
+    setRerunBusy(true);
+    setOverrideErr("");
+    setOverrideMsg("");
+    try {
+      const response = await fetch(
+        apiUrl(`/api/operator/ai-explainability/tickets/${encodeURIComponent(detailTicket.ticketId)}/pipeline-rerun`),
+        {
+          method: "POST",
+          headers: getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {},
+        },
+      );
+      if (!response.ok) {
+        const msg = await response.text().catch(() => "Failed to rerun pipeline");
+        throw new Error(msg || "Failed to rerun pipeline");
+      }
+      const result = await response.json();
+      const refreshed = await apiFetch(`/operator/ai-explainability/tickets/${encodeURIComponent(detailTicket.ticketId)}`);
+      setData(refreshed);
+      const nextExecutionId = result?.orchestratorExecutionId || result?.executionId || "";
+      if (nextExecutionId) {
+        setSelectedExecutionId(nextExecutionId);
+      }
+      setOverrideMsg("Pipeline rerun completed from the beginning.");
+    } catch (e) {
+      setOverrideErr(e?.message || "Failed to rerun pipeline.");
+    } finally {
+      setRerunBusy(false);
+    }
+  }
 
   async function loadTicket(ticketId) {
     const q = String(ticketId || "").trim();
@@ -939,6 +1004,18 @@ export default function AIExplainability() {
                     <div><span className="aix-label">Department</span><div>{detailTicket.department || "Unassigned"}</div></div>
                     <div><span className="aix-label">Pipeline Runs</span><div>{data.pipelineExecutions?.length || 0}</div></div>
                   </div>
+                  {executionOptions.length > 0 ? (
+                    <label className="aix-field">
+                      <span>Selected Pipeline Run</span>
+                      <select value={selectedExecutionId} onChange={(e) => setSelectedExecutionId(e.target.value)}>
+                        {executionOptions.map((execution, index) => (
+                          <option key={execution.executionId} value={execution.executionId}>
+                            Run {executionOptions.length - index} · {execution.startedAt || execution.executionId}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <div className="aix-summary-text">
                     <span className="aix-label">Ticket Subject</span>
                     <div>{detailTicket.description?.subject || data.subject || "—"}</div>
@@ -1081,6 +1158,9 @@ export default function AIExplainability() {
                   ) : null}
 
                   <div className="aix-controls-actions">
+                    <button type="button" className="aix-open-btn" disabled={rerunBusy || overrideBusy} onClick={rerunPipeline}>
+                      {rerunBusy ? "Re-running..." : "Re-run Full Pipeline"}
+                    </button>
                     <button type="button" className="aix-open-btn" disabled={overrideBusy} onClick={applyOverrides}>
                       {overrideBusy ? "Applying..." : "Apply & Re-run Prioritization"}
                     </button>
@@ -1122,7 +1202,7 @@ export default function AIExplainability() {
                     <div className="aix-meta">
                       <span>Execution: {selectedStage.executionId}</span>
                       <span>Time: {selectedStage.createdAt || "—"}</span>
-                      <span>Latency: {selectedStage.inferenceTimeMs ?? "—"} ms</span>
+                      <span>Processing time: {formatProcessingTimeSeconds(selectedStage.inferenceTimeMs)}</span>
                       <span>Confidence: {getStageConfidence(selectedStage) ?? "—"}</span>
                       <span>Mode: {inferStageMode(selectedStage)}</span>
                       {selectedStage.stageName === "AudioAnalysisAgent" ? (

@@ -83,7 +83,7 @@ SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
 ROUTING_CONFIDENCE_THRESHOLD = float(
     os.getenv(
         "DEPARTMENT_ROUTING_THRESHOLD",
-        os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.70"),
+        os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.20"),
     )
 )
 CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "30"))
@@ -165,6 +165,7 @@ def _ensure_runtime_schema_compatibility() -> None:
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority_assigned_at TIMESTAMPTZ;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS respond_time_left_seconds INTEGER;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolve_time_left_seconds INTEGER;")
+                cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_source TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;")

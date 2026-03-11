@@ -7,6 +7,7 @@ import urllib.request
 logger = logging.getLogger(__name__)
 
 VALID_CATEGORIES = {"inquiry", "complaint"}
+TICKET_CREATE_TIMEOUT_SECONDS = float(os.environ.get("CHATBOT_TICKET_CREATE_TIMEOUT_SECONDS", "60"))
 
 
 def create_ticket(
@@ -58,7 +59,7 @@ def create_ticket(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=TICKET_CREATE_TIMEOUT_SECONDS) as resp:
                 raw = resp.read().decode("utf-8")
                 parsed = json.loads(raw) if raw else {}
                 ticket_code = parsed.get("ticket_id")

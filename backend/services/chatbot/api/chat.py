@@ -51,6 +51,17 @@ class ResolutionRetrainRequest(BaseModel):
     max_examples: int = Field(default=12, ge=1, le=50)
 
 
+def _clean_resolution(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = text.splitlines()[0].strip()
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r'^(?:resolution|suggested resolution|output|answer)\s*[:\-]\s*', "", text, flags=re.IGNORECASE)
+    text = text.strip(" \"'")
+    return text
+
+
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     try:
@@ -105,8 +116,11 @@ def suggest_resolution(req: ResolutionSuggestionRequest):
             [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
-            ]
+            ],
+            max_new_tokens=48,
+            do_sample=False,
         ).strip()
+        suggestion = _clean_resolution(suggestion)
         if not suggestion:
             raise HTTPException(status_code=502, detail="Model returned empty suggestion")
         return {"suggested_resolution": suggestion}
@@ -126,7 +140,11 @@ def suggest_subject(req: SubjectSuggestionRequest):
             "Return only the subject line.\n\n"
             f"Ticket: {req.details}"
         )
-        subject = generate_response([{"role": "user", "content": prompt}]).strip()
+        subject = generate_response(
+            [{"role": "user", "content": prompt}],
+            max_new_tokens=12,
+            do_sample=False,
+        ).strip()
         subject = subject.splitlines()[0].strip() if subject else ""
         subject = re.sub(r'^["\']|["\']$', "", subject).strip()
         subject = re.sub(r"[.!?;:,]+$", "", subject).strip()
