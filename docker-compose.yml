@@ -53,7 +53,7 @@ services:
       - innovacx-network
 
   chatbot:
-    profiles: ["dev"]
+    profiles: ["pipeline", "dev"]
     build: ./backend/services/chatbot
     container_name: innovacx-chatbot
     restart: unless-stopped
