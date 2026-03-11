@@ -1,5 +1,6 @@
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,9 @@ _tokenizer = None
 _model = None
 _model_init_attempted = False
 _model_warmup_completed = False
+# Serialise all generate() calls — PyTorch CPU inference is not safe to run
+# concurrently on the same model object from multiple threads.
+_generate_lock = threading.Lock()
 
 
 # ── Public helpers ───────────────────────────────────────────────────────────
@@ -255,16 +259,17 @@ def _local_model_response(
         )
 
     inputs = _tokenizer([text], return_tensors="pt").to(_model.device)
-    with torch.no_grad():
-        effective_do_sample = DO_SAMPLE if do_sample is None else do_sample
-        gen_kwargs: dict[str, Any] = {
-            "max_new_tokens": MAX_NEW_TOKENS if max_new_tokens is None else max_new_tokens,
-            "do_sample": effective_do_sample,
-        }
-        if effective_do_sample:
-            gen_kwargs["temperature"] = TEMPERATURE if temperature is None else temperature
-            gen_kwargs["top_p"] = TOP_P if top_p is None else top_p
-        output_ids = _model.generate(**inputs, **gen_kwargs)
+    with _generate_lock:
+        with torch.no_grad():
+            effective_do_sample = DO_SAMPLE if do_sample is None else do_sample
+            gen_kwargs: dict[str, Any] = {
+                "max_new_tokens": MAX_NEW_TOKENS if max_new_tokens is None else max_new_tokens,
+                "do_sample": effective_do_sample,
+            }
+            if effective_do_sample:
+                gen_kwargs["temperature"] = TEMPERATURE if temperature is None else temperature
+                gen_kwargs["top_p"] = TOP_P if top_p is None else top_p
+            output_ids = _model.generate(**inputs, **gen_kwargs)
 
     generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
     response = _tokenizer.decode(generated_ids, skip_special_tokens=True).strip()

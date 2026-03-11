@@ -65,16 +65,18 @@ def _clean_resolution(value: str) -> str:
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     try:
-        if not req.session_id:
-            session_id = create_session(req.user_id)
-            result = handle_message(session_id, req.user_id, "__init__")
-        else:
-            if not session_belongs_to_user(req.session_id, req.user_id):
-                raise HTTPException(status_code=403, detail="session_id does not belong to this user")
+        if req.session_id and session_belongs_to_user(req.session_id, req.user_id):
+            # Valid, existing session — process the user's message.
             user_text = (req.message or "").strip()
             if not user_text:
                 raise HTTPException(status_code=400, detail="message is required when session_id is provided")
             result = handle_message(req.session_id, req.user_id, user_text)
+        else:
+            # No session_id provided OR session is stale/unknown (e.g. container was
+            # rebuilt and DB was wiped).  Auto-recover by starting a fresh session
+            # instead of returning 403, which the proxy would surface as "unavailable".
+            session_id = create_session(req.user_id)
+            result = handle_message(session_id, req.user_id, "__init__")
         return result
     except HTTPException:
         raise
