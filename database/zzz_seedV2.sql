@@ -60,150 +60,143 @@ INSERT INTO departments (name) VALUES
 ON CONFLICT (name) DO NOTHING;
 
 -- =============================================================================
--- 2. USERS  (11 seed users: 1 customer, 1 manager, 1 operator, 8 employees)
+-- 2. USERS  (18 seed users: 3 customers, 1 operator, 7 managers, 7 employees)
 -- =============================================================================
 INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secret) VALUES
-  ('customer1@innova.cx',  crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
-  ('customer2@innova.cx',  crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
-  ('customer3@innova.cx',  crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
-  ('manager@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
-  ('operator@innova.cx',   crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  TRUE, FALSE, NULL),
-  ('ahmed@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('maria@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('omar@innova.cx',       crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('sara@innova.cx',       crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('bilal@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('fatima@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('yousef@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('khalid@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('rania@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('tariq@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, FALSE, NULL),
-  ('lena@innova.cx',       crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('hassan@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('noura@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('ziad@innova.cx',       crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
-  ('dina@innova.cx',       crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL)
+  -- Customers
+  ('customer1@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
+  ('customer2@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
+  ('customer3@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
+  -- Operator
+  ('operator@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  TRUE, FALSE, NULL),
+  -- Managers (1 per department)
+  ('hamad@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
+  ('leen@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
+  ('rami@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
+  ('majid@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
+  ('ali@innovacx.net',       crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
+  ('yara@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
+  ('hana@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
+  -- Employees (1 per department)
+  ('ahmed@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
+  ('lena@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
+  ('bilal@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
+  ('sameer@innovacx.net',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
+  ('yousef@innovacx.net',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
+  ('talya@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL),
+  ('sarah@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL)
 ON CONFLICT (email) DO UPDATE SET mfa_enabled = FALSE, totp_secret = NULL;
 
 -- =============================================================================
 -- 3. USER_PROFILES
 -- =============================================================================
+-- Operator profile
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Dr. Farhad Al-Rashidi', '+97155000001', 'Dubai',
-       (SELECT id FROM departments WHERE name='Facilities Management'), NULL, 'Department Manager'
-FROM users u WHERE u.email='manager@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
-
-INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Sarah Operator', '+97155000002', 'Dubai',
+SELECT u.id, 'System Operator', '+97155000001', 'Dubai',
        NULL, NULL, 'System Operator'
 FROM users u WHERE u.email='operator@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
+-- Manager profiles
+INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
+SELECT u.id, 'Hamad Alaa', '+97155000010', 'Dubai',
+       (SELECT id FROM departments WHERE name='IT'), 'MGR-IT01', 'Department Manager'
+FROM users u WHERE u.email='hamad@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
+
+INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
+SELECT u.id, 'Leen Naser', '+97155000011', 'Dubai',
+       (SELECT id FROM departments WHERE name='HR'), 'MGR-HR01', 'Department Manager'
+FROM users u WHERE u.email='leen@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
+
+INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
+SELECT u.id, 'Rami Alassi', '+97155000012', 'Dubai',
+       (SELECT id FROM departments WHERE name='Legal & Compliance'), 'MGR-LC01', 'Department Manager'
+FROM users u WHERE u.email='rami@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
+
+INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
+SELECT u.id, 'Majid Sharaf', '+97155000013', 'Dubai',
+       (SELECT id FROM departments WHERE name='Maintenance'), 'MGR-MN01', 'Department Manager'
+FROM users u WHERE u.email='majid@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
+
+INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
+SELECT u.id, 'Ali Al Maharif', '+97155000014', 'Dubai',
+       (SELECT id FROM departments WHERE name='Safety & Security'), 'MGR-SS01', 'Department Manager'
+FROM users u WHERE u.email='ali@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
+
+INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
+SELECT u.id, 'Yara Saab', '+97155000015', 'Dubai',
+       (SELECT id FROM departments WHERE name='Leasing'), 'MGR-LS01', 'Department Manager'
+FROM users u WHERE u.email='yara@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
+
+INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
+SELECT u.id, 'Hana Ayad', '+97155000016', 'Dubai',
+       (SELECT id FROM departments WHERE name='Facilities Management'), 'MGR-FM01', 'Department Manager'
+FROM users u WHERE u.email='hana@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
+
+-- Employee profiles
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
 SELECT u.id, 'Ahmed Hassan', '+97155001001', 'Dubai',
-       (SELECT id FROM departments WHERE name='Maintenance'), 'EMP-1023', 'Senior Technician'
-FROM users u WHERE u.email='ahmed@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
+       (SELECT id FROM departments WHERE name='IT'), 'EMP-IT01', 'Support Specialist'
+FROM users u WHERE u.email='ahmed@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
 
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Maria Lopez', '+97155001002', 'Dubai',
-       (SELECT id FROM departments WHERE name='Maintenance'), 'EMP-1078', 'Technician'
-FROM users u WHERE u.email='maria@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
+SELECT u.id, 'Lena Musa', '+97155001002', 'Dubai',
+       (SELECT id FROM departments WHERE name='HR'), 'EMP-HR01', 'Support Specialist'
+FROM users u WHERE u.email='lena@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
 
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Omar Ali', '+97155001003', 'Sharjah',
-       (SELECT id FROM departments WHERE name='Maintenance'), 'EMP-1150', 'Assistant Technician'
-FROM users u WHERE u.email='omar@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
+SELECT u.id, 'Bilal Khan', '+97155001003', 'Dubai',
+       (SELECT id FROM departments WHERE name='Legal & Compliance'), 'EMP-LC01', 'Support Specialist'
+FROM users u WHERE u.email='bilal@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
 
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Sara Ahmed', '+97155001004', 'Dubai',
-       (SELECT id FROM departments WHERE name='Facilities Management'), 'EMP-1192', 'Technician'
-FROM users u WHERE u.email='sara@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
+SELECT u.id, 'Sameer Ahmed', '+97155001004', 'Dubai',
+       (SELECT id FROM departments WHERE name='Maintenance'), 'EMP-MN01', 'Support Specialist'
+FROM users u WHERE u.email='sameer@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
 
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Bilal Khan', '+97155001005', 'Abu Dhabi',
-       (SELECT id FROM departments WHERE name='Safety & Security'), 'EMP-1244', 'HVAC Specialist'
-FROM users u WHERE u.email='bilal@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
+SELECT u.id, 'Yousef Madi', '+97155001005', 'Dubai',
+       (SELECT id FROM departments WHERE name='Safety & Security'), 'EMP-SS01', 'Support Specialist'
+FROM users u WHERE u.email='yousef@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
 
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Fatima Noor', '+97155001006', 'Dubai',
-       (SELECT id FROM departments WHERE name='IT'), 'EMP-1290', 'IT Coordinator'
-FROM users u WHERE u.email='fatima@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
+SELECT u.id, 'Talya Mohammad', '+97155001006', 'Dubai',
+       (SELECT id FROM departments WHERE name='Leasing'), 'EMP-LS01', 'Support Specialist'
+FROM users u WHERE u.email='talya@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
 
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Yousef Karim', '+97155001007', 'Sharjah',
-       (SELECT id FROM departments WHERE name='Maintenance'), 'EMP-1331', 'Maintenance Supervisor'
-FROM users u WHERE u.email='yousef@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
-
-INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Khalid Musa', '+97155001008', 'Dubai',
-       (SELECT id FROM departments WHERE name='Facilities Management'), 'EMP-1378', 'Electrician'
-FROM users u WHERE u.email='khalid@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
-
-INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Rania Saeed', '+97155001009', 'Dubai',
-       (SELECT id FROM departments WHERE name='HR'), 'EMP-1401', 'HR Coordinator'
-FROM users u WHERE u.email='rania@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
-
-INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Tariq Mansour', '+97155001010', 'Ajman',
-       (SELECT id FROM departments WHERE name='Maintenance'), 'EMP-1412', 'Junior Technician'
-FROM users u WHERE u.email='tariq@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
-
-INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Lena Haddad', '+97155001011', 'Dubai',
-       (SELECT id FROM departments WHERE name='IT'), 'EMP-1435', 'Network Engineer'
-FROM users u WHERE u.email='lena@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
-
-INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Hassan Zuberi', '+97155001012', 'Dubai',
-       (SELECT id FROM departments WHERE name='Safety & Security'), 'EMP-1460', 'Security Officer'
-FROM users u WHERE u.email='hassan@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
-
-INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Noura Al-Farsi', '+97155001013', 'Dubai',
-       (SELECT id FROM departments WHERE name='Leasing'), 'EMP-1482', 'Leasing Executive'
-FROM users u WHERE u.email='noura@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
-
-INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Ziad Khalil', '+97155001014', 'Dubai',
-       (SELECT id FROM departments WHERE name='Maintenance'), 'EMP-1499', 'Plumber'
-FROM users u WHERE u.email='ziad@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
-
-INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
-SELECT u.id, 'Dina Rashid', '+97155001015', 'Sharjah',
-       (SELECT id FROM departments WHERE name='Facilities Management'), 'EMP-1510', 'Facilities Coordinator'
-FROM users u WHERE u.email='dina@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
+SELECT u.id, 'Sarah Muneer', '+97155001007', 'Dubai',
+       (SELECT id FROM departments WHERE name='Facilities Management'), 'EMP-FM01', 'Support Specialist'
+FROM users u WHERE u.email='sarah@innovacx.net'
+ON CONFLICT (user_id) DO UPDATE SET full_name=EXCLUDED.full_name, department_id=EXCLUDED.department_id, employee_code=EXCLUDED.employee_code, job_title=EXCLUDED.job_title;
 
 -- Customer profiles
 INSERT INTO user_profiles (user_id, full_name, phone, location)
 SELECT u.id, 'Customer One', '+971500000001', 'Dubai'
-FROM users u WHERE u.email='customer1@innova.cx'
+FROM users u WHERE u.email='customer1@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, phone, location)
 SELECT u.id, 'Customer Two', '+971500000002', 'Abu Dhabi'
-FROM users u WHERE u.email='customer2@innova.cx'
+FROM users u WHERE u.email='customer2@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, phone, location)
 SELECT u.id, 'Customer Three', '+971500000003', 'Sharjah'
-FROM users u WHERE u.email='customer3@innova.cx'
+FROM users u WHERE u.email='customer3@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 -- =============================================================================
@@ -216,40 +209,40 @@ WHERE NOT EXISTS (SELECT 1 FROM user_preferences p WHERE p.user_id = u.id);
 
 -- Customise a few users
 UPDATE user_preferences SET dark_mode = TRUE, language = 'Arabic'
-WHERE user_id = (SELECT id FROM users WHERE email = 'manager@innova.cx');
+WHERE user_id = (SELECT id FROM users WHERE email = 'hamad@innovacx.net');
 
 UPDATE user_preferences SET dark_mode = TRUE
-WHERE user_id = (SELECT id FROM users WHERE email = 'fatima@innova.cx');
+WHERE user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net');
 
 UPDATE user_preferences SET email_notifications = FALSE
-WHERE user_id = (SELECT id FROM users WHERE email = 'omar@innova.cx');
+WHERE user_id = (SELECT id FROM users WHERE email = 'yousef@innovacx.net');
 
 -- =============================================================================
 -- 5. PASSWORD_RESET_TOKENS
 -- =============================================================================
 INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
-SELECT (SELECT id FROM users WHERE email='customer1@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='customer1@innovacx.net'),
        crypt('reset-token-cust1-abc123', gen_salt('bf', 10)),
        now() + interval '2 hours'
 WHERE NOT EXISTS (
-  SELECT 1 FROM password_reset_tokens WHERE user_id=(SELECT id FROM users WHERE email='customer1@innova.cx') AND used_at IS NULL
+  SELECT 1 FROM password_reset_tokens WHERE user_id=(SELECT id FROM users WHERE email='customer1@innovacx.net') AND used_at IS NULL
 );
 
 INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, used_at)
-SELECT (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
        crypt('reset-token-ahmed-xyz789', gen_salt('bf', 10)),
        now() - interval '12 hours',
        now() - interval '10 hours'
 WHERE NOT EXISTS (
-  SELECT 1 FROM password_reset_tokens WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innova.cx')
+  SELECT 1 FROM password_reset_tokens WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innovacx.net')
 );
 
 INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
-SELECT (SELECT id FROM users WHERE email='maria@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='sarah@innovacx.net'),
        crypt('reset-token-maria-mno456', gen_salt('bf', 10)),
        now() + interval '1 hour'
 WHERE NOT EXISTS (
-  SELECT 1 FROM password_reset_tokens WHERE user_id=(SELECT id FROM users WHERE email='maria@innova.cx') AND used_at IS NULL
+  SELECT 1 FROM password_reset_tokens WHERE user_id=(SELECT id FROM users WHERE email='sarah@innovacx.net') AND used_at IS NULL
 );
 
 -- =============================================================================
@@ -276,8 +269,8 @@ VALUES
  'Cooling unit in Server Room B has stopped. Ambient temperature above 32°C and rising. All servers at risk.',
  'Complaint', 'In Progress', 'Critical',
  'HVAC', (SELECT id FROM departments WHERE name='Facilities Management'),
- (SELECT id FROM users WHERE email='customer1@innova.cx'),
- (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
+ (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
  '2026-03-01 06:00:00+00', '2026-03-01 06:08:00+00', '2026-03-01 06:25:00+00',
  '2026-03-01 06:30:00+00', '2026-03-01 12:00:00+00',
  FALSE, FALSE, '2026-03-01 06:00:00+00',
@@ -291,8 +284,8 @@ VALUES
  'All RFID readers at main Gate 2 refusing valid credentials. 30+ staff unable to enter.',
  'Complaint', 'In Progress', 'Critical',
  'Access Control', (SELECT id FROM departments WHERE name='Safety & Security'),
- (SELECT id FROM users WHERE email='customer2@innova.cx'),
- (SELECT id FROM users WHERE email='omar@innova.cx'),
+ (SELECT id FROM users WHERE email='customer2@innovacx.net'),
+ (SELECT id FROM users WHERE email='yousef@innovacx.net'),
  '2026-03-01 07:30:00+00', '2026-03-01 07:35:00+00', '2026-03-01 07:52:00+00',
  '2026-03-01 08:00:00+00', '2026-03-01 13:30:00+00',
  FALSE, FALSE, '2026-03-01 07:30:00+00',
@@ -306,8 +299,8 @@ VALUES
  'Elevator B in Tower 2 has stalled between floors 4 and 5. Alarm sounding intermittently.',
  'Complaint', 'Assigned', 'High',
  'Elevator', (SELECT id FROM departments WHERE name='Facilities Management'),
- (SELECT id FROM users WHERE email='customer3@innova.cx'),
- (SELECT id FROM users WHERE email='khalid@innova.cx'),
+ (SELECT id FROM users WHERE email='customer3@innovacx.net'),
+ (SELECT id FROM users WHERE email='sameer@innovacx.net'),
  '2026-03-01 08:00:00+00', '2026-03-01 08:10:00+00', '2026-03-01 08:32:00+00',
  '2026-03-01 09:00:00+00', '2026-03-02 08:00:00+00',
  FALSE, FALSE, '2026-03-01 08:00:00+00',
@@ -321,8 +314,8 @@ VALUES
  '20 workstations on Floor 5 lost connectivity. Identified as potential switch failure.',
  'Complaint', 'In Progress', 'Critical',
  'Network', (SELECT id FROM departments WHERE name='IT'),
- (SELECT id FROM users WHERE email='customer1@innova.cx'),
- (SELECT id FROM users WHERE email='fatima@innova.cx'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
+ (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
  '2026-03-01 08:15:00+00', '2026-03-01 08:20:00+00', '2026-03-01 08:42:00+00',
  '2026-03-01 08:45:00+00', '2026-03-01 14:15:00+00',
  FALSE, FALSE, '2026-03-01 08:15:00+00',
@@ -336,8 +329,8 @@ VALUES
  'Water dripping from ceiling joint in 3rd floor pantry area. Puddle forming near electrical sockets.',
  'Complaint', 'Assigned', 'High',
  'Plumbing', (SELECT id FROM departments WHERE name='Maintenance'),
- (SELECT id FROM users WHERE email='customer2@innova.cx'),
- (SELECT id FROM users WHERE email='ziad@innova.cx'),
+ (SELECT id FROM users WHERE email='customer2@innovacx.net'),
+ (SELECT id FROM users WHERE email='sameer@innovacx.net'),
  '2026-03-01 09:00:00+00', '2026-03-01 09:15:00+00', '2026-03-01 09:48:00+00',
  '2026-03-01 10:00:00+00', '2026-03-02 09:00:00+00',
  FALSE, FALSE, '2026-03-01 09:00:00+00',
@@ -351,8 +344,8 @@ VALUES
  'Block D restrooms and corridors have not been cleaned for two consecutive days. Multiple complaints received.',
  'Complaint', 'Assigned', 'Medium',
  'Cleaning', (SELECT id FROM departments WHERE name='Facilities Management'),
- (SELECT id FROM users WHERE email='customer3@innova.cx'),
- (SELECT id FROM users WHERE email='sara@innova.cx'),
+ (SELECT id FROM users WHERE email='customer3@innovacx.net'),
+ (SELECT id FROM users WHERE email='sameer@innovacx.net'),
  '2026-03-01 09:30:00+00', '2026-03-01 09:45:00+00', '2026-03-01 10:05:00+00',
  '2026-03-01 12:30:00+00', '2026-03-03 09:30:00+00',
  FALSE, FALSE, '2026-03-01 09:30:00+00',
@@ -366,8 +359,8 @@ VALUES
  'A 3-metre section of the western perimeter fence has collapsed, creating an unsecured gap.',
  'Complaint', 'Assigned', 'High',
  'Infrastructure', (SELECT id FROM departments WHERE name='Safety & Security'),
- (SELECT id FROM users WHERE email='customer1@innova.cx'),
- (SELECT id FROM users WHERE email='hassan@innova.cx'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
+ (SELECT id FROM users WHERE email='yousef@innovacx.net'),
  '2026-03-01 10:00:00+00', '2026-03-01 10:12:00+00', '2026-03-01 10:35:00+00',
  '2026-03-01 11:00:00+00', '2026-03-02 10:00:00+00',
  FALSE, FALSE, '2026-03-01 10:00:00+00',
@@ -381,8 +374,8 @@ VALUES
  'VoIP phones on the Finance floor dropping all calls after 2 minutes. Business operations impacted.',
  'Inquiry', 'Assigned', 'Medium',
  'Telephony', (SELECT id FROM departments WHERE name='IT'),
- (SELECT id FROM users WHERE email='customer2@innova.cx'),
- (SELECT id FROM users WHERE email='lena@innova.cx'),
+ (SELECT id FROM users WHERE email='customer2@innovacx.net'),
+ (SELECT id FROM users WHERE email='lena@innovacx.net'),
  '2026-03-01 10:30:00+00', '2026-03-01 10:45:00+00', '2026-03-01 11:00+00',
  '2026-03-01 13:30:00+00', '2026-03-02 10:30:00+00',
  FALSE, FALSE, '2026-03-01 10:30:00+00',
@@ -396,7 +389,7 @@ VALUES
  'Rainwater seeping through roof membrane into executive office area. Documents at risk.',
  'Complaint', 'Open', 'High',
  'Roof', (SELECT id FROM departments WHERE name='Facilities Management'),
- (SELECT id FROM users WHERE email='customer3@innova.cx'),
+ (SELECT id FROM users WHERE email='customer3@innovacx.net'),
  NULL,
  '2026-03-01 11:00:00+00', NULL, NULL,
  '2026-03-01 12:00:00+00', '2026-03-02 11:00:00+00',
@@ -411,7 +404,7 @@ VALUES
  'Reserved emergency access bay at entrance C occupied by an unknown vehicle for 3 consecutive days.',
  'Complaint', 'Open', 'Low',
  'Parking', (SELECT id FROM departments WHERE name='Safety & Security'),
- (SELECT id FROM users WHERE email='customer1@innova.cx'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
  NULL,
  '2026-03-01 11:30:00+00', NULL, NULL,
  '2026-03-01 17:30:00+00', '2026-03-04 11:30:00+00',
@@ -427,8 +420,8 @@ VALUES
  'Gas sensor triggered in building kitchen. Evacuated area as precaution.',
  'Complaint', 'Resolved', 'Critical',
  'Gas', (SELECT id FROM departments WHERE name='Facilities Management'),
- (SELECT id FROM users WHERE email='customer1@innova.cx'),
- (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
+ (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
  '2025-03-05 06:00:00+00', '2025-03-05 06:04:00+00', '2025-03-05 06:24:00+00',
  '2025-03-05 06:30:00+00', '2025-03-05 12:00:00+00',
  FALSE, FALSE, '2025-03-05 06:00:00+00',
@@ -442,8 +435,8 @@ VALUES
  'Complete power failure affecting Finance department. UPS not kicking in.',
  'Complaint', 'Resolved', 'Critical',
  'Electrical', (SELECT id FROM departments WHERE name='Facilities Management'),
- (SELECT id FROM users WHERE email='customer2@innova.cx'),
- (SELECT id FROM users WHERE email='khalid@innova.cx'),
+ (SELECT id FROM users WHERE email='customer2@innovacx.net'),
+ (SELECT id FROM users WHERE email='sameer@innovacx.net'),
  '2025-04-10 13:00:00+00', '2025-04-10 13:05:00+00', '2025-04-10 13:26:00+00',
  '2025-04-10 13:30:00+00', '2025-04-10 19:00:00+00',
  FALSE, FALSE, '2025-04-10 13:00:00+00',
@@ -457,8 +450,8 @@ VALUES
  'All 48 cameras showing signal lost on monitoring console. Security breach risk.',
  'Complaint', 'Resolved', 'Critical',
  'CCTV', (SELECT id FROM departments WHERE name='Safety & Security'),
- (SELECT id FROM users WHERE email='customer1@innova.cx'),
- (SELECT id FROM users WHERE email='bilal@innova.cx'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
+ (SELECT id FROM users WHERE email='bilal@innovacx.net'),
  '2025-05-15 07:00:00+00', '2025-05-15 07:07:00+00', '2025-05-15 07:28:00+00',
  '2025-05-15 07:30:00+00', '2025-05-15 13:00:00+00',
  FALSE, FALSE, '2025-05-15 07:00:00+00',
@@ -472,8 +465,8 @@ VALUES
  'Server room temperature crossed 28°C threshold. Backup cooling unit fault.',
  'Complaint', 'Resolved', 'Critical',
  'HVAC', (SELECT id FROM departments WHERE name='IT'),
- (SELECT id FROM users WHERE email='customer3@innova.cx'),
- (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+ (SELECT id FROM users WHERE email='customer3@innovacx.net'),
+ (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
  '2025-06-20 14:00:00+00', '2025-06-20 14:04:00+00', '2025-06-20 14:27:00+00',
  '2025-06-20 14:30:00+00', '2025-06-20 20:00:00+00',
  FALSE, FALSE, '2025-06-20 14:00:00+00',
@@ -487,8 +480,8 @@ VALUES
  'Heavy rain caused flooding in basement carpark. Vehicles and equipment at risk.',
  'Complaint', 'Resolved', 'Critical',
  'Civil', (SELECT id FROM departments WHERE name='Facilities Management'),
- (SELECT id FROM users WHERE email='customer2@innova.cx'),
- (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+ (SELECT id FROM users WHERE email='customer2@innovacx.net'),
+ (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
  '2025-07-08 06:00:00+00', '2025-07-08 06:06:00+00', '2025-07-08 06:28:00+00',
  '2025-07-08 06:30:00+00', '2025-07-08 12:00:00+00',
  FALSE, FALSE, '2025-07-08 06:00:00+00',
@@ -502,8 +495,8 @@ VALUES
  'Motion sensors triggered on restricted rooftop area at 23:15. Unclear if threat.',
  'Complaint', 'Resolved', 'Critical',
  'Security', (SELECT id FROM departments WHERE name='Safety & Security'),
- (SELECT id FROM users WHERE email='customer1@innova.cx'),
- (SELECT id FROM users WHERE email='omar@innova.cx'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
+ (SELECT id FROM users WHERE email='yousef@innovacx.net'),
  '2025-08-22 23:00:00+00', '2025-08-22 23:04:00+00', '2025-08-22 23:27:00+00',
  '2025-08-22 23:30:00+00', '2025-08-23 05:00:00+00',
  FALSE, FALSE, '2025-08-22 23:00:00+00',
@@ -517,8 +510,8 @@ VALUES
  'Main chiller breakdown caused complete loss of cooling across all floors.',
  'Complaint', 'Resolved', 'Critical',
  'HVAC', (SELECT id FROM departments WHERE name='Facilities Management'),
- (SELECT id FROM users WHERE email='customer3@innova.cx'),
- (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+ (SELECT id FROM users WHERE email='customer3@innovacx.net'),
+ (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
  '2025-09-12 08:00:00+00', '2025-09-12 08:04:00+00', '2025-09-12 08:28:00+00',
  '2025-09-12 08:30:00+00', '2025-09-12 20:00:00+00',
  FALSE, FALSE, '2025-09-12 08:00:00+00',
@@ -532,8 +525,8 @@ VALUES
  'No wireless connectivity across 4 conference rooms during back-to-back client meetings.',
  'Inquiry', 'Resolved', 'Medium',
  'Network', (SELECT id FROM departments WHERE name='IT'),
- (SELECT id FROM users WHERE email='customer2@innova.cx'),
- (SELECT id FROM users WHERE email='fatima@innova.cx'),
+ (SELECT id FROM users WHERE email='customer2@innovacx.net'),
+ (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
  '2025-10-14 10:00:00+00', '2025-10-14 10:25:00+00', '2025-10-14 13:00:00+00',
  '2025-10-14 13:00:00+00', '2025-10-15 10:00:00+00',
  FALSE, FALSE, '2025-10-14 10:00:00+00',
@@ -547,8 +540,8 @@ VALUES
  'Annual suppression test failed. System will not trigger on test activation.',
  'Complaint', 'Resolved', 'Critical',
  'Fire Safety', (SELECT id FROM departments WHERE name='Safety & Security'),
- (SELECT id FROM users WHERE email='customer1@innova.cx'),
- (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
+ (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
  '2025-11-04 08:00:00+00', '2025-11-04 08:04:00+00', '2025-11-04 08:28:00+00',
  '2025-11-04 08:30:00+00', '2025-11-04 18:00:00+00',
  FALSE, FALSE, '2025-11-04 08:00:00+00',
@@ -562,8 +555,8 @@ VALUES
  'Data centre UPS batteries flagged at 18% capacity. Emergency runtime insufficient.',
  'Complaint', 'Resolved', 'Critical',
  'Electrical', (SELECT id FROM departments WHERE name='IT'),
- (SELECT id FROM users WHERE email='customer3@innova.cx'),
- (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+ (SELECT id FROM users WHERE email='customer3@innovacx.net'),
+ (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
  '2025-12-10 09:00:00+00', '2025-12-10 09:04:00+00', '2025-12-10 09:27:00+00',
  '2025-12-10 09:30:00+00', '2025-12-10 21:00:00+00',
  FALSE, FALSE, '2025-12-10 09:00:00+00',
@@ -577,8 +570,8 @@ VALUES
  'Entire Building A without heating during winter. Heat exchanger fault.',
  'Complaint', 'Resolved', 'Critical',
  'HVAC', (SELECT id FROM departments WHERE name='Facilities Management'),
- (SELECT id FROM users WHERE email='customer2@innova.cx'),
- (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+ (SELECT id FROM users WHERE email='customer2@innovacx.net'),
+ (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
  '2026-01-08 07:00:00+00', '2026-01-08 07:05:00+00', '2026-01-08 07:28:00+00',
  '2026-01-08 07:30:00+00', '2026-01-08 19:00:00+00',
  FALSE, FALSE, '2026-01-08 07:00:00+00',
@@ -592,8 +585,8 @@ VALUES
  'Remote employees unable to connect to internal VPN since certificate expiry.',
  'Inquiry', 'Resolved', 'High',
  'Network', (SELECT id FROM departments WHERE name='IT'),
- (SELECT id FROM users WHERE email='customer1@innova.cx'),
- (SELECT id FROM users WHERE email='fatima@innova.cx'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
+ (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
  '2026-01-20 09:00:00+00', '2026-01-20 09:18:00+00', '2026-01-20 10:00:00+00',
  '2026-01-20 10:00:00+00', '2026-01-21 09:00:00+00',
  FALSE, FALSE, '2026-01-20 09:00:00+00',
@@ -607,8 +600,8 @@ VALUES
  'Main DB tripped cutting power to floors 3 and 4. Faulty MCB identified.',
  'Complaint', 'Resolved', 'Critical',
  'Electrical', (SELECT id FROM departments WHERE name='Facilities Management'),
- (SELECT id FROM users WHERE email='customer3@innova.cx'),
- (SELECT id FROM users WHERE email='khalid@innova.cx'),
+ (SELECT id FROM users WHERE email='customer3@innovacx.net'),
+ (SELECT id FROM users WHERE email='sameer@innovacx.net'),
  '2026-02-05 07:00:00+00', '2026-02-05 07:05:00+00', '2026-02-05 07:27:00+00',
  '2026-02-05 07:30:00+00', '2026-02-05 15:00:00+00',
  FALSE, FALSE, '2026-02-05 07:00:00+00',
@@ -622,8 +615,8 @@ VALUES
  'Lab smoke detector triggering false alarms every morning causing unnecessary evacuations.',
  'Complaint', 'Resolved', 'Medium',
  'Fire Safety', (SELECT id FROM departments WHERE name='Safety & Security'),
- (SELECT id FROM users WHERE email='customer2@innova.cx'),
- (SELECT id FROM users WHERE email='bilal@innova.cx'),
+ (SELECT id FROM users WHERE email='customer2@innovacx.net'),
+ (SELECT id FROM users WHERE email='bilal@innovacx.net'),
  '2026-02-15 10:00:00+00', '2026-02-15 10:18:00+00', '2026-02-15 11:00:00+00',
  '2026-02-15 13:00:00+00', '2026-02-16 10:00:00+00',
  FALSE, FALSE, '2026-02-15 10:00:00+00',
@@ -637,8 +630,8 @@ VALUES
  'Customer parking access cards failing at gate reader. Issue recurring for third time this month.',
  'Inquiry', 'Overdue', 'Medium',
  'Access Control', (SELECT id FROM departments WHERE name='Safety & Security'),
- (SELECT id FROM users WHERE email='customer1@innova.cx'),
- (SELECT id FROM users WHERE email='omar@innova.cx'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
+ (SELECT id FROM users WHERE email='yousef@innovacx.net'),
  '2026-02-20 08:00:00+00', '2026-02-20 08:30:00+00', '2026-02-20 11:30:00+00',
  '2026-02-20 11:00:00+00', '2026-02-22 08:00:00+00',
  TRUE, FALSE, '2026-02-20 08:00:00+00',
@@ -668,64 +661,64 @@ SELECT t.id, v.fname, v.furl,
 FROM (VALUES
   ('CX-A001', 'server_room_temp_log_2026-03-01.csv',
    'https://storage.innovacx.com/attachments/CX-A001/temp_log.csv',
-   'ahmed@innova.cx', '2026-03-01 07:00:00+00'),
+   'ahmed@innovacx.net', '2026-03-01 07:00:00+00'),
   ('CX-A001', 'hvac_unit_photo.jpg',
    'https://storage.innovacx.com/attachments/CX-A001/hvac_photo.jpg',
-   'ahmed@innova.cx', '2026-03-01 07:15:00+00'),
+   'ahmed@innovacx.net', '2026-03-01 07:15:00+00'),
   ('CX-A002', 'gate2_reader_error_screenshot.png',
    'https://storage.innovacx.com/attachments/CX-A002/reader_error.png',
-   'omar@innova.cx', '2026-03-01 07:55:00+00'),
+   'yousef@innovacx.net', '2026-03-01 07:55:00+00'),
   ('CX-A004', 'network_topology_floor5.pdf',
    'https://storage.innovacx.com/attachments/CX-A004/network_topology.pdf',
-   'fatima@innova.cx', '2026-03-01 08:50:00+00'),
+   'ahmed@innovacx.net', '2026-03-01 08:50:00+00'),
   ('CX-A005', 'leak_damage_photo.jpg',
    'https://storage.innovacx.com/attachments/CX-A005/leak_photo.jpg',
-   'ziad@innova.cx', '2026-03-01 09:20:00+00'),
+   'sameer@innovacx.net', '2026-03-01 09:20:00+00'),
   ('CX-H009', 'suppression_test_report_2025.pdf',
    'https://storage.innovacx.com/attachments/CX-H009/test_report.pdf',
-   'ahmed@innova.cx', '2025-11-04 09:00:00+00'),
+   'ahmed@innovacx.net', '2025-11-04 09:00:00+00'),
   ('CX-H010', 'ups_capacity_report_Q4_2025.pdf',
    'https://storage.innovacx.com/attachments/CX-H010/ups_report.pdf',
-   'ahmed@innova.cx', '2025-12-10 10:00:00+00'),
+   'ahmed@innovacx.net', '2025-12-10 10:00:00+00'),
   ('CX-H003', 'nvr_error_log_2025-05-15.txt',
    'https://storage.innovacx.com/attachments/CX-H003/nvr_error.txt',
-   'bilal@innova.cx', '2025-05-15 08:00:00+00'),
+   'bilal@innovacx.net', '2025-05-15 08:00:00+00'),
   ('CX-H013', 'electrical_inspection_report.pdf',
    'https://storage.innovacx.com/attachments/CX-H013/inspection.pdf',
-   'khalid@innova.cx', '2026-02-05 08:00:00+00'),
+   'sameer@innovacx.net', '2026-02-05 08:00:00+00'),
   ('CX-H015', 'access_card_system_logs.csv',
    'https://storage.innovacx.com/attachments/CX-H015/card_logs.csv',
-   'omar@innova.cx', '2026-02-20 09:00:00+00'),
+   'yousef@innovacx.net', '2026-02-20 09:00:00+00'),
   ('CX-A007', 'fence_damage_photos.zip',
    'https://storage.innovacx.com/attachments/CX-A007/fence_photos.zip',
-   'hassan@innova.cx', '2026-03-01 10:40:00+00'),
+   'yousef@innovacx.net', '2026-03-01 10:40:00+00'),
   ('CX-H001', 'gas_sensor_alert_log.csv',
    'https://storage.innovacx.com/attachments/CX-H001/gas_log.csv',
-   'ahmed@innova.cx', '2025-03-05 07:00:00+00'),
+   'ahmed@innovacx.net', '2025-03-05 07:00:00+00'),
   ('CX-H005', 'carpark_flooding_video.mp4',
    'https://storage.innovacx.com/attachments/CX-H005/flooding.mp4',
-   'ahmed@innova.cx', '2025-07-08 07:00:00+00'),
+   'ahmed@innovacx.net', '2025-07-08 07:00:00+00'),
   ('CX-H007', 'chiller_diagnostic_report.pdf',
    'https://storage.innovacx.com/attachments/CX-H007/chiller_diag.pdf',
-   'ahmed@innova.cx', '2025-09-12 09:00:00+00'),
+   'ahmed@innovacx.net', '2025-09-12 09:00:00+00'),
   ('CX-H011', 'boiler_replacement_invoice.pdf',
    'https://storage.innovacx.com/attachments/CX-H011/boiler_invoice.pdf',
-   'ahmed@innova.cx', '2026-01-08 14:00:00+00'),
+   'ahmed@innovacx.net', '2026-01-08 14:00:00+00'),
   ('CX-H002', 'electrical_panel_photo.jpg',
    'https://storage.innovacx.com/attachments/CX-H002/panel_photo.jpg',
-   'khalid@innova.cx', '2025-04-10 14:00:00+00'),
+   'sameer@innovacx.net', '2025-04-10 14:00:00+00'),
   ('CX-H012', 'vpn_certificate_renewal_log.txt',
    'https://storage.innovacx.com/attachments/CX-H012/vpn_cert.txt',
-   'fatima@innova.cx', '2026-01-20 11:00:00+00'),
+   'ahmed@innovacx.net', '2026-01-20 11:00:00+00'),
   ('CX-H006', 'cctv_rooftop_capture.jpg',
    'https://storage.innovacx.com/attachments/CX-H006/rooftop.jpg',
-   'omar@innova.cx', '2025-08-23 00:30:00+00'),
+   'yousef@innovacx.net', '2025-08-23 00:30:00+00'),
   ('CX-H014', 'smoke_detector_calibration_report.pdf',
    'https://storage.innovacx.com/attachments/CX-H014/detector_calib.pdf',
-   'bilal@innova.cx', '2026-02-15 12:00:00+00'),
+   'bilal@innovacx.net', '2026-02-15 12:00:00+00'),
   ('CX-A009', 'roof_leak_damage_assessment.pdf',
    'https://storage.innovacx.com/attachments/CX-A009/roof_assessment.pdf',
-   'manager@innova.cx', '2026-03-01 12:00:00+00')
+   'hamad@innovacx.net', '2026-03-01 12:00:00+00')
 ) AS v(ticket_code, fname, furl, email, ts)
 JOIN tickets t ON t.ticket_code = v.ticket_code
 WHERE NOT EXISTS (
@@ -750,7 +743,7 @@ FROM (VALUES
    'Open','Assigned',
    '{"source":"chat","escalation_level":1}',
    '2026-03-01 06:08:00+00'),
-  ('CX-A001','ahmed@innova.cx','internal_note',
+  ('CX-A001','ahmed@innovacx.net','internal_note',
    'On-site. Backup cooling activated. Primary compressor inspection underway.',
    'Assigned','In Progress',
    '{"temp_reading":32.5,"backup_cooling":"active"}',
@@ -760,87 +753,87 @@ FROM (VALUES
    'Open','In Progress',
    '{"affected_staff":32,"manual_entry":"authorised"}',
    '2026-03-01 07:35:00+00'),
-  ('CX-A004','fatima@innova.cx','internal_note',
+  ('CX-A004','ahmed@innovacx.net','internal_note',
    'Switch identified as failed. Replacement sourced from spares. ETA 1 hour.',
    'Assigned','In Progress',
    '{"floor":5,"affected_workstations":20}',
    '2026-03-01 09:00:00+00'),
-  ('CX-H001','ahmed@innova.cx','status_change',
+  ('CX-H001','ahmed@innovacx.net','status_change',
    'Gas leak resolved. Faulty valve replaced. Area cleared for re-entry.',
    'In Progress','Resolved',
    '{"parts_replaced":["valve"],"downtime_minutes":360}',
    '2025-03-05 12:00:00+00'),
-  ('CX-H002','khalid@innova.cx','status_change',
+  ('CX-H002','sameer@innovacx.net','status_change',
    'MCB replaced. Power restored to Finance floor. UPS tested and operational.',
    'In Progress','Resolved',
    '{"parts_replaced":["MCB-3A"],"downtime_minutes":360}',
    '2025-04-10 19:00:00+00'),
-  ('CX-H003','bilal@innova.cx','status_change',
+  ('CX-H003','bilal@innovacx.net','status_change',
    'NVR hard drive replaced. All 48 cameras restored. System tested for 1 hour.',
    'In Progress','Resolved',
    '{"nvr_drives_replaced":1,"cameras_restored":48}',
    '2025-05-15 13:00:00+00'),
-  ('CX-H007','ahmed@innova.cx','status_change',
+  ('CX-H007','ahmed@innovacx.net','status_change',
    'Chiller compressor replaced. Refrigerant recharged. Cooling restored to all floors.',
    'In Progress','Resolved',
    '{"parts_replaced":["compressor"],"floors_affected":8}',
    '2025-09-12 20:00:00+00'),
-  ('CX-H009','ahmed@innova.cx','status_change',
+  ('CX-H009','ahmed@innovacx.net','status_change',
    'Suppression head replaced. System re-tested with full pass. Certificate issued.',
    'In Progress','Resolved',
    '{"certificate_issued":true,"test_result":"pass"}',
    '2025-11-04 18:00:00+00'),
-  ('CX-H010','ahmed@innova.cx','status_change',
+  ('CX-H010','ahmed@innovacx.net','status_change',
    'All UPS battery modules replaced. Runtime certified at 45 minutes.',
    'In Progress','Resolved',
    '{"batteries_replaced":12,"certified_runtime_mins":45}',
    '2025-12-10 21:00:00+00'),
-  ('CX-H011','ahmed@innova.cx','status_change',
+  ('CX-H011','ahmed@innovacx.net','status_change',
    'Heat exchanger replaced. Boiler pressure normalised. Heating restored.',
    'In Progress','Resolved',
    '{"parts_replaced":["heat_exchanger"],"downtime_hours":12}',
    '2026-01-08 19:00:00+00'),
-  ('CX-H013','khalid@innova.cx','status_change',
+  ('CX-H013','sameer@innovacx.net','status_change',
    'Faulty MCB replaced. Load redistributed across circuits. Power fully restored.',
    'In Progress','Resolved',
    '{"floors_affected":2,"mcb_replaced":"MCB-Phase-2"}',
    '2026-02-05 15:00:00+00'),
-  ('CX-H015','manager@innova.cx','escalation',
+  ('CX-H015','hamad@innovacx.net','escalation',
    'SLA breached — response time exceeded by 30 minutes. Escalating to manager review.',
    'Assigned','Overdue',
    '{"breach_minutes":30,"escalated_by":"system"}',
    '2026-02-20 11:31:00+00'),
-  ('CX-A009','manager@innova.cx','internal_note',
+  ('CX-A009','hamad@innovacx.net','internal_note',
    'Unassigned — awaiting Facilities team availability. Temporary bucket placement authorised.',
    'Open','Open',
    '{"temporary_measure":"bucket_placement"}',
    '2026-03-01 11:30:00+00'),
-  ('CX-H014','bilal@innova.cx','status_change',
+  ('CX-H014','bilal@innovacx.net','status_change',
    'Detector head replaced and recalibrated. No false alarms in 48-hour test period.',
    'In Progress','Resolved',
    '{"test_period_hours":48,"false_alarms_since_fix":0}',
    '2026-02-16 10:00:00+00'),
-  ('CX-H012','fatima@innova.cx','status_change',
+  ('CX-H012','ahmed@innovacx.net','status_change',
    'VPN certificate renewed. All remote users confirmed back online.',
    'In Progress','Resolved',
    '{"users_affected":45,"certificate_expiry":"2027-01-20"}',
    '2026-01-21 09:00:00+00'),
-  ('CX-H015','omar@innova.cx','internal_note',
+  ('CX-H015','yousef@innovacx.net','internal_note',
    'Re-encoded 5 cards and tested all readers. Issue may be intermittent server-side.',
    'Overdue','Overdue',
    '{"cards_re-encoded":5,"readers_tested":3}',
    '2026-02-21 10:00:00+00'),
-  ('CX-A003','khalid@innova.cx','internal_note',
+  ('CX-A003','sameer@innovacx.net','internal_note',
    'Elevator diagnostics complete. Door sensor fault confirmed. Parts on order.',
    'Assigned','Assigned',
    '{"fault":"door_sensor","parts_eta":"2 hours"}',
    '2026-03-01 09:30:00+00'),
-  ('CX-A006','sara@innova.cx','internal_note',
+  ('CX-A006','sameer@innovacx.net','internal_note',
    'Cleaning crew deployed to Block D. Deep-clean in progress. ETA completion 14:00.',
    'Assigned','Assigned',
    '{"crew_size":4,"eta_completion":"14:00"}',
    '2026-03-01 10:00:00+00'),
-  ('CX-H004','ahmed@innova.cx','status_change',
+  ('CX-H004','ahmed@innovacx.net','status_change',
    'Backup cooling restored server room to 22°C. Primary unit compressor replaced.',
    'In Progress','Resolved',
    '{"final_temp_c":22,"primary_unit_repaired":true}',
@@ -862,70 +855,70 @@ SELECT
   (SELECT id FROM users WHERE email = v.email),
   v.notes, v.ts::timestamptz
 FROM (VALUES
-  ('CX-A001', 1, 'ahmed@innova.cx',
+  ('CX-A001', 1, 'ahmed@innovacx.net',
    'Arrived server room. Temperature at 32.5°C. Backup cooling unit powered on.',
    '2026-03-01 06:55:00+00'),
-  ('CX-A001', 2, 'ahmed@innova.cx',
+  ('CX-A001', 2, 'ahmed@innovacx.net',
    'Primary AC compressor inspected. Refrigerant leak identified. Parts ordered.',
    '2026-03-01 08:00:00+00'),
-  ('CX-A001', 3, 'ahmed@innova.cx',
+  ('CX-A001', 3, 'ahmed@innovacx.net',
    'Parts arrived. Compressor replacement in progress.',
    '2026-03-01 10:00:00+00'),
-  ('CX-A002', 1, 'omar@innova.cx',
+  ('CX-A002', 1, 'yousef@innovacx.net',
    'Access control server rebooted. Badge DB re-sync initiated.',
    '2026-03-01 07:55:00+00'),
-  ('CX-A002', 2, 'omar@innova.cx',
+  ('CX-A002', 2, 'yousef@innovacx.net',
    'Sync completed. 28 of 30 readers online. 2 readers require firmware update.',
    '2026-03-01 09:00:00+00'),
-  ('CX-A003', 1, 'khalid@innova.cx',
+  ('CX-A003', 1, 'sameer@innovacx.net',
    'Elevator diagnostics run. Door sensor fault confirmed.',
    '2026-03-01 08:35:00+00'),
-  ('CX-A004', 1, 'fatima@innova.cx',
+  ('CX-A004', 1, 'ahmed@innovacx.net',
    'Network switch confirmed failed. Replacement sourced from IT spares room.',
    '2026-03-01 08:50:00+00'),
-  ('CX-A004', 2, 'fatima@innova.cx',
+  ('CX-A004', 2, 'ahmed@innovacx.net',
    'Replacement switch installed. All 20 workstations back online.',
    '2026-03-01 10:00:00+00'),
-  ('CX-A005', 1, 'ziad@innova.cx',
+  ('CX-A005', 1, 'sameer@innovacx.net',
    'Water supply isolated at floor valve. Leak source identified as compression joint.',
    '2026-03-01 09:30:00+00'),
-  ('CX-A007', 1, 'hassan@innova.cx',
+  ('CX-A007', 1, 'yousef@innovacx.net',
    'Temporary barrier deployed along collapsed fence section. Area cordoned off.',
    '2026-03-01 10:45:00+00'),
-  ('CX-H001', 1, 'ahmed@innova.cx',
+  ('CX-H001', 1, 'ahmed@innovacx.net',
    'Gas supply isolated at main valve. Evacuated kitchen area.',
    '2025-03-05 06:30:00+00'),
-  ('CX-H001', 2, 'ahmed@innova.cx',
+  ('CX-H001', 2, 'ahmed@innovacx.net',
    'Faulty gas valve replaced. Leak test passed. Area cleared for re-entry.',
    '2025-03-05 10:00:00+00'),
-  ('CX-H002', 1, 'khalid@innova.cx',
+  ('CX-H002', 1, 'sameer@innovacx.net',
    'Faulty MCB-3A identified in main distribution board.',
    '2025-04-10 13:30:00+00'),
-  ('CX-H002', 2, 'khalid@innova.cx',
+  ('CX-H002', 2, 'sameer@innovacx.net',
    'MCB replaced. Power restored to Finance floor. UPS bypass disengaged.',
    '2025-04-10 17:00:00+00'),
-  ('CX-H009', 1, 'ahmed@innova.cx',
+  ('CX-H009', 1, 'ahmed@innovacx.net',
    'Test activation failed — suppression head confirmed defective.',
    '2025-11-04 09:00:00+00'),
-  ('CX-H009', 2, 'ahmed@innova.cx',
+  ('CX-H009', 2, 'ahmed@innovacx.net',
    'New suppression head installed. System retested — full pass.',
    '2025-11-04 14:00:00+00'),
-  ('CX-H010', 1, 'ahmed@innova.cx',
+  ('CX-H010', 1, 'ahmed@innovacx.net',
    'UPS capacity confirmed at 18% across all 12 modules.',
    '2025-12-10 09:30:00+00'),
-  ('CX-H010', 2, 'ahmed@innova.cx',
+  ('CX-H010', 2, 'ahmed@innovacx.net',
    'All 12 battery modules replaced. Runtime test: 47 minutes certified.',
    '2025-12-10 16:00:00+00'),
-  ('CX-H011', 1, 'ahmed@innova.cx',
+  ('CX-H011', 1, 'ahmed@innovacx.net',
    'Heat exchanger identified as failed. Emergency parts ordered.',
    '2026-01-08 08:00:00+00'),
-  ('CX-H011', 2, 'ahmed@innova.cx',
+  ('CX-H011', 2, 'ahmed@innovacx.net',
    'Heat exchanger replaced. Boiler restarted. Heating restored to all zones.',
    '2026-01-08 15:00:00+00'),
-  ('CX-H013', 1, 'khalid@innova.cx',
+  ('CX-H013', 1, 'sameer@innovacx.net',
    'Faulty MCB identified in Phase 2 of main DB.',
    '2026-02-05 07:30:00+00'),
-  ('CX-H013', 2, 'khalid@innova.cx',
+  ('CX-H013', 2, 'sameer@innovacx.net',
    'MCB replaced. Load redistributed. Full power restored floors 3-4.',
    '2026-02-05 12:00:00+00')
 ) AS v(tc, step_no, email, notes, ts)
@@ -941,52 +934,52 @@ WHERE NOT EXISTS (
 INSERT INTO ticket_resolution_feedback (ticket_id, employee_user_id, decision, suggested_resolution, employee_resolution, final_resolution)
 SELECT t.id, u.id, fb.decision, fb.suggested, fb.custom, fb.final
 FROM (VALUES
-  ('CX-H001','ahmed@innova.cx','accepted',
+  ('CX-H001','ahmed@innovacx.net','accepted',
    'Isolate gas supply and replace faulty valve.',
    NULL, 'Gas supply isolated; faulty valve replaced and area cleared for re-entry.'),
-  ('CX-H002','khalid@innova.cx','accepted',
+  ('CX-H002','sameer@innovacx.net','accepted',
    'Reset tripped MCB and test UPS bypass.',
    NULL, 'Faulty MCB replaced; power restored. UPS tested operational.'),
-  ('CX-H003','bilal@innova.cx','accepted',
+  ('CX-H003','bilal@innovacx.net','accepted',
    'Replace NVR hard drive and restore camera feeds.',
    NULL, 'NVR hard drive replaced; all 48 camera feeds restored.'),
-  ('CX-H004','ahmed@innova.cx','accepted',
+  ('CX-H004','ahmed@innovacx.net','accepted',
    'Activate backup cooling; repair primary unit.',
    NULL, 'Backup cooling activated; primary compressor replaced.'),
-  ('CX-H005','ahmed@innova.cx','accepted',
+  ('CX-H005','ahmed@innovacx.net','accepted',
    'Deploy pumping crew and clear drainage channels.',
    NULL, 'Pumping crew deployed; drainage channel cleared.'),
-  ('CX-H006','omar@innova.cx','accepted',
+  ('CX-H006','yousef@innovacx.net','accepted',
    'Secure rooftop area and review access logs.',
    NULL, 'Area secured; access logs reviewed; door lock replaced.'),
-  ('CX-H007','ahmed@innova.cx','accepted',
+  ('CX-H007','ahmed@innovacx.net','accepted',
    'Replace compressor and recharge refrigerant.',
    NULL, 'Compressor replaced and refrigerant recharged. Cooling restored.'),
-  ('CX-H008','fatima@innova.cx','declined_custom',
+  ('CX-H008','ahmed@innovacx.net','declined_custom',
    'Restart AP controller.',
    'Restart alone insufficient — new access point required for coverage.',
    'New AP installed. Signal verified across all 4 conference rooms.'),
-  ('CX-H009','ahmed@innova.cx','accepted',
+  ('CX-H009','ahmed@innovacx.net','accepted',
    'Replace suppression head and retest.',
    NULL, 'Suppression head replaced; system retested — full pass. Certificate issued.'),
-  ('CX-H010','ahmed@innova.cx','declined_custom',
+  ('CX-H010','ahmed@innovacx.net','declined_custom',
    'Recharge UPS batteries.',
    'Batteries degraded beyond recharge — full module replacement required.',
    'All 12 UPS battery modules replaced; 47-minute runtime certified.'),
-  ('CX-H011','ahmed@innova.cx','accepted',
+  ('CX-H011','ahmed@innovacx.net','accepted',
    'Replace heat exchanger and restore pressure.',
    NULL, 'Heat exchanger replaced; boiler pressure normalised. Heating restored.'),
-  ('CX-H012','fatima@innova.cx','accepted',
+  ('CX-H012','ahmed@innovacx.net','accepted',
    'Renew VPN gateway certificate and update routing.',
    NULL, 'VPN certificate renewed; all remote users confirmed online.'),
-  ('CX-H013','khalid@innova.cx','accepted',
+  ('CX-H013','sameer@innovacx.net','accepted',
    'Replace faulty MCB and redistribute load.',
    NULL, 'Faulty MCB replaced; load redistributed. Full power restored.'),
-  ('CX-H014','bilal@innova.cx','declined_custom',
+  ('CX-H014','bilal@innovacx.net','declined_custom',
    'Replace detector head.',
    'Root cause was accumulated dust — cleaning needed before replacement test.',
    'Detector cleaned and head replaced. No false alarms in 48-hour test.'),
-  ('CX-H015','omar@innova.cx','declined_custom',
+  ('CX-H015','yousef@innovacx.net','declined_custom',
    'Re-encode access card.',
    'Card re-encode insufficient — server-side permission sync required.',
    'Cards re-encoded; permission sync completed. Readers all operational.')
@@ -1014,43 +1007,43 @@ SELECT r.code, t.id, r.rtype::approval_request_type,
 FROM (VALUES
   ('REQ-4001','CX-A001','Rescoring','Priority: High','Priority: Critical',
    'Server room temperature escalating beyond thresholds. Critical impact on all IT operations.',
-   'ahmed@innova.cx','2026-03-01 06:10:00+00','Approved',
-   'manager@innova.cx','2026-03-01 06:20:00+00','Safety-critical — approved immediately.'),
+   'ahmed@innovacx.net','2026-03-01 06:10:00+00','Approved',
+   'hamad@innovacx.net','2026-03-01 06:20:00+00','Safety-critical — approved immediately.'),
   ('REQ-4002','CX-A002','Rerouting','Dept: Maintenance','Dept: Safety & Security',
    'Badge reader failure is an access control issue — Security team must own this.',
-   'omar@innova.cx','2026-03-01 07:40:00+00','Approved',
-   'manager@innova.cx','2026-03-01 07:50:00+00','Correct routing — Security confirmed as owner.'),
+   'yousef@innovacx.net','2026-03-01 07:40:00+00','Approved',
+   'hamad@innovacx.net','2026-03-01 07:50:00+00','Correct routing — Security confirmed as owner.'),
   ('REQ-4003','CX-A009','Rescoring','Priority: Medium','Priority: High',
    'Executive floor leak now affecting documents and IT equipment. Higher priority justified.',
-   'yousef@innova.cx','2026-03-01 11:10:00+00','Pending',
+   'yousef@innovacx.net','2026-03-01 11:10:00+00','Pending',
    NULL, NULL, NULL),
   ('REQ-4004','CX-H015','Rescoring','Priority: Medium','Priority: High',
    'Third recurrence of same issue this month. Pattern suggests systemic fault.',
-   'omar@innova.cx','2026-02-21 09:00:00+00','Pending',
+   'yousef@innovacx.net','2026-02-21 09:00:00+00','Pending',
    NULL, NULL, NULL),
   ('REQ-4005','CX-A003','Rerouting','Dept: Maintenance','Dept: Facilities Management',
    'Elevator is mechanical Facilities asset — should not be logged under Maintenance.',
-   'khalid@innova.cx','2026-03-01 09:00:00+00','Rejected',
-   'manager@innova.cx','2026-03-01 09:30:00+00','Maintenance is correct for mechanical elevators. Keep as is.'),
+   'sameer@innovacx.net','2026-03-01 09:00:00+00','Rejected',
+   'hamad@innovacx.net','2026-03-01 09:30:00+00','Maintenance is correct for mechanical elevators. Keep as is.'),
   ('REQ-4006','CX-A010','Rescoring','Priority: Low','Priority: Medium',
    'Repeated occupancy of emergency access bay is a safety compliance risk.',
-   'hassan@innova.cx','2026-03-01 12:00:00+00','Pending',
+   'yousef@innovacx.net','2026-03-01 12:00:00+00','Pending',
    NULL, NULL, NULL),
   ('REQ-4007','CX-H008','Rerouting','Dept: IT','Dept: Facilities Management',
    'VoIP crackling caused by HVAC vibration near server rack — not a pure IT issue.',
-   'lena@innova.cx','2025-10-15 11:00:00+00','Rejected',
-   'manager@innova.cx','2025-10-15 14:00:00+00','IT confirmed root cause is QoS configuration. Remains in IT.'),
+   'lena@innovacx.net','2025-10-15 11:00:00+00','Rejected',
+   'hamad@innovacx.net','2025-10-15 14:00:00+00','IT confirmed root cause is QoS configuration. Remains in IT.'),
   ('REQ-4008','CX-H014','Rescoring','Priority: Medium','Priority: High',
    'False alarms causing daily evacuations — productivity and safety impact is High not Medium.',
-   'bilal@innova.cx','2026-02-15 10:30:00+00','Approved',
-   'manager@innova.cx','2026-02-15 11:00:00+00','Agreed — daily disruption warrants High priority.'),
+   'bilal@innovacx.net','2026-02-15 10:30:00+00','Approved',
+   'hamad@innovacx.net','2026-02-15 11:00:00+00','Agreed — daily disruption warrants High priority.'),
   ('REQ-4009','CX-A005','Rescoring','Priority: High','Priority: Critical',
    'Water near live electrical sockets. Immediate electrocution risk.',
-   'ziad@innova.cx','2026-03-01 09:20:00+00','Approved',
-   'manager@innova.cx','2026-03-01 09:35:00+00','Electric hazard confirmed — Critical approved.'),
+   'sameer@innovacx.net','2026-03-01 09:20:00+00','Approved',
+   'hamad@innovacx.net','2026-03-01 09:35:00+00','Electric hazard confirmed — Critical approved.'),
   ('REQ-4010','CX-A006','Rerouting','Dept: Facilities Management','Dept: Maintenance',
    'Cleaning scheduling is owned by Maintenance operations team, not Facilities.',
-   'sara@innova.cx','2026-03-01 10:00:00+00','Pending',
+   'sameer@innovacx.net','2026-03-01 10:00:00+00','Pending',
    NULL, NULL, NULL)
 ) AS r(code, tc, rtype, cur, req, reason, sub_email, sub_at, status, dec_email, dec_at, dec_notes)
 JOIN tickets t ON t.ticket_code = r.tc
@@ -1062,64 +1055,64 @@ ON CONFLICT (request_code) DO NOTHING;
 INSERT INTO chat_conversations (id, customer_user_id, channel, created_at, ended_at, status)
 VALUES
   ('aaaaaaaa-0001-0001-0001-000000000001'::uuid,
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'web','2026-03-01 06:15:00+00','2026-03-01 06:35:00+00','closed'),
   ('aaaaaaaa-0002-0002-0002-000000000002'::uuid,
-   (SELECT id FROM users WHERE email='customer2@innova.cx'),
+   (SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'web','2026-03-01 07:25:00+00','2026-03-01 07:45:00+00','closed'),
   ('aaaaaaaa-0003-0003-0003-000000000003'::uuid,
-   (SELECT id FROM users WHERE email='customer3@innova.cx'),
+   (SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'mobile','2026-03-01 08:05:00+00','2026-03-01 08:20:00+00','closed'),
   ('aaaaaaaa-0004-0004-0004-000000000004'::uuid,
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'web','2026-03-01 09:00:00+00',NULL,'open'),
   ('aaaaaaaa-0005-0005-0005-000000000005'::uuid,
-   (SELECT id FROM users WHERE email='customer2@innova.cx'),
+   (SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'web','2026-02-28 14:00:00+00','2026-02-28 14:12:00+00','closed'),
   ('aaaaaaaa-0006-0006-0006-000000000006'::uuid,
-   (SELECT id FROM users WHERE email='customer3@innova.cx'),
+   (SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'web','2026-02-27 10:00:00+00','2026-02-27 10:20:00+00','closed'),
   ('aaaaaaaa-0007-0007-0007-000000000007'::uuid,
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'mobile','2026-02-25 11:00:00+00','2026-02-25 11:25:00+00','closed'),
   ('aaaaaaaa-0008-0008-0008-000000000008'::uuid,
-   (SELECT id FROM users WHERE email='customer2@innova.cx'),
+   (SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'web','2026-02-20 09:00:00+00','2026-02-20 09:10:00+00','closed'),
   ('aaaaaaaa-0009-0009-0009-000000000009'::uuid,
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'web','2026-02-15 16:00:00+00','2026-02-15 16:30:00+00','closed'),
   ('aaaaaaaa-0010-0010-0010-000000000010'::uuid,
-   (SELECT id FROM users WHERE email='customer3@innova.cx'),
+   (SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'mobile','2026-02-10 08:00:00+00','2026-02-10 08:18:00+00','closed'),
   ('aaaaaaaa-0011-0011-0011-000000000011'::uuid,
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'web','2026-01-22 13:00:00+00','2026-01-22 13:15:00+00','closed'),
   ('aaaaaaaa-0012-0012-0012-000000000012'::uuid,
-   (SELECT id FROM users WHERE email='customer2@innova.cx'),
+   (SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'web','2026-01-10 09:30:00+00','2026-01-10 09:45:00+00','closed'),
   ('aaaaaaaa-0013-0013-0013-000000000013'::uuid,
-   (SELECT id FROM users WHERE email='customer3@innova.cx'),
+   (SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'mobile','2025-12-05 10:00:00+00','2025-12-05 10:22:00+00','closed'),
   ('aaaaaaaa-0014-0014-0014-000000000014'::uuid,
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'web','2025-11-18 14:30:00+00','2025-11-18 14:50:00+00','closed'),
   ('aaaaaaaa-0015-0015-0015-000000000015'::uuid,
-   (SELECT id FROM users WHERE email='customer2@innova.cx'),
+   (SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'web','2025-10-12 08:45:00+00','2025-10-12 09:00:00+00','closed'),
   ('aaaaaaaa-0016-0016-0016-000000000016'::uuid,
-   (SELECT id FROM users WHERE email='customer3@innova.cx'),
+   (SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'web','2025-09-08 11:00:00+00','2025-09-08 11:20:00+00','closed'),
   ('aaaaaaaa-0017-0017-0017-000000000017'::uuid,
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'mobile','2025-08-20 07:30:00+00','2025-08-20 07:50:00+00','closed'),
   ('aaaaaaaa-0018-0018-0018-000000000018'::uuid,
-   (SELECT id FROM users WHERE email='customer2@innova.cx'),
+   (SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'web','2025-07-14 15:00:00+00','2025-07-14 15:18:00+00','closed'),
   ('aaaaaaaa-0019-0019-0019-000000000019'::uuid,
-   (SELECT id FROM users WHERE email='customer3@innova.cx'),
+   (SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'web','2025-06-10 09:00:00+00','2025-06-10 09:12:00+00','closed'),
   ('aaaaaaaa-0020-0020-0020-000000000020'::uuid,
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'web','2025-05-22 10:00:00+00','2025-05-22 10:30:00+00','closed')
 ON CONFLICT (id) DO NOTHING;
 
@@ -1130,7 +1123,7 @@ INSERT INTO chat_messages (conversation_id, sender_type, sender_user_id, message
 VALUES
   -- Conv 1: CX-A001 escalation
   ('aaaaaaaa-0001-0001-0001-000000000001'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'The server room AC is completely down! Temperature is at 32 degrees and rising!',
    '2026-03-01 06:15:30+00','report_issue','HVAC',-0.85,FALSE,NULL),
   ('aaaaaaaa-0001-0001-0001-000000000001'::uuid, 'bot', NULL,
@@ -1144,7 +1137,7 @@ VALUES
 
   -- Conv 2: CX-A002 escalation
   ('aaaaaaaa-0002-0002-0002-000000000002'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer2@innova.cx'),
+   (SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'All badge readers at Gate 2 are refusing our cards. 30 people stuck outside!',
    '2026-03-01 07:25:30+00','report_issue','Access Control',-0.80,FALSE,NULL),
   ('aaaaaaaa-0002-0002-0002-000000000002'::uuid, 'bot', NULL,
@@ -1158,7 +1151,7 @@ VALUES
 
   -- Conv 3: elevator inquiry
   ('aaaaaaaa-0003-0003-0003-000000000003'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer3@innova.cx'),
+   (SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'The elevator in Tower 2 is stuck between floors and the alarm keeps going off.',
    '2026-03-01 08:05:30+00','report_issue','Elevator',-0.60,FALSE,NULL),
   ('aaaaaaaa-0003-0003-0003-000000000003'::uuid, 'bot', NULL,
@@ -1166,13 +1159,13 @@ VALUES
    '2026-03-01 08:05:50+00','create_ticket','Elevator',0.10,FALSE,
    (SELECT id FROM tickets WHERE ticket_code='CX-A003')),
   ('aaaaaaaa-0003-0003-0003-000000000003'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer3@innova.cx'),
+   (SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'Thank you. Please make sure someone comes quickly.',
    '2026-03-01 08:06:30+00','close','Elevator',0.20,FALSE,NULL),
 
   -- Conv 4: open chat (ongoing)
   ('aaaaaaaa-0004-0004-0004-000000000004'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'What is the expected resolution time for ticket CX-A001?',
    '2026-03-01 09:00:30+00','inquiry','HVAC',0.00,FALSE,NULL),
   ('aaaaaaaa-0004-0004-0004-000000000004'::uuid, 'bot', NULL,
@@ -1182,20 +1175,20 @@ VALUES
 
   -- Conv 5: FAQ, no escalation
   ('aaaaaaaa-0005-0005-0005-000000000005'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer2@innova.cx'),
+   (SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'What are the SLA times for critical tickets?',
    '2026-02-28 14:00:30+00','inquiry','General',0.10,FALSE,NULL),
   ('aaaaaaaa-0005-0005-0005-000000000005'::uuid, 'bot', NULL,
    'Critical tickets have a 30-minute response SLA and 6-hour resolution SLA.',
    '2026-02-28 14:00:45+00','answer','General',0.50,FALSE,NULL),
   ('aaaaaaaa-0005-0005-0005-000000000005'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer2@innova.cx'),
+   (SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'Perfect, thank you.',
    '2026-02-28 14:01:10+00','close','General',0.80,FALSE,NULL),
 
   -- Conv 6: complaint
   ('aaaaaaaa-0006-0006-0006-000000000006'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer3@innova.cx'),
+   (SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'Nobody has cleaned the restrooms in Block D for two days. This is unacceptable!',
    '2026-02-27 10:00:30+00','complaint','Cleaning',-0.70,FALSE,NULL),
   ('aaaaaaaa-0006-0006-0006-000000000006'::uuid, 'bot', NULL,
@@ -1204,7 +1197,7 @@ VALUES
 
   -- Conv 7: aggressive user (flagged)
   ('aaaaaaaa-0007-0007-0007-000000000007'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'I have called 3 times and nobody has fixed the AC yet! This is absolutely disgraceful!',
    '2026-02-25 11:00:30+00','complaint','HVAC',-0.95,FALSE,NULL),
   ('aaaaaaaa-0007-0007-0007-000000000007'::uuid, 'bot', NULL,
@@ -1217,7 +1210,7 @@ VALUES
 
   -- Conv 8–20: brief interactions for volume/analytics
   ('aaaaaaaa-0008-0008-0008-000000000008'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer2@innova.cx'),
+   (SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'Can I track the status of my ticket CX-H015?',
    '2026-02-20 09:00:30+00','inquiry','General',0.00,FALSE,NULL),
   ('aaaaaaaa-0008-0008-0008-000000000008'::uuid, 'bot', NULL,
@@ -1226,7 +1219,7 @@ VALUES
    (SELECT id FROM tickets WHERE ticket_code='CX-H015')),
 
   ('aaaaaaaa-0009-0009-0009-000000000009'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer1@innova.cx'),
+   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'How do I submit a maintenance request for a broken window?',
    '2026-02-15 16:00:30+00','inquiry','General',0.10,FALSE,NULL),
   ('aaaaaaaa-0009-0009-0009-000000000009'::uuid, 'bot', NULL,
@@ -1234,7 +1227,7 @@ VALUES
    '2026-02-15 16:00:48+00','answer','General',0.50,FALSE,NULL),
 
   ('aaaaaaaa-0010-0010-0010-000000000010'::uuid, 'customer',
-   (SELECT id FROM users WHERE email='customer3@innova.cx'),
+   (SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'The perimeter fence near the west entrance has collapsed.',
    '2026-02-10 08:00:30+00','report_issue','Security',-0.50,FALSE,NULL),
   ('aaaaaaaa-0010-0010-0010-000000000010'::uuid, 'bot', NULL,
@@ -1247,7 +1240,7 @@ VALUES
 -- =============================================================================
 INSERT INTO sessions (user_id, current_state, context, history, created_at, updated_at, bot_model_version, escalated_to_human, escalated_at, linked_ticket_id)
 VALUES
-  ((SELECT id FROM users WHERE email='customer1@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'resolved',
    '{"last_intent":"report_issue","asset":"HVAC","building":"A","floor":"Ground"}',
    '[{"role":"user","msg":"AC down in server room"},{"role":"bot","msg":"Escalating"},{"role":"operator","msg":"Ticket raised"}]',
@@ -1255,7 +1248,7 @@ VALUES
    TRUE,'2026-03-01 06:18:00+00',
    (SELECT id FROM tickets WHERE ticket_code='CX-A001')),
 
-  ((SELECT id FROM users WHERE email='customer2@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'resolved',
    '{"last_intent":"report_issue","asset":"Access Control","building":"Main","gate":"Gate2"}',
    '[{"role":"user","msg":"Badge readers down"},{"role":"bot","msg":"Escalating"},{"role":"operator","msg":"Omar dispatched"}]',
@@ -1263,7 +1256,7 @@ VALUES
    TRUE,'2026-03-01 07:27:00+00',
    (SELECT id FROM tickets WHERE ticket_code='CX-A002')),
 
-  ((SELECT id FROM users WHERE email='customer3@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'resolved',
    '{"last_intent":"report_issue","asset":"Elevator","building":"Tower2","floors":"4-5"}',
    '[{"role":"user","msg":"Elevator stuck"},{"role":"bot","msg":"Ticket raised"}]',
@@ -1271,35 +1264,35 @@ VALUES
    FALSE, NULL,
    (SELECT id FROM tickets WHERE ticket_code='CX-A003')),
 
-  ((SELECT id FROM users WHERE email='customer1@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'collecting_info',
    '{"last_intent":"inquiry","topic":"ticket_status"}',
    '[{"role":"user","msg":"Status of CX-A001?"}]',
    '2026-03-01 09:00:00+00','2026-03-01 09:01:00+00','chatbot-v2.1',
    FALSE, NULL, NULL),
 
-  ((SELECT id FROM users WHERE email='customer2@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'resolved',
    '{"last_intent":"inquiry","topic":"sla_times"}',
    '[{"role":"user","msg":"SLA for critical?"},{"role":"bot","msg":"30 min response, 6 hour resolve"}]',
    '2026-02-28 14:00:00+00','2026-02-28 14:12:00+00','chatbot-v2.1',
    FALSE, NULL, NULL),
 
-  ((SELECT id FROM users WHERE email='customer1@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'resolved',
    '{"last_intent":"complaint","topic":"cleaning","block":"D"}',
    '[{"role":"user","msg":"Restrooms not cleaned"},{"role":"bot","msg":"Ticket raised"}]',
    '2026-02-27 10:00:00+00','2026-02-27 10:20:00+00','chatbot-v2.1',
    FALSE, NULL, NULL),
 
-  ((SELECT id FROM users WHERE email='customer1@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'resolved',
    '{"last_intent":"complaint","topic":"HVAC","escalation_reason":"repeated_failure"}',
    '[{"role":"user","msg":"AC still not fixed"},{"role":"bot","msg":"Connecting to operator"},{"role":"operator","msg":"Escalated to manager"}]',
    '2026-02-25 11:00:00+00','2026-02-25 11:25:00+00','chatbot-v2.1',
    TRUE,'2026-02-25 11:03:00+00', NULL),
 
-  ((SELECT id FROM users WHERE email='customer2@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'resolved',
    '{"last_intent":"inquiry","topic":"ticket_status","ticket":"CX-H015"}',
    '[{"role":"user","msg":"Status of CX-H015?"},{"role":"bot","msg":"Overdue"}]',
@@ -1307,84 +1300,84 @@ VALUES
    FALSE, NULL,
    (SELECT id FROM tickets WHERE ticket_code='CX-H015')),
 
-  ((SELECT id FROM users WHERE email='customer1@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'resolved',
    '{"last_intent":"inquiry","topic":"how_to_submit"}',
    '[{"role":"user","msg":"How to raise a ticket?"},{"role":"bot","msg":"Use Complaints section"}]',
    '2026-02-15 16:00:00+00','2026-02-15 16:30:00+00','chatbot-v2.1',
    FALSE, NULL, NULL),
 
-  ((SELECT id FROM users WHERE email='customer3@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'resolved',
    '{"last_intent":"report_issue","asset":"Security","location":"west_fence"}',
    '[{"role":"user","msg":"Fence collapsed"},{"role":"bot","msg":"High ticket raised"}]',
    '2026-02-10 08:00:00+00','2026-02-10 08:18:00+00','chatbot-v2.1',
    FALSE, NULL, NULL),
 
-  ((SELECT id FROM users WHERE email='customer1@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'resolved',
    '{"last_intent":"inquiry","topic":"support_hours"}',
    '[{"role":"user","msg":"Support hours?"},{"role":"bot","msg":"24/7 for critical"}]',
    '2026-01-22 13:00:00+00','2026-01-22 13:15:00+00','chatbot-v2.0',
    FALSE, NULL, NULL),
 
-  ((SELECT id FROM users WHERE email='customer2@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'resolved',
    '{"last_intent":"report_issue","asset":"Network","building":"Tower1","floor":5}',
    '[{"role":"user","msg":"No network on floor 5"},{"role":"bot","msg":"Ticket raised"}]',
    '2026-01-10 09:30:00+00','2026-01-10 09:45:00+00','chatbot-v2.0',
    FALSE, NULL, NULL),
 
-  ((SELECT id FROM users WHERE email='customer3@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'resolved',
    '{"last_intent":"report_issue","asset":"HVAC","building":"B","floor":2}',
    '[{"role":"user","msg":"No heating on floor 2"},{"role":"bot","msg":"Ticket raised"}]',
    '2025-12-05 10:00:00+00','2025-12-05 10:22:00+00','chatbot-v2.0',
    FALSE, NULL, NULL),
 
-  ((SELECT id FROM users WHERE email='customer1@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'resolved',
    '{"last_intent":"complaint","topic":"cleaning","floor":3}',
    '[{"role":"user","msg":"Floor 3 not cleaned"},{"role":"bot","msg":"Ticket raised"}]',
    '2025-11-18 14:30:00+00','2025-11-18 14:50:00+00','chatbot-v2.0',
    FALSE, NULL, NULL),
 
-  ((SELECT id FROM users WHERE email='customer2@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'resolved',
    '{"last_intent":"inquiry","topic":"wifi","building":"C","rooms":"conference"}',
    '[{"role":"user","msg":"No WiFi in conference rooms"},{"role":"bot","msg":"Medium ticket raised"}]',
    '2025-10-12 08:45:00+00','2025-10-12 09:00:00+00','chatbot-v2.0',
    FALSE, NULL, NULL),
 
-  ((SELECT id FROM users WHERE email='customer3@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'resolved',
    '{"last_intent":"report_issue","asset":"Security","type":"intruder_alert"}',
    '[{"role":"user","msg":"Intruder on roof"},{"role":"bot","msg":"Critical ticket — escalating to operator"}]',
    '2025-09-08 11:00:00+00','2025-09-08 11:20:00+00','chatbot-v2.0',
    TRUE,'2025-09-08 11:02:00+00', NULL),
 
-  ((SELECT id FROM users WHERE email='customer1@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'resolved',
    '{"last_intent":"report_issue","asset":"Security","type":"intruder"}',
    '[{"role":"user","msg":"Motion on rooftop"},{"role":"bot","msg":"Critical ticket raised"}]',
    '2025-08-20 07:30:00+00','2025-08-20 07:50:00+00','chatbot-v2.0',
    TRUE,'2025-08-20 07:32:00+00', NULL),
 
-  ((SELECT id FROM users WHERE email='customer2@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer2@innovacx.net'),
    'resolved',
    '{"last_intent":"report_issue","asset":"HVAC","building":"Main","floor":"Basement"}',
    '[{"role":"user","msg":"Basement flooding"},{"role":"bot","msg":"Critical ticket raised"}]',
    '2025-07-14 15:00:00+00','2025-07-14 15:18:00+00','chatbot-v2.0',
    TRUE,'2025-07-14 15:03:00+00', NULL),
 
-  ((SELECT id FROM users WHERE email='customer3@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer3@innovacx.net'),
    'resolved',
    '{"last_intent":"inquiry","topic":"fire_safety"}',
    '[{"role":"user","msg":"What do I do in a fire?"},{"role":"bot","msg":"Answered with evacuation procedure"}]',
    '2025-06-10 09:00:00+00','2025-06-10 09:12:00+00','chatbot-v2.0',
    FALSE, NULL, NULL),
 
-  ((SELECT id FROM users WHERE email='customer1@innova.cx'),
+  ((SELECT id FROM users WHERE email='customer1@innovacx.net'),
    'resolved',
    '{"last_intent":"report_issue","asset":"CCTV","type":"system_down"}',
    '[{"role":"user","msg":"All CCTV down"},{"role":"bot","msg":"Critical ticket raised — escalating"}]',
@@ -1403,64 +1396,64 @@ SELECT
   v.sent, v.cat, v.resp_ms,
   CASE WHEN v.tc IS NOT NULL THEN (SELECT id FROM tickets WHERE ticket_code = v.tc) ELSE NULL END
 FROM (VALUES
-  ('customer1@innova.cx','2026-03-01 06:15:30+00',
+  ('customer1@innovacx.net','2026-03-01 06:15:30+00',
    'The server room AC is completely down. Temperature is at 32 degrees!',
    'report_issue',FALSE,0.0180,-0.85,'HVAC',NULL,'CX-A001'),
-  ('customer2@innova.cx','2026-03-01 07:25:30+00',
+  ('customer2@innovacx.net','2026-03-01 07:25:30+00',
    'Badge readers at Gate 2 are refusing all cards. 30 people stuck outside!',
    'report_issue',FALSE,0.0250,-0.80,'Access Control',NULL,'CX-A002'),
-  ('customer3@innova.cx','2026-03-01 08:05:30+00',
+  ('customer3@innovacx.net','2026-03-01 08:05:30+00',
    'The elevator in Tower 2 is stuck and alarm keeps going off.',
    'report_issue',FALSE,0.0150,-0.60,'Elevator',1100,'CX-A003'),
-  ('customer1@innova.cx','2026-03-01 09:00:30+00',
+  ('customer1@innovacx.net','2026-03-01 09:00:30+00',
    'What is the expected resolution time for ticket CX-A001?',
    'inquiry',FALSE,0.0080,0.00,'HVAC',800,NULL),
-  ('customer2@innova.cx','2026-02-28 14:00:30+00',
+  ('customer2@innovacx.net','2026-02-28 14:00:30+00',
    'What are the SLA times for critical tickets?',
    'inquiry',FALSE,0.0060,0.10,'General',650,NULL),
-  ('customer1@innova.cx','2026-02-27 10:00:30+00',
+  ('customer1@innovacx.net','2026-02-27 10:00:30+00',
    'Nobody has cleaned the restrooms in Block D for two days. Unacceptable!',
    'complaint',FALSE,0.3200,-0.70,'Cleaning',950,NULL),
-  ('customer1@innova.cx','2026-02-25 11:00:30+00',
+  ('customer1@innovacx.net','2026-02-25 11:00:30+00',
    'I have called 3 times and nobody fixed the AC yet. Absolutely disgraceful!',
    'complaint',TRUE,0.8100,-0.95,'HVAC',NULL,NULL),
-  ('customer2@innova.cx','2026-02-20 09:00:30+00',
+  ('customer2@innovacx.net','2026-02-20 09:00:30+00',
    'Can I track the status of my ticket CX-H015?',
    'inquiry',FALSE,0.0050,0.00,'General',700,'CX-H015'),
-  ('customer1@innova.cx','2026-02-15 16:00:30+00',
+  ('customer1@innovacx.net','2026-02-15 16:00:30+00',
    'How do I submit a maintenance request for a broken window?',
    'inquiry',FALSE,0.0040,0.10,'General',580,NULL),
-  ('customer3@innova.cx','2026-02-10 08:00:30+00',
+  ('customer3@innovacx.net','2026-02-10 08:00:30+00',
    'The perimeter fence near the west entrance has completely collapsed.',
    'report_issue',FALSE,0.0200,-0.50,'Security',920,NULL),
-  ('customer1@innova.cx','2026-01-22 13:00:30+00',
+  ('customer1@innovacx.net','2026-01-22 13:00:30+00',
    'What are your support hours for facilities management?',
    'inquiry',FALSE,0.0030,0.10,'General',610,NULL),
-  ('customer2@innova.cx','2026-01-10 09:30:30+00',
+  ('customer2@innovacx.net','2026-01-10 09:30:30+00',
    'All workstations on Floor 5 have no network access since this morning.',
    'report_issue',FALSE,0.0120,-0.40,'Network',NULL,NULL),
-  ('customer3@innova.cx','2025-12-05 10:00:30+00',
+  ('customer3@innovacx.net','2025-12-05 10:00:30+00',
    'There is no heating on the second floor of Building B.',
    'report_issue',FALSE,0.0100,-0.35,'HVAC',1000,NULL),
-  ('customer1@innova.cx','2025-11-18 14:30:30+00',
+  ('customer1@innovacx.net','2025-11-18 14:30:30+00',
    'The third floor has not been cleaned today and it is very messy.',
    'complaint',FALSE,0.1800,-0.45,'Cleaning',870,NULL),
-  ('customer2@innova.cx','2025-10-12 08:45:30+00',
+  ('customer2@innovacx.net','2025-10-12 08:45:30+00',
    'Wi-Fi in all conference rooms on Floor 3 is completely down.',
    'report_issue',FALSE,0.0140,-0.30,'IT',940,NULL),
-  ('customer3@innova.cx','2025-09-08 11:00:30+00',
+  ('customer3@innovacx.net','2025-09-08 11:00:30+00',
    'Motion sensors went off on the rooftop at 3 AM — possible intruder.',
    'report_issue',FALSE,0.0500,-0.55,'Security',1150,NULL),
-  ('customer1@innova.cx','2025-08-20 07:30:30+00',
+  ('customer1@innovacx.net','2025-08-20 07:30:30+00',
    'Security camera system is completely offline — all cameras showing no signal.',
    'report_issue',FALSE,0.0220,-0.65,'Security',NULL,NULL),
-  ('customer2@innova.cx','2025-07-14 15:00:30+00',
+  ('customer2@innovacx.net','2025-07-14 15:00:30+00',
    'The basement carpark is flooding from the heavy rain.',
    'report_issue',FALSE,0.0380,-0.78,'Civil',NULL,NULL),
-  ('customer1@innova.cx','2025-06-10 09:00:30+00',
+  ('customer1@innovacx.net','2025-06-10 09:00:30+00',
    'What should I do if I smell gas in the building?',
    'inquiry',FALSE,0.0050,0.05,'Safety',620,NULL),
-  ('customer3@innova.cx','2025-05-22 10:00:30+00',
+  ('customer3@innovacx.net','2025-05-22 10:00:30+00',
    'All cameras on the security monitoring system are showing no signal.',
    'report_issue',FALSE,0.0280,-0.72,'Security',NULL,NULL)
 ) AS v(email, ts, msg, intent, agg, agg_score, sent, cat, resp_ms, tc)
@@ -1565,132 +1558,204 @@ SELECT
   CASE WHEN v.tc IS NOT NULL THEN (SELECT id FROM tickets WHERE ticket_code = v.tc) ELSE NULL END,
   v.read_flag, v.ts::timestamptz
 FROM (VALUES
-  -- Manager notifications
-  ('manager@innova.cx','sla_warning','SLA Warning — CX-A001',
-   'Critical ticket CX-A001 (HVAC Server Room) is approaching resolve SLA. 2 hours remaining.',
-   'Critical','CX-A001',FALSE,'2026-03-01 10:00:00+00'),
-  ('manager@innova.cx','status_change','Ticket Escalated — CX-A002',
-   'CX-A002 (Gate 2 badge readers down) — 32 staff affected. Operator assigned.',
-   'Critical','CX-A002',FALSE,'2026-03-01 07:40:00+00'),
-  ('manager@innova.cx','ticket_assignment','Approval Requested — REQ-4003',
-   'Yousef Karim requested priority upgrade for CX-A009 (Roof leak – Executive floor).',
-   'High','CX-A009',FALSE,'2026-03-01 11:10:00+00'),
-  ('manager@innova.cx','sla_warning','SLA Breached — CX-H015',
-   'CX-H015 (Parking card failures) has exceeded response SLA. Immediate action required.',
-   'Medium','CX-H015',TRUE,'2026-02-20 11:31:00+00'),
-  ('manager@innova.cx','ticket_assignment','Approval Requested — REQ-4004',
-   'Omar Ali submitted a rescoring request for CX-H015 — third recurrence of same issue.',
-   'Medium','CX-H015',FALSE,'2026-02-21 09:00:00+00'),
-  ('manager@innova.cx','status_change','Approval Approved — REQ-4008',
-   'You approved the rescoring of CX-H014 from Medium to High. Bilal Khan notified.',
-   'High','CX-H014',TRUE,'2026-02-15 11:00:00+00'),
-  ('manager@innova.cx','ticket_assignment','Approval Requested — REQ-4006',
-   'Hassan Zuberi requested priority change for CX-A010 (Parking bay dispute) to Medium.',
-   'Low','CX-A010',FALSE,'2026-03-01 12:00:00+00'),
-  ('manager@innova.cx','report_ready','March 2026 Analytics Ready',
+  -- =========================================================================
+  -- Manager notifications — routed to the manager who OWNS the ticket's dept.
+  -- Dept→Manager: IT=hamad, HR=leen, Legal=rami, Maintenance=majid,
+  --               Safety&Security=ali, Leasing=yara, FM=hana
+  -- =========================================================================
+
+  -- Hamad (IT) notifications
+  ('hamad@innovacx.net','ticket_assignment','Approval Requested — REQ-4007',
+   'Lena Musa requested rerouting of CX-H008 (VoIP crackling) from IT to Facilities.',
+   'Medium','CX-H008',FALSE,'2025-10-15 11:00:00+00'),
+  ('hamad@innovacx.net','status_change','Approval Decision — REQ-4007',
+   'You rejected the rerouting of CX-H008. Root cause confirmed as IT QoS issue.',
+   'Medium','CX-H008',TRUE,'2025-10-15 14:00:00+00'),
+  ('hamad@innovacx.net','report_ready','March 2026 Analytics Ready',
    'The monthly analytics report for March 2026 has been generated and is available.',
    NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
 
+  -- Hana (Facilities Management) notifications
+  ('hana@innovacx.net','sla_warning','SLA Warning — CX-A001',
+   'Critical ticket CX-A001 (HVAC Server Room) is approaching resolve SLA. 2 hours remaining.',
+   'Critical','CX-A001',FALSE,'2026-03-01 10:00:00+00'),
+  ('hana@innovacx.net','ticket_assignment','Approval Requested — REQ-4003',
+   'Yousef Madi requested priority upgrade for CX-A009 (Roof leak – Executive floor).',
+   'High','CX-A009',FALSE,'2026-03-01 11:10:00+00'),
+  ('hana@innovacx.net','ticket_assignment','Approval Requested — REQ-4005',
+   'Sameer Ahmed requested rerouting of CX-A003 (Elevator B stuck) to Facilities Management.',
+   'High','CX-A003',FALSE,'2026-03-01 09:00:00+00'),
+  ('hana@innovacx.net','status_change','Approval Rejected — REQ-4005',
+   'You rejected the rerouting of CX-A003. Maintenance remains the correct owner.',
+   'High','CX-A003',TRUE,'2026-03-01 09:30:00+00'),
+  ('hana@innovacx.net','ticket_assignment','Approval Requested — REQ-4010',
+   'Sameer Ahmed requested rerouting of CX-A006 (Cleaning missed Block D) to Maintenance.',
+   'Medium','CX-A006',FALSE,'2026-03-01 10:00:00+00'),
+  ('hana@innovacx.net','report_ready','March 2026 Analytics Ready',
+   'The monthly analytics report for March 2026 has been generated and is available.',
+   NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
+
+  -- Ali (Safety & Security) notifications
+  ('ali@innovacx.net','status_change','Ticket Escalated — CX-A002',
+   'CX-A002 (Gate 2 badge readers down) — 32 staff affected. Operator assigned.',
+   'Critical','CX-A002',FALSE,'2026-03-01 07:40:00+00'),
+  ('ali@innovacx.net','sla_warning','SLA Breached — CX-H015',
+   'CX-H015 (Parking card failures) has exceeded response SLA. Immediate action required.',
+   'Medium','CX-H015',TRUE,'2026-02-20 11:31:00+00'),
+  ('ali@innovacx.net','ticket_assignment','Approval Requested — REQ-4004',
+   'Yousef Madi submitted a rescoring request for CX-H015 — third recurrence of same issue.',
+   'Medium','CX-H015',FALSE,'2026-02-21 09:00:00+00'),
+  ('ali@innovacx.net','status_change','Approval Approved — REQ-4008',
+   'You approved the rescoring of CX-H014 from Medium to High. Bilal Khan notified.',
+   'High','CX-H014',TRUE,'2026-02-15 11:00:00+00'),
+  ('ali@innovacx.net','ticket_assignment','Approval Requested — REQ-4006',
+   'Yousef Madi requested priority change for CX-A010 (Parking bay dispute) to Medium.',
+   'Low','CX-A010',FALSE,'2026-03-01 12:00:00+00'),
+  ('ali@innovacx.net','report_ready','March 2026 Analytics Ready',
+   'The monthly analytics report for March 2026 has been generated and is available.',
+   NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
+
+  -- Leen (HR) notifications
+  ('leen@innovacx.net','ticket_assignment','Approval Requested — REQ-4007-HR',
+   'Lena Musa submitted a rerouting request for CX-H008 (VoIP crackling). Review pending.',
+   'Medium','CX-H008',FALSE,'2025-10-15 11:05:00+00'),
+  ('leen@innovacx.net','sla_warning','SLA Warning — CX-HR001',
+   'Ticket CX-HR001 (HR onboarding system outage) is approaching resolve SLA deadline.',
+   'High', NULL, FALSE,'2026-03-02 09:00:00+00'),
+  ('leen@innovacx.net','report_ready','March 2026 Analytics Ready',
+   'The monthly analytics report for March 2026 has been generated and is available.',
+   NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
+  ('leen@innovacx.net','system','Scheduled Maintenance Tonight',
+   'System maintenance window: tonight 11 PM – 2 AM. No ticket disruption expected.',
+   NULL, NULL, TRUE,'2026-02-28 16:00:00+00'),
+
+  -- Rami (Legal & Compliance) notifications
+  ('rami@innovacx.net','report_ready','March 2026 Analytics Ready',
+   'The monthly analytics report for March 2026 has been generated and is available.',
+   NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
+  ('rami@innovacx.net','system','Compliance audit scheduled',
+   'Quarterly legal compliance audit is scheduled for next week. Prepare documentation.',
+   NULL, NULL, FALSE,'2026-03-01 08:00:00+00'),
+
+  -- Majid (Maintenance) notifications
+  ('majid@innovacx.net','ticket_assignment','Approval Requested — REQ-4009',
+   'Sameer Ahmed requested priority escalation for CX-A005 (water near live sockets) to Critical.',
+   'High','CX-A005',FALSE,'2026-03-01 09:20:00+00'),
+  ('majid@innovacx.net','status_change','Approval Approved — REQ-4009',
+   'You approved CX-A005 escalation to Critical. Electric hazard confirmed.',
+   'Critical','CX-A005',TRUE,'2026-03-01 09:35:00+00'),
+  ('majid@innovacx.net','report_ready','March 2026 Analytics Ready',
+   'The monthly analytics report for March 2026 has been generated and is available.',
+   NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
+
+  -- Yara (Leasing) notifications
+  ('yara@innovacx.net','report_ready','March 2026 Analytics Ready',
+   'The monthly analytics report for March 2026 has been generated and is available.',
+   NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
+  ('yara@innovacx.net','system','Lease renewal queue update',
+   'Five lease renewal tickets are pending assignment this week.',
+   NULL, NULL, FALSE,'2026-03-01 08:30:00+00'),
+
   -- Ahmed notifications
-  ('ahmed@innova.cx','ticket_assignment','New Ticket Assigned: CX-A001',
+  ('ahmed@innovacx.net','ticket_assignment','New Ticket Assigned: CX-A001',
    'You have been assigned CX-A001 — HVAC offline in Server Room B. Critical priority.',
    'Critical','CX-A001',FALSE,'2026-03-01 06:08:00+00'),
-  ('ahmed@innova.cx','sla_warning','SLA Warning: CX-A001',
+  ('ahmed@innovacx.net','sla_warning','SLA Warning: CX-A001',
    'CX-A001 resolve deadline is in 2 hours. Ensure completion before 12:00.',
    'Critical','CX-A001',FALSE,'2026-03-01 10:00:00+00'),
-  ('ahmed@innova.cx','customer_reply','Customer replied on CX-H010',
+  ('ahmed@innovacx.net','customer_reply','Customer replied on CX-H010',
    'Customer confirmed UPS replacement resolved issue. Awaiting formal ticket closure.',
    'Critical','CX-H010',TRUE,'2025-12-10 22:00:00+00'),
-  ('ahmed@innova.cx','report_ready','February 2026 Report Ready',
+  ('ahmed@innovacx.net','report_ready','February 2026 Report Ready',
    'Your performance report for February 2026 is now available.',
    NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
-  ('ahmed@innova.cx','status_change','Ticket Resolved: CX-H011',
+  ('ahmed@innovacx.net','status_change','Ticket Resolved: CX-H011',
    'Ticket CX-H011 (Boiler failure – Building A) has been marked Resolved.',
    'Critical','CX-H011',TRUE,'2026-01-08 19:00:00+00'),
 
   -- Maria notifications
-  ('maria@innova.cx','ticket_assignment','New Ticket Assigned: CX-A008',
+  ('sarah@innovacx.net','ticket_assignment','New Ticket Assigned: CX-A008',
    'You have been assigned CX-A008 — VoIP dropping calls – Finance. Medium priority.',
    'Medium','CX-A008',FALSE,'2026-03-01 10:45:00+00'),
-  ('maria@innova.cx','report_ready','February 2026 Report Ready',
+  ('sarah@innovacx.net','report_ready','February 2026 Report Ready',
    'Your performance report for February 2026 is now available.',
    NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
-  ('maria@innova.cx','sla_warning','SLA Warning: CX-A008',
+  ('sarah@innovacx.net','sla_warning','SLA Warning: CX-A008',
    'CX-A008 response deadline is in 30 minutes.',
    'Medium','CX-A008',FALSE,'2026-03-01 13:00:00+00'),
 
   -- Omar notifications
-  ('omar@innova.cx','ticket_assignment','New Ticket Assigned: CX-A002',
+  ('yousef@innovacx.net','ticket_assignment','New Ticket Assigned: CX-A002',
    'You have been assigned CX-A002 — Gate 2 access failure. Critical priority.',
    'Critical','CX-A002',FALSE,'2026-03-01 07:35:00+00'),
-  ('omar@innova.cx','sla_warning','SLA Warning: CX-A002',
+  ('yousef@innovacx.net','sla_warning','SLA Warning: CX-A002',
    'CX-A002 resolve deadline is in 5 hours. Multiple staff still blocked.',
    'Critical','CX-A002',FALSE,'2026-03-01 08:30:00+00'),
-  ('omar@innova.cx','status_change','Approval Decision: REQ-4004',
+  ('yousef@innovacx.net','status_change','Approval Decision: REQ-4004',
    'Your rescoring request REQ-4004 for CX-H015 is pending manager review.',
    'Medium','CX-H015',FALSE,'2026-02-21 09:15:00+00'),
-  ('omar@innova.cx','system','Scheduled Maintenance Tonight',
+  ('yousef@innovacx.net','system','Scheduled Maintenance Tonight',
    'System maintenance window: tonight 11 PM – 2 AM. No ticket disruption expected.',
    NULL, NULL, TRUE,'2026-02-28 16:00:00+00'),
 
   -- Sara notifications
-  ('sara@innova.cx','ticket_assignment','New Ticket Assigned: CX-A006',
+  ('sameer@innovacx.net','ticket_assignment','New Ticket Assigned: CX-A006',
    'You have been assigned CX-A006 — Cleaning missed Block D. Medium priority.',
    'Medium','CX-A006',FALSE,'2026-03-01 09:45:00+00'),
-  ('sara@innova.cx','customer_reply','Customer replied on CX-H015',
+  ('sameer@innovacx.net','customer_reply','Customer replied on CX-H015',
    'Customer noted recurring issue with parking access card. Third time this month.',
    'Medium','CX-H015',TRUE,'2026-02-21 10:00:00+00'),
-  ('sara@innova.cx','report_ready','February 2026 Report Ready',
+  ('sameer@innovacx.net','report_ready','February 2026 Report Ready',
    'Your performance report for February 2026 is now available.',
    NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
 
   -- Bilal notifications
-  ('bilal@innova.cx','ticket_assignment','New Ticket Assigned: CX-A007',
+  ('bilal@innovacx.net','ticket_assignment','New Ticket Assigned: CX-A007',
    'You have been assigned CX-A007 — Perimeter fence collapsed. High priority.',
    'High','CX-A007',FALSE,'2026-03-01 10:12:00+00'),
-  ('bilal@innova.cx','status_change','Approval Decision: REQ-4008',
+  ('bilal@innovacx.net','status_change','Approval Decision: REQ-4008',
    'Your rescoring request REQ-4008 for CX-H014 was approved. Priority changed to High.',
    'High','CX-H014',FALSE,'2026-02-15 11:05:00+00'),
-  ('bilal@innova.cx','system','Password Policy Update',
+  ('bilal@innovacx.net','system','Password Policy Update',
    'Your system password expires in 14 days. Please update via Settings.',
    NULL, NULL, FALSE,'2026-02-26 09:00:00+00'),
 
   -- Fatima notifications
-  ('fatima@innova.cx','ticket_assignment','New Ticket Assigned: CX-A004',
+  ('ahmed@innovacx.net','ticket_assignment','New Ticket Assigned: CX-A004',
    'You have been assigned CX-A004 — Network outage Floor 5. Critical priority.',
    'Critical','CX-A004',FALSE,'2026-03-01 08:20:00+00'),
-  ('fatima@innova.cx','sla_warning','SLA Warning: CX-A004',
+  ('ahmed@innovacx.net','sla_warning','SLA Warning: CX-A004',
    'CX-A004 resolve SLA is in 3 hours. 20 workstations still offline.',
    'Critical','CX-A004',FALSE,'2026-03-01 11:15:00+00'),
-  ('fatima@innova.cx','customer_reply','Customer replied on CX-H012',
+  ('ahmed@innovacx.net','customer_reply','Customer replied on CX-H012',
    'Customer confirmed VPN access restored for all remote staff.',
    'High','CX-H012',TRUE,'2026-01-21 10:00:00+00'),
-  ('fatima@innova.cx','report_ready','February 2026 Report Ready',
+  ('ahmed@innovacx.net','report_ready','February 2026 Report Ready',
    'Your performance report for February 2026 is now available.',
    NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
 
   -- Yousef notifications
-  ('yousef@innova.cx','ticket_assignment','New Ticket Assigned: CX-A009',
+  ('yousef@innovacx.net','ticket_assignment','New Ticket Assigned: CX-A009',
    'You have been assigned CX-A009 — Roof membrane leak – Executive floor. High priority.',
    'High','CX-A009',FALSE,'2026-03-01 11:20:00+00'),
-  ('yousef@innova.cx','status_change','Approval Decision: REQ-4003',
+  ('yousef@innovacx.net','status_change','Approval Decision: REQ-4003',
    'Your rescoring request REQ-4003 for CX-A009 is pending manager review.',
    'High','CX-A009',FALSE,'2026-03-01 11:15:00+00'),
-  ('yousef@innova.cx','report_ready','February 2026 Report Ready',
+  ('yousef@innovacx.net','report_ready','February 2026 Report Ready',
    'Your performance report for February 2026 is now available.',
    NULL, NULL, FALSE,'2026-03-01 06:00:00+00'),
 
   -- Khalid notifications
-  ('khalid@innova.cx','ticket_assignment','New Ticket Assigned: CX-A003',
+  ('sameer@innovacx.net','ticket_assignment','New Ticket Assigned: CX-A003',
    'You have been assigned CX-A003 — Elevator B stuck. High priority.',
    'High','CX-A003',FALSE,'2026-03-01 08:10:00+00'),
-  ('khalid@innova.cx','sla_warning','SLA Warning: CX-A003',
+  ('sameer@innovacx.net','sla_warning','SLA Warning: CX-A003',
    'CX-A003 response deadline is in 30 minutes. Elevator still stuck.',
    'High','CX-A003',FALSE,'2026-03-01 08:30:00+00'),
-  ('khalid@innova.cx','status_change','Ticket Resolved: CX-H013',
+  ('sameer@innovacx.net','status_change','Ticket Resolved: CX-H013',
    'Ticket CX-H013 (Main distribution board tripped) marked Resolved.',
    'Critical','CX-H013',TRUE,'2026-02-05 15:00:00+00'),
-  ('khalid@innova.cx','system','System Update Completed',
+  ('sameer@innovacx.net','system','System Update Completed',
    'InnovaCX updated to v2.4.2. New analytics dashboard features available.',
    NULL, NULL, TRUE,'2026-02-28 06:00:00+00')
 ) AS v(email, ntype, title, msg, prio, tc, read_flag, ts)
@@ -1707,7 +1772,7 @@ INSERT INTO employee_reports (report_code, employee_user_id, month_label, subtit
 SELECT code, emp_id, label, sub, rating, resolved, sla, avg_resp, 'report-gen-v1.0', 'system', ps::date, pe::date
 FROM (
   SELECT
-    (SELECT id FROM users WHERE email='ahmed@innova.cx') AS emp_id,
+    (SELECT id FROM users WHERE email='ahmed@innovacx.net') AS emp_id,
     unnest(ARRAY['rpt-ahmed-mar26','rpt-ahmed-feb26','rpt-ahmed-jan26',
                  'rpt-ahmed-dec25','rpt-ahmed-nov25','rpt-ahmed-oct25']) AS code,
     unnest(ARRAY['March 2026','February 2026','January 2026',
@@ -1732,7 +1797,7 @@ FROM (
   UNION ALL
 
   SELECT
-    (SELECT id FROM users WHERE email='bilal@innova.cx') AS emp_id,
+    (SELECT id FROM users WHERE email='bilal@innovacx.net') AS emp_id,
     unnest(ARRAY['rpt-bilal-mar26','rpt-bilal-feb26','rpt-bilal-jan26',
                  'rpt-bilal-dec25','rpt-bilal-nov25','rpt-bilal-oct25']),
     unnest(ARRAY['March 2026','February 2026','January 2026',
@@ -1757,7 +1822,7 @@ FROM (
   UNION ALL
 
   SELECT
-    (SELECT id FROM users WHERE email='khalid@innova.cx') AS emp_id,
+    (SELECT id FROM users WHERE email='sameer@innovacx.net') AS emp_id,
     unnest(ARRAY['rpt-khalid-mar26','rpt-khalid-feb26','rpt-khalid-jan26',
                  'rpt-khalid-dec25','rpt-khalid-nov25','rpt-khalid-oct25']),
     unnest(ARRAY['March 2026','February 2026','January 2026',
@@ -1782,7 +1847,7 @@ FROM (
   UNION ALL
 
   SELECT
-    (SELECT id FROM users WHERE email='fatima@innova.cx') AS emp_id,
+    (SELECT id FROM users WHERE email='ahmed@innovacx.net') AS emp_id,
     unnest(ARRAY['rpt-fatima-mar26','rpt-fatima-feb26','rpt-fatima-jan26',
                  'rpt-fatima-dec25','rpt-fatima-nov25','rpt-fatima-oct25']),
     unnest(ARRAY['March 2026','February 2026','January 2026',
@@ -1807,7 +1872,7 @@ FROM (
   UNION ALL
 
   SELECT
-    (SELECT id FROM users WHERE email='maria@innova.cx') AS emp_id,
+    (SELECT id FROM users WHERE email='sarah@innovacx.net') AS emp_id,
     unnest(ARRAY['rpt-maria-mar26','rpt-maria-feb26','rpt-maria-nov25','rpt-maria-oct25']),
     unnest(ARRAY['March 2026','February 2026','November 2025','October 2025']),
     unnest(ARRAY[
@@ -1826,7 +1891,7 @@ FROM (
   UNION ALL
 
   SELECT
-    (SELECT id FROM users WHERE email='omar@innova.cx') AS emp_id,
+    (SELECT id FROM users WHERE email='yousef@innovacx.net') AS emp_id,
     unnest(ARRAY['rpt-omar-mar26','rpt-omar-feb26','rpt-omar-nov25','rpt-omar-oct25']),
     unnest(ARRAY['March 2026','February 2026','November 2025','October 2025']),
     unnest(ARRAY[
@@ -1845,7 +1910,7 @@ FROM (
   UNION ALL
 
   SELECT
-    (SELECT id FROM users WHERE email='sara@innova.cx') AS emp_id,
+    (SELECT id FROM users WHERE email='sameer@innovacx.net') AS emp_id,
     unnest(ARRAY['rpt-sara-mar26','rpt-sara-feb26','rpt-sara-nov25','rpt-sara-oct25']),
     unnest(ARRAY['March 2026','February 2026','November 2025','October 2025']),
     unnest(ARRAY[
@@ -1864,7 +1929,7 @@ FROM (
   UNION ALL
 
   SELECT
-    (SELECT id FROM users WHERE email='yousef@innova.cx') AS emp_id,
+    (SELECT id FROM users WHERE email='yousef@innovacx.net') AS emp_id,
     unnest(ARRAY['rpt-yousef-mar26','rpt-yousef-feb26','rpt-yousef-nov25','rpt-yousef-oct25']),
     unnest(ARRAY['March 2026','February 2026','November 2025','October 2025']),
     unnest(ARRAY[
@@ -2601,12 +2666,12 @@ WHERE priority_assigned_at IS NULL;
 UPDATE users
 SET mfa_enabled = FALSE, totp_secret = NULL
 WHERE email IN (
-  'customer1@innova.cx','customer2@innova.cx','customer3@innova.cx',
-  'manager@innova.cx','operator@innova.cx',
-  'ahmed@innova.cx','maria@innova.cx','omar@innova.cx','sara@innova.cx',
-  'bilal@innova.cx','fatima@innova.cx','yousef@innova.cx','khalid@innova.cx',
-  'rania@innova.cx','tariq@innova.cx','lena@innova.cx','hassan@innova.cx',
-  'noura@innova.cx','ziad@innova.cx','dina@innova.cx'
+  'customer1@innovacx.net','customer2@innovacx.net','customer3@innovacx.net',
+  'operator@innova.cx',
+  'hamad@innovacx.net','leen@innovacx.net','rami@innovacx.net','majid@innovacx.net',
+  'ali@innovacx.net','yara@innovacx.net','hana@innovacx.net',
+  'ahmed@innovacx.net','lena@innovacx.net','bilal@innovacx.net','sameer@innovacx.net',
+  'yousef@innovacx.net','talya@innovacx.net','sarah@innovacx.net'
 );
 
 COMMIT;

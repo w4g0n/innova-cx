@@ -6,15 +6,12 @@ import { apiUrl } from "../../config/apiBase";
 import "./RoutingReviewDetails.css";
 
 function getAuthToken() {
-  try {
-    const raw = localStorage.getItem("user");
-    if (raw) { const u = JSON.parse(raw); if (u?.access_token) return u.access_token; }
-  } catch { /* ignore */ }
   return (
     localStorage.getItem("access_token") ||
     localStorage.getItem("token") ||
     localStorage.getItem("jwt") ||
-    localStorage.getItem("authToken") || ""
+    localStorage.getItem("authToken") ||
+    ""
   );
 }
 
@@ -144,14 +141,18 @@ export default function RoutingReviewDetails() {
     ];
 
     Promise.all([
-      fetch(apiUrl(`/api/manager/routing-review?status_filter=All`), { headers }).then((r) => r.json()),
-      // Try both common endpoint paths; fall back to hardcoded list if both fail
+      // Use the dedicated single-item endpoint — backend enforces manager's department scope
+      fetch(apiUrl(`/api/manager/routing-review/${reviewId}`), { headers })
+        .then((r) => {
+          if (r.status === 401) { navigate("/login"); return null; }
+          if (!r.ok) throw new Error("Routing review item not found.");
+          return r.json();
+        }),
       fetch(apiUrl("/api/manager/departments"), { headers })
-        .then((r) => r.ok ? r.json() : fetch(apiUrl("/manager/departments"), { headers }).then((r2) => r2.json()))
+        .then((r) => r.ok ? r.json() : DEPT_FALLBACK)
         .catch(() => DEPT_FALLBACK),
     ])
-      .then(([data, depts]) => {
-        const found = (data.items || []).find((i) => i.reviewId === reviewId);
+      .then(([found, depts]) => {
         if (!found) { setError("Routing review item not found."); return; }
         setItem(found);
         const deptList = Array.isArray(depts) && depts.length > 0 ? depts : DEPT_FALLBACK;

@@ -10,15 +10,12 @@ import { apiUrl } from "../../config/apiBase";
 import useScrollReveal from "../../utils/useScrollReveal";
 
 function getAuthToken() {
-  try {
-    const raw = localStorage.getItem("user");
-    if (raw) { const u = JSON.parse(raw); if (u?.access_token) return u.access_token; }
-  } catch { /* ignore */ }
   return (
     localStorage.getItem("access_token") ||
     localStorage.getItem("token") ||
     localStorage.getItem("jwt") ||
-    localStorage.getItem("authToken") || ""
+    localStorage.getItem("authToken") ||
+    ""
   );
 }
 
@@ -312,13 +309,52 @@ export default function ComplaintTrends() {
   const navigate  = useNavigate();
   const [tab, setTab]           = useState(0);
   const [timeRange, setTimeRange]   = useState("Last 12 Months");
-  const [department, setDepartment] = useState("All Departments");
+  // Initialise to empty string — overwritten once we learn the manager's dept from /api/manager
+  const [department, setDepartment] = useState("");
   const [priority, setPriority]     = useState("All Priorities");
   const [apiData, setApiData]       = useState(null);
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState(null);
 
+  // Dynamic department list from /api/manager/departments
+  const [deptOptions, setDeptOptions] = useState([]);
+  // The logged-in manager's own department — used as the default filter
+  const [myDepartment, setMyDepartment] = useState("");
+
+  // On mount: fetch (1) manager identity to learn own dept, (2) full dept list
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) { navigate("/login"); return; }
+    const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+
+    // Fetch manager identity — /api/manager now returns managerName + departmentName
+    fetch(apiUrl("/api/manager"), { headers })
+      .then((r) => { if (r.status === 401) { navigate("/login"); return null; } return r.json(); })
+      .then((data) => {
+        if (!data) return;
+        const dept = data.departmentName || "";
+        setMyDepartment(dept);
+        // Only set department if it hasn't been manually changed yet (still empty)
+        setDepartment((prev) => prev === "" ? (dept || "All Departments") : prev);
+      })
+      .catch(() => {
+        setDepartment("All Departments");
+      });
+
+    // Fetch real department list from DB
+    fetch(apiUrl("/api/manager/departments"), { headers })
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setDeptOptions(data);
+        }
+      })
+      .catch(() => {});
+  }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const fetchData = useCallback(async () => {
+    // Don't fetch until we know which department to default to
+    if (department === "") return;
     const token = getAuthToken();
     if (!token) { navigate("/login"); return; }
     setLoading(true);
@@ -389,14 +425,19 @@ export default function ComplaintTrends() {
               />
               <PillSelect value={department} onChange={setDepartment} ariaLabel="Department"
                 options={[
-                  { value: "All Departments",      label: "All Departments" },
-                  { value: "Safety & Security", label: "Safety & Security" },
-                  { value: "HR", label: "HR" },
-                  { value: "IT", label: "IT" },
-                  { value: "Leasing", label: "Leasing" },
-                  { value: "Maintenance", label: "Maintenance" },
-                  { value: "Legal & Compliance", label: "Legal & Compliance" },
-                  { value: "Facilities Management", label: "Facilities Management" },
+                  { value: "All Departments", label: "All Departments" },
+                  ...(deptOptions.length > 0
+                    ? deptOptions.map((d) => ({ value: d, label: d }))
+                    : [
+                        { value: "Safety & Security",    label: "Safety & Security" },
+                        { value: "HR",                   label: "HR" },
+                        { value: "IT",                   label: "IT" },
+                        { value: "Leasing",              label: "Leasing" },
+                        { value: "Maintenance",          label: "Maintenance" },
+                        { value: "Legal & Compliance",   label: "Legal & Compliance" },
+                        { value: "Facilities Management",label: "Facilities Management" },
+                      ]
+                  ),
                 ]}
               />
               <PillSelect value={priority} onChange={setPriority} ariaLabel="Priority"
@@ -409,7 +450,7 @@ export default function ComplaintTrends() {
                 ]}
               />
             </div>
-            <FilterPillButton onClick={() => { setTimeRange("Last 12 Months"); setDepartment("All Departments"); setPriority("All Priorities"); }} label="Reset" />
+            <FilterPillButton onClick={() => { setTimeRange("Last 12 Months"); setDepartment(myDepartment || "All Departments"); setPriority("All Priorities"); }} label="Reset" />
           </div>
         </section>
 

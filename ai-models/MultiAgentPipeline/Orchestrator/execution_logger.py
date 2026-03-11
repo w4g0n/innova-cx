@@ -21,8 +21,10 @@ Logging failures never crash the pipeline.
 """
 
 import copy
+import asyncio
 import json
 import math
+import os
 import time
 import uuid
 import logging
@@ -33,6 +35,61 @@ from langchain_core.runnables import RunnableLambda
 from db import db_connect
 
 logger = logging.getLogger(__name__)
+PIPELINE_STAGE_TIMEOUT_SECONDS = max(
+    1.0,
+    float(os.getenv("PIPELINE_STAGE_TIMEOUT_SECONDS", "60")),
+)
+INTERNAL_TIMEOUT_AGENTS = {"SuggestedResolutionAgent"}
+
+
+def _fallback_subject(text: str) -> str:
+    compact = " ".join(str(text or "").split()).strip()
+    if not compact:
+        return "Support issue"
+    words = compact.split()
+    subject = " ".join(words[:6]).strip(" .,:;!?-")
+    return subject[:1].upper() + subject[1:] if subject else "Support issue"
+
+
+def _timeout_fallback_state(agent_name: str, state: dict) -> dict:
+    out = copy.deepcopy(state)
+    name = str(agent_name or "")
+
+    if name == "SubjectGenerationAgent":
+        out["subject"] = out.get("subject") or _fallback_subject(out.get("text"))
+        out["subject_generation_mode"] = "timeout_fallback"
+    elif name == "SuggestedResolutionAgent":
+        out["suggested_resolution"] = out.get("suggested_resolution")
+        out["suggested_resolution_mode"] = "timeout_fallback"
+    elif name == "ClassificationAgent":
+        out["label"] = str(out.get("label") or "complaint").strip().lower() or "complaint"
+        out["class_confidence"] = float(out.get("class_confidence", 0.0) or 0.0)
+        out["classification_source"] = "timeout_fallback"
+    elif name == "SentimentAgent":
+        out["text_sentiment"] = float(out.get("text_sentiment", 0.0) or 0.0)
+        out["sentiment_mode"] = "timeout_fallback"
+    elif name == "AudioAnalysisAgent":
+        out["audio_analysis_mode"] = "timeout_fallback"
+    elif name == "SentimentCombinerAgent":
+        out["sentiment_combiner_mode"] = "timeout_fallback"
+    elif name == "RecurrenceAgent":
+        out["is_recurring"] = bool(out.get("is_recurring", False))
+        out["is_recurring_source"] = "timeout_fallback"
+    elif name == "FeatureEngineeringAgent":
+        out["business_impact"] = out.get("business_impact") or "medium"
+        out["issue_severity"] = out.get("issue_severity") or "medium"
+        out["issue_urgency"] = out.get("issue_urgency") or "medium"
+        out["feature_labeler_mode"] = "timeout_fallback"
+    elif name == "PrioritizationAgent":
+        out["priority_label"] = out.get("priority_label") or "Medium"
+        out["priority_mode"] = "timeout_fallback"
+    elif name == "DepartmentRoutingAgent":
+        out["department_routing_source"] = "timeout_fallback"
+
+    out["stage_timeout_fallback"] = True
+    out["stage_timeout_seconds"] = PIPELINE_STAGE_TIMEOUT_SECONDS
+    out["stage_timeout_agent"] = name
+    return out
 
 
 def _coerce_uuid_or_none(value: Any) -> str | None:
@@ -345,7 +402,56 @@ def logged_step(
         start = time.monotonic()
 
         try:
-            result = await step_fn(state)
+            if agent_name in INTERNAL_TIMEOUT_AGENTS:
+                result = await step_fn(state)
+            else:
+                result = await asyncio.wait_for(step_fn(state), timeout=PIPELINE_STAGE_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            result = _timeout_fallback_state(agent_name, state)
+            output_snapshot = {k: v for k, v in copy.deepcopy(result).items() if not k.startswith("_")}
+            output_delta = _state_delta(input_snapshot, output_snapshot)
+            out_db_ticket_id, out_ticket_code = _ticket_refs(result.get("ticket_id"), result.get("ticket_code") or ticket_code)
+            confidence = _extract_confidence(result)
+            stage_summary = _summarize_stage_output(output_delta)
+
+            _write_logs(
+                execution_id=execution_id,
+                ticket_id=out_db_ticket_id,
+                ticket_code=out_ticket_code,
+                agent_name=agent_name,
+                step_order=step_order,
+                input_state=input_snapshot,
+                output_state=output_delta,
+                inference_time_ms=elapsed_ms,
+                confidence_score=confidence,
+                error_flag=False,
+                error_message=f"Timeout fallback after {PIPELINE_STAGE_TIMEOUT_SECONDS:.1f}s",
+            )
+            _write_stage_event(
+                execution_id=execution_id,
+                ticket_id=out_db_ticket_id,
+                ticket_code=out_ticket_code,
+                agent_name=agent_name,
+                step_order=step_order,
+                event_type="output",
+                status="running",
+                input_state=input_snapshot,
+                output_state=output_delta,
+                inference_time_ms=elapsed_ms,
+                confidence_score=confidence,
+                error_message=f"Timeout fallback after {PIPELINE_STAGE_TIMEOUT_SECONDS:.1f}s",
+            )
+            logger.warning(
+                "STAGE_TIMEOUT | execution_id=%s step=%d agent=%s ticket_id=%s timeout_s=%.1f summary=%s",
+                execution_id,
+                step_order,
+                agent_name,
+                raw_ticket_id,
+                PIPELINE_STAGE_TIMEOUT_SECONDS,
+                json.dumps(_safe_json(stage_summary), ensure_ascii=False),
+            )
+            return result
         except Exception as exc:
             elapsed_ms = int((time.monotonic() - start) * 1000)
             error_msg = f"{type(exc).__name__}: {exc}"

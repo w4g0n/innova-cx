@@ -1,7 +1,6 @@
 # backend/api/main.py
 
 import os
-import subprocess
 import time
 import json
 import logging
@@ -84,7 +83,7 @@ SLA_HEARTBEAT_SECONDS = int(os.getenv("SLA_HEARTBEAT_SECONDS", "300"))
 ROUTING_CONFIDENCE_THRESHOLD = float(
     os.getenv(
         "DEPARTMENT_ROUTING_THRESHOLD",
-        os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.70"),
+        os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.20"),
     )
 )
 CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "30"))
@@ -166,6 +165,7 @@ def _ensure_runtime_schema_compatibility() -> None:
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS priority_assigned_at TIMESTAMPTZ;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS respond_time_left_seconds INTEGER;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolve_time_left_seconds INTEGER;")
+                cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_source TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;")
@@ -225,75 +225,14 @@ def _ensure_runtime_schema_compatibility() -> None:
 def _ensure_analytics_mvs() -> None:
     """
     Installs analytics materialized views if they don't exist yet.
-    Runs database/scripts/analytics_mvs.sql via psql using the DATABASE_URL.
-    Called from startup with retry logic so it safely handles the case where
-    the DB is still running its own init.sql.
+    Delegates to analytics_service._ensure_analytics_mvs() which uses a
+    Python DB connection — no psql binary required in the backend container.
     """
-    MV_SQL = "/app/database/scripts/analytics_mvs.sql"
-    if not os.path.exists(MV_SQL):
-        logger.warning("_ensure_analytics_mvs | %s not found — skipping", MV_SQL)
+    if not _ANALYTICS_READY or _analytics is None:
+        logger.info("_ensure_analytics_mvs | analytics_service not loaded — skipping")
         return
-
-    required_mvs = [
-        "mv_ticket_base",
-        "mv_daily_volume",
-        "mv_employee_daily",
-        "mv_acceptance_daily",
-        "mv_operator_qc_daily",
-        "mv_chatbot_daily",
-        "mv_sentiment_daily",
-        "mv_feature_daily",
-    ]
-
-    # Check if all required MVs already exist
     try:
-        row = fetch_one(
-            "SELECT COUNT(*) AS cnt FROM pg_matviews "
-            "WHERE schemaname='public' AND matviewname = ANY(%s)",
-            (required_mvs,),
-        )
-        if row and int(row.get("cnt") or 0) == len(required_mvs):
-            logger.info(
-                "_ensure_analytics_mvs | all required MVs exist (%s/%s) — skipping install",
-                int(row.get("cnt") or 0),
-                len(required_mvs),
-            )
-            return
-        logger.info(
-            "_ensure_analytics_mvs | incomplete MV set (%s/%s) — installing",
-            int((row or {}).get("cnt") or 0),
-            len(required_mvs),
-        )
-    except Exception as _check_err:
-        logger.info("_ensure_analytics_mvs | cannot check pg_matviews — attempting MV install anyway")
-
-    # Parse DATABASE_URL → psql connection args
-    db_url = os.getenv("DATABASE_URL", "")
-    # Format: postgresql://user:pass@host:port/dbname
-    try:
-        import urllib.parse as _urlparse
-        p = _urlparse.urlparse(db_url)
-        psql_env = {
-            **os.environ,
-            "PGPASSWORD": p.password or "",
-        }
-        psql_cmd = [
-            "psql",
-            "-h", p.hostname or "postgres",
-            "-p", str(p.port or 5432),
-            "-U", p.username or "postgres",
-            "-d", (p.path or "/postgres").lstrip("/"),
-            "-v", "ON_ERROR_STOP=1",
-            "-f", MV_SQL,
-        ]
-        result = subprocess.run(
-            psql_cmd, env=psql_env,
-            capture_output=True, text=True, timeout=60
-        )
-        if result.returncode == 0:
-            logger.info("_ensure_analytics_mvs | MVs installed successfully")
-        else:
-            logger.error("_ensure_analytics_mvs | install failed: %s", result.stderr[-500:])
+        _analytics._ensure_analytics_mvs()
     except Exception as _install_err:
         logger.error("_ensure_analytics_mvs | install failed: %s", _install_err)
 
@@ -555,10 +494,30 @@ def _ensure_dev_seed_users() -> None:
 @app.on_event("startup")
 async def _start_sla_heartbeat() -> None:
     global _sla_heartbeat_task, _has_sla_policy_fn
-    _ensure_runtime_schema_compatibility()
+
+    # Retry db_compat and dev_seed until DB is reachable (handles startup race on first boot)
+    for _boot_attempt in range(15):
+        try:
+            _ensure_runtime_schema_compatibility()
+            break
+        except Exception as _e:
+            if _boot_attempt < 14:
+                logger.info("db_compat | DB not ready yet (attempt %d/15), retrying in 2s...", _boot_attempt + 1)
+                await asyncio.sleep(2)
+            else:
+                logger.warning("db_compat | gave up after 15 attempts: %s", _e)
 
     # ✅ permanent dev seed (works even with existing DB volume)
-    _ensure_dev_seed_users()
+    for _seed_attempt in range(15):
+        try:
+            _ensure_dev_seed_users()
+            break
+        except Exception as _e:
+            if _seed_attempt < 14:
+                logger.info("dev_seed | DB not ready yet (attempt %d/15), retrying in 2s...", _seed_attempt + 1)
+                await asyncio.sleep(2)
+            else:
+                logger.warning("dev_seed | gave up after 15 attempts: %s", _e)
 
     # ── Wire analytics service to DB helpers and warm-up refresh ─────────────
     if _ANALYTICS_READY:
@@ -651,8 +610,13 @@ def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dic
     token = _get_bearer_token(authorization)
     payload = verify_jwt(token)
     user = fetch_one(
-        # ✅ include totp_secret + mfa_enabled so totp_setup can work correctly
-        "SELECT id, email, role, is_active, totp_secret, mfa_enabled FROM users WHERE id = %s",
+        """
+        SELECT u.id, u.email, u.role, u.is_active, u.totp_secret, u.mfa_enabled,
+               up.full_name, up.department_id
+        FROM users u
+        LEFT JOIN user_profiles up ON up.user_id = u.id
+        WHERE u.id = %s
+        """,
         (payload.get("sub"),),
     )
     if not user or not user.get("is_active"):
@@ -1033,6 +997,7 @@ def login(body: LoginRequest):
     # Bypass TOTP when explicitly disabled (dev/demo only — set DISABLE_MFA=true in .env on VM)
     if DISABLE_MFA:
         access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+        profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
         return {
             "access_token": access_token,
             "token_type": "bearer",
@@ -1041,6 +1006,7 @@ def login(body: LoginRequest):
                 "id": str(user["id"]),
                 "email": user["email"],
                 "role": user["role"],
+                "full_name": (profile or {}).get("full_name") or user["email"],
             },
         }
 
@@ -1056,6 +1022,7 @@ def login(body: LoginRequest):
     # Flag to indicate MFA setup required
     requires_setup = not user.get("mfa_enabled", False)
 
+    _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
     return {
         "access_token": temp_token,
         "token_type": "temporary",
@@ -1064,10 +1031,9 @@ def login(body: LoginRequest):
             "id": str(user["id"]),
             "email": user["email"],
             "role": user["role"],
+            "full_name": (_profile or {}).get("full_name") or user["email"],
         },
     }
-
-@api.post("/auth/totp-setup-complete")
 def totp_setup_complete(user: Dict[str, Any] = Depends(get_current_user)):
     """
     Mark MFA as enabled after user has scanned QR and verified OTP.
@@ -1104,10 +1070,16 @@ def totp_verify(body: VerifyTOTPRequest):
 
     # Issue real JWT valid for standard TTL
     access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+    _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user": {"id": str(user["id"]), "email": user["email"], "role": user["role"]},
+        "user": {
+            "id": str(user["id"]),
+            "email": user["email"],
+            "role": user["role"],
+            "full_name": (_profile or {}).get("full_name") or user["email"],
+        },
     }
 
 
@@ -1943,6 +1915,23 @@ def employee_rescore_ticket(
     current_priority = row.get("current_priority") or "Unknown"
     request_code = f"REQ-{int(time.time() * 1000) % 10000000}"
 
+    # Look up the manager of the ticket's department so the notification
+    # trigger sends to exactly the right manager — not all managers.
+    dept_manager_row = fetch_one(
+        """
+        SELECT u.id AS manager_id
+        FROM tickets t
+        JOIN user_profiles up ON up.department_id = t.department_id
+        JOIN users u ON u.id = up.user_id
+        WHERE t.id = %s
+          AND u.role = 'manager'
+          AND u.is_active = TRUE
+        LIMIT 1;
+        """,
+        (row["id"],),
+    ) or {}
+    target_manager_id = dept_manager_row.get("manager_id") or None
+
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
@@ -1951,9 +1940,10 @@ def employee_rescore_ticket(
                   request_code, ticket_id, request_type,
                   current_value, requested_value,
                   request_reason, submitted_by_user_id,
+                  requested_to_user_id,
                   submitted_at, status
                 )
-                VALUES (%s, %s, 'Rescoring', %s, %s, %s, %s, now(), 'Pending')
+                VALUES (%s, %s, 'Rescoring', %s, %s, %s, %s, %s, now(), 'Pending')
                 RETURNING request_code;
                 """,
                 (
@@ -1963,12 +1953,14 @@ def employee_rescore_ticket(
                     f"Priority: {new_priority}",
                     reason,
                     user_id,
+                    target_manager_id,
                 ),
             )
             result = cur.fetchone()
             # Notifications handled by DB triggers:
-            #   trg_notify_manager_approval_request  → manager
-            #   trg_notify_employee_approval_submit  → submitting employee
+            #   trg_notify_manager_approval_request → correct dept manager only
+            #     (requested_to_user_id is now set, so trigger routes to 1 manager)
+            #   trg_notify_employee_approval_submit → submitting employee
 
     logger.info(
         "employee_rescore | ticket=%s from=%s to=%s request=%s by=%s",
@@ -2014,6 +2006,23 @@ def employee_reroute_ticket(
     current_dept = row.get("current_dept") or "Unknown"
     request_code = f"REQ-{int(time.time() * 1000) % 10000000}"
 
+    # Look up the manager of the ticket's current department so the notification
+    # trigger sends to exactly the right manager — not all managers.
+    dept_manager_row = fetch_one(
+        """
+        SELECT u.id AS manager_id
+        FROM tickets t
+        JOIN user_profiles up ON up.department_id = t.department_id
+        JOIN users u ON u.id = up.user_id
+        WHERE t.id = %s
+          AND u.role = 'manager'
+          AND u.is_active = TRUE
+        LIMIT 1;
+        """,
+        (row["id"],),
+    ) or {}
+    target_manager_id = dept_manager_row.get("manager_id") or None
+
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
@@ -2022,9 +2031,10 @@ def employee_reroute_ticket(
                   request_code, ticket_id, request_type,
                   current_value, requested_value,
                   request_reason, submitted_by_user_id,
+                  requested_to_user_id,
                   submitted_at, status
                 )
-                VALUES (%s, %s, 'Rerouting', %s, %s, %s, %s, now(), 'Pending')
+                VALUES (%s, %s, 'Rerouting', %s, %s, %s, %s, %s, now(), 'Pending')
                 RETURNING request_code;
                 """,
                 (
@@ -2034,11 +2044,13 @@ def employee_reroute_ticket(
                     f"Dept: {new_dept_name}",
                     reason,
                     user_id,
+                    target_manager_id,
                 ),
             )
             result = cur.fetchone()
             # Notifications handled by DB triggers:
-            #   trg_notify_manager_approval_request → manager
+            #   trg_notify_manager_approval_request → correct dept manager only
+            #     (requested_to_user_id is now set, so trigger routes to 1 manager)
             #   trg_notify_employee_approval_submit → submitting employee
 
     logger.info(
@@ -3296,16 +3308,32 @@ def update_customer_settings(
 
 @api.get("/manager/employees")
 def get_employees(user: Dict[str, Any] = Depends(require_manager)):
-    employees = fetch_all("""
-        SELECT
-            up.full_name AS name,
-            up.employee_code AS id,
-            up.job_title AS role,
-            u.id AS user_id
-        FROM user_profiles up
-        JOIN users u ON u.id = up.user_id
-        WHERE up.job_title NOT IN ('Customer', 'Department Manager')
-    """)
+    dept_id = user.get("department_id")
+    if dept_id:
+        employees = fetch_all("""
+            SELECT
+                up.full_name AS name,
+                up.employee_code AS id,
+                up.job_title AS role,
+                u.id AS user_id
+            FROM user_profiles up
+            JOIN users u ON u.id = up.user_id
+            WHERE u.role = 'employee'
+              AND u.is_active = TRUE
+              AND up.department_id = %s
+        """, (dept_id,))
+    else:
+        employees = fetch_all("""
+            SELECT
+                up.full_name AS name,
+                up.employee_code AS id,
+                up.job_title AS role,
+                u.id AS user_id
+            FROM user_profiles up
+            JOIN users u ON u.id = up.user_id
+            WHERE u.role = 'employee'
+              AND u.is_active = TRUE
+        """)
 
     result = []
     for emp in employees:
@@ -3334,27 +3362,52 @@ def get_employees(user: Dict[str, Any] = Depends(require_manager)):
 
 @api.get("/manager/complaints")
 def get_complaints(user: Dict[str, Any] = Depends(require_manager)):
-    tickets = fetch_all("""
-        SELECT
-            t.id AS ticket_id,
-            t.ticket_code,
-            t.subject AS subject,
-            t.status,
-            t.priority,
-            t.created_at,
-            t.updated_at,
-            t.priority_assigned_at,
-            t.assigned_at,
-            t.first_response_at,
-            t.resolved_at,
-            t.assigned_to_user_id,
-            up.full_name AS assignee_name,
-            d.name AS department_name
-        FROM tickets t
-        LEFT JOIN user_profiles up ON t.assigned_to_user_id = up.user_id
-        LEFT JOIN departments d ON d.id = t.department_id
-        ORDER BY t.created_at DESC;
-    """)
+    dept_id = user.get("department_id")
+    if dept_id:
+        tickets = fetch_all("""
+            SELECT
+                t.id AS ticket_id,
+                t.ticket_code,
+                t.subject AS subject,
+                t.status,
+                t.priority,
+                t.created_at,
+                t.updated_at,
+                t.priority_assigned_at,
+                t.assigned_at,
+                t.first_response_at,
+                t.resolved_at,
+                t.assigned_to_user_id,
+                up.full_name AS assignee_name,
+                d.name AS department_name
+            FROM tickets t
+            LEFT JOIN user_profiles up ON t.assigned_to_user_id = up.user_id
+            LEFT JOIN departments d ON d.id = t.department_id
+            WHERE t.department_id = %s
+            ORDER BY t.created_at DESC;
+        """, (dept_id,))
+    else:
+        tickets = fetch_all("""
+            SELECT
+                t.id AS ticket_id,
+                t.ticket_code,
+                t.subject AS subject,
+                t.status,
+                t.priority,
+                t.created_at,
+                t.updated_at,
+                t.priority_assigned_at,
+                t.assigned_at,
+                t.first_response_at,
+                t.resolved_at,
+                t.assigned_to_user_id,
+                up.full_name AS assignee_name,
+                d.name AS department_name
+            FROM tickets t
+            LEFT JOIN user_profiles up ON t.assigned_to_user_id = up.user_id
+            LEFT JOIN departments d ON d.id = t.department_id
+            ORDER BY t.created_at DESC;
+        """)
 
     result = []
     for t in tickets:
@@ -3761,28 +3814,74 @@ def get_departments(authorization: Optional[str] = Header(default=None)):
 
 @api.get("/manager")
 def get_manager_kpis(user: Dict[str, Any] = Depends(require_manager)):
-    row = fetch_one("""
-        SELECT
-            COUNT(*) FILTER (WHERE status <> 'Resolved')                                AS open_complaints,
-            COUNT(*) FILTER (WHERE status NOT IN ('Resolved'::ticket_status, 'Open'::ticket_status))  AS in_progress,
-            COUNT(*) FILTER (WHERE resolved_at::date = CURRENT_DATE)           AS resolved_today,
-            (SELECT COUNT(*) FROM users WHERE role = 'employee')               AS active_employees,
-            (SELECT COUNT(*) FROM approval_requests WHERE status = 'Pending')  AS pending_approvals
-        FROM tickets;
-    """)
+    dept_id = user.get("department_id")
+    # Fetch the manager's department name for the frontend header
+    dept_row = fetch_one("SELECT name FROM departments WHERE id = %s", (dept_id,)) if dept_id else None
+    dept_name = (dept_row or {}).get("name") or ""
+
+    if dept_id:
+        row = fetch_one("""
+            SELECT
+                COUNT(*) FILTER (WHERE status <> 'Resolved')                                                        AS open_complaints,
+                COUNT(*) FILTER (WHERE status NOT IN ('Resolved'::ticket_status, 'Open'::ticket_status))            AS in_progress,
+                COUNT(*) FILTER (WHERE resolved_at::date = CURRENT_DATE)                                            AS resolved_today,
+                (SELECT COUNT(*) FROM users u JOIN user_profiles up ON up.user_id = u.id
+                 WHERE u.role = 'employee' AND up.department_id = %s)                                               AS active_employees,
+                (SELECT COUNT(*) FROM approval_requests WHERE status = 'Pending')                                   AS pending_approvals
+            FROM tickets
+            WHERE department_id = %s;
+        """, (dept_id, dept_id))
+    else:
+        row = fetch_one("""
+            SELECT
+                COUNT(*) FILTER (WHERE status <> 'Resolved')                                                        AS open_complaints,
+                COUNT(*) FILTER (WHERE status NOT IN ('Resolved'::ticket_status, 'Open'::ticket_status))            AS in_progress,
+                COUNT(*) FILTER (WHERE resolved_at::date = CURRENT_DATE)                                            AS resolved_today,
+                (SELECT COUNT(*) FROM users WHERE role = 'employee')                                                AS active_employees,
+                (SELECT COUNT(*) FROM approval_requests WHERE status = 'Pending')                                   AS pending_approvals
+            FROM tickets;
+        """)
     return {
-        "openComplaints":   int(row["open_complaints"]   or 0),
-        "inProgress":       int(row["in_progress"]       or 0),
-        "resolvedToday":    int(row["resolved_today"]    or 0),
-        "activeEmployees":  int(row["active_employees"]  or 0),
-        "pendingApprovals": int(row["pending_approvals"] or 0),
+        "openComplaints":   int((row or {}).get("open_complaints")   or 0),
+        "inProgress":       int((row or {}).get("in_progress")       or 0),
+        "resolvedToday":    int((row or {}).get("resolved_today")    or 0),
+        "activeEmployees":  int((row or {}).get("active_employees")  or 0),
+        "pendingApprovals": int((row or {}).get("pending_approvals") or 0),
+        "managerName":      user.get("full_name") or user.get("email") or "",
+        "departmentName":   dept_name,
     }
 
 # ==========================
 
 @api.get("/manager/approvals")
 def get_approvals(user: Dict[str, Any] = Depends(require_manager)):
-    approvals = fetch_all("""
+    dept_id = user.get("department_id")
+    if dept_id:
+        approvals = fetch_all("""
+SELECT
+    ar.id AS request_id,
+    t.id AS ticket_id,
+    t.ticket_code,
+    t.subject AS ticket_subject,
+    ar.request_type AS type,
+    ar.current_value AS current,
+    ar.requested_value AS requested,
+    ar.request_reason AS request_reason,
+    up.full_name AS submitted_by,
+    ar.submitted_at AS submitted_on,
+    ar.status AS status,
+    du.full_name AS decided_by,
+    ar.decided_at AS decision_date,
+    ar.decision_notes
+FROM approval_requests ar
+LEFT JOIN tickets t ON ar.ticket_id = t.id
+LEFT JOIN user_profiles up ON ar.submitted_by_user_id = up.user_id
+LEFT JOIN user_profiles du ON ar.decided_by_user_id = du.user_id
+WHERE t.department_id = %s
+ORDER BY ar.submitted_at DESC;
+""", (dept_id,))
+    else:
+        approvals = fetch_all("""
 SELECT
     ar.id AS request_id,
     t.id AS ticket_id,
@@ -4116,6 +4215,11 @@ def get_manager_trends(
     )["start"]
 
     # ── Route through analytics_service (materialized views) ─────────────────
+    # manager_dept_id scopes Section C (employee performance) to employees who
+    # BELONG to this manager's department (user_profiles.department_id), which is
+    # the only correct definition.  Without it, employees from other departments
+    # who happen to have handled a cross-routed ticket appear in the wrong view.
+    manager_dept_id = user.get("department_id")
     if _ANALYTICS_READY:
         try:
             return _analytics.get_trends_data(
@@ -4124,6 +4228,7 @@ def get_manager_trends(
                 prev_start=prev_start,
                 department=department,
                 priority=priority,
+                manager_dept_id=str(manager_dept_id) if manager_dept_id else None,
             )
         except Exception as _svc_err:
             logger.error(
@@ -4248,11 +4353,26 @@ def get_manager_trends(
     time_by_priority_raw = fetch_all(f"SELECT t.priority, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond, ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve, COUNT(*) AS total FROM tickets t {dept_join} WHERE {where} GROUP BY 1 ORDER BY CASE t.priority WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END", params)
     time_by_priority_out = [{"priority":r["priority"],"avgRespond":float(r["avg_respond"] or 0),"avgResolve":float(r["avg_resolve"] or 0),"targetRespond":sla_targets["respond"].get(r["priority"],360),"targetResolve":sla_targets["resolve"].get(r["priority"],4320),"total":r["total"]} for r in time_by_priority_raw]
 
-    employee_perf = fetch_all(f"SELECT up.full_name AS name, up.employee_code AS emp_id, up.job_title AS role, COUNT(t.id) AS total, COUNT(t.id) FILTER(WHERE t.status='Resolved') AS resolved, COUNT(t.id) FILTER(WHERE t.resolve_breached OR t.respond_breached) AS breached, ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve_mins, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond_mins FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where} GROUP BY up.full_name,up.employee_code,up.job_title ORDER BY resolved DESC", params)
+    # ── Section C: scope employee rows to THIS manager's department only ─────
+    # Use user_profiles.department_id (employee's HOME dept) not ticket's dept.
+    # This matches the analytics_service.get_section_c() strategy.
+    _fallback_dept_id = user.get("department_id")
+    if _fallback_dept_id:
+        _emp_dept_clause = " AND up.department_id = %s::uuid"
+        _emp_params = params + [str(_fallback_dept_id)]
+        _acc_dept_clause = " AND up.department_id = %s::uuid"
+        _acc_params = [period_start, period_end, str(_fallback_dept_id)]
+    else:
+        _emp_dept_clause = ""
+        _emp_params = params
+        _acc_dept_clause = ""
+        _acc_params = [period_start, period_end]
+
+    employee_perf = fetch_all(f"SELECT up.full_name AS name, up.employee_code AS emp_id, up.job_title AS role, COUNT(t.id) AS total, COUNT(t.id) FILTER(WHERE t.status='Resolved') AS resolved, COUNT(t.id) FILTER(WHERE t.resolve_breached OR t.respond_breached) AS breached, ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve_mins, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond_mins FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where}{_emp_dept_clause} GROUP BY up.full_name,up.employee_code,up.job_title ORDER BY resolved DESC", _emp_params)
     company_avg = fetch_one(f"SELECT ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond, COUNT(*) FILTER(WHERE t.resolve_breached OR t.respond_breached)::float/NULLIF(COUNT(*),0)*100 AS breach_rate FROM tickets t {dept_join} WHERE {where}", params) or {}
-    acceptance_rows = fetch_all("SELECT up.full_name AS name, COUNT(*) AS total, COUNT(*) FILTER(WHERE trf.decision='accepted') AS accepted, COUNT(*) FILTER(WHERE trf.decision='declined_custom') AS declined FROM ticket_resolution_feedback trf JOIN tickets t ON t.id=trf.ticket_id JOIN user_profiles up ON up.user_id=trf.employee_user_id WHERE t.created_at>=%s AND t.created_at<%s GROUP BY up.full_name", [period_start, period_end])
+    acceptance_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) AS total, COUNT(*) FILTER(WHERE trf.decision='accepted') AS accepted, COUNT(*) FILTER(WHERE trf.decision='declined_custom') AS declined FROM ticket_resolution_feedback trf JOIN tickets t ON t.id=trf.ticket_id JOIN user_profiles up ON up.user_id=trf.employee_user_id WHERE t.created_at>=%s AND t.created_at<%s{_acc_dept_clause} GROUP BY up.full_name", _acc_params)
     acceptance_map = {r["name"]:{"total":r["total"],"accepted":r["accepted"],"declined":r["declined"],"rate":round(r["accepted"]/r["total"]*100,1) if r["total"] else 0} for r in acceptance_rows}
-    rescore_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority) AS rescored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Low' AND t.priority IN('Medium','High','Critical'))OR(t.model_priority='Medium' AND t.priority IN('High','Critical'))OR(t.model_priority='High' AND t.priority='Critical'))) AS upscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Critical' AND t.priority IN('Low','Medium','High'))OR(t.model_priority='High' AND t.priority IN('Low','Medium'))OR(t.model_priority='Medium' AND t.priority='Low'))) AS downscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL) AS total_with_model FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where} GROUP BY up.full_name", params)
+    rescore_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority) AS rescored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Low' AND t.priority IN('Medium','High','Critical'))OR(t.model_priority='Medium' AND t.priority IN('High','Critical'))OR(t.model_priority='High' AND t.priority='Critical'))) AS upscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Critical' AND t.priority IN('Low','Medium','High'))OR(t.model_priority='High' AND t.priority IN('Low','Medium'))OR(t.model_priority='Medium' AND t.priority='Low'))) AS downscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL) AS total_with_model FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where}{_emp_dept_clause} GROUP BY up.full_name", _emp_params)
     rescore_map = {r["name"]:{"rescored":r["rescored"],"upscored":r["upscored"],"downscored":r["downscored"],"totalWithModel":r["total_with_model"],"rescoreRate":round(r["rescored"]/r["total_with_model"]*100,1) if r["total_with_model"] else 0} for r in rescore_rows}
 
     co_breach=float(company_avg.get("breach_rate") or 0)
@@ -4291,34 +4411,81 @@ def manager_notifications(
     user: Dict[str, Any] = Depends(require_manager),   # ← use Depends, not Header
 ):
     user_id = user["id"]
+    dept_id = user.get("department_id")
 
-    rows = fetch_all(
-        """
-        SELECT
-          n.id::text           AS "id",
-          n.type::text         AS "type",
-          n.title              AS "title",
-          n.message            AS "message",
-          n.priority::text     AS "priority",
-          t.id::text           AS "ticketId",
-          t.ticket_code        AS "ticketCode",
-          n.report_id          AS "reportId",
-          n.read               AS "read",
-          n.created_at         AS "timestamp"
-        FROM notifications n
-        LEFT JOIN tickets t ON t.id = n.ticket_id
-        WHERE n.user_id = %s
-          AND (%s = FALSE OR n.read = FALSE)
-        ORDER BY n.created_at DESC
-        LIMIT %s;
-        """,
-        (user_id, only_unread, limit),
-    )
-
-    unread_row = fetch_one(
-        "SELECT COUNT(*)::int AS unread FROM notifications WHERE user_id = %s AND read = FALSE;",
-        (user_id,),
-    ) or {"unread": 0}
+    # Two-layer defence:
+    # Layer 1 (generation): backend now sets requested_to_user_id on approval_requests
+    #   so the DB trigger only inserts 1 notification for the correct dept manager.
+    # Layer 2 (retrieval): even for notifications generated before this fix, we
+    #   additionally filter at query time — ticket-linked notifications are only
+    #   returned if their ticket.department_id matches this manager's department.
+    #   System/report notifications (ticket_id IS NULL) always pass through.
+    if dept_id:
+        rows = fetch_all(
+            """
+            SELECT
+              n.id::text           AS "id",
+              n.type::text         AS "type",
+              n.title              AS "title",
+              n.message            AS "message",
+              n.priority::text     AS "priority",
+              t.id::text           AS "ticketId",
+              t.ticket_code        AS "ticketCode",
+              n.report_id          AS "reportId",
+              n.read               AS "read",
+              n.created_at         AS "timestamp"
+            FROM notifications n
+            LEFT JOIN tickets t ON t.id = n.ticket_id
+            WHERE n.user_id = %s
+              AND (%s = FALSE OR n.read = FALSE)
+              AND (
+                n.ticket_id IS NULL
+                OR t.department_id = %s
+              )
+            ORDER BY n.created_at DESC
+            LIMIT %s;
+            """,
+            (user_id, only_unread, dept_id, limit),
+        )
+        unread_row = fetch_one(
+            """
+            SELECT COUNT(*)::int AS unread
+            FROM notifications n
+            LEFT JOIN tickets t ON t.id = n.ticket_id
+            WHERE n.user_id = %s
+              AND n.read = FALSE
+              AND (n.ticket_id IS NULL OR t.department_id = %s);
+            """,
+            (user_id, dept_id),
+        ) or {"unread": 0}
+    else:
+        # Unassigned manager: graceful fallback — return all their notifications
+        rows = fetch_all(
+            """
+            SELECT
+              n.id::text           AS "id",
+              n.type::text         AS "type",
+              n.title              AS "title",
+              n.message            AS "message",
+              n.priority::text     AS "priority",
+              t.id::text           AS "ticketId",
+              t.ticket_code        AS "ticketCode",
+              n.report_id          AS "reportId",
+              n.read               AS "read",
+              n.created_at         AS "timestamp"
+            FROM notifications n
+            LEFT JOIN tickets t ON t.id = n.ticket_id
+            WHERE n.user_id = %s
+              AND (%s = FALSE OR n.read = FALSE)
+            ORDER BY n.created_at DESC
+            LIMIT %s;
+            """,
+            (user_id, only_unread, limit),
+        )
+        unread_row = fetch_one(
+            "SELECT COUNT(*)::int AS unread FROM notifications WHERE user_id = %s AND read = FALSE;",
+            (user_id,),
+        ) or {"unread": 0}
 
     notifications = []
     for r in rows:

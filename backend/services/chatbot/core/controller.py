@@ -1,7 +1,16 @@
 import logging
 import re
 
-from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression, is_human_escalation_request, is_cancellation_request
+from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression
+
+try:
+    from .intent import is_human_escalation_request, is_cancellation_request
+except ImportError:
+    def is_human_escalation_request(_: str) -> bool:
+        return False
+
+    def is_cancellation_request(_: str) -> bool:
+        return False
 from .llm import generate_response
 from .logger import log_bot_response, log_user_message
 from .retriever import retrieve_context
@@ -212,6 +221,9 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
     if state in ("collecting_inquiry_ticket", "collecting_complaint"):
         return _collect_ticket_fields(session, user_id, user_text)
 
+    if state == "await_ticket_confirmation":
+        return _confirm_ticket_creation(session, user_id, user_text)
+
     # POST TICKET CREATED
     if state == "ticket_created":
         transition(session, "await_primary_intent")
@@ -366,7 +378,6 @@ def _handle_complaint(session: dict, user_id: str, user_text: str) -> dict:
     context    = session["context"]
 
     if not context.get("deescalated", False):
-        # De-escalation turn — acknowledge, do not solve, ask for issue details
         kb_context = retrieve_context(user_text, mode="complaint")
         system = (
             "You are a calm, empathetic customer support assistant. "
@@ -382,7 +393,7 @@ def _handle_complaint(session: dict, user_id: str, user_text: str) -> dict:
             *session["history"][-4:],
             {"role": "user", "content": user_text},
         ]
-        response  = generate_response(messages)
+        response = generate_response(messages)
         response += "\n\nTo raise this as a complaint ticket, please describe the issue in as much detail as you can."
         context["deescalated"] = True
         context["category"]    = "complaint"
@@ -399,7 +410,6 @@ def _handle_complaint(session: dict, user_id: str, user_text: str) -> dict:
 def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
     session_id = session["session_id"]
     context    = session["context"]
-    category   = context.get("category", "complaint")
 
     # Step 1: collect description
     if "description" not in context:
@@ -411,32 +421,73 @@ def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
             return _result(response, "prompt_description_retry", session_id)
         context["description"] = text_clean
 
-    # Step 3: create ticket
-    result = create_ticket(
-        user_id=user_id,
-        session_id=session_id,
-        category=category,
-        description=context["description"],
+    response = (
+        "Please confirm the ticket before I create it:\n\n"
+        f"Details: {context['description']}\n\n"
+        "Reply yes to create it, or no if you want to change the details."
+    )
+    transition(session, "await_ticket_confirmation")
+    _log_and_save(session, response, "ticket_confirmation_prompt")
+    return _result(
+        response,
+        "ticket_confirmation_prompt",
+        session_id,
+        buttons=["confirm_ticket", "edit_ticket"],
     )
 
-    if result["success"]:
-        response = (
-            f"Your ticket has been created successfully. "
-            f"Your ticket ID is {result['ticket_id']}. "
-            "A member of the team will be in touch shortly."
-        )
-        transition(session, "ticket_created")
-        rtype = "ticket_created"
-    else:
-        logger.error("ticket_create_error session=%s err=%s", session_id, result.get("error"))
-        response = (
-            "I was unable to create your ticket at this time. "
-            "Please try again or use the complaint form directly."
-        )
-        rtype = "ticket_create_error"
 
-    _log_and_save(session, response, rtype)
-    return _result(response, rtype, session_id)
+def _confirm_ticket_creation(session: dict, user_id: str, user_text: str) -> dict:
+    session_id = session["session_id"]
+    context = session["context"]
+    category = context.get("category", "complaint")
+    text_clean = user_text.strip()
+    text_lower = text_clean.lower()
+
+    if _is_affirmative(text_lower):
+        result = create_ticket(
+            user_id=user_id,
+            session_id=session_id,
+            category=category,
+            description=context.get("description", ""),
+        )
+
+        if result["success"]:
+            response = (
+                f"Your ticket has been created successfully. "
+                f"Your ticket ID is {result['ticket_id']}. "
+                "A member of the team will be in touch shortly."
+            )
+            transition(session, "ticket_created")
+            rtype = "ticket_created"
+        else:
+            logger.error("ticket_create_error session=%s err=%s", session_id, result.get("error"))
+            response = (
+                "I was unable to create your ticket at this time. "
+                "Please try again or use the complaint form directly."
+            )
+            rtype = "ticket_create_error"
+
+        _log_and_save(session, response, rtype)
+        return _result(response, rtype, session_id)
+
+    if _is_negative(text_lower):
+        context.pop("description", None)
+        transition(
+            session,
+            "collecting_inquiry_ticket" if str(category).strip().lower() == "inquiry" else "collecting_complaint",
+        )
+        response = "Okay. Please send the corrected issue details and I will update the ticket preview before creating it."
+        _log_and_save(session, response, "ticket_confirmation_edit")
+        return _result(response, "ticket_confirmation_edit", session_id)
+
+    response = "Please reply yes to create the ticket, or no if you want to change the details."
+    _log_and_save(session, response, "ticket_confirmation_retry")
+    return _result(
+        response,
+        "ticket_confirmation_retry",
+        session_id,
+        buttons=["confirm_ticket", "edit_ticket"],
+    )
 
 
 # ── Utility helpers ───────────────────────────────────────────────────────────
@@ -456,6 +507,14 @@ def _extract_ticket_id(text: str) -> str | None:
     if matched.isdigit():
         matched = f"CX-{matched}"
     return matched
+
+
+def _is_affirmative(text: str) -> bool:
+    return bool(re.fullmatch(r"\s*(yes|y|yeah|yep|yup|confirm|confirmed|create|go ahead|proceed|submit)[\s!.,-]*", text))
+
+
+def _is_negative(text: str) -> bool:
+    return bool(re.fullmatch(r"\s*(no|n|nope|nah|cancel|edit|change|not yet|don'?t create)[\s!.,-]*", text))
 
 
 def _log_and_save(

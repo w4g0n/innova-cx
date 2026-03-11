@@ -8,20 +8,7 @@ import KpiCard from "../../components/common/KpiCard";
 import { apiUrl } from "../../config/apiBase";
 import useScrollReveal from "../../utils/useScrollReveal";
 
-// FIX (Issue 1 — KPI cards show 0):
-// The original code used localStorage.getItem("access_token") directly.
-// In this project the token may be stored inside a "user" JSON object under
-// the "user" key (user.access_token), which means getItem("access_token")
-// returns null, the useEffect guard fires and no fetch is made → all KPIs stay 0.
-// This helper matches the pattern used by every other manager page.
 function getAuthToken() {
-  try {
-    const raw = localStorage.getItem("user");
-    if (raw) {
-      const u = JSON.parse(raw);
-      if (u?.access_token) return u.access_token;
-    }
-  } catch { /* ignore malformed payload */ }
   return (
     localStorage.getItem("access_token") ||
     localStorage.getItem("token") ||
@@ -34,7 +21,6 @@ function getAuthToken() {
 export default function ManagerDashboard() {
   const revealRef = useScrollReveal();
 
-  // State to hold backend KPIs — keys match GET /api/manager response (camelCase)
   const [kpis, setKpis] = useState({
     openComplaints:   0,
     inProgress:       0,
@@ -43,9 +29,22 @@ export default function ManagerDashboard() {
     pendingApprovals: 0,
   });
 
+  // Identity seeded immediately from localStorage (populated by Login on sign-in)
+  // then confirmed/updated from the /api/manager response which is scoped to the
+  // authenticated user via get_current_user joining user_profiles.
+  const [managerName, setManagerName] = useState(() => {
+    try {
+      const raw = localStorage.getItem("user");
+      if (raw) {
+        const u = JSON.parse(raw);
+        return u?.full_name || "";
+      }
+    } catch { /* ignore */ }
+    return "";
+  });
+  const [departmentName, setDepartmentName] = useState("");
+
   useEffect(() => {
-    // Read token inside the effect so we always get the freshest value, even
-    // if localStorage was populated after the component first rendered.
     const token = getAuthToken();
     if (!token) return;
 
@@ -60,19 +59,29 @@ export default function ManagerDashboard() {
         return res.json();
       })
       .then((data) => {
-        if (data) setKpis(data);
+        if (!data) return;
+        setKpis(data);
+        // Backend returns these from the authenticated session (get_current_user
+        // now joins user_profiles, so these are always the logged-in manager's values)
+        if (data.managerName) setManagerName(data.managerName);
+        if (data.departmentName) setDepartmentName(data.departmentName);
       })
       .catch((err) => {
         console.error("Failed to fetch manager KPIs:", err);
       });
-  }, []); // run once on mount — token is read fresh inside the effect
+  }, []);
+
+  const title =
+    managerName && departmentName
+      ? `${managerName} – ${departmentName}`
+      : managerName || "Manager Dashboard";
 
   return (
     <Layout role="manager">
       <div className="mgrDashboard" ref={revealRef}>
         <PageHeader
-          title="Dr. Farhad - Facilities Management"
-          subtitle="Quick overview of your department’s activity."
+          title={title}
+          subtitle="Quick overview of your department's activity."
         />
 
         <section className="managerKpiRow">
@@ -101,14 +110,14 @@ export default function ManagerDashboard() {
             <span className="managerBubbleLabel">Team</span>
             <div className="managerBubbleTitle">View Employees</div>
             <div className="managerBubbleMetric">
-              Review workload & auto-generated reports.
+              Review workload &amp; auto-generated reports.
             </div>
             <div className="managerBubbleLink">Go to employees →</div>
           </Link>
 
           <Link to="/manager/approvals" className="managerBubbleCard">
             <span className="managerBubbleLabel">Approvals</span>
-            <div className="managerBubbleTitle">Rescoring & Rerouting</div>
+            <div className="managerBubbleTitle">Rescoring &amp; Rerouting</div>
             <div className="managerBubbleMetric">
               Approve or reject scoring and routing changes.
             </div>
