@@ -353,6 +353,29 @@ function TicketModal({
       case "resolve":
         return (
           <>
+            {!(resolutionSuggestion || "").trim() && (
+              <div style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "10px",
+                padding: "12px 14px",
+                marginBottom: "14px",
+                borderRadius: "12px",
+                background: "rgba(234, 179, 8, 0.08)",
+                border: "1.5px solid rgba(234, 179, 8, 0.28)",
+                fontSize: "13px",
+                fontWeight: "600",
+                color: "#92400e",
+                lineHeight: "1.45",
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, marginTop: "1px" }}>
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span>No AI suggestion available for this ticket. Please write the resolution manually below.</span>
+              </div>
+            )}
             <label>Suggested Resolution</label>
             <div className="resolution-review-box">
               <div className="resolution-review-box__hint">
@@ -397,9 +420,9 @@ function TicketModal({
                     setResolveReviewAction("accepted");
                     setFinalResolution(resolutionSuggestion || "");
                   }}
-                  disabled={suggestionBusy}
+                  disabled={suggestionBusy || !(resolutionSuggestion || "").trim()}
                   aria-label="Accept suggestion"
-                  title="Accept suggestion"
+                  title={!(resolutionSuggestion || "").trim() ? "No suggestion to accept" : "Accept suggestion"}
                 >
                   ✓
                 </button>
@@ -821,10 +844,11 @@ export default function ComplaintDetails() {
   useEffect(() => {
     if (modalType !== "resolve") return;
     const preGenerated = (ticket?.suggestedResolution || "").trim();
-    setResolveReviewAction("accepted");
     setResolutionSuggestion(preGenerated);
     setFinalResolution(preGenerated);
     setResolveError("");
+    // If no AI suggestion exists, force the employee to write their own resolution
+    setResolveReviewAction(preGenerated ? "accepted" : "declined_custom");
   }, [modalType, ticket]);
 
   const loadTicket = useCallback(async () => {
