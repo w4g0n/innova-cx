@@ -2,8 +2,6 @@
 -- InnovaCX 
 -- =========================================================
 
-BEGIN;
-
 -- -------------------------
 -- Extensions
 -- -------------------------
@@ -554,10 +552,12 @@ DECLARE
   v_manager_id      UUID;
   v_ticket_code     TEXT;
   v_ticket_priority ticket_priority;
+  v_ticket_dept_id  UUID;
   v_submitter_name  TEXT;
   v_submitter_role  user_role;
   v_title           TEXT;
   v_message         TEXT;
+  v_found_manager   BOOLEAN := FALSE;
 BEGIN
   SELECT role INTO v_submitter_role
   FROM users WHERE id = NEW.submitted_by_user_id;
@@ -566,41 +566,81 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT ticket_code, priority
-  INTO v_ticket_code, v_ticket_priority
+  SELECT ticket_code, priority, department_id
+  INTO v_ticket_code, v_ticket_priority, v_ticket_dept_id
   FROM tickets WHERE id = NEW.ticket_id;
 
   SELECT full_name INTO v_submitter_name
   FROM user_profiles WHERE user_id = NEW.submitted_by_user_id;
 
-  -- Notify targeted manager if set; otherwise notify all active managers.
-  FOR v_manager_id IN
-    SELECT id
-    FROM users
-    WHERE role = 'manager'
-      AND is_active = TRUE
-      AND (NEW.requested_to_user_id IS NULL OR id = NEW.requested_to_user_id)
-  LOOP
-    v_title := CASE NEW.request_type
-      WHEN 'Rescoring' THEN 'Rescoring Request — ' || COALESCE(v_ticket_code, 'Unknown')
-      WHEN 'Rerouting' THEN 'Rerouting Request — ' || COALESCE(v_ticket_code, 'Unknown')
-      ELSE 'Approval Request — ' || COALESCE(v_ticket_code, 'Unknown')
-    END;
+  v_title := CASE NEW.request_type
+    WHEN 'Rescoring' THEN 'Rescoring Request — ' || COALESCE(v_ticket_code, 'Unknown')
+    WHEN 'Rerouting' THEN 'Rerouting Request — ' || COALESCE(v_ticket_code, 'Unknown')
+    ELSE 'Approval Request — ' || COALESCE(v_ticket_code, 'Unknown')
+  END;
 
-    v_message := COALESCE(v_submitter_name, 'An employee') || ' submitted a '
-      || lower(NEW.request_type::TEXT) || ' request. '
-      || 'Current: ' || NEW.current_value || ' → Requested: ' || NEW.requested_value || '.';
+  v_message := COALESCE(v_submitter_name, 'An employee') || ' submitted a '
+    || lower(NEW.request_type::TEXT) || ' request. '
+    || 'Current: ' || NEW.current_value || ' → Requested: ' || NEW.requested_value || '.';
 
+  -- ── Case 1: explicit target manager set by backend ────────────────────────
+  IF NEW.requested_to_user_id IS NOT NULL THEN
     INSERT INTO notifications (user_id, type, title, message, priority, ticket_id)
     VALUES (
-      v_manager_id,
+      NEW.requested_to_user_id,
       'status_change',
       v_title,
       v_message,
       v_ticket_priority,
       NEW.ticket_id
     );
-  END LOOP;
+    RETURN NEW;
+  END IF;
+
+  -- ── Case 2: no explicit target — route to the manager of the ticket dept ──
+  -- Find the manager whose user_profiles.department_id = ticket.department_id.
+  -- Only ONE notification is inserted, for the correct department manager.
+  IF v_ticket_dept_id IS NOT NULL THEN
+    FOR v_manager_id IN
+      SELECT u.id
+      FROM users u
+      JOIN user_profiles up ON up.user_id = u.id
+      WHERE u.role = 'manager'
+        AND u.is_active = TRUE
+        AND up.department_id = v_ticket_dept_id
+      LIMIT 1
+    LOOP
+      INSERT INTO notifications (user_id, type, title, message, priority, ticket_id)
+      VALUES (
+        v_manager_id,
+        'status_change',
+        v_title,
+        v_message,
+        v_ticket_priority,
+        NEW.ticket_id
+      );
+      v_found_manager := TRUE;
+    END LOOP;
+  END IF;
+
+  -- ── Case 3: no dept or no manager found for dept — fallback to all managers
+  -- This prevents silent notification loss when a ticket has no department.
+  IF NOT v_found_manager THEN
+    FOR v_manager_id IN
+      SELECT id FROM users
+      WHERE role = 'manager' AND is_active = TRUE
+    LOOP
+      INSERT INTO notifications (user_id, type, title, message, priority, ticket_id)
+      VALUES (
+        v_manager_id,
+        'status_change',
+        v_title,
+        v_message,
+        v_ticket_priority,
+        NEW.ticket_id
+      );
+    END LOOP;
+  END IF;
 
   RETURN NEW;
 END;
@@ -1050,97 +1090,152 @@ ON CONFLICT (name) DO NOTHING;
 -- mfa_enabled = FALSE and totp_secret = NULL so all users get a proper
 -- bearer token on login (no MFA prompt during development/testing)
 INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
-  ('customer1@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
-  ('customer2@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
-  ('customer3@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
-  ('manager@innova.cx',   crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
-  ('operator@innova.cx',  crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  FALSE, NULL),
-  ('ahmed@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('maria@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('omar@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('sara@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('bilal@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('fatima@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('yousef@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('khalid@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('dina@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('hassan@innova.cx',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('lena@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('noura@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
-  ('ziad@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL)
+  -- Customers
+  ('customer1@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
+  ('customer2@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
+  ('customer3@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
+  -- Operator
+  ('operator@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  FALSE, NULL),
+  -- Managers (1 per department)
+  ('hamad@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
+  ('leen@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
+  ('rami@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
+  ('majid@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
+  ('ali@innovacx.net',       crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
+  ('yara@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
+  ('hana@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
+  -- Employees (1 per department)
+  ('ahmed@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('lena@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('bilal@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('sameer@innovacx.net',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('yousef@innovacx.net',    crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('talya@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL),
+  ('sarah@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  FALSE, NULL)
 ON CONFLICT (email) DO UPDATE
   SET mfa_enabled = FALSE,
       totp_secret = NULL;
 
 
 -- Profiles
--- Profiles
+-- Managers
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
-SELECT u.id, 'Dr. Farhad', NULL, 'Department Manager',
+SELECT u.id, 'Hamad Alaa', 'MGR-IT01', 'Department Manager',
+       (SELECT id FROM departments WHERE name='IT' LIMIT 1)
+FROM users u WHERE u.email='hamad@innovacx.net'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Leen Naser', 'MGR-HR01', 'Department Manager',
+       (SELECT id FROM departments WHERE name='HR' LIMIT 1)
+FROM users u WHERE u.email='leen@innovacx.net'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Rami Alassi', 'MGR-LC01', 'Department Manager',
+       (SELECT id FROM departments WHERE name='Legal & Compliance' LIMIT 1)
+FROM users u WHERE u.email='rami@innovacx.net'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Majid Sharaf', 'MGR-MN01', 'Department Manager',
+       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1)
+FROM users u WHERE u.email='majid@innovacx.net'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Ali Al Maharif', 'MGR-SS01', 'Department Manager',
+       (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1)
+FROM users u WHERE u.email='ali@innovacx.net'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Yara Saab', 'MGR-LS01', 'Department Manager',
+       (SELECT id FROM departments WHERE name='Leasing' LIMIT 1)
+FROM users u WHERE u.email='yara@innovacx.net'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Hana Ayad', 'MGR-FM01', 'Department Manager',
        (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1)
-FROM users u WHERE u.email='manager@innova.cx'
+FROM users u WHERE u.email='hana@innovacx.net'
+ON CONFLICT (user_id) DO NOTHING;
+
+-- Employees
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Ahmed Hassan', 'EMP-IT01', 'Support Specialist',
+       (SELECT id FROM departments WHERE name='IT' LIMIT 1)
+FROM users u WHERE u.email='ahmed@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
-SELECT u.id, 'Ahmed Hassan', 'EMP-1023', 'Senior Technician',
+SELECT u.id, 'Lena Musa', 'EMP-HR01', 'Support Specialist',
+       (SELECT id FROM departments WHERE name='HR' LIMIT 1)
+FROM users u WHERE u.email='lena@innovacx.net'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Bilal Khan', 'EMP-LC01', 'Support Specialist',
+       (SELECT id FROM departments WHERE name='Legal & Compliance' LIMIT 1)
+FROM users u WHERE u.email='bilal@innovacx.net'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
+SELECT u.id, 'Sameer Ahmed', 'EMP-MN01', 'Support Specialist',
        (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1)
-FROM users u WHERE u.email='ahmed@innova.cx'
+FROM users u WHERE u.email='sameer@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
-SELECT u.id, 'Maria Lopez', 'EMP-1078', 'Technician',
-       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1)
-FROM users u WHERE u.email='maria@innova.cx'
+SELECT u.id, 'Yousef Madi', 'EMP-SS01', 'Support Specialist',
+       (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1)
+FROM users u WHERE u.email='yousef@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
-SELECT u.id, 'Omar Ali', 'EMP-1150', 'Assistant Technician',
-       (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1)
-FROM users u WHERE u.email='omar@innova.cx'
+SELECT u.id, 'Talya Mohammad', 'EMP-LS01', 'Support Specialist',
+       (SELECT id FROM departments WHERE name='Leasing' LIMIT 1)
+FROM users u WHERE u.email='talya@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, employee_code, job_title, department_id)
-SELECT u.id, 'Sara Ahmed', 'EMP-1192', 'Technician',
+SELECT u.id, 'Sarah Muneer', 'EMP-FM01', 'Support Specialist',
        (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1)
-FROM users u WHERE u.email='sara@innova.cx'
+FROM users u WHERE u.email='sarah@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
-INSERT INTO user_profiles (user_id, full_name, employee_code, job_title)
-SELECT u.id, 'Bilal Khan', 'EMP-1244', 'HVAC Specialist'
-FROM users u WHERE u.email='bilal@innova.cx'
+-- Operator profile
+INSERT INTO user_profiles (user_id, full_name, job_title)
+SELECT u.id, 'System Operator', 'System Operator'
+FROM users u WHERE u.email='operator@innova.cx'
 ON CONFLICT (user_id) DO NOTHING;
 
-INSERT INTO user_profiles (user_id, full_name, employee_code, job_title)
-SELECT u.id, 'Fatima Noor', 'EMP-1290', 'Coordinator'
-FROM users u WHERE u.email='fatima@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
-
-INSERT INTO user_profiles (user_id, full_name, employee_code, job_title)
-SELECT u.id, 'Yousef Karim', 'EMP-1331', 'Maintenance Supervisor'
-FROM users u WHERE u.email='yousef@innova.cx'
-ON CONFLICT (user_id) DO NOTHING;
-
-INSERT INTO user_profiles (user_id, full_name, employee_code, job_title)
-SELECT u.id, 'Khalid Musa', 'EMP-1378', 'Electrician'
-FROM users u WHERE u.email='khalid@innova.cx'
+-- Customer profiles
+INSERT INTO user_profiles (user_id, full_name, phone, location)
+SELECT u.id, 'Customer One', '+971500000001', 'Dubai'
+FROM users u WHERE u.email='customer1@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, phone, location)
-SELECT u.id, 'Customer One', '+971500000000', 'Dubai'
-FROM users u WHERE u.email='customer1@innova.cx'
+SELECT u.id, 'Customer Two', '+971500000002', 'Abu Dhabi'
+FROM users u WHERE u.email='customer2@innovacx.net'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO user_profiles (user_id, full_name, phone, location)
+SELECT u.id, 'Customer Three', '+971500000003', 'Sharjah'
+FROM users u WHERE u.email='customer3@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 -- Tickets (fixed assignments seed)
 WITH
-  cust    AS (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
-  ahmed   AS (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
-  maria   AS (SELECT id FROM users WHERE email='maria@innova.cx' LIMIT 1),
-  omar    AS (SELECT id FROM users WHERE email='omar@innova.cx' LIMIT 1),
-  sara    AS (SELECT id FROM users WHERE email='sara@innova.cx' LIMIT 1),
-  bilal   AS (SELECT id FROM users WHERE email='bilal@innova.cx' LIMIT 1),
-  fatima  AS (SELECT id FROM users WHERE email='fatima@innova.cx' LIMIT 1),
-  yousef  AS (SELECT id FROM users WHERE email='yousef@innova.cx' LIMIT 1),
-  khalid  AS (SELECT id FROM users WHERE email='khalid@innova.cx' LIMIT 1),
+  cust    AS (SELECT id FROM users WHERE email='customer1@innovacx.net' LIMIT 1),
+  ahmed   AS (SELECT id FROM users WHERE email='ahmed@innovacx.net' LIMIT 1),
+  sarah   AS (SELECT id FROM users WHERE email='sarah@innovacx.net' LIMIT 1),
+  sameer  AS (SELECT id FROM users WHERE email='sameer@innovacx.net' LIMIT 1),
+  bilal   AS (SELECT id FROM users WHERE email='bilal@innovacx.net' LIMIT 1),
+  yousef  AS (SELECT id FROM users WHERE email='yousef@innovacx.net' LIMIT 1),
+  talya   AS (SELECT id FROM users WHERE email='talya@innovacx.net' LIMIT 1),
+  lena    AS (SELECT id FROM users WHERE email='lena@innovacx.net' LIMIT 1),
   facilities  AS (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1),
   legal       AS (SELECT id FROM departments WHERE name='Legal & Compliance' LIMIT 1),
   safety      AS (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1),
@@ -1200,7 +1295,7 @@ VALUES
   'Assigned',
   (SELECT id FROM it),
   (SELECT id FROM cust),
-  (SELECT id FROM fatima),
+  (SELECT id FROM ahmed),
   to_timestamp('19/11/2025','DD/MM/YYYY'),
   to_timestamp('19/11/2025','DD/MM/YYYY') + interval '1 hour',
   to_timestamp('19/11/2025','DD/MM/YYYY') + interval '18 hours',
@@ -1218,7 +1313,7 @@ VALUES
   'Assigned',
   (SELECT id FROM safety),
   (SELECT id FROM cust),
-  (SELECT id FROM omar),
+  (SELECT id FROM yousef),
   to_timestamp('18/11/2025','DD/MM/YYYY'),
   to_timestamp('18/11/2025','DD/MM/YYYY') + interval '1 hour',
   to_timestamp('18/11/2025','DD/MM/YYYY') + interval '18 hours',
@@ -1254,7 +1349,7 @@ VALUES
   'Assigned',
   (SELECT id FROM legal),
   (SELECT id FROM cust),
-  (SELECT id FROM sara),
+  (SELECT id FROM sameer),
   to_timestamp('13/11/2025','DD/MM/YYYY'),
   to_timestamp('13/11/2025','DD/MM/YYYY') + interval '3 hours',
   to_timestamp('13/11/2025','DD/MM/YYYY') + interval '2 days',
@@ -1272,7 +1367,7 @@ VALUES
   'Assigned',
   (SELECT id FROM facilities),
   (SELECT id FROM cust),
-  (SELECT id FROM maria),
+  (SELECT id FROM sarah),
   to_timestamp('09/11/2025','DD/MM/YYYY'),
   to_timestamp('09/11/2025','DD/MM/YYYY') + interval '6 hours',
   to_timestamp('09/11/2025','DD/MM/YYYY') + interval '3 days',
@@ -1285,8 +1380,8 @@ ON CONFLICT (ticket_code) DO NOTHING;
 
 -- ✅ KPI-friendly tickets for Ahmed (FIXED: every row has same number of columns)
 WITH
-cust  AS (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
-ahmed AS (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
+cust  AS (SELECT id FROM users WHERE email='customer1@innovacx.net' LIMIT 1),
+ahmed AS (SELECT id FROM users WHERE email='ahmed@innovacx.net' LIMIT 1),
 fac   AS (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1)
 INSERT INTO tickets (
   ticket_code,
@@ -1357,7 +1452,7 @@ ON CONFLICT (ticket_code) DO NOTHING;
 
 -- Work steps example
 INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, occurred_at, notes)
-SELECT t.id, 1, (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
+SELECT t.id, 1, (SELECT id FROM users WHERE email='ahmed@innovacx.net' LIMIT 1),
        t.created_at + interval '20 minutes',
        'Initial inspection completed. Logged error codes and safety checks.'
 FROM tickets t WHERE t.ticket_code='CX-4630'
@@ -1368,7 +1463,7 @@ INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, statu
 SELECT 'CX-2011', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3101',
        'Complaint','Medium','Open',
        (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1),
-       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innovacx.net' LIMIT 1),
        to_timestamp('18/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2011');
 
@@ -1376,7 +1471,7 @@ INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, statu
 SELECT 'CX-2034', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3110',
        'Complaint','Medium','Open',
        (SELECT id FROM departments WHERE name='Maintenance' LIMIT 1),
-       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innovacx.net' LIMIT 1),
        to_timestamp('18/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2034');
 
@@ -1384,7 +1479,7 @@ INSERT INTO tickets (ticket_code, subject, details, ticket_type, priority, statu
 SELECT 'CX-2078', 'Placeholder ticket for approval linkage', 'Created to support approval request REQ-3125',
        'Complaint','High','Open',
        (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1),
-       (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
+       (SELECT id FROM users WHERE email='customer1@innovacx.net' LIMIT 1),
        to_timestamp('17/11/2025','DD/MM/YYYY')
 WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_code='CX-2078');
 
@@ -1397,7 +1492,7 @@ SELECT
   'REQ-3101', t.id, 'Rescoring',
   'Priority: Medium', 'Priority: Critical',
   'Raised due to increased urgency and impact on operations.',
-  (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
+  (SELECT id FROM users WHERE email='ahmed@innovacx.net' LIMIT 1),
   to_timestamp('18/11/2025 10:22','DD/MM/YYYY HH24:MI'),
   'Pending'
 FROM tickets t WHERE t.ticket_code='CX-2011'
@@ -1411,7 +1506,7 @@ SELECT
   'REQ-3110', t.id, 'Rerouting',
   'Dept: Maintenance', 'Dept: Safety & Security',
   'Security review required due to access-control implications.',
-  (SELECT id FROM users WHERE email='ahmed@innova.cx' LIMIT 1),
+  (SELECT id FROM users WHERE email='ahmed@innovacx.net' LIMIT 1),
   to_timestamp('18/11/2025 11:05','DD/MM/YYYY HH24:MI'),
   'Pending'
 FROM tickets t WHERE t.ticket_code='CX-2034'
@@ -1425,7 +1520,7 @@ SELECT
   'REQ-3125', t.id, 'Rescoring',
   'Priority: High', 'Priority: Medium',
   'Adjusted after verification reduced the severity classification.',
-  (SELECT id FROM users WHERE email='maria@innova.cx' LIMIT 1),
+  (SELECT id FROM users WHERE email='sarah@innovacx.net' LIMIT 1),
   to_timestamp('17/11/2025 15:40','DD/MM/YYYY HH24:MI'),
   'Pending'
 FROM tickets t WHERE t.ticket_code='CX-2078'
@@ -1493,19 +1588,19 @@ SET value=EXCLUDED.value;
 -- Re-assign seed tickets to correct employee UUIDs
 -- (guards against UUID drift if users were recreated)
 UPDATE tickets
-SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx' LIMIT 1)
+SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net' LIMIT 1)
 WHERE ticket_code IN ('CX-4630', 'CX-9001', 'CX-9002', 'CX-9003', 'CX-9004', 'CX-9005');
 
 UPDATE tickets
-SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'maria@innova.cx' LIMIT 1)
+SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'sarah@innovacx.net' LIMIT 1)
 WHERE ticket_code = 'CX-3862';
 
 UPDATE tickets
-SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'omar@innova.cx' LIMIT 1)
+SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'yousef@innovacx.net' LIMIT 1)
 WHERE ticket_code = 'CX-4725';
 
 UPDATE tickets
-SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'sara@innova.cx' LIMIT 1)
+SET assigned_to_user_id = (SELECT id FROM users WHERE email = 'sameer@innovacx.net' LIMIT 1)
 WHERE ticket_code = 'CX-4780';
 
 -- Disable MFA for all seed users so login returns a bearer token
@@ -1513,17 +1608,24 @@ WHERE ticket_code = 'CX-4780';
 UPDATE users
 SET mfa_enabled = FALSE, totp_secret = NULL
 WHERE email IN (
-  'customer1@innova.cx',
-  'manager@innova.cx',
+  'customer1@innovacx.net',
+  'customer2@innovacx.net',
+  'customer3@innovacx.net',
   'operator@innova.cx',
-  'ahmed@innova.cx',
-  'maria@innova.cx',
-  'omar@innova.cx',
-  'sara@innova.cx',
-  'bilal@innova.cx',
-  'fatima@innova.cx',
-  'yousef@innova.cx',
-  'khalid@innova.cx'
+  'hamad@innovacx.net',
+  'leen@innovacx.net',
+  'rami@innovacx.net',
+  'majid@innovacx.net',
+  'ali@innovacx.net',
+  'yara@innovacx.net',
+  'hana@innovacx.net',
+  'ahmed@innovacx.net',
+  'lena@innovacx.net',
+  'bilal@innovacx.net',
+  'sameer@innovacx.net',
+  'yousef@innovacx.net',
+  'talya@innovacx.net',
+  'sarah@innovacx.net'
 );
 
 -- =========================================================
@@ -1535,7 +1637,7 @@ INSERT INTO employee_reports (report_code, employee_user_id, month_label, subtit
 SELECT code, ahmed_id, label, sub, rating, resolved, sla, avg_resp
 FROM (
   SELECT
-    (SELECT id FROM users WHERE email = 'ahmed@innova.cx') AS ahmed_id,
+    (SELECT id FROM users WHERE email = 'ahmed@innovacx.net') AS ahmed_id,
     unnest(ARRAY['nov-2025','oct-2025','sep-2025','aug-2025','jul-2025','jun-2025']) AS code,
     unnest(ARRAY['November 2025','October 2025','September 2025','August 2025','July 2025','June 2025']) AS label,
     unnest(ARRAY[
@@ -1562,7 +1664,7 @@ FROM employee_reports er,
     ('Pending','1'), ('Avg Priority','High'), ('SLA Breaches','1')
   ) AS data(label, val)
 WHERE er.report_code = 'nov-2025'
-  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
   AND NOT EXISTS (
     SELECT 1 FROM employee_report_summary_items si WHERE si.report_id = er.id
   );
@@ -1576,7 +1678,7 @@ FROM employee_reports er,
     ('Pending','1'), ('Avg Priority','Medium'), ('SLA Breaches','2')
   ) AS data(label, val)
 WHERE er.report_code = 'oct-2025'
-  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
   AND NOT EXISTS (
     SELECT 1 FROM employee_report_summary_items si WHERE si.report_id = er.id
   );
@@ -1592,7 +1694,7 @@ FROM employee_reports er,
     ('Customer Satisfaction', 4.5, 90)
   ) AS data(name, score, pct)
 WHERE er.report_code = 'nov-2025'
-  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
   AND NOT EXISTS (
     SELECT 1 FROM employee_report_rating_components rc WHERE rc.report_id = er.id
   );
@@ -1608,7 +1710,7 @@ FROM employee_reports er,
     ('Customer Satisfaction', 4.3, 86)
   ) AS data(name, score, pct)
 WHERE er.report_code = 'oct-2025'
-  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
   AND NOT EXISTS (
     SELECT 1 FROM employee_report_rating_components rc WHERE rc.report_id = er.id
   );
@@ -1624,7 +1726,7 @@ FROM employee_reports er,
     ('Week 4', 3, 2, '67%',  '22 Mins', 'negative', '-8%')
   ) AS data(wk, asgn, res, s, avg_r, dt, dtxt)
 WHERE er.report_code = 'nov-2025'
-  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
   AND NOT EXISTS (
     SELECT 1 FROM employee_report_weekly ew WHERE ew.report_id = er.id
   );
@@ -1640,7 +1742,7 @@ FROM employee_reports er,
     ('Week 4', 3, 2, '67%',  '26 Mins', 'negative', '-33%')
   ) AS data(wk, asgn, res, s, avg_r, dt, dtxt)
 WHERE er.report_code = 'oct-2025'
-  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
   AND NOT EXISTS (
     SELECT 1 FROM employee_report_weekly ew WHERE ew.report_id = er.id
   );
@@ -1654,7 +1756,7 @@ FROM employee_reports er,
     ('One SLA breach in week 4 due to parts delay — documented.')
   ) AS data(note)
 WHERE er.report_code = 'nov-2025'
-  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
   AND NOT EXISTS (
     SELECT 1 FROM employee_report_notes en WHERE en.report_id = er.id
   );
@@ -1668,7 +1770,7 @@ FROM employee_reports er,
     ('Response time above target — investigate workload balancing.')
   ) AS data(note)
 WHERE er.report_code = 'oct-2025'
-  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  AND er.employee_user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
   AND NOT EXISTS (
     SELECT 1 FROM employee_report_notes en WHERE en.report_id = er.id
   );
@@ -1679,7 +1781,7 @@ WHERE er.report_code = 'oct-2025'
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  (SELECT id FROM users WHERE email = 'ahmed@innovacx.net'),
   'sla_warning',
   'SLA Warning: CX-9004',
   'Ticket CX-9004 is overdue. Immediate action required.',
@@ -1689,13 +1791,13 @@ SELECT
   now() - interval '2 hours'
 WHERE NOT EXISTS (
   SELECT 1 FROM notifications n
-  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
     AND n.title = 'SLA Warning: CX-9004'
 );
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  (SELECT id FROM users WHERE email = 'ahmed@innovacx.net'),
   'ticket_assignment',
   'Ticket Assigned: CX-9003',
   'You have been assigned ticket CX-9003 — Critical priority.',
@@ -1705,13 +1807,13 @@ SELECT
   now() - interval '1 day'
 WHERE NOT EXISTS (
   SELECT 1 FROM notifications n
-  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
     AND n.title = 'Ticket Assigned: CX-9003'
 );
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  (SELECT id FROM users WHERE email = 'ahmed@innovacx.net'),
   'ticket_assignment',
   'Ticket Assigned: CX-9001',
   'You have been assigned a new ticket CX-9001.',
@@ -1721,13 +1823,13 @@ SELECT
   now() - interval '12 days'
 WHERE NOT EXISTS (
   SELECT 1 FROM notifications n
-  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
     AND n.title = 'Ticket Assigned: CX-9001'
 );
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  (SELECT id FROM users WHERE email = 'ahmed@innovacx.net'),
   'report_ready',
   'Monthly Report Ready',
   'Your November 2025 performance report is now available.',
@@ -1737,13 +1839,13 @@ SELECT
   now() - interval '5 days'
 WHERE NOT EXISTS (
   SELECT 1 FROM notifications n
-  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
     AND n.title = 'Monthly Report Ready'
 );
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  (SELECT id FROM users WHERE email = 'ahmed@innovacx.net'),
   'status_change',
   'Ticket Status Updated: CX-9002',
   'Ticket CX-9002 has been moved to In Progress.',
@@ -1753,7 +1855,7 @@ SELECT
   now() - interval '3 hours'
 WHERE NOT EXISTS (
   SELECT 1 FROM notifications n
-  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innova.cx')
+  WHERE n.user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net')
     AND n.title = 'Ticket Status Updated: CX-9002'
 );
 
@@ -1766,7 +1868,7 @@ INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, notes, oc
 SELECT
   (SELECT id FROM tickets WHERE ticket_code = 'CX-9002'),
   1,
-  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  (SELECT id FROM users WHERE email = 'ahmed@innovacx.net'),
   'Initial assessment completed. Issue identified as network switch failure.',
   now() - interval '2 days'
 WHERE NOT EXISTS (
@@ -1779,7 +1881,7 @@ INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, notes, oc
 SELECT
   (SELECT id FROM tickets WHERE ticket_code = 'CX-9002'),
   2,
-  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  (SELECT id FROM users WHERE email = 'ahmed@innovacx.net'),
   'Replacement switch ordered. ETA 48 hours. Temporary workaround applied.',
   now() - interval '1 day'
 WHERE NOT EXISTS (
@@ -1792,7 +1894,7 @@ INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, notes, oc
 SELECT
   (SELECT id FROM tickets WHERE ticket_code = 'CX-9004'),
   1,
-  (SELECT id FROM users WHERE email = 'ahmed@innova.cx'),
+  (SELECT id FROM users WHERE email = 'ahmed@innovacx.net'),
   'Ticket overdue. Escalation attempt made — awaiting supervisor response.',
   now() - interval '5 hours'
 WHERE NOT EXISTS (
@@ -1809,19 +1911,18 @@ WHERE NOT EXISTS (
 -- =========================================================
 
 WITH
-  cust   AS (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
-  ahmed  AS (SELECT id FROM users WHERE email='ahmed@innova.cx'    LIMIT 1),
-  maria  AS (SELECT id FROM users WHERE email='maria@innova.cx'    LIMIT 1),
-  omar   AS (SELECT id FROM users WHERE email='omar@innova.cx'     LIMIT 1),
-  sara   AS (SELECT id FROM users WHERE email='sara@innova.cx'     LIMIT 1),
-  bilal  AS (SELECT id FROM users WHERE email='bilal@innova.cx'    LIMIT 1),
-  fatima AS (SELECT id FROM users WHERE email='fatima@innova.cx'   LIMIT 1),
-  yousef AS (SELECT id FROM users WHERE email='yousef@innova.cx'   LIMIT 1),
-  khalid AS (SELECT id FROM users WHERE email='khalid@innova.cx'   LIMIT 1),
+  cust   AS (SELECT id FROM users WHERE email='customer1@innovacx.net' LIMIT 1),
+  ahmed  AS (SELECT id FROM users WHERE email='ahmed@innovacx.net'    LIMIT 1),
+  sarah  AS (SELECT id FROM users WHERE email='sarah@innovacx.net'    LIMIT 1),
+  yousef AS (SELECT id FROM users WHERE email='yousef@innovacx.net'   LIMIT 1),
+  sameer AS (SELECT id FROM users WHERE email='sameer@innovacx.net'   LIMIT 1),
+  bilal  AS (SELECT id FROM users WHERE email='bilal@innovacx.net'    LIMIT 1),
+  lena   AS (SELECT id FROM users WHERE email='lena@innovacx.net'     LIMIT 1),
+  talya  AS (SELECT id FROM users WHERE email='talya@innovacx.net'    LIMIT 1),
   fac   AS (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1),
   it    AS (SELECT id FROM departments WHERE name='IT' LIMIT 1),
   sec   AS (SELECT id FROM departments WHERE name='Safety & Security' LIMIT 1),
-  cln   AS (SELECT id FROM departments WHERE name='Cleaning Services' LIMIT 1)
+  cln   AS (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1)
 
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, priority, status,
@@ -1846,11 +1947,11 @@ INSERT INTO tickets (
 
 ('CX-M02','Water leak from ceiling pipe','Dripping water causing damage to office equipment.',
  'Complaint','High','Resolved',
- (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM maria),
+ (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sarah),
  '2025-03-08 09:00:00+00','2025-03-08 09:20:00+00','2025-03-08 09:55:00+00','2025-03-09 16:00:00+00',
  '2025-03-08 10:00:00+00','2025-03-10 09:00:00+00',
  FALSE,FALSE,
- 'High',87.0,'Pipe joint sealed and ceiling panel replaced.',(SELECT id FROM maria)),
+ 'High',87.0,'Pipe joint sealed and ceiling panel replaced.',(SELECT id FROM sarah)),
 
 ('CX-M03','Security camera offline – Gate 3','Camera at Gate 3 showing no signal since yesterday.',
  'Complaint','High','Resolved',
@@ -1862,38 +1963,38 @@ INSERT INTO tickets (
 
 ('CX-M04','Cleaning missed – Floor 4 restrooms','Restrooms not cleaned for two consecutive days.',
  'Complaint','Medium','Resolved',
- (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sara),
+ (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-03-15 07:30:00+00','2025-03-15 08:00:00+00','2025-03-15 10:00:00+00','2025-03-16 08:00:00+00',
  '2025-03-15 10:30:00+00','2025-03-17 07:30:00+00',
  FALSE,FALSE,
- 'Medium',80.0,'Cleaning team rescheduled and area deep-cleaned.',(SELECT id FROM sara)),
+ 'Medium',80.0,'Cleaning team rescheduled and area deep-cleaned.',(SELECT id FROM sameer)),
 
 ('CX-M05','IT printer network error inquiry','Network printer unavailable from multiple workstations.',
  'Inquiry','Medium','Resolved',
- (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM fatima),
+ (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM ahmed),
  '2025-03-20 11:00:00+00','2025-03-20 11:15:00+00','2025-03-20 13:00:00+00','2025-03-21 09:00:00+00',
  '2025-03-20 14:00:00+00','2025-03-22 11:00:00+00',
  FALSE,FALSE,
- 'Low',65.0,'Printer IP reassigned and driver reinstalled on affected PCs.',(SELECT id FROM fatima)),
+ 'Low',65.0,'Printer IP reassigned and driver reinstalled on affected PCs.',(SELECT id FROM ahmed)),
 
 -- ═══════════════════════════════════
 -- APRIL 2025
 -- ═══════════════════════════════════
 ('CX-M06','Electrical fault – Lab corridor','Repeated circuit breaker tripping in lab wing.',
  'Complaint','Critical','Resolved',
- (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM khalid),
+ (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-04-03 07:00:00+00','2025-04-03 07:10:00+00','2025-04-03 07:38:00+00','2025-04-03 18:00:00+00',
  '2025-04-03 07:30:00+00','2025-04-03 19:00:00+00',
  TRUE,FALSE,
- 'Critical',94.0,'Faulty socket replaced and wiring inspected.',(SELECT id FROM khalid)),
+ 'Critical',94.0,'Faulty socket replaced and wiring inspected.',(SELECT id FROM sameer)),
 
 ('CX-M07','Pest sighting – Canteen area','Rodent droppings found near food preparation area.',
  'Complaint','High','Resolved',
- (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sara),
+ (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-04-07 06:00:00+00','2025-04-07 06:30:00+00','2025-04-07 07:15:00+00','2025-04-08 12:00:00+00',
  '2025-04-07 07:00:00+00','2025-04-09 06:00:00+00',
  TRUE,FALSE,
- 'Medium',78.0,'Pest control treatment applied and entry points sealed.',(SELECT id FROM sara)),
+ 'Medium',78.0,'Pest control treatment applied and entry points sealed.',(SELECT id FROM sameer)),
 
 ('CX-M08','Access card readers not registering','Multiple employees unable to badge into west wing.',
  'Complaint','High','Resolved',
@@ -1913,11 +2014,11 @@ INSERT INTO tickets (
 
 ('CX-M10','Wi-Fi dead zone – Conference rooms','No connectivity in rooms 3A through 3D.',
  'Inquiry','Medium','Resolved',
- (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM fatima),
+ (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM ahmed),
  '2025-04-22 10:00:00+00','2025-04-22 10:30:00+00','2025-04-22 13:00:00+00','2025-04-23 11:00:00+00',
  '2025-04-22 13:00:00+00','2025-04-24 10:00:00+00',
  FALSE,FALSE,
- 'Medium',82.0,'New access point installed; signal verified across all rooms.',(SELECT id FROM fatima)),
+ 'Medium',82.0,'New access point installed; signal verified across all rooms.',(SELECT id FROM ahmed)),
 
 -- ═══════════════════════════════════
 -- MAY 2025
@@ -1940,19 +2041,19 @@ INSERT INTO tickets (
 
 ('CX-M13','CCTV footage request – parking incident','Customer requests footage of parking incident.',
  'Inquiry','Medium','Resolved',
- (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM omar),
+ (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM yousef),
  '2025-05-14 11:00:00+00','2025-05-14 11:30:00+00','2025-05-14 14:00:00+00','2025-05-15 12:00:00+00',
  '2025-05-14 14:00:00+00','2025-05-16 11:00:00+00',
  FALSE,FALSE,
- 'Low',68.0,'Footage reviewed and relevant clip shared with customer.',(SELECT id FROM omar)),
+ 'Low',68.0,'Footage reviewed and relevant clip shared with customer.',(SELECT id FROM yousef)),
 
 ('CX-M14','Cleaning chemicals smell – Floor 3','Strong chemical odour from cleaning product use.',
  'Complaint','Low','Resolved',
- (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sara),
+ (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-05-19 07:00:00+00','2025-05-19 09:00:00+00','2025-05-19 15:00:00+00','2025-05-20 08:00:00+00',
  '2025-05-19 13:00:00+00','2025-05-22 07:00:00+00',
  TRUE,FALSE,
- 'Low',74.0,'Switched to low-odour products and improved ventilation during cleaning.',(SELECT id FROM sara)),
+ 'Low',74.0,'Switched to low-odour products and improved ventilation during cleaning.',(SELECT id FROM sameer)),
 
 ('CX-M15','Server room overheating alert','Temperature in server room exceeded 28°C threshold.',
  'Complaint','Critical','Resolved',
@@ -1967,19 +2068,19 @@ INSERT INTO tickets (
 -- ═══════════════════════════════════
 ('CX-M16','Generator fuel low – Building C','Standby generator at 12% fuel capacity.',
  'Complaint','High','Resolved',
- (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM khalid),
+ (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-06-04 07:00:00+00','2025-06-04 07:20:00+00','2025-06-04 08:00:00+00','2025-06-04 15:00:00+00',
  '2025-06-04 08:00:00+00','2025-06-06 07:00:00+00',
  FALSE,FALSE,
- 'High',89.0,'Fuel topped up and weekly check schedule reinstated.',(SELECT id FROM khalid)),
+ 'High',89.0,'Fuel topped up and weekly check schedule reinstated.',(SELECT id FROM sameer)),
 
 ('CX-M17','Visitor management system down','Visitor kiosks in lobby not accepting registrations.',
  'Inquiry','Medium','Resolved',
- (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM fatima),
+ (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM ahmed),
  '2025-06-10 09:00:00+00','2025-06-10 09:30:00+00','2025-06-10 11:00:00+00','2025-06-11 10:00:00+00',
  '2025-06-10 12:00:00+00','2025-06-12 09:00:00+00',
  FALSE,FALSE,
- 'Low',71.0,'Software service restarted and kiosk connectivity confirmed.',(SELECT id FROM fatima)),
+ 'Low',71.0,'Software service restarted and kiosk connectivity confirmed.',(SELECT id FROM ahmed)),
 
 ('CX-M18','Fire exit blocked – east stairwell','Fire exit door propped open and partially blocked.',
  'Complaint','Critical','Resolved',
@@ -1991,11 +2092,11 @@ INSERT INTO tickets (
 
 ('CX-M19','Cleaning frequency insufficient – lobby','Lobby floor dirty by mid-morning daily.',
  'Complaint','Low','Resolved',
- (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sara),
+ (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-06-23 08:00:00+00','2025-06-23 10:00:00+00','2025-06-23 15:00:00+00','2025-06-24 09:00:00+00',
  '2025-06-23 14:00:00+00','2025-06-26 08:00:00+00',
  TRUE,FALSE,
- 'Medium',69.0,'Cleaning frequency increased to 3x daily for lobby.',(SELECT id FROM sara)),
+ 'Medium',69.0,'Cleaning frequency increased to 3x daily for lobby.',(SELECT id FROM sameer)),
 
 -- ═══════════════════════════════════
 -- JULY 2025
@@ -2010,19 +2111,19 @@ INSERT INTO tickets (
 
 ('CX-M21','Badge printing station broken','HR badge printer not functioning.',
  'Inquiry','Low','Resolved',
- (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM fatima),
+ (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM ahmed),
  '2025-07-08 10:00:00+00','2025-07-08 10:30:00+00','2025-07-08 16:00:00+00','2025-07-09 11:00:00+00',
  '2025-07-08 16:00:00+00','2025-07-11 10:00:00+00',
  FALSE,FALSE,
- 'Low',70.0,'Printer driver updated and cartridge replaced.',(SELECT id FROM fatima)),
+ 'Low',70.0,'Printer driver updated and cartridge replaced.',(SELECT id FROM ahmed)),
 
 ('CX-M22','Security guard post unmanned','Main gate security post left unmanned for 90 minutes.',
  'Complaint','Critical','Resolved',
- (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM omar),
+ (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM yousef),
  '2025-07-14 06:00:00+00','2025-07-14 06:10:00+00','2025-07-14 06:28:00+00','2025-07-14 10:00:00+00',
  '2025-07-14 06:30:00+00','2025-07-14 12:00:00+00',
  FALSE,FALSE,
- 'Critical',95.0,'Relief guard deployed; roster updated to prevent gaps.',(SELECT id FROM omar)),
+ 'Critical',95.0,'Relief guard deployed; roster updated to prevent gaps.',(SELECT id FROM yousef)),
 
 ('CX-M23','Mould on ceiling – Meeting Room 7','Visible mould patch spreading on ceiling tiles.',
  'Complaint','High','Resolved',
@@ -2037,11 +2138,11 @@ INSERT INTO tickets (
 -- ═══════════════════════════════════
 ('CX-M24','Blocked drainage – outdoor plaza','Plaza drains backing up after rain.',
  'Complaint','Medium','Resolved',
- (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM khalid),
+ (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-08-05 08:00:00+00','2025-08-05 08:30:00+00','2025-08-05 11:00:00+00','2025-08-06 10:00:00+00',
  '2025-08-05 11:00:00+00','2025-08-07 08:00:00+00',
  FALSE,FALSE,
- 'Medium',81.0,'Drainage cleared of debris; grating repaired.',(SELECT id FROM khalid)),
+ 'Medium',81.0,'Drainage cleared of debris; grating repaired.',(SELECT id FROM sameer)),
 
 ('CX-M25','CCTV system error – all cameras','All cameras showing "signal lost" on monitoring screen.',
  'Complaint','Critical','Resolved',
@@ -2053,11 +2154,11 @@ INSERT INTO tickets (
 
 ('CX-M26','Cleaning robot stuck – atrium','Autonomous floor cleaning robot stuck and blocking pathway.',
  'Complaint','Low','Resolved',
- (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sara),
+ (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-08-19 11:00:00+00','2025-08-19 11:30:00+00','2025-08-19 16:00:00+00','2025-08-20 09:00:00+00',
  '2025-08-19 17:00:00+00','2025-08-22 11:00:00+00',
  FALSE,FALSE,
- 'Low',66.0,'Robot repositioned and obstacle sensors recalibrated.',(SELECT id FROM sara)),
+ 'Low',66.0,'Robot repositioned and obstacle sensors recalibrated.',(SELECT id FROM sameer)),
 
 ('CX-M27','Power outage – Finance floor','Complete power failure affecting Finance department.',
  'Complaint','Critical','Resolved',
@@ -2080,19 +2181,19 @@ INSERT INTO tickets (
 
 ('CX-M29','Security alarm false triggers','Motion sensors triggering alarm at 3 AM daily.',
  'Complaint','Medium','Resolved',
- (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM omar),
+ (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM yousef),
  '2025-09-11 07:00:00+00','2025-09-11 07:30:00+00','2025-09-11 10:00:00+00','2025-09-12 12:00:00+00',
  '2025-09-11 10:00:00+00','2025-09-13 07:00:00+00',
  FALSE,FALSE,
- 'Medium',79.0,'Sensor sensitivity adjusted; false triggers eliminated.',(SELECT id FROM omar)),
+ 'Medium',79.0,'Sensor sensitivity adjusted; false triggers eliminated.',(SELECT id FROM yousef)),
 
 ('CX-M30','Hot water failure – staff showers','No hot water in staff shower block.',
  'Complaint','High','Resolved',
- (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM khalid),
+ (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-09-18 06:00:00+00','2025-09-18 06:20:00+00','2025-09-18 07:10:00+00','2025-09-18 16:00:00+00',
  '2025-09-18 07:00:00+00','2025-09-20 06:00:00+00',
  FALSE,FALSE,
- 'High',88.0,'Heating element replaced in main boiler.',(SELECT id FROM khalid)),
+ 'High',88.0,'Heating element replaced in main boiler.',(SELECT id FROM sameer)),
 
 -- ═══════════════════════════════════
 -- OCTOBER 2025
@@ -2115,19 +2216,19 @@ INSERT INTO tickets (
 
 ('CX-M33','Pest control needed – archives room','Evidence of insects in document archives.',
  'Complaint','Medium','Resolved',
- (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sara),
+ (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-10-14 08:00:00+00','2025-10-14 09:00:00+00','2025-10-14 13:00:00+00','2025-10-15 10:00:00+00',
  '2025-10-14 11:00:00+00','2025-10-16 08:00:00+00',
  TRUE,FALSE,
- 'Low',72.0,'Fumigation completed and sealing applied to entry points.',(SELECT id FROM sara)),
+ 'Low',72.0,'Fumigation completed and sealing applied to entry points.',(SELECT id FROM sameer)),
 
 ('CX-M34','Network switch failure – Floor 5','20 workstations offline due to switch failure.',
  'Complaint','Critical','Resolved',
- (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM fatima),
+ (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM ahmed),
  '2025-10-20 07:00:00+00','2025-10-20 07:10:00+00','2025-10-20 07:28:00+00','2025-10-20 14:00:00+00',
  '2025-10-20 07:30:00+00','2025-10-20 13:00:00+00',
  FALSE,FALSE,
- 'Critical',95.0,'Switch replaced and all connections verified.',(SELECT id FROM fatima)),
+ 'Critical',95.0,'Switch replaced and all connections verified.',(SELECT id FROM ahmed)),
 
 ('CX-M35','Broken handrail – staircase B','Handrail detached from wall, safety hazard.',
  'Complaint','High','Resolved',
@@ -2150,19 +2251,19 @@ INSERT INTO tickets (
 
 ('CX-M37','Parking sensor errors – Level 2','Parking guidance sensors showing wrong availability.',
  'Inquiry','Medium','Resolved',
- (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM fatima),
+ (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM ahmed),
  '2025-11-07 10:00:00+00','2025-11-07 10:30:00+00','2025-11-07 13:00:00+00','2025-11-08 11:00:00+00',
  '2025-11-07 13:00:00+00','2025-11-09 10:00:00+00',
  FALSE,FALSE,
- 'Low',67.0,'Sensor calibration reset; display updated.',(SELECT id FROM fatima)),
+ 'Low',67.0,'Sensor calibration reset; display updated.',(SELECT id FROM ahmed)),
 
 ('CX-M38','Intruder alert – Roof access','Motion detected on restricted rooftop area after hours.',
  'Complaint','Critical','Resolved',
- (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM omar),
+ (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM yousef),
  '2025-11-12 23:00:00+00','2025-11-12 23:04:00+00','2025-11-12 23:26:00+00','2025-11-13 04:00:00+00',
  '2025-11-12 23:30:00+00','2025-11-13 05:00:00+00',
  FALSE,FALSE,
- 'Critical',98.0,'Area secured; access logs reviewed and door lock replaced.',(SELECT id FROM omar)),
+ 'Critical',98.0,'Area secured; access logs reviewed and door lock replaced.',(SELECT id FROM yousef)),
 
 ('CX-M39','Carpet replacement needed – exec floor','Worn and stained carpet posing slip risk.',
  'Complaint','Medium','Resolved',
@@ -2174,11 +2275,11 @@ INSERT INTO tickets (
 
 ('CX-M40','VoIP system crackling noise','Voice calls experiencing noise and drop-outs.',
  'Inquiry','Medium','Resolved',
- (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM fatima),
+ (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM ahmed),
  '2025-11-24 11:00:00+00','2025-11-24 11:20:00+00','2025-11-24 14:00:00+00','2025-11-25 10:00:00+00',
  '2025-11-24 14:00:00+00','2025-11-26 11:00:00+00',
  FALSE,FALSE,
- 'Low',70.0,'QoS settings updated; noise eliminated after router firmware patch.',(SELECT id FROM fatima)),
+ 'Low',70.0,'QoS settings updated; noise eliminated after router firmware patch.',(SELECT id FROM ahmed)),
 
 -- ═══════════════════════════════════
 -- DECEMBER 2025
@@ -2193,11 +2294,11 @@ INSERT INTO tickets (
 
 ('CX-M42','Slippery floor after mopping','Cleaning crew left floor wet without wet-floor signs.',
  'Complaint','High','Resolved',
- (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sara),
+ (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-12-08 08:30:00+00','2025-12-08 09:00:00+00','2025-12-08 10:00:00+00','2025-12-09 09:00:00+00',
  '2025-12-08 09:30:00+00','2025-12-10 08:30:00+00',
  TRUE,FALSE,
- 'Medium',76.0,'Crew briefed; wet-floor sign protocol enforced.',(SELECT id FROM sara)),
+ 'Medium',76.0,'Crew briefed; wet-floor sign protocol enforced.',(SELECT id FROM sameer)),
 
 ('CX-M43','Perimeter fence damage','Section of perimeter fence knocked over.',
  'Complaint','High','Resolved',
@@ -2209,19 +2310,19 @@ INSERT INTO tickets (
 
 ('CX-M44','Server backup failure – weekly job','Automated backup job failing silently.',
  'Complaint','Critical','Resolved',
- (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM fatima),
+ (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM ahmed),
  '2025-12-17 09:00:00+00','2025-12-17 09:06:00+00','2025-12-17 09:27:00+00','2025-12-17 16:00:00+00',
  '2025-12-17 09:30:00+00','2025-12-17 18:00:00+00',
  FALSE,FALSE,
- 'Critical',94.0,'Backup agent reinstalled; job verified and alerting enabled.',(SELECT id FROM fatima)),
+ 'Critical',94.0,'Backup agent reinstalled; job verified and alerting enabled.',(SELECT id FROM ahmed)),
 
 ('CX-M45','Staircase light outages – Block B','Emergency lighting not functioning in stairwells.',
  'Complaint','High','Resolved',
- (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM khalid),
+ (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2025-12-22 07:00:00+00','2025-12-22 07:25:00+00','2025-12-22 08:00:00+00','2025-12-23 11:00:00+00',
  '2025-12-22 08:00:00+00','2025-12-24 07:00:00+00',
  FALSE,FALSE,
- 'High',89.0,'Faulty LED drivers replaced; emergency battery backup tested.',(SELECT id FROM khalid)),
+ 'High',89.0,'Faulty LED drivers replaced; emergency battery backup tested.',(SELECT id FROM sameer)),
 
 -- ═══════════════════════════════════
 -- JANUARY 2026
@@ -2236,27 +2337,27 @@ INSERT INTO tickets (
 
 ('CX-M47','VPN access issues – remote staff','Remote employees unable to connect to internal VPN.',
  'Inquiry','High','Resolved',
- (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM fatima),
+ (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM ahmed),
  '2026-01-10 09:00:00+00','2026-01-10 09:20:00+00','2026-01-10 10:00:00+00','2026-01-11 10:00:00+00',
  '2026-01-10 10:00:00+00','2026-01-12 09:00:00+00',
  FALSE,FALSE,
- 'Medium',78.0,'VPN gateway certificate renewed and routing tables updated.',(SELECT id FROM fatima)),
+ 'Medium',78.0,'VPN gateway certificate renewed and routing tables updated.',(SELECT id FROM ahmed)),
 
 ('CX-M48','Unauthorised vehicle in restricted bay','Unknown vehicle parked in reserved emergency access bay.',
  'Complaint','High','Resolved',
- (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM omar),
+ (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM yousef),
  '2026-01-15 07:30:00+00','2026-01-15 07:45:00+00','2026-01-15 08:40:00+00','2026-01-15 11:00:00+00',
  '2026-01-15 08:30:00+00','2026-01-17 07:30:00+00',
  TRUE,FALSE,
- 'High',83.0,'Vehicle removed; signage reinforced and patrol frequency increased.',(SELECT id FROM omar)),
+ 'High',83.0,'Vehicle removed; signage reinforced and patrol frequency increased.',(SELECT id FROM yousef)),
 
 ('CX-M49','Deep clean request – storage area','Storage area showing mould and debris build-up.',
  'Complaint','Medium','Resolved',
- (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sara),
+ (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2026-01-20 08:00:00+00','2026-01-20 09:00:00+00','2026-01-20 13:00:00+00','2026-01-21 12:00:00+00',
  '2026-01-20 11:00:00+00','2026-01-23 08:00:00+00',
  FALSE,FALSE,
- 'Medium',79.0,'Full deep-clean completed; anti-mould treatment applied.',(SELECT id FROM sara)),
+ 'Medium',79.0,'Full deep-clean completed; anti-mould treatment applied.',(SELECT id FROM sameer)),
 
 ('CX-M50','Lightning conductor inspection overdue','Annual inspection certificate expired for roof conductor.',
  'Complaint','High','Resolved',
@@ -2271,11 +2372,11 @@ INSERT INTO tickets (
 -- ═══════════════════════════════════
 ('CX-M51','Electrical trip – main distribution board','Main DB tripped cutting power to two floors.',
  'Complaint','Critical','Resolved',
- (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM khalid),
+ (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2026-02-03 07:00:00+00','2026-02-03 07:06:00+00','2026-02-03 07:27:00+00','2026-02-03 14:00:00+00',
  '2026-02-03 07:30:00+00','2026-02-03 15:00:00+00',
  FALSE,FALSE,
- 'Critical',96.0,'Faulty MCB replaced; load redistributed across circuits.',(SELECT id FROM khalid)),
+ 'Critical',96.0,'Faulty MCB replaced; load redistributed across circuits.',(SELECT id FROM sameer)),
 
 ('CX-M52','Lift maintenance overdue – Building D','Lift certificate lapsed; unable to operate.',
  'Complaint','High','Resolved',
@@ -2295,11 +2396,11 @@ INSERT INTO tickets (
 
 ('CX-M54','Cleaning schedule complaint – Ramadan hours','Schedule not adjusted for Ramadan shift change.',
  'Complaint','Low','Resolved',
- (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sara),
+ (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2026-02-17 07:00:00+00','2026-02-17 09:00:00+00','2026-02-17 15:00:00+00','2026-02-18 09:00:00+00',
  '2026-02-17 13:00:00+00','2026-02-20 07:00:00+00',
  TRUE,FALSE,
- 'Low',68.0,'Schedule updated to reflect Ramadan timings.',(SELECT id FROM sara)),
+ 'Low',68.0,'Schedule updated to reflect Ramadan timings.',(SELECT id FROM sameer)),
 
 ('CX-M55','Data centre UPS battery replacement','UPS batteries below minimum capacity threshold.',
  'Complaint','Critical','Resolved',
@@ -2321,74 +2422,74 @@ INSERT INTO ticket_resolution_feedback (ticket_id, employee_user_id, decision, s
 SELECT t.id, u.id, fb.decision, fb.suggested, fb.custom, fb.final
 FROM (VALUES
   -- Ahmed: high acceptance rate (good AI alignment)
-  ('CX-M01', 'ahmed@innova.cx',  'accepted',         'Dispatch HVAC and check compressor.', NULL, 'Replaced compressor unit and recharged refrigerant.'),
-  ('CX-M11', 'ahmed@innova.cx',  'accepted',         'Deploy pumping crew.', NULL, 'Pumping crew deployed; drainage channel cleared.'),
-  ('CX-M15', 'ahmed@innova.cx',  'accepted',         'Activate backup cooling.', NULL, 'Backup cooling unit activated; primary unit serviced.'),
-  ('CX-M27', 'ahmed@innova.cx',  'accepted',         'Reset tripped MCB.', NULL, 'Tripped MCB reset; UPS bypass engaged for continuity.'),
-  ('CX-M31', 'ahmed@innova.cx',  'accepted',         'Replace compressor.', NULL, 'Compressor replaced and refrigerant recharged.'),
-  ('CX-M36', 'ahmed@innova.cx',  'accepted',         'Isolate gas and replace valve.', NULL, 'Gas supply isolated; faulty valve replaced.'),
-  ('CX-M41', 'ahmed@innova.cx',  'accepted',         'Replace heat exchanger.', NULL, 'Heat exchanger replaced; pressure restored.'),
-  ('CX-M46', 'ahmed@innova.cx',  'accepted',         'Replace suppression head and retest.', NULL, 'Suppression head replaced; system retested.'),
-  ('CX-M55', 'ahmed@innova.cx',  'declined_custom',  'Recharge batteries.', 'Full battery module replacement required — recharge insufficient.', 'All UPS battery modules replaced; runtime tested.'),
+  ('CX-M01', 'ahmed@innovacx.net',  'accepted',         'Dispatch HVAC and check compressor.', NULL, 'Replaced compressor unit and recharged refrigerant.'),
+  ('CX-M11', 'ahmed@innovacx.net',  'accepted',         'Deploy pumping crew.', NULL, 'Pumping crew deployed; drainage channel cleared.'),
+  ('CX-M15', 'ahmed@innovacx.net',  'accepted',         'Activate backup cooling.', NULL, 'Backup cooling unit activated; primary unit serviced.'),
+  ('CX-M27', 'ahmed@innovacx.net',  'accepted',         'Reset tripped MCB.', NULL, 'Tripped MCB reset; UPS bypass engaged for continuity.'),
+  ('CX-M31', 'ahmed@innovacx.net',  'accepted',         'Replace compressor.', NULL, 'Compressor replaced and refrigerant recharged.'),
+  ('CX-M36', 'ahmed@innovacx.net',  'accepted',         'Isolate gas and replace valve.', NULL, 'Gas supply isolated; faulty valve replaced.'),
+  ('CX-M41', 'ahmed@innovacx.net',  'accepted',         'Replace heat exchanger.', NULL, 'Heat exchanger replaced; pressure restored.'),
+  ('CX-M46', 'ahmed@innovacx.net',  'accepted',         'Replace suppression head and retest.', NULL, 'Suppression head replaced; system retested.'),
+  ('CX-M55', 'ahmed@innovacx.net',  'declined_custom',  'Recharge batteries.', 'Full battery module replacement required — recharge insufficient.', 'All UPS battery modules replaced; runtime tested.'),
 
   -- Maria: moderate acceptance
-  ('CX-M02', 'maria@innova.cx',  'accepted',         'Seal pipe joint and replace panel.', NULL, 'Pipe joint sealed and ceiling panel replaced.'),
+  ('CX-M02', 'sarah@innovacx.net',  'accepted',         'Seal pipe joint and replace panel.', NULL, 'Pipe joint sealed and ceiling panel replaced.'),
 
   -- Fatima: lower acceptance (often modifies AI suggestions)
-  ('CX-M05', 'fatima@innova.cx', 'declined_custom',  'Reinstall printer driver.', 'Driver reinstall insufficient — IP conflict root cause.', 'Printer IP reassigned and driver reinstalled.'),
-  ('CX-M10', 'fatima@innova.cx', 'accepted',         'Install new access point.', NULL, 'New access point installed; signal verified.'),
-  ('CX-M17', 'fatima@innova.cx', 'declined_custom',  'Restart kiosk service.', 'Restart did not resolve — full software re-deploy needed.', 'Software service restarted and kiosk connectivity confirmed.'),
-  ('CX-M21', 'fatima@innova.cx', 'accepted',         'Update printer driver.', NULL, 'Printer driver updated and cartridge replaced.'),
-  ('CX-M34', 'fatima@innova.cx', 'accepted',         'Replace failed switch.', NULL, 'Switch replaced and all connections verified.'),
-  ('CX-M37', 'fatima@innova.cx', 'declined_custom',  'Recalibrate sensors.', 'Sensor model needed full reset not just recalibration.', 'Sensor calibration reset; display updated.'),
-  ('CX-M40', 'fatima@innova.cx', 'accepted',         'Update QoS settings.', NULL, 'QoS settings updated; noise eliminated.'),
-  ('CX-M44', 'fatima@innova.cx', 'accepted',         'Reinstall backup agent.', NULL, 'Backup agent reinstalled; job verified.'),
-  ('CX-M47', 'fatima@innova.cx', 'declined_custom',  'Reset VPN gateway.', 'Gateway certificate renewal needed — reset alone insufficient.', 'VPN gateway certificate renewed and routing updated.'),
+  ('CX-M05', 'ahmed@innovacx.net', 'declined_custom',  'Reinstall printer driver.', 'Driver reinstall insufficient — IP conflict root cause.', 'Printer IP reassigned and driver reinstalled.'),
+  ('CX-M10', 'ahmed@innovacx.net', 'accepted',         'Install new access point.', NULL, 'New access point installed; signal verified.'),
+  ('CX-M17', 'ahmed@innovacx.net', 'declined_custom',  'Restart kiosk service.', 'Restart did not resolve — full software re-deploy needed.', 'Software service restarted and kiosk connectivity confirmed.'),
+  ('CX-M21', 'ahmed@innovacx.net', 'accepted',         'Update printer driver.', NULL, 'Printer driver updated and cartridge replaced.'),
+  ('CX-M34', 'ahmed@innovacx.net', 'accepted',         'Replace failed switch.', NULL, 'Switch replaced and all connections verified.'),
+  ('CX-M37', 'ahmed@innovacx.net', 'declined_custom',  'Recalibrate sensors.', 'Sensor model needed full reset not just recalibration.', 'Sensor calibration reset; display updated.'),
+  ('CX-M40', 'ahmed@innovacx.net', 'accepted',         'Update QoS settings.', NULL, 'QoS settings updated; noise eliminated.'),
+  ('CX-M44', 'ahmed@innovacx.net', 'accepted',         'Reinstall backup agent.', NULL, 'Backup agent reinstalled; job verified.'),
+  ('CX-M47', 'ahmed@innovacx.net', 'declined_custom',  'Reset VPN gateway.', 'Gateway certificate renewal needed — reset alone insufficient.', 'VPN gateway certificate renewed and routing updated.'),
 
   -- Omar: moderate
-  ('CX-M13', 'omar@innova.cx',   'accepted',         'Review and share CCTV footage.', NULL, 'Footage reviewed and relevant clip shared.'),
-  ('CX-M22', 'omar@innova.cx',   'accepted',         'Deploy relief guard and update roster.', NULL, 'Relief guard deployed; roster updated.'),
-  ('CX-M29', 'omar@innova.cx',   'accepted',         'Adjust sensor sensitivity.', NULL, 'Sensor sensitivity adjusted; false triggers eliminated.'),
-  ('CX-M38', 'omar@innova.cx',   'accepted',         'Secure area and review logs.', NULL, 'Area secured; access logs reviewed.'),
-  ('CX-M48', 'omar@innova.cx',   'declined_custom',  'Issue warning notice.', 'Vehicle needed removal not just notice — contacted security supervisor.', 'Vehicle removed; signage reinforced.'),
+  ('CX-M13', 'yousef@innovacx.net',   'accepted',         'Review and share CCTV footage.', NULL, 'Footage reviewed and relevant clip shared.'),
+  ('CX-M22', 'yousef@innovacx.net',   'accepted',         'Deploy relief guard and update roster.', NULL, 'Relief guard deployed; roster updated.'),
+  ('CX-M29', 'yousef@innovacx.net',   'accepted',         'Adjust sensor sensitivity.', NULL, 'Sensor sensitivity adjusted; false triggers eliminated.'),
+  ('CX-M38', 'yousef@innovacx.net',   'accepted',         'Secure area and review logs.', NULL, 'Area secured; access logs reviewed.'),
+  ('CX-M48', 'yousef@innovacx.net',   'declined_custom',  'Issue warning notice.', 'Vehicle needed removal not just notice — contacted security supervisor.', 'Vehicle removed; signage reinforced.'),
 
   -- Sara: lower acceptance
-  ('CX-M04', 'sara@innova.cx',   'declined_custom',  'Reschedule cleaning team.', 'Root cause was staff absence — needed replacement team dispatch.', 'Cleaning team rescheduled and area deep-cleaned.'),
-  ('CX-M07', 'sara@innova.cx',   'accepted',         'Apply pest control treatment.', NULL, 'Pest control treatment applied and entry points sealed.'),
-  ('CX-M14', 'sara@innova.cx',   'accepted',         'Switch to low-odour products.', NULL, 'Switched to low-odour products and improved ventilation.'),
-  ('CX-M19', 'sara@innova.cx',   'declined_custom',  'Increase cleaning frequency.', 'Frequency alone insufficient — need dedicated lobby morning crew.', 'Cleaning frequency increased to 3x daily for lobby.'),
-  ('CX-M26', 'sara@innova.cx',   'accepted',         'Reposition robot and recalibrate sensors.', NULL, 'Robot repositioned and obstacle sensors recalibrated.'),
-  ('CX-M33', 'sara@innova.cx',   'accepted',         'Apply fumigation.', NULL, 'Fumigation completed and sealing applied.'),
-  ('CX-M42', 'sara@innova.cx',   'declined_custom',  'Place wet-floor signs.', 'Signs alone not enough — required protocol retraining for crew.', 'Crew briefed; wet-floor sign protocol enforced.'),
-  ('CX-M49', 'sara@innova.cx',   'accepted',         'Deep clean and apply anti-mould treatment.', NULL, 'Full deep-clean completed; anti-mould treatment applied.'),
-  ('CX-M54', 'sara@innova.cx',   'accepted',         'Update cleaning schedule for Ramadan.', NULL, 'Schedule updated to reflect Ramadan timings.'),
+  ('CX-M04', 'sameer@innovacx.net',   'declined_custom',  'Reschedule cleaning team.', 'Root cause was staff absence — needed replacement team dispatch.', 'Cleaning team rescheduled and area deep-cleaned.'),
+  ('CX-M07', 'sameer@innovacx.net',   'accepted',         'Apply pest control treatment.', NULL, 'Pest control treatment applied and entry points sealed.'),
+  ('CX-M14', 'sameer@innovacx.net',   'accepted',         'Switch to low-odour products.', NULL, 'Switched to low-odour products and improved ventilation.'),
+  ('CX-M19', 'sameer@innovacx.net',   'declined_custom',  'Increase cleaning frequency.', 'Frequency alone insufficient — need dedicated lobby morning crew.', 'Cleaning frequency increased to 3x daily for lobby.'),
+  ('CX-M26', 'sameer@innovacx.net',   'accepted',         'Reposition robot and recalibrate sensors.', NULL, 'Robot repositioned and obstacle sensors recalibrated.'),
+  ('CX-M33', 'sameer@innovacx.net',   'accepted',         'Apply fumigation.', NULL, 'Fumigation completed and sealing applied.'),
+  ('CX-M42', 'sameer@innovacx.net',   'declined_custom',  'Place wet-floor signs.', 'Signs alone not enough — required protocol retraining for crew.', 'Crew briefed; wet-floor sign protocol enforced.'),
+  ('CX-M49', 'sameer@innovacx.net',   'accepted',         'Deep clean and apply anti-mould treatment.', NULL, 'Full deep-clean completed; anti-mould treatment applied.'),
+  ('CX-M54', 'sameer@innovacx.net',   'accepted',         'Update cleaning schedule for Ramadan.', NULL, 'Schedule updated to reflect Ramadan timings.'),
 
   -- Bilal: high acceptance
-  ('CX-M03', 'bilal@innova.cx',  'accepted',         'Replace NVR cable.', NULL, 'Camera NVR cable replaced and feed restored.'),
-  ('CX-M08', 'bilal@innova.cx',  'accepted',         'Update firmware and re-sync badges.', NULL, 'Reader firmware updated and badge database re-synced.'),
-  ('CX-M18', 'bilal@innova.cx',  'accepted',         'Remove obstruction and reset door alarm.', NULL, 'Obstruction removed and door alarm reset.'),
-  ('CX-M25', 'bilal@innova.cx',  'accepted',         'Replace NVR drive.', NULL, 'NVR hard drive replaced; all feeds restored.'),
-  ('CX-M32', 'bilal@innova.cx',  'declined_custom',  'Update scanner firmware.', 'Firmware update insufficient — full template re-enrol required.', 'Scanner firmware updated and fingerprint templates re-enrolled.'),
-  ('CX-M43', 'bilal@innova.cx',  'accepted',         'Repair fence section.', NULL, 'Fence section repaired and post re-anchored.'),
-  ('CX-M53', 'bilal@innova.cx',  'accepted',         'Replace detector head.', NULL, 'Detector head replaced; sensitivity recalibrated.'),
+  ('CX-M03', 'bilal@innovacx.net',  'accepted',         'Replace NVR cable.', NULL, 'Camera NVR cable replaced and feed restored.'),
+  ('CX-M08', 'bilal@innovacx.net',  'accepted',         'Update firmware and re-sync badges.', NULL, 'Reader firmware updated and badge database re-synced.'),
+  ('CX-M18', 'bilal@innovacx.net',  'accepted',         'Remove obstruction and reset door alarm.', NULL, 'Obstruction removed and door alarm reset.'),
+  ('CX-M25', 'bilal@innovacx.net',  'accepted',         'Replace NVR drive.', NULL, 'NVR hard drive replaced; all feeds restored.'),
+  ('CX-M32', 'bilal@innovacx.net',  'declined_custom',  'Update scanner firmware.', 'Firmware update insufficient — full template re-enrol required.', 'Scanner firmware updated and fingerprint templates re-enrolled.'),
+  ('CX-M43', 'bilal@innovacx.net',  'accepted',         'Repair fence section.', NULL, 'Fence section repaired and post re-anchored.'),
+  ('CX-M53', 'bilal@innovacx.net',  'accepted',         'Replace detector head.', NULL, 'Detector head replaced; sensitivity recalibrated.'),
 
   -- Yousef
-  ('CX-M12', 'yousef@innova.cx', 'accepted',         'Replace window pane.', NULL, 'Pane replaced and frame sealed.'),
-  ('CX-M23', 'yousef@innova.cx', 'declined_custom',  'Remove mould tiles.', 'Source leak must be fixed first — tile replacement secondary.', 'Affected tiles replaced and source leak repaired.'),
-  ('CX-M28', 'yousef@innova.cx', 'accepted',         'Apply membrane patch.', NULL, 'Membrane patch applied; area monitored for 48 hours.'),
-  ('CX-M35', 'yousef@innova.cx', 'accepted',         'Re-secure handrail.', NULL, 'Handrail re-secured with heavy-duty anchors.'),
-  ('CX-M39', 'yousef@innova.cx', 'accepted',         'Replace carpet.', NULL, 'Carpet replaced on full exec floor.'),
-  ('CX-M50', 'yousef@innova.cx', 'accepted',         'Complete lightning conductor inspection.', NULL, 'Inspection completed; new certificate issued.'),
-  ('CX-M52', 'yousef@innova.cx', 'accepted',         'Complete maintenance and renew certificate.', NULL, 'Maintenance completed; certificate renewed.'),
+  ('CX-M12', 'yousef@innovacx.net', 'accepted',         'Replace window pane.', NULL, 'Pane replaced and frame sealed.'),
+  ('CX-M23', 'yousef@innovacx.net', 'declined_custom',  'Remove mould tiles.', 'Source leak must be fixed first — tile replacement secondary.', 'Affected tiles replaced and source leak repaired.'),
+  ('CX-M28', 'yousef@innovacx.net', 'accepted',         'Apply membrane patch.', NULL, 'Membrane patch applied; area monitored for 48 hours.'),
+  ('CX-M35', 'yousef@innovacx.net', 'accepted',         'Re-secure handrail.', NULL, 'Handrail re-secured with heavy-duty anchors.'),
+  ('CX-M39', 'yousef@innovacx.net', 'accepted',         'Replace carpet.', NULL, 'Carpet replaced on full exec floor.'),
+  ('CX-M50', 'yousef@innovacx.net', 'accepted',         'Complete lightning conductor inspection.', NULL, 'Inspection completed; new certificate issued.'),
+  ('CX-M52', 'yousef@innovacx.net', 'accepted',         'Complete maintenance and renew certificate.', NULL, 'Maintenance completed; certificate renewed.'),
 
   -- Khalid
-  ('CX-M06', 'khalid@innova.cx', 'accepted',         'Replace faulty socket and inspect wiring.', NULL, 'Faulty socket replaced and wiring inspected.'),
-  ('CX-M09', 'yousef@innova.cx', 'accepted',         'Replace door sensor.', NULL, 'Door sensor replaced and control board reset.'),
-  ('CX-M16', 'khalid@innova.cx', 'accepted',         'Top up fuel.', NULL, 'Fuel topped up and weekly check schedule reinstated.'),
-  ('CX-M24', 'khalid@innova.cx', 'accepted',         'Clear drainage and repair grating.', NULL, 'Drainage cleared of debris; grating repaired.'),
-  ('CX-M30', 'khalid@innova.cx', 'declined_custom',  'Check thermostat.', 'Thermostat fine — heating element replacement needed.', 'Heating element replaced in main boiler.'),
-  ('CX-M45', 'khalid@innova.cx', 'accepted',         'Replace LED drivers.', NULL, 'Faulty LED drivers replaced; emergency battery backup tested.'),
-  ('CX-M51', 'khalid@innova.cx', 'accepted',         'Replace faulty MCB.', NULL, 'Faulty MCB replaced; load redistributed.')
+  ('CX-M06', 'sameer@innovacx.net', 'accepted',         'Replace faulty socket and inspect wiring.', NULL, 'Faulty socket replaced and wiring inspected.'),
+  ('CX-M09', 'yousef@innovacx.net', 'accepted',         'Replace door sensor.', NULL, 'Door sensor replaced and control board reset.'),
+  ('CX-M16', 'sameer@innovacx.net', 'accepted',         'Top up fuel.', NULL, 'Fuel topped up and weekly check schedule reinstated.'),
+  ('CX-M24', 'sameer@innovacx.net', 'accepted',         'Clear drainage and repair grating.', NULL, 'Drainage cleared of debris; grating repaired.'),
+  ('CX-M30', 'sameer@innovacx.net', 'declined_custom',  'Check thermostat.', 'Thermostat fine — heating element replacement needed.', 'Heating element replaced in main boiler.'),
+  ('CX-M45', 'sameer@innovacx.net', 'accepted',         'Replace LED drivers.', NULL, 'Faulty LED drivers replaced; emergency battery backup tested.'),
+  ('CX-M51', 'sameer@innovacx.net', 'accepted',         'Replace faulty MCB.', NULL, 'Faulty MCB replaced; load redistributed.')
 ) AS fb(ticket_code, emp_email, decision, suggested, custom, final)
 JOIN tickets t ON t.ticket_code = fb.ticket_code
 JOIN users u ON u.email = fb.emp_email
@@ -2422,7 +2523,7 @@ INSERT INTO approval_requests (
 SELECT 'REQ-3140', t.id, 'Rescoring',
   'Priority: Low', 'Priority: High',
   'Customer escalated complaint — noise is now affecting three floors.',
-  (SELECT id FROM users WHERE email='bilal@innova.cx'),
+  (SELECT id FROM users WHERE email='bilal@innovacx.net'),
   '2026-02-10 09:15:00+00', 'Pending'
 FROM tickets t WHERE t.ticket_code='CX-4780'
 ON CONFLICT (request_code) DO NOTHING;
@@ -2434,7 +2535,7 @@ INSERT INTO approval_requests (
 SELECT 'REQ-3145', t.id, 'Rerouting',
   'Dept: IT', 'Dept: Maintenance',
   'Root cause is physical cabling, not software — needs Maintenance team.',
-  (SELECT id FROM users WHERE email='fatima@innova.cx'),
+  (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
   '2026-02-12 11:30:00+00', 'Approved'
 FROM tickets t WHERE t.ticket_code='CX-4587'
 ON CONFLICT (request_code) DO NOTHING;
@@ -2446,7 +2547,7 @@ INSERT INTO approval_requests (
 SELECT 'REQ-3150', t.id, 'Rescoring',
   'Priority: Medium', 'Priority: Critical',
   'Lift stopping mid-floor is a safety hazard — needs immediate escalation.',
-  (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+  (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
   '2026-02-14 08:00:00+00', 'Approved'
 FROM tickets t WHERE t.ticket_code='CX-4630'
 ON CONFLICT (request_code) DO NOTHING;
@@ -2458,7 +2559,7 @@ INSERT INTO approval_requests (
 SELECT 'REQ-3155', t.id, 'Rerouting',
   'Dept: Legal & Compliance', 'Dept: IT',
   'Parking access card issue is a system/software problem — needs IT.',
-  (SELECT id FROM users WHERE email='omar@innova.cx'),
+  (SELECT id FROM users WHERE email='yousef@innovacx.net'),
   '2026-02-16 14:20:00+00', 'Rejected'
 FROM tickets t WHERE t.ticket_code='CX-4725'
 ON CONFLICT (request_code) DO NOTHING;
@@ -2470,7 +2571,7 @@ INSERT INTO approval_requests (
 SELECT 'REQ-3160', t.id, 'Rescoring',
   'Priority: Critical', 'Priority: High',
   'Issue resolved partially — residual risk is High not Critical.',
-  (SELECT id FROM users WHERE email='khalid@innova.cx'),
+  (SELECT id FROM users WHERE email='sameer@innovacx.net'),
   '2026-02-20 10:45:00+00', 'Pending'
 FROM tickets t WHERE t.ticket_code='CX-M51'
 ON CONFLICT (request_code) DO NOTHING;
@@ -2482,7 +2583,7 @@ INSERT INTO approval_requests (
 SELECT 'REQ-3165', t.id, 'Rerouting',
   'Dept: Safety & Security', 'Dept: Facilities Management',
   'Structural issue confirmed — requires Facilities Management, not Security.',
-  (SELECT id FROM users WHERE email='bilal@innova.cx'),
+  (SELECT id FROM users WHERE email='bilal@innovacx.net'),
   '2026-02-25 13:10:00+00', 'Pending'
 FROM tickets t WHERE t.ticket_code='CX-M53'
 ON CONFLICT (request_code) DO NOTHING;
@@ -2494,7 +2595,7 @@ INSERT INTO approval_requests (
 SELECT 'REQ-3170', t.id, 'Rescoring',
   'Priority: High', 'Priority: Critical',
   'Lift fully out of service — affects all 6 floors, requires emergency repair.',
-  (SELECT id FROM users WHERE email='yousef@innova.cx'),
+  (SELECT id FROM users WHERE email='yousef@innovacx.net'),
   '2026-02-27 07:30:00+00', 'Pending'
 FROM tickets t WHERE t.ticket_code='CX-M52'
 ON CONFLICT (request_code) DO NOTHING;
@@ -2506,7 +2607,7 @@ INSERT INTO approval_requests (
 SELECT 'REQ-3175', t.id, 'Rescoring',
   'Priority: Medium', 'Priority: High',
   'Cleaning backlog causing hygiene concerns on 3 floors.',
-  (SELECT id FROM users WHERE email='sara@innova.cx'),
+  (SELECT id FROM users WHERE email='sameer@innovacx.net'),
   '2026-02-28 09:00:00+00', 'Rejected'
 FROM tickets t WHERE t.ticket_code='CX-M54'
 ON CONFLICT (request_code) DO NOTHING;
@@ -2518,19 +2619,16 @@ ON CONFLICT (request_code) DO NOTHING;
 -- ─────────────────────────────────────────────────────────
 
 WITH
-  cust   AS (SELECT id FROM users WHERE email='customer1@innova.cx' LIMIT 1),
-  ahmed  AS (SELECT id FROM users WHERE email='ahmed@innova.cx'     LIMIT 1),
-  maria  AS (SELECT id FROM users WHERE email='maria@innova.cx'     LIMIT 1),
-  omar   AS (SELECT id FROM users WHERE email='omar@innova.cx'      LIMIT 1),
-  sara   AS (SELECT id FROM users WHERE email='sara@innova.cx'      LIMIT 1),
-  bilal  AS (SELECT id FROM users WHERE email='bilal@innova.cx'     LIMIT 1),
-  fatima AS (SELECT id FROM users WHERE email='fatima@innova.cx'    LIMIT 1),
-  yousef AS (SELECT id FROM users WHERE email='yousef@innova.cx'    LIMIT 1),
-  khalid AS (SELECT id FROM users WHERE email='khalid@innova.cx'    LIMIT 1),
-  fac   AS (SELECT id FROM departments WHERE name='Leasing'      LIMIT 1),
-  it    AS (SELECT id FROM departments WHERE name='Legal & Compliance' LIMIT 1),
-  sec   AS (SELECT id FROM departments WHERE name='Maintenance'   LIMIT 1),
-  cln   AS (SELECT id FROM departments WHERE name='Safety & Security'         LIMIT 1)
+  cust   AS (SELECT id FROM users WHERE email='customer1@innovacx.net'  LIMIT 1),
+  ahmed  AS (SELECT id FROM users WHERE email='ahmed@innovacx.net'      LIMIT 1),
+  yousef AS (SELECT id FROM users WHERE email='yousef@innovacx.net'     LIMIT 1),
+  bilal  AS (SELECT id FROM users WHERE email='bilal@innovacx.net'      LIMIT 1),
+  sameer AS (SELECT id FROM users WHERE email='sameer@innovacx.net'     LIMIT 1),
+  sarah  AS (SELECT id FROM users WHERE email='sarah@innovacx.net'      LIMIT 1),
+  fac    AS (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1),
+  it     AS (SELECT id FROM departments WHERE name='IT'                    LIMIT 1),
+  sec    AS (SELECT id FROM departments WHERE name='Safety & Security'     LIMIT 1),
+  cln    AS (SELECT id FROM departments WHERE name='Facilities Management' LIMIT 1)
 
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, priority, status,
@@ -2575,7 +2673,7 @@ INSERT INTO tickets (
 
 ('CX-R04','Printer network error – Floor 3','All 4 network printers on Floor 3 unreachable since morning.',
  'Inquiry','Medium','In Progress',
- (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM fatima),
+ (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM ahmed),
  '2026-03-01 08:30:00+00','2026-03-01 08:45:00+00','2026-03-01 09:10:00+00',
  '2026-03-01 11:30:00+00','2026-03-02 08:30:00+00',
  FALSE,FALSE,'Medium',82.0,
@@ -2585,7 +2683,7 @@ INSERT INTO tickets (
 
 ('CX-R05','Restroom cleaning missed – Block C','Block C restrooms not cleaned for two days. Hygiene concern.',
  'Complaint','Medium','Assigned',
- (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sara),
+ (SELECT id FROM cln),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2026-03-01 09:00:00+00','2026-03-01 09:15:00+00','2026-03-01 09:40:00+00',
  '2026-03-01 12:00:00+00','2026-03-03 09:00:00+00',
  FALSE,FALSE,'Medium',79.0,
@@ -2595,7 +2693,7 @@ INSERT INTO tickets (
 
 ('CX-R06','Access control fault – Gate 2','Badge readers at Gate 2 rejecting all valid cards since 08:00.',
  'Complaint','Critical','In Progress',
- (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM omar),
+ (SELECT id FROM sec),(SELECT id FROM cust),(SELECT id FROM yousef),
  '2026-03-01 09:30:00+00','2026-03-01 09:33:00+00','2026-03-01 09:55:00+00',
  '2026-03-01 10:00:00+00','2026-03-01 15:30:00+00',
  FALSE,FALSE,'Critical',94.0,
@@ -2605,7 +2703,7 @@ INSERT INTO tickets (
 
 ('CX-R07','Lift alarm triggered – Building B','Lift alarm sounding intermittently. Passengers refusing to use.',
  'Complaint','High','Assigned',
- (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM khalid),
+ (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sameer),
  '2026-03-01 10:00:00+00','2026-03-01 10:08:00+00','2026-03-01 10:30:00+00',
  '2026-03-01 11:00:00+00','2026-03-01 22:00:00+00',
  FALSE,FALSE,'High',90.0,
@@ -2615,7 +2713,7 @@ INSERT INTO tickets (
 
 ('CX-R08','Slow Wi-Fi – Conference Rooms','Severe packet loss in all 4 conference rooms during peak hours.',
  'Inquiry','Medium','Assigned',
- (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM maria),
+ (SELECT id FROM it),(SELECT id FROM cust),(SELECT id FROM sarah),
  '2026-03-01 10:30:00+00','2026-03-01 10:45:00+00','2026-03-01 11:05:00+00',
  '2026-03-01 13:30:00+00','2026-03-02 10:30:00+00',
  FALSE,FALSE,'Medium',80.0,
@@ -2653,7 +2751,7 @@ ON CONFLICT (ticket_code) DO NOTHING;
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email='manager@innova.cx'),
+  (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   'ticket_assignment',
   'Approval Requested — Rescoring CX-4780',
   'Bilal Khan requested a priority change from Low to High on ticket CX-4780.',
@@ -2662,13 +2760,13 @@ SELECT
   FALSE,
   '2026-02-10 09:15:00+00'
 WHERE NOT EXISTS (
-  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='manager@innova.cx')
+  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='hamad@innovacx.net')
     AND title='Approval Requested — Rescoring CX-4780'
 );
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email='manager@innova.cx'),
+  (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   'sla_warning',
   'SLA Breached — CX-4725',
   'Ticket CX-4725 (Parking access card) has exceeded its resolution SLA. Overdue by 3 days.',
@@ -2677,13 +2775,13 @@ SELECT
   FALSE,
   '2026-02-15 08:00:00+00'
 WHERE NOT EXISTS (
-  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='manager@innova.cx')
+  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='hamad@innovacx.net')
     AND title='SLA Breached — CX-4725'
 );
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email='manager@innova.cx'),
+  (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   'status_change',
   'Ticket Escalated — CX-4587',
   'Ticket CX-4587 (Wi-Fi connection unstable) has been escalated and requires your attention.',
@@ -2692,13 +2790,13 @@ SELECT
   FALSE,
   '2026-02-18 11:30:00+00'
 WHERE NOT EXISTS (
-  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='manager@innova.cx')
+  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='hamad@innovacx.net')
     AND title='Ticket Escalated — CX-4587'
 );
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email='manager@innova.cx'),
+  (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   'ticket_assignment',
   'Approval Requested — Rerouting CX-M53',
   'Bilal Khan requested rerouting of CX-M53 from Security to Facilities department.',
@@ -2707,13 +2805,13 @@ SELECT
   FALSE,
   '2026-02-25 13:10:00+00'
 WHERE NOT EXISTS (
-  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='manager@innova.cx')
+  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='hamad@innovacx.net')
     AND title='Approval Requested — Rerouting CX-M53'
 );
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email='manager@innova.cx'),
+  (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   'sla_warning',
   'SLA Warning — CX-R01',
   'Critical ticket CX-R01 (AC unit failure – Server Room) is approaching its resolve SLA deadline.',
@@ -2722,13 +2820,13 @@ SELECT
   FALSE,
   '2026-03-01 11:00:00+00'
 WHERE NOT EXISTS (
-  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='manager@innova.cx')
+  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='hamad@innovacx.net')
     AND title='SLA Warning — CX-R01'
 );
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email='manager@innova.cx'),
+  (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   'status_change',
   'Ticket Escalated — CX-R06',
   'Ticket CX-R06 (Access control fault – Gate 2) has been escalated. Multiple employees affected.',
@@ -2737,13 +2835,13 @@ SELECT
   FALSE,
   '2026-03-01 10:30:00+00'
 WHERE NOT EXISTS (
-  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='manager@innova.cx')
+  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='hamad@innovacx.net')
     AND title='Ticket Escalated — CX-R06'
 );
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email='manager@innova.cx'),
+  (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   'ticket_assignment',
   'Approval Requested — Rescoring CX-M52',
   'Yousef Karim requested priority change from High to Critical on CX-M52 (Lift maintenance overdue).',
@@ -2752,13 +2850,13 @@ SELECT
   TRUE,
   '2026-02-27 07:30:00+00'
 WHERE NOT EXISTS (
-  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='manager@innova.cx')
+  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='hamad@innovacx.net')
     AND title='Approval Requested — Rescoring CX-M52'
 );
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
-  (SELECT id FROM users WHERE email='manager@innova.cx'),
+  (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   'sla_warning',
   'SLA Breached — CX-1122',
   'Ticket CX-1122 (Air conditioning not working) is unassigned and has breached response SLA.',
@@ -2767,7 +2865,7 @@ SELECT
   TRUE,
   '2026-02-05 09:00:00+00'
 WHERE NOT EXISTS (
-  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='manager@innova.cx')
+  SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='hamad@innovacx.net')
     AND title='SLA Breached — CX-1122'
 );
 
@@ -2780,186 +2878,186 @@ WHERE NOT EXISTS (
 
 -- Ahmed
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
   'ticket_assignment','New Ticket Assigned: CX-R01',
   'You have been assigned CX-R01 — AC unit failure in Server Room. Critical priority.',
   'Critical',(SELECT id FROM tickets WHERE ticket_code='CX-R01'),FALSE,'2026-03-01 06:35:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innova.cx') AND title='New Ticket Assigned: CX-R01');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innovacx.net') AND title='New Ticket Assigned: CX-R01');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
   'sla_warning','SLA Warning: CX-R01',
   'CX-R01 is approaching its resolve deadline in 1 hour. Take action immediately.',
   'Critical',(SELECT id FROM tickets WHERE ticket_code='CX-R01'),FALSE,'2026-03-01 11:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innova.cx') AND title='SLA Warning: CX-R01');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innovacx.net') AND title='SLA Warning: CX-R01');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
   'customer_reply','Customer replied on CX-M55',
   'Customer confirmed UPS battery replacement resolved the issue. Awaiting formal close.',
   'Critical',(SELECT id FROM tickets WHERE ticket_code='CX-M55'),TRUE,'2026-02-24 14:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innova.cx') AND title='Customer replied on CX-M55');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innovacx.net') AND title='Customer replied on CX-M55');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='ahmed@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
   'report_ready','February 2026 Report Ready',
   'Your performance report for February 2026 has been generated and is ready to view.',
   NULL,NULL,FALSE,'2026-03-01 06:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innova.cx') AND title='February 2026 Report Ready');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innovacx.net') AND title='February 2026 Report Ready');
 
 -- Maria
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='maria@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='sarah@innovacx.net'),
   'ticket_assignment','New Ticket Assigned: CX-R08',
   'You have been assigned CX-R08 — Slow Wi-Fi in Conference Rooms. Medium priority.',
   'Medium',(SELECT id FROM tickets WHERE ticket_code='CX-R08'),FALSE,'2026-03-01 10:45:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='maria@innova.cx') AND title='New Ticket Assigned: CX-R08');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sarah@innovacx.net') AND title='New Ticket Assigned: CX-R08');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='maria@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='sarah@innovacx.net'),
   'status_change','CX-3862 Status Updated',
   'Ticket CX-3862 (Water leakage in pantry) has been marked Overdue by the system.',
   'Critical',(SELECT id FROM tickets WHERE ticket_code='CX-3862'),TRUE,'2026-02-20 08:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='maria@innova.cx') AND title='CX-3862 Status Updated');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sarah@innovacx.net') AND title='CX-3862 Status Updated');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='maria@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='sarah@innovacx.net'),
   'report_ready','February 2026 Report Ready',
   'Your performance report for February 2026 is now available.',
   NULL,NULL,FALSE,'2026-03-01 06:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='maria@innova.cx') AND title='February 2026 Report Ready');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sarah@innovacx.net') AND title='February 2026 Report Ready');
 
 -- Omar
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='omar@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='yousef@innovacx.net'),
   'ticket_assignment','New Ticket Assigned: CX-R06',
   'You have been assigned CX-R06 — Access control fault at Gate 2. Critical priority.',
   'Critical',(SELECT id FROM tickets WHERE ticket_code='CX-R06'),FALSE,'2026-03-01 09:33:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='omar@innova.cx') AND title='New Ticket Assigned: CX-R06');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='yousef@innovacx.net') AND title='New Ticket Assigned: CX-R06');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='omar@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='yousef@innovacx.net'),
   'sla_warning','SLA Warning: CX-R06',
   'CX-R06 resolve deadline is in 5 hours. Multiple staff blocked at Gate 2.',
   'Critical',(SELECT id FROM tickets WHERE ticket_code='CX-R06'),FALSE,'2026-03-01 10:30:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='omar@innova.cx') AND title='SLA Warning: CX-R06');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='yousef@innovacx.net') AND title='SLA Warning: CX-R06');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='omar@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='yousef@innovacx.net'),
   'system','Scheduled Maintenance Window',
   'System maintenance is scheduled for tonight 11 PM – 2 AM. No disruption to active tickets.',
   NULL,NULL,TRUE,'2026-02-28 16:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='omar@innova.cx') AND title='Scheduled Maintenance Window');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='yousef@innovacx.net') AND title='Scheduled Maintenance Window');
 
 -- Sara
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='sara@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='sameer@innovacx.net'),
   'ticket_assignment','New Ticket Assigned: CX-R05',
   'You have been assigned CX-R05 — Restroom cleaning missed in Block C. Medium priority.',
   'Medium',(SELECT id FROM tickets WHERE ticket_code='CX-R05'),FALSE,'2026-03-01 09:15:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sara@innova.cx') AND title='New Ticket Assigned: CX-R05');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sameer@innovacx.net') AND title='New Ticket Assigned: CX-R05');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='sara@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='sameer@innovacx.net'),
   'customer_reply','Customer replied on CX-M54',
   'Customer confirmed cleaning schedule has been updated. Satisfied with resolution.',
   'Low',(SELECT id FROM tickets WHERE ticket_code='CX-M54'),TRUE,'2026-02-19 10:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sara@innova.cx') AND title='Customer replied on CX-M54');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sameer@innovacx.net') AND title='Customer replied on CX-M54');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='sara@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='sameer@innovacx.net'),
   'report_ready','February 2026 Report Ready',
   'Your performance report for February 2026 is now available.',
   NULL,NULL,FALSE,'2026-03-01 06:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sara@innova.cx') AND title='February 2026 Report Ready');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sameer@innovacx.net') AND title='February 2026 Report Ready');
 
 -- Bilal
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='bilal@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='bilal@innovacx.net'),
   'ticket_assignment','New Ticket Assigned: CX-R03',
   'You have been assigned CX-R03 — CCTV blind spot in Carpark Level 1. High priority.',
   'High',(SELECT id FROM tickets WHERE ticket_code='CX-R03'),FALSE,'2026-03-01 08:10:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='bilal@innova.cx') AND title='New Ticket Assigned: CX-R03');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='bilal@innovacx.net') AND title='New Ticket Assigned: CX-R03');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='bilal@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='bilal@innovacx.net'),
   'status_change','Approval Decision: REQ-3140',
   'Your rescoring request REQ-3140 for CX-4780 is pending manager review.',
   'High',(SELECT id FROM tickets WHERE ticket_code='CX-4780'),FALSE,'2026-02-10 09:30:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='bilal@innova.cx') AND title='Approval Decision: REQ-3140');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='bilal@innovacx.net') AND title='Approval Decision: REQ-3140');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='bilal@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='bilal@innovacx.net'),
   'system','Password Policy Update',
   'Your password will expire in 14 days. Please update it via Settings.',
   NULL,NULL,FALSE,'2026-02-26 09:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='bilal@innova.cx') AND title='Password Policy Update');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='bilal@innovacx.net') AND title='Password Policy Update');
 
 -- Fatima
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='fatima@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
   'ticket_assignment','New Ticket Assigned: CX-R04',
   'You have been assigned CX-R04 — Printer network error on Floor 3. Medium priority.',
   'Medium',(SELECT id FROM tickets WHERE ticket_code='CX-R04'),FALSE,'2026-03-01 08:45:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='fatima@innova.cx') AND title='New Ticket Assigned: CX-R04');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innovacx.net') AND title='New Ticket Assigned: CX-R04');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='fatima@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
   'customer_reply','Customer replied on CX-M47',
   'Customer confirmed VPN access is restored. Requesting formal ticket closure.',
   'High',(SELECT id FROM tickets WHERE ticket_code='CX-M47'),TRUE,'2026-01-12 11:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='fatima@innova.cx') AND title='Customer replied on CX-M47');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innovacx.net') AND title='Customer replied on CX-M47');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='fatima@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='ahmed@innovacx.net'),
   'report_ready','February 2026 Report Ready',
   'Your performance report for February 2026 is now available.',
   NULL,NULL,FALSE,'2026-03-01 06:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='fatima@innova.cx') AND title='February 2026 Report Ready');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='ahmed@innovacx.net') AND title='February 2026 Report Ready');
 
 -- Yousef
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='yousef@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='yousef@innovacx.net'),
   'ticket_assignment','New Ticket Assigned: CX-R02',
   'You have been assigned CX-R02 — Water ingress in Ground floor lobby. High priority.',
   'High',(SELECT id FROM tickets WHERE ticket_code='CX-R02'),FALSE,'2026-03-01 07:25:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='yousef@innova.cx') AND title='New Ticket Assigned: CX-R02');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='yousef@innovacx.net') AND title='New Ticket Assigned: CX-R02');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='yousef@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='yousef@innovacx.net'),
   'ticket_assignment','New Ticket Assigned: CX-R09',
   'You have been assigned CX-R09 — Broken window in Meeting Room 5B. Low priority.',
   'Low',(SELECT id FROM tickets WHERE ticket_code='CX-R09'),FALSE,'2026-03-01 11:20:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='yousef@innova.cx') AND title='New Ticket Assigned: CX-R09');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='yousef@innovacx.net') AND title='New Ticket Assigned: CX-R09');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='yousef@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='yousef@innovacx.net'),
   'status_change','Approval Decision: REQ-3170',
   'Your rescoring request REQ-3170 for CX-M52 is pending manager review.',
   'High',(SELECT id FROM tickets WHERE ticket_code='CX-M52'),FALSE,'2026-02-27 08:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='yousef@innova.cx') AND title='Approval Decision: REQ-3170');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='yousef@innovacx.net') AND title='Approval Decision: REQ-3170');
 
 -- Khalid
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='khalid@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='sameer@innovacx.net'),
   'ticket_assignment','New Ticket Assigned: CX-R07',
   'You have been assigned CX-R07 — Lift alarm triggered in Building B. High priority.',
   'High',(SELECT id FROM tickets WHERE ticket_code='CX-R07'),FALSE,'2026-03-01 10:08:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='khalid@innova.cx') AND title='New Ticket Assigned: CX-R07');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sameer@innovacx.net') AND title='New Ticket Assigned: CX-R07');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='khalid@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='sameer@innovacx.net'),
   'sla_warning','SLA Warning: CX-R07',
   'CX-R07 response is due in 30 minutes. Lift alarm still active.',
   'High',(SELECT id FROM tickets WHERE ticket_code='CX-R07'),FALSE,'2026-03-01 10:30:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='khalid@innova.cx') AND title='SLA Warning: CX-R07');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sameer@innovacx.net') AND title='SLA Warning: CX-R07');
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
-SELECT (SELECT id FROM users WHERE email='khalid@innova.cx'),
+SELECT (SELECT id FROM users WHERE email='sameer@innovacx.net'),
   'system','System Update Completed',
   'The InnovaCX platform was updated to v2.4.1. New features available — check the changelog.',
   NULL,NULL,TRUE,'2026-02-28 06:00:00+00'
-WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='khalid@innova.cx') AND title='System Update Completed');
+WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sameer@innovacx.net') AND title='System Update Completed');
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- FINAL BACKFILL: set priority_assigned_at = created_at for any historical
@@ -2983,8 +3081,6 @@ WHERE priority_assigned_at IS NOT NULL
   AND first_response_at IS NOT NULL
   AND first_response_at < priority_assigned_at;
 
-COMMIT;
-
 -- =============================================================================
 -- InnovaCX — Extended Seed Inserts
 -- Covers: model_execution_log, all agent output tables, sentiment/priority/
@@ -3000,8 +3096,6 @@ COMMIT;
 -- Safe to re-run: all statements use ON CONFLICT / WHERE NOT EXISTS.
 -- =============================================================================
 
-BEGIN;
-
 -- NOTE: ML pipeline seed data (model_execution_log, sentiment_outputs,
 -- priority_outputs, routing_outputs, sla_outputs, resolution_outputs,
 -- feature_outputs) moved to zzz_seedV2.sql, which runs after
@@ -3016,7 +3110,7 @@ BEGIN;
 INSERT INTO public.chat_conversations (id, customer_user_id, channel, created_at, ended_at, status)
 SELECT
   '11111111-1111-1111-1111-000000000001'::uuid,
-  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  (SELECT id FROM users WHERE email='customer1@innovacx.net'),
   'web',
   '2026-03-01 06:20:00+00',
   '2026-03-01 06:35:00+00',
@@ -3033,11 +3127,11 @@ SELECT
   msg.body, msg.ts::timestamptz, msg.intent, msg.category, msg.score, msg.escalate,
   CASE WHEN msg.link_ticket IS NOT NULL THEN (SELECT id FROM tickets WHERE ticket_code=msg.link_ticket) ELSE NULL END
 FROM (VALUES
-  ('customer','customer1@innova.cx','2026-03-01 06:20:30+00','The server room AC is completely down and temperature is rising fast!',
+  ('customer','customer1@innovacx.net','2026-03-01 06:20:30+00','The server room AC is completely down and temperature is rising fast!',
    'report_issue','HVAC',-0.75,FALSE,NULL),
   ('bot','bot','2026-03-01 06:20:45+00','I understand. This sounds urgent. Can you confirm your building and floor?',
    'collect_info','HVAC', 0.10,FALSE,NULL),
-  ('customer','customer1@innova.cx','2026-03-01 06:21:10+00','Building A, server room on ground floor. Temperature is at 30°C already.',
+  ('customer','customer1@innovacx.net','2026-03-01 06:21:10+00','Building A, server room on ground floor. Temperature is at 30°C already.',
    'provide_info','HVAC',-0.80,TRUE,NULL),
   ('operator','operator@innova.cx','2026-03-01 06:25:00+00','I am creating a Critical ticket now and dispatching the HVAC team immediately.',
    'resolution','HVAC', 0.20,FALSE,'CX-R01')
@@ -3052,7 +3146,7 @@ WHERE NOT EXISTS (
 INSERT INTO public.chat_conversations (id, customer_user_id, channel, created_at, ended_at, status)
 SELECT
   '22222222-2222-2222-2222-000000000002'::uuid,
-  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  (SELECT id FROM users WHERE email='customer1@innovacx.net'),
   'web',
   '2026-02-28 10:00:00+00',
   '2026-02-28 10:08:00+00',
@@ -3068,11 +3162,11 @@ SELECT
   CASE msg.email WHEN 'bot' THEN NULL ELSE (SELECT id FROM users WHERE email=msg.email) END,
   msg.body, msg.ts::timestamptz, msg.intent, msg.category, msg.score, FALSE
 FROM (VALUES
-  ('customer','customer1@innova.cx','2026-02-28 10:00:20+00','What are the support hours for facilities management?',
+  ('customer','customer1@innovacx.net','2026-02-28 10:00:20+00','What are the support hours for facilities management?',
    'inquiry','General',0.10),
   ('bot','bot','2026-02-28 10:00:35+00','Facilities Management is available 24/7 for critical issues and 7 AM – 10 PM for standard requests.',
    'answer','General',0.50),
-  ('customer','customer1@innova.cx','2026-02-28 10:01:00+00','Great, thank you!',
+  ('customer','customer1@innovacx.net','2026-02-28 10:01:00+00','Great, thank you!',
    'close','General',0.80)
 ) AS msg(sender_type, email, ts, body, intent, category, score)
 WHERE NOT EXISTS (
@@ -3085,7 +3179,7 @@ WHERE NOT EXISTS (
 INSERT INTO public.chat_conversations (id, customer_user_id, channel, created_at, ended_at, status)
 SELECT
   '33333333-3333-3333-3333-000000000003'::uuid,
-  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  (SELECT id FROM users WHERE email='customer1@innovacx.net'),
   'mobile',
   '2026-03-01 09:25:00+00',
   '2026-03-01 09:40:00+00',
@@ -3102,7 +3196,7 @@ SELECT
   msg.body, msg.ts::timestamptz, msg.intent, msg.category, msg.score, msg.escalate,
   CASE WHEN msg.link_ticket IS NOT NULL THEN (SELECT id FROM tickets WHERE ticket_code=msg.link_ticket) ELSE NULL END
 FROM (VALUES
-  ('customer','customer1@innova.cx','2026-03-01 09:25:10+00','None of the badge readers at Gate 2 are working. My whole team is stuck outside!',
+  ('customer','customer1@innovacx.net','2026-03-01 09:25:10+00','None of the badge readers at Gate 2 are working. My whole team is stuck outside!',
    'report_issue','Access Control',-0.85,FALSE,NULL),
   ('bot','bot','2026-03-01 09:25:25+00',$msg$I'm escalating this to an operator immediately given the severity.$msg$,
    'escalate','Access Control',0.05,TRUE,NULL),
@@ -3125,7 +3219,7 @@ INSERT INTO public.sessions (
   escalated_to_human, escalated_at, linked_ticket_id
 )
 SELECT
-  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  (SELECT id FROM users WHERE email='customer1@innovacx.net'),
   'resolved',
   '{"last_intent":"report_issue","asset":"HVAC","building":"A","floor":"Ground"}'::jsonb,
   '[{"role":"user","msg":"AC down in server room"},{"role":"bot","msg":"Ticket raised"},{"role":"operator","msg":"Team dispatched"}]'::jsonb,
@@ -3137,7 +3231,7 @@ SELECT
   (SELECT id FROM tickets WHERE ticket_code='CX-R01')
 WHERE NOT EXISTS (
   SELECT 1 FROM public.sessions s
-  WHERE s.user_id=(SELECT id FROM users WHERE email='customer1@innova.cx')
+  WHERE s.user_id=(SELECT id FROM users WHERE email='customer1@innovacx.net')
     AND s.created_at='2026-03-01 06:20:00+00'
 );
 
@@ -3147,7 +3241,7 @@ INSERT INTO public.sessions (
   escalated_to_human, escalated_at, linked_ticket_id
 )
 SELECT
-  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  (SELECT id FROM users WHERE email='customer1@innovacx.net'),
   'resolved',
   '{"last_intent":"inquiry","topic":"support_hours"}'::jsonb,
   '[{"role":"user","msg":"Support hours?"},{"role":"bot","msg":"24/7 for critical"}]'::jsonb,
@@ -3157,7 +3251,7 @@ SELECT
   FALSE, NULL, NULL
 WHERE NOT EXISTS (
   SELECT 1 FROM public.sessions s
-  WHERE s.user_id=(SELECT id FROM users WHERE email='customer1@innova.cx')
+  WHERE s.user_id=(SELECT id FROM users WHERE email='customer1@innovacx.net')
     AND s.created_at='2026-02-28 10:00:00+00'
 );
 
@@ -3171,7 +3265,7 @@ INSERT INTO public.user_chat_logs (
   sentiment_score, category, response_time_ms, ticket_id
 )
 SELECT
-  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  (SELECT id FROM users WHERE email='customer1@innovacx.net'),
   v.msg, v.intent, v.agg_flag, v.agg_score, v.ts::timestamptz,
   v.sent, v.cat, v.resp_ms,
   CASE WHEN v.ticket_code IS NOT NULL THEN (SELECT id FROM tickets WHERE ticket_code=v.ticket_code) ELSE NULL END
@@ -3189,7 +3283,7 @@ FROM (VALUES
 ) AS v(msg, intent, agg_flag, agg_score, ts, sent, cat, resp_ms, ticket_code)
 WHERE NOT EXISTS (
   SELECT 1 FROM public.user_chat_logs ucl
-  WHERE ucl.user_id=(SELECT id FROM users WHERE email='customer1@innova.cx')
+  WHERE ucl.user_id=(SELECT id FROM users WHERE email='customer1@innovacx.net')
     AND ucl.message = v.msg
   LIMIT 1
 );
@@ -3228,19 +3322,19 @@ SELECT t.id, v.fname, v.furl,
 FROM (VALUES
   ('CX-R01','server_room_temp_log_2026-03-01.csv',
    'https://storage.innovacx.com/attachments/CX-R01/server_room_temp_log_2026-03-01.csv',
-   'ahmed@innova.cx','2026-03-01 07:00:00+00'),
+   'ahmed@innovacx.net','2026-03-01 07:00:00+00'),
   ('CX-R01','hvac_inspection_photo.jpg',
    'https://storage.innovacx.com/attachments/CX-R01/hvac_inspection_photo.jpg',
-   'ahmed@innova.cx','2026-03-01 07:15:00+00'),
+   'ahmed@innovacx.net','2026-03-01 07:15:00+00'),
   ('CX-M25','cctv_nvr_error_screenshot.png',
    'https://storage.innovacx.com/attachments/CX-M25/cctv_nvr_error_screenshot.png',
-   'bilal@innova.cx','2025-08-12 08:00:00+00'),
+   'bilal@innovacx.net','2025-08-12 08:00:00+00'),
   ('CX-M55','ups_battery_report_Q1_2026.pdf',
    'https://storage.innovacx.com/attachments/CX-M55/ups_battery_report_Q1_2026.pdf',
-   'ahmed@innova.cx','2026-02-22 10:00:00+00'),
+   'ahmed@innovacx.net','2026-02-22 10:00:00+00'),
   ('CX-M31','chiller_diagnostic_report.pdf',
    'https://storage.innovacx.com/attachments/CX-M31/chiller_diagnostic_report.pdf',
-   'ahmed@innova.cx','2025-10-02 09:00:00+00')
+   'ahmed@innovacx.net','2025-10-02 09:00:00+00')
 ) AS v(ticket_code, fname, furl, email, ts)
 JOIN public.tickets t ON t.ticket_code = v.ticket_code
 WHERE NOT EXISTS (
@@ -3271,7 +3365,7 @@ FROM (VALUES
    'Open','Assigned',
    '{"source":"chat_escalation","chat_conv_id":"11111111-1111-1111-1111-000000000001"}',
    '2026-03-01 06:35:00+00'),
-  ('CX-R01','ahmed@innova.cx','internal_note',
+  ('CX-R01','ahmed@innovacx.net','internal_note',
    'On-site. Backup cooling unit activated. Primary compressor inspection in progress.',
    'Assigned','In Progress',
    '{"location":"Ground Floor Server Room","temp_reading":30.2}',
@@ -3283,13 +3377,13 @@ FROM (VALUES
    '{"affected_staff":15,"gate":"Gate 2"}',
    '2026-03-01 09:33:00+00'),
   -- CX-M41 resolution
-  ('CX-M41','ahmed@innova.cx','status_change',
+  ('CX-M41','ahmed@innovacx.net','status_change',
    'Boiler heat exchanger successfully replaced. Heating restored across Building A.',
    'In Progress','Resolved',
    '{"parts_replaced":["heat_exchanger"],"downtime_hours":10}',
    '2025-12-03 17:00:00+00'),
   -- CX-4725 overdue note
-  ('CX-4725','manager@innova.cx','escalation',
+  ('CX-4725','hamad@innovacx.net','escalation',
    'Ticket overdue — SLA breached. Escalating and requesting immediate re-assignment.',
    'Overdue','Escalated',
    '{"escalated_by":"manager","breach_hours":72}',
@@ -3313,19 +3407,19 @@ SELECT
   v.notes,
   v.ts::timestamptz
 FROM (VALUES
-  ('CX-R01', 1, 'ahmed@innova.cx',
+  ('CX-R01', 1, 'ahmed@innovacx.net',
    'Arrived on-site. Backup cooling unit powered on. Server temps dropping.',
    '2026-03-01 06:55:00+00'),
-  ('CX-R01', 2, 'ahmed@innova.cx',
+  ('CX-R01', 2, 'ahmed@innovacx.net',
    'Primary AC compressor inspected — refrigerant leak detected. Parts ordered.',
    '2026-03-01 08:00:00+00'),
-  ('CX-R06', 1, 'omar@innova.cx',
+  ('CX-R06', 1, 'yousef@innovacx.net',
    'Access control server restarted. Testing badge re-sync against user database.',
    '2026-03-01 09:55:00+00'),
-  ('CX-R03', 1, 'bilal@innova.cx',
+  ('CX-R03', 1, 'bilal@innovacx.net',
    'NVR connection cables checked. Level 1 south switch found faulty.',
    '2026-03-01 08:40:00+00'),
-  ('CX-R07', 1, 'khalid@innova.cx',
+  ('CX-R07', 1, 'sameer@innovacx.net',
    'Lift diagnostics run. Alarm sensor wiring loose — temporary bypass applied.',
    '2026-03-01 10:35:00+00')
 ) AS v(ticket_code, step_no, email, notes, ts)
@@ -3341,7 +3435,7 @@ WHERE NOT EXISTS (
 
 UPDATE public.approval_requests
 SET
-  decided_by_user_id = (SELECT id FROM users WHERE email='manager@innova.cx'),
+  decided_by_user_id = (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   decided_at         = '2026-02-13 10:00:00+00',
   decision_notes     = 'Confirmed physical root cause — Facilities is correct owner.'
 WHERE request_code = 'REQ-3145'
@@ -3349,7 +3443,7 @@ WHERE request_code = 'REQ-3145'
 
 UPDATE public.approval_requests
 SET
-  decided_by_user_id = (SELECT id FROM users WHERE email='manager@innova.cx'),
+  decided_by_user_id = (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   decided_at         = '2026-02-14 09:30:00+00',
   decision_notes     = 'Safety risk confirmed by site inspection. Critical escalation approved.'
 WHERE request_code = 'REQ-3150'
@@ -3357,7 +3451,7 @@ WHERE request_code = 'REQ-3150'
 
 UPDATE public.approval_requests
 SET
-  decided_by_user_id = (SELECT id FROM users WHERE email='manager@innova.cx'),
+  decided_by_user_id = (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   decided_at         = '2026-02-17 11:00:00+00',
   decision_notes     = 'Parking access is a hardware + system issue — remains in Facilities.'
 WHERE request_code = 'REQ-3155'
@@ -3365,7 +3459,7 @@ WHERE request_code = 'REQ-3155'
 
 UPDATE public.approval_requests
 SET
-  decided_by_user_id = (SELECT id FROM users WHERE email='manager@innova.cx'),
+  decided_by_user_id = (SELECT id FROM users WHERE email='hamad@innovacx.net'),
   decided_at         = '2026-03-01 09:00:00+00',
   decision_notes     = 'Cleaning-related schedule complaint does not meet threshold for High priority.'
 WHERE request_code = 'REQ-3175'
@@ -3384,7 +3478,7 @@ INSERT INTO public.employee_reports (
 SELECT code, emp_id, label, sub, rating, resolved, sla, avg_resp, 'report-gen-v1.0', 'system', ps::date, pe::date
 FROM (
   SELECT
-    (SELECT id FROM users WHERE email='maria@innova.cx')   AS emp_id,
+    (SELECT id FROM users WHERE email='sarah@innovacx.net')   AS emp_id,
     unnest(ARRAY['nov-2025-maria','oct-2025-maria'])         AS code,
     unnest(ARRAY['November 2025','October 2025'])            AS label,
     unnest(ARRAY['Solid month with high resolution rate.','Consistent performance, slight SLA dip.']) AS sub,
@@ -3398,7 +3492,7 @@ FROM (
   UNION ALL
 
   SELECT
-    (SELECT id FROM users WHERE email='bilal@innova.cx')    AS emp_id,
+    (SELECT id FROM users WHERE email='bilal@innovacx.net')    AS emp_id,
     unnest(ARRAY['nov-2025-bilal','oct-2025-bilal']),
     unnest(ARRAY['November 2025','October 2025']),
     unnest(ARRAY['High SLA compliance across security tickets.','Above-average month — strong resolve rate.']),
@@ -3412,7 +3506,7 @@ FROM (
   UNION ALL
 
   SELECT
-    (SELECT id FROM users WHERE email='yousef@innova.cx')   AS emp_id,
+    (SELECT id FROM users WHERE email='yousef@innovacx.net')   AS emp_id,
     unnest(ARRAY['nov-2025-yousef','oct-2025-yousef']),
     unnest(ARRAY['November 2025','October 2025']),
     unnest(ARRAY['Good resolve rate with room on response time.','Steady performance — no SLA breaches.']),
@@ -3426,7 +3520,7 @@ FROM (
   UNION ALL
 
   SELECT
-    (SELECT id FROM users WHERE email='khalid@innova.cx')   AS emp_id,
+    (SELECT id FROM users WHERE email='sameer@innovacx.net')   AS emp_id,
     unnest(ARRAY['nov-2025-khalid','oct-2025-khalid']),
     unnest(ARRAY['November 2025','October 2025']),
     unnest(ARRAY['Strong month — all critical tickets resolved within SLA.','Handled complex electrical faults efficiently.']),
@@ -3570,12 +3664,12 @@ ON CONFLICT (component) DO UPDATE
 
 INSERT INTO public.password_reset_tokens (user_id, token_hash, expires_at)
 SELECT
-  (SELECT id FROM users WHERE email='customer1@innova.cx'),
+  (SELECT id FROM users WHERE email='customer1@innovacx.net'),
   crypt('dev-reset-token-cx1-2026', gen_salt('bf', 10)),
   now() + interval '1 hour'
 WHERE NOT EXISTS (
   SELECT 1 FROM public.password_reset_tokens prt
-  WHERE prt.user_id=(SELECT id FROM users WHERE email='customer1@innova.cx')
+  WHERE prt.user_id=(SELECT id FROM users WHERE email='customer1@innovacx.net')
     AND prt.used_at IS NULL
 );
 
@@ -3593,15 +3687,15 @@ INSERT INTO public.ticket_resolution_feedback (
 SELECT t.id, u.id, fb.decision, fb.suggested, fb.custom, fb.final,
   'resolution-v2.0', fb.conf
 FROM (VALUES
-  ('CX-M20','ahmed@innova.cx','accepted',
+  ('CX-M20','ahmed@innovacx.net','accepted',
    'Tighten mounting bolts and balance fan blade.',
    NULL,
    'Loose mounting bolts tightened and fan blade balanced.', 0.8300),
-  ('CX-M36','ahmed@innova.cx','accepted',
+  ('CX-M36','ahmed@innovacx.net','accepted',
    'Isolate gas supply and replace faulty valve.',
    NULL,
    'Gas supply isolated; faulty valve replaced and area cleared.', 0.9900),
-  ('CX-M22','omar@innova.cx','accepted',
+  ('CX-M22','yousef@innovacx.net','accepted',
    'Deploy relief guard and update shift roster.',
    NULL,
    'Relief guard deployed; roster updated to prevent gaps.', 0.9500)
@@ -3669,5 +3763,3 @@ END $$;
 -- ---------------------------------------------------------------------------
 \ir scripts/AI_Explainability.sql
 \ir seeds/seed_department_staffing.sql
-
-COMMIT;

@@ -9,21 +9,12 @@ import { fireNotifRefresh } from "../../utils/notifRefresh";
 import "./ManagerNotifications.css";
 
 function getAuthToken() {
-  try {
-    const raw = localStorage.getItem("user");
-    if (raw) {
-      const user = JSON.parse(raw);
-      if (user?.access_token) return user.access_token;
-    }
-  } catch {
-    // ignore malformed user payload in storage
-  }
   return (
-    localStorage.getItem("access_token")
-    || localStorage.getItem("token")
-    || localStorage.getItem("jwt")
-    || localStorage.getItem("authToken")
-    || ""
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") ||
+    ""
   );
 }
 

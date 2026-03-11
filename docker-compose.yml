@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
-      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innovacx.net}"
       DISABLE_MFA: "${DISABLE_MFA:-false}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
       CHATBOT_PROXY_TIMEOUT_SECONDS: "${CHATBOT_PROXY_TIMEOUT_SECONDS:-30}"
@@ -108,7 +108,7 @@ services:
     restart: unless-stopped
     environment:
       PYTHONPATH: /app
-      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innova.cx}"
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innovacx.net}"
       DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
       SENTIMENT_MODEL_DIR: "${SENTIMENT_MODEL_DIR:-/app/agents/step04_sentimentanalysis/model}"
       CLASSIFIER_MODEL_DIR: "${CLASSIFIER_MODEL_DIR:-/app/agents/step03_classifier/model}"

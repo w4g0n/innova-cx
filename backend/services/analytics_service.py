@@ -745,13 +745,55 @@ def get_section_c(
     period_end: datetime,
     department: str,
     priority: str,
+    manager_dept_id: str = None,
 ) -> Dict[str, Any]:
+    """
+    Section C — Employee Performance.
 
-    where, params = _build_filters(
-        period_start, period_end, department, priority, table_alias="e", use_date_col=True, skip_priority=True
-    )
+    Scoping strategy (critical):
+      mv_employee_daily.department_name  is the TICKET's department, not the
+      employee's home department.  Filtering by department_name would include
+      any employee who ever handled a ticket filed to this department — wrong.
+
+      mv_acceptance_daily has NO department_name column at all — unfiltered it
+      returns every employee company-wide.
+
+    Correct approach: when manager_dept_id (UUID) is provided, filter both
+    mv_employee_daily and mv_acceptance_daily by:
+        employee_id IN (
+            SELECT user_id FROM user_profiles
+            WHERE department_id = %s::uuid
+        )
+    This is the identical definition used by /api/manager/employees — employees
+    who BELONG to the department, regardless of which tickets they handled.
+
+    Fallback (manager_dept_id is None): use department_name filter on tickets
+    so unassigned managers still get a useful response.
+    """
+    # ── Build time-range filter (no dept filter here; we handle dept below) ──
+    time_where = "e.created_day >= %s::date AND e.created_day < %s::date"
+    time_params: List[Any] = [period_start, period_end]
 
     # ── C1: Per-employee summary from mv_employee_daily ───────────────────
+    # Scope by ownership (user_profiles.department_id) when possible;
+    # fall back to ticket-department filter for unassigned managers.
+    if manager_dept_id:
+        emp_where = (
+            f"{time_where}"
+            " AND e.employee_id IN ("
+            "    SELECT user_id FROM user_profiles"
+            "    WHERE department_id = %s::uuid"
+            " )"
+        )
+        emp_params: List[Any] = [period_start, period_end, manager_dept_id]
+    else:
+        # Fallback: filter by ticket department name (old behaviour)
+        dept_cond = "" if department == "All Departments" else " AND e.department_name = %s"
+        emp_where = f"{time_where}{dept_cond}"
+        emp_params = list(time_params)
+        if department != "All Departments":
+            emp_params.append(department)
+
     emp_raw = _fetch_all(
         f"""
         SELECT
@@ -768,11 +810,11 @@ def get_section_c(
             ROUND(AVG(avg_respond_mins) FILTER (WHERE avg_respond_mins IS NOT NULL), 1) AS avg_respond_mins,
             ROUND(AVG(avg_resolve_mins) FILTER (WHERE avg_resolve_mins IS NOT NULL), 1) AS avg_resolve_mins
         FROM mv_employee_daily e
-        WHERE {where}
+        WHERE {emp_where}
         GROUP BY employee_name, employee_code, employee_role
         ORDER BY resolved DESC
         """,
-        params,
+        emp_params,
     )
 
     # ── Company averages ──────────────────────────────────────────────────
@@ -793,11 +835,24 @@ def get_section_c(
     ) or {}
 
     # ── C2: Acceptance rates from mv_acceptance_daily ─────────────────────
-    acc_where = "created_month >= %s AND created_month < %s"
-    acc_params = [
-        date(period_start.year, period_start.month, 1),
-        date(period_end.year,   period_end.month,   1),
-    ]
+    # mv_acceptance_daily has no department_name column — must filter by
+    # employee_id ownership just like emp_raw above.
+    acc_month_start = date(period_start.year, period_start.month, 1)
+    acc_month_end   = date(period_end.year,   period_end.month,   1)
+
+    if manager_dept_id:
+        acc_where = (
+            "created_month >= %s AND created_month < %s"
+            " AND employee_id IN ("
+            "    SELECT user_id FROM user_profiles"
+            "    WHERE department_id = %s::uuid"
+            " )"
+        )
+        acc_params: List[Any] = [acc_month_start, acc_month_end, manager_dept_id]
+    else:
+        acc_where = "created_month >= %s AND created_month < %s"
+        acc_params = [acc_month_start, acc_month_end]
+
     acc_raw = _fetch_all(
         f"""
         SELECT
@@ -1003,10 +1058,17 @@ def get_trends_data(
     prev_start: datetime,
     department: str = "All Departments",
     priority: str = "All Priorities",
+    manager_dept_id: str = None,
 ) -> Dict[str, Any]:
     """
     Returns the complete payload for /manager/trends.
     Identical JSON shape to the original endpoint — zero frontend changes needed.
+
+    manager_dept_id: the UUID of the authenticated manager's department from
+    user_profiles.department_id.  When supplied, Section C employee rows are
+    scoped to employees who BELONG to that department (user_profiles.department_id
+    = manager_dept_id), not just employees who handled tickets filed to it.
+    This is the authoritative definition — matching /api/manager/employees.
     """
     section_b = get_section_b(period_start, period_end, prev_start, department, priority)
     total_t          = section_b["kpis"]["totalTickets"]
@@ -1023,7 +1085,10 @@ def get_trends_data(
         **legacy,
         "sectionA": get_section_a(period_start, period_end, department, priority),
         "sectionB": section_b,
-        "sectionC": get_section_c(period_start, period_end, department, priority),
+        "sectionC": get_section_c(
+            period_start, period_end, department, priority,
+            manager_dept_id=manager_dept_id,
+        ),
     }
 
 

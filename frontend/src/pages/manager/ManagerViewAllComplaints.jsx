@@ -14,15 +14,12 @@ import { apiUrl } from "../../config/apiBase";
 import useScrollReveal from "../../utils/useScrollReveal";
 
 function getAuthToken() {
-  try {
-    const raw = localStorage.getItem("user");
-    if (raw) { const u = JSON.parse(raw); if (u?.access_token) return u.access_token; }
-  } catch { /* ignore */ }
   return (
     localStorage.getItem("access_token") ||
     localStorage.getItem("token") ||
     localStorage.getItem("jwt") ||
-    localStorage.getItem("authToken") || ""
+    localStorage.getItem("authToken") ||
+    ""
   );
 }
 
