@@ -4,35 +4,37 @@ import novaLogo from "../assets/nova-logo.png";
 import "./PublicLanding.css";
 
 const AGENTS_DATA = [
-  { name: "Transcriber", role: "Audio → Text",          model: "OpenAI Whisper",       color: "#818cf8", icon: "mic",
-    details: "Converts voice complaint recordings to text before passing downstream." },
-  { name: "Chatbot",     role: "Resolves & Routes",      model: "Falcon 1B Instruct",   color: "#c084fc", icon: "inbox",
-    details: "Front-line agent that handles inquiries and routes unresolved complaints." },
-  { name: "Classifier",  role: "Complaint vs Inquiry",   model: "NLI Model",            color: "#a78bfa", icon: "tag",
-    details: "Classifies the ticket as a Complaint or Inquiry, gating downstream agents." },
-  { name: "Sentiment",   role: "Emotion Detection",      model: "RoBERTa + Librosa",    color: "#e879f9", icon: "heart",
-    details: "Analyses text tone via RoBERTa and voice tone via Librosa." },
-  { name: "Features",    role: "Urgency & Impact",       model: "NLI + Database",       color: "#f0abfc", icon: "settings",
-    details: "Determines recurrence, safety concern, impact, severity and urgency." },
-  { name: "Prioritizer", role: "Fuzzy Logic Scoring",    model: "Fuzzy Logic Engine",   color: "#c026d3", icon: "scale",
-    details: "Combines upstream signals to output Critical / High / Medium / Low priority." },
-  { name: "Router",      role: "Department Assignment",  model: "NLI DeBERTa",          color: "#d946ef", icon: "building",
-    details: "Routes tickets to the correct department at 0.7 confidence threshold." },
-  { name: "Resolver",    role: "Suggested Fixes",        model: "Flan-T5-Base",         color: "#a855f7", icon: "lightbulb",
-    details: "Generates resolution suggestions and retrains on every correction." },
+  { name: "Transcriber", role: "Audio → Text", model: "Whisper", color: "#818cf8", icon: "mic",
+    details: "Transcribes voice submissions into editable text before the ticket enters the pipeline." },
+  { name: "Chatbot", role: "Ticket Intake", model: "Qwen", color: "#c084fc", icon: "inbox",
+    details: "Nova - the front-line chatbot. Handles inquiries using a knowledge base and initiates formal ticketing when escalation is needed." },
+  { name: "Classifier", role: "Complaint vs Inquiry", model: "DeBERTa NLI", color: "#a78bfa", icon: "tag",
+    details: "Classifies the ticket as a Complaint or Inquiry, so the correct workflow can continue." },
+  { name: "Sentiment", role: "Emotion Detection", model: "RoBERTa + Librosa", color: "#e879f9", icon: "heart",
+    details: "RoBERTa reads the ticket text for tone and frustration; Librosa extracts emotional cues from the audio waveform." },
+  { name: "Features", role: "Urgency & Impact", model: "DeBERTa NLI", color: "#f0abfc", icon: "settings",
+    details: "Extracts safety concern, severity, urgency, business impact, and recurrence from ticket content and history." },
+  { name: "Prioritizer", role: "Priority Scoring", model: "XGBoost", color: "#c026d3", icon: "scale",
+    details: "Assigns Low, Medium, High, or Critical priority using engineered ticket signals and learned scoring patterns." },
+  { name: "Router", role: "Department Assignment", model: "DeBERTa", color: "#d946ef", icon: "building",
+    details: "Routes tickets to the best-fit department and sends low-confidence cases for manager approval." },
+  { name: "Resolver", role: "Suggested Resolution", model: "Qwen", color: "#a855f7", icon: "lightbulb",
+    details: "Generates a suggested resolution for the employee to approve, edit, or reject, and retrains on every correction." },
 ];
 
 
 const PIPELINE = [
-  { icon: "mic",       label: "Transcribe",       sub: "Whisper (if audio)",      color: "#818cf8" },
-  { icon: "inbox",     label: "Ticket Submitted", sub: "Text or Audio",           color: "#c084fc" },
-  { icon: "tag",       label: "Classify",         sub: "Complaint / Inquiry",     color: "#a78bfa" },
-  { icon: "heart",     label: "Sentiment",        sub: "RoBERTa + Librosa",       color: "#e879f9" },
-  { icon: "settings",  label: "Feature Eng.",     sub: "Urgency · Impact · Risk", color: "#f0abfc" },
-  { icon: "scale",     label: "Prioritise",       sub: "Fuzzy Logic",             color: "#c026d3" },
-  { icon: "clock",     label: "SLA",              sub: "Auto-escalation",         color: "#d946ef" },
-  { icon: "building",  label: "Route",            sub: "DeBERTa 0.7",             color: "#a855f7" },
-  { icon: "lightbulb", label: "Resolution",       sub: "Flan-T5 + relearn",       color: "#c084fc" },
+
+{ icon: "mic", label: "Transcribe", sub: "Whisper (if audio)", color: "#818cf8" },
+{ icon: "inbox", label: "Create Ticket", sub: "Qwen chatbot or form", color: "#c084fc" },
+{ icon: "tag", label: "Classify", sub: "Complaint / Inquiry", color: "#a78bfa" },
+{ icon: "heart", label: "Sentiment", sub: "RoBERTa + Librosa", color: "#e879f9" },
+{ icon: "settings", label: "Feature Eng.", sub: "Urgency · Impact · Risk", color: "#f0abfc" },
+{ icon: "scale", label: "Prioritise", sub: "XGBoost scoring", color: "#c026d3" },
+{ icon: "clock", label: "SLA", sub: "Auto-escalation", color: "#d946ef" },
+{ icon: "building", label: "Route", sub: "DeBERTa department routing",color: "#a855f7" },
+{ icon: "lightbulb", label: "Resolution", sub: "Qwen suggested resolution", color: "#c084fc" },
+
 ];
 
 /* ── Orbit config — each planet has a distinct visual personality ── */
@@ -1231,8 +1233,8 @@ export default function PublicLanding() {
       <div className="pl-marquee">
         <div className="pl-marquee-track">
           {[...Array(4)].map((_,r) =>
-            ["Falcon 1B Chatbot","Whisper Transcription","RoBERTa Sentiment","Fuzzy Logic Priority",
-             "DeBERTa Routing","Flan-T5 Resolution","SLA Automation","Zero Missed Complaints"].map((x,i)=>(
+            ["Whisper Transcription","Qwen Chatbot","RoBERTa Sentiment","DeBERTa Routing",
+              "XGBoost Priority","Qwen Suggested Resolution","SLA Automation"].map((x,i)=>(
               <span key={`${r}-${i}`} className="pl-marquee-item">✦ {x}</span>
             ))
           )}
