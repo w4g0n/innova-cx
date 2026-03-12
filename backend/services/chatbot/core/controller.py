@@ -170,7 +170,7 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
             # No ID in message — list open tickets and stay in this state
             # so the user can reply with the ID they want
             result = get_open_tickets(user_id)
-            if result.get("found") and result.get("raw"):
+            if result.get("found") and result.get("raw") and result.get("raw") != "You currently have no open tickets.":
                 response = (
                     "No problem. Here are your open tickets:\n\n"
                     + result["raw"]
@@ -180,9 +180,13 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
                 _log_and_save(session, response, "open_tickets_list",
                               sql_query=result.get("query"))
             else:
-                response = "I could not find any open tickets for your account."
-                transition(session, "resolved")
-                _log_and_save(session, response, "no_open_tickets")
+                response = (
+                    "I could not find any non-resolved tickets for your account. "
+                    "If you have a ticket ID, send it and I will check it directly. "
+                    "Otherwise, you can tell me you want to create a new ticket."
+                )
+                # Stay in await_ticket_id so the next reply is still handled as follow-up context
+                _log_and_save(session, response, "no_open_tickets", sql_query=result.get("query"))
 
         return _result(response, "ticket_lookup", session_id)
 
@@ -253,6 +257,7 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
 def _handle_inquiry(session: dict, user_text: str) -> dict:
     session_id = session["session_id"]
     context    = session["context"]
+    context["category"] = "inquiry"
 
     attempts = context.get("inquiry_attempts", 0) + 1
     context["inquiry_attempts"] = attempts
@@ -298,8 +303,11 @@ def _handle_inquiry(session: dict, user_text: str) -> dict:
         rtype    = "inquiry_falcon_fallback"
         response = "[Not fully certain] " + response
 
-    # Do not force binary follow-up prompts; allow natural conversation.
-    transition(session, "await_primary_intent")
+    response = (
+        f"{response}\n\n"
+        "Did this answer your question? Reply yes if it did, or no and I will keep helping."
+    )
+    transition(session, "inquiry_confirm")
     _log_and_save(session, response, rtype)
     return _result(response, rtype, session_id)
 
@@ -410,6 +418,13 @@ def _handle_complaint(session: dict, user_id: str, user_text: str) -> dict:
 def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
     session_id = session["session_id"]
     context    = session["context"]
+    current_state = session.get("current_state", "")
+
+    if str(context.get("category", "")).strip().lower() not in {"inquiry", "complaint"}:
+        if current_state == "collecting_inquiry_ticket":
+            context["category"] = "inquiry"
+        elif current_state == "collecting_complaint":
+            context["category"] = "complaint"
 
     # Step 1: collect description
     if "description" not in context:
@@ -439,9 +454,18 @@ def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
 def _confirm_ticket_creation(session: dict, user_id: str, user_text: str) -> dict:
     session_id = session["session_id"]
     context = session["context"]
-    category = context.get("category", "complaint")
+    category = str(context.get("category", "")).strip().lower()
     text_clean = user_text.strip()
     text_lower = text_clean.lower()
+
+    if category not in {"inquiry", "complaint"}:
+        response = (
+            "Before I create the ticket, I need to confirm one thing: "
+            "is this an inquiry or a complaint?"
+        )
+        transition(session, "await_secondary_intent")
+        _log_and_save(session, response, "ticket_category_missing")
+        return _result(response, "ticket_category_missing", session_id)
 
     if _is_affirmative(text_lower):
         result = create_ticket(
@@ -468,7 +492,7 @@ def _confirm_ticket_creation(session: dict, user_id: str, user_text: str) -> dic
             rtype = "ticket_create_error"
 
         _log_and_save(session, response, rtype)
-        return _result(response, rtype, session_id)
+        return _result(response, rtype, session_id, ticket_category=category if rtype == "ticket_created" else None)
 
     if _is_negative(text_lower):
         context.pop("description", None)
@@ -541,12 +565,14 @@ def _result(
     rtype: str,
     session_id: str,
     buttons: list | None = None,
+    ticket_category: str | None = None,
 ) -> dict:
     return {
         "response":      response,
         "response_type": rtype,
         "show_buttons":  buttons or [],
         "session_id":    session_id,
+        "ticket_category": ticket_category,
     }
 
 # ── Backward-compatible wrappers (used by local_model_test.py) ────────────────

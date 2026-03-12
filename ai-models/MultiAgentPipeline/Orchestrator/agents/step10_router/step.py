@@ -12,6 +12,7 @@ import os
 import tarfile
 import gc
 import json
+import re
 import subprocess
 import sys
 from functools import lru_cache
@@ -92,6 +93,13 @@ HEURISTIC_ROUTING_BOOSTS = {
     "HR": ("hr", "salary", "leave", "employee", "staff grievance", "payroll"),
     "Facilities Management": ("cleaning", "pest", "rat", "rodent", "cockroach", "garbage", "trash", "housekeeping"),
 }
+
+
+def _contains_routing_keyword(text: str, keyword: str) -> bool:
+    escaped = re.escape(str(keyword or "").strip().lower())
+    if not escaped:
+        return False
+    return bool(re.search(rf"\b{escaped}\b", str(text or "").lower()))
 
 
 def _resolve_router_model_dir() -> Path | None:
@@ -193,17 +201,17 @@ def get_router_diagnostics() -> dict[str, object]:
 
 def _mock_department_from_text(text: str) -> str:
     t = (text or "").lower()
-    if any(k in t for k in ("wifi", "network", "internet", "server", "system", "software", "login")):
+    if any(_contains_routing_keyword(t, k) for k in ("wifi", "network", "internet", "server", "system", "software", "login")):
         return "IT"
-    if any(k in t for k in ("leak", "pipe", "water", "ac", "air conditioning", "maintenance", "electrical", "power")):
+    if any(_contains_routing_keyword(t, k) for k in ("leak", "pipe", "water", "ac", "air conditioning", "maintenance", "electrical", "power")):
         return "Maintenance"
-    if any(k in t for k in ("fire", "unsafe", "hazard", "security", "alarm", "theft", "emergency")):
+    if any(_contains_routing_keyword(t, k) for k in ("fire", "unsafe", "hazard", "security", "alarm", "theft", "emergency")):
         return "Safety & Security"
-    if any(k in t for k in ("contract", "legal", "policy", "compliance", "regulation", "law")):
+    if any(_contains_routing_keyword(t, k) for k in ("contract", "legal", "policy", "compliance", "regulation", "law")):
         return "Legal & Compliance"
-    if any(k in t for k in ("lease", "tenant", "rent", "handover", "move in")):
+    if any(_contains_routing_keyword(t, k) for k in ("lease", "tenant", "rent", "handover", "move in")):
         return "Leasing"
-    if any(k in t for k in ("hr", "salary", "leave", "employee", "staff")):
+    if any(_contains_routing_keyword(t, k) for k in ("hr", "salary", "leave", "employee", "staff")):
         return "HR"
     return "Facilities Management"
 
@@ -310,7 +318,7 @@ def _apply_domain_routing_boost(text: str, labels: list[str], scores: list[float
     lowered = str(text or "").lower()
     adjustments: dict[str, float] = {}
     for department, keywords in HEURISTIC_ROUTING_BOOSTS.items():
-        matches = sum(1 for keyword in keywords if keyword in lowered)
+        matches = sum(1 for keyword in keywords if _contains_routing_keyword(lowered, keyword))
         if matches:
             adjustments[department] = min(0.65, 0.22 + (0.12 * (matches - 1)))
 

@@ -71,6 +71,11 @@ _INQUIRY_SIGNALS = [
     "help me understand", "guidance", "advice", "explain",
     "opening hours", "policy", "procedure", "process",
     "schedule", "available", "who do i contact",
+    "i was wondering", "i'm wondering", "interested in", "looking for",
+    "want to know", "tell me about", "ask about", "question about",
+    "availability", "pricing", "price", "lease", "leasing",
+    "rental", "rent", "renting", "office space", "available space",
+    "minimum lease term", "floor plan", "floor plans",
 ]
 
 _COMPLAINT_SIGNALS = [
@@ -110,6 +115,47 @@ def _keyword_score(text: str, signals: list[str]) -> int:
     return sum(1 for s in signals if s in text_lower)
 
 
+def _contains_question_like_inquiry(text: str) -> bool:
+    text_lower = text.strip().lower()
+    if "?" in text_lower:
+        return True
+    inquiry_starters = (
+        "i was wondering",
+        "i'm wondering",
+        "can you tell me",
+        "could you tell me",
+        "i want to know",
+        "i'd like to know",
+        "tell me about",
+        "what are",
+        "what is",
+        "what's",
+        "do you have",
+        "is there",
+        "are there",
+    )
+    return any(text_lower.startswith(prefix) for prefix in inquiry_starters)
+
+
+def _contains_leasing_inquiry(text: str) -> bool:
+    text_lower = text.strip().lower()
+    leasing_terms = (
+        "lease",
+        "leasing",
+        "rental",
+        "rent",
+        "renting",
+        "office space",
+        "available space",
+        "availability",
+        "floor plan",
+        "floor plans",
+        "price",
+        "pricing",
+    )
+    return any(term in text_lower for term in leasing_terms)
+
+
 def _keyword_primary_intent(user_text: str) -> str:
     follow_score = _keyword_score(user_text, _FOLLOW_UP_SIGNALS)
     create_score = _keyword_score(user_text, _CREATE_SIGNALS)
@@ -132,6 +178,11 @@ def _keyword_primary_intent(user_text: str) -> str:
 def _keyword_secondary_intent(user_text: str) -> str:
     inquiry_score = _keyword_score(user_text, _INQUIRY_SIGNALS)
     complaint_score = _keyword_score(user_text, _COMPLAINT_SIGNALS)
+
+    if _contains_question_like_inquiry(user_text):
+        inquiry_score += 2
+    if _contains_leasing_inquiry(user_text):
+        inquiry_score += 2
 
     if complaint_score > inquiry_score:
         return "complaint"

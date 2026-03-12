@@ -23,6 +23,7 @@ class ChatResponse(BaseModel):
     response: str
     response_type: str
     show_buttons: list[str]
+    ticket_category: Optional[str] = None
 
 
 class ResolutionSuggestionRequest(BaseModel):
@@ -60,6 +61,28 @@ def _clean_resolution(value: str) -> str:
     text = re.sub(r'^(?:resolution|suggested resolution|output|answer)\s*[:\-]\s*', "", text, flags=re.IGNORECASE)
     text = text.strip(" \"'")
     return text
+
+
+def _heuristic_subject(details: str) -> str:
+    text = str(details or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text)
+    text = text.splitlines()[0].strip()
+    text = re.sub(
+        r"^(?:i need you to|please|can you|could you|it seems that|there is|there's)\s+",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = text.strip(" .,:;!?-\"'")
+    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9&/'-]*", text)
+    if not tokens:
+        return ""
+    subject = " ".join(tokens[:8]).strip()
+    if not subject:
+        return ""
+    return subject[:1].upper() + subject[1:]
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -140,14 +163,19 @@ def suggest_subject(req: SubjectSuggestionRequest):
             "Return only the subject line.\n\n"
             f"Ticket: {req.details}"
         )
-        subject = generate_response(
-            [{"role": "user", "content": prompt}],
-            max_new_tokens=12,
-            do_sample=False,
-        ).strip()
+        try:
+            subject = generate_response(
+                [{"role": "user", "content": prompt}],
+                max_new_tokens=12,
+                do_sample=False,
+            ).strip()
+        except Exception:
+            subject = ""
         subject = subject.splitlines()[0].strip() if subject else ""
         subject = re.sub(r'^["\']|["\']$', "", subject).strip()
         subject = re.sub(r"[.!?;:,]+$", "", subject).strip()
+        if not subject:
+            subject = _heuristic_subject(req.details)
         if not subject:
             raise HTTPException(status_code=502, detail="Model returned empty subject")
         return {"subject": subject}

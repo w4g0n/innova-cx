@@ -155,7 +155,7 @@ export default function CustomerChatbot() {
         const ticketIdMatch = botText.match(/ticket ID is (CX-[A-Za-z0-9_-]+)/i);
         setTicketPopup({
           ticketId: ticketIdMatch ? ticketIdMatch[1] : null,
-          isInquiry: false,
+          isInquiry: String(data?.ticket_category || "").toLowerCase() === "inquiry",
           replyText: botText,
         });
       }

@@ -64,7 +64,7 @@ export default function AudioReplyPlayer({ ticketId, isInquiry, replyText }) {
       const data = await getAudioReply({
         ticketId,
         messageType: isInquiry ? "inquiry_handled" : "ticket_logged",
-        ticketType: "complaint",
+        ticketType: isInquiry ? "inquiry" : "complaint",
       });
 
       if (cancelled) return;

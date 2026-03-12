@@ -72,27 +72,30 @@ def _infer_resolution_plan(ticket: dict[str, Any]) -> tuple[str, str, str]:
     first_action = "triage the reported issue"
     verify_action = "confirm the issue is resolved with the reporter"
 
-    if any(term in details for term in ("exposed wire", "electrical wire", "electric shock", "sparking", "short circuit")):
+    def has_term(*terms: str) -> bool:
+        return any(re.search(rf"\b{re.escape(term)}\b", details) for term in terms)
+
+    if has_term("exposed wire", "electrical wire", "electric shock", "sparking", "short circuit"):
         first_action = "isolate power to the affected area and secure access immediately"
         department = "Maintenance"
         verify_action = "confirm the electrical hazard is removed and the area is safe to reopen"
-    elif any(term in details for term in ("water leak", "water leakage", "leak", "flood", "pipe burst")):
+    elif has_term("water leak", "water leakage", "leak", "flood", "pipe burst"):
         first_action = "shut off the leak source if possible and contain the water immediately"
         department = "Maintenance"
         verify_action = "confirm the leak has stopped and no active water ingress remains"
-    elif any(term in details for term in ("fire", "smoke", "alarm", "gas leak")):
+    elif has_term("fire", "smoke", "alarm", "gas leak"):
         first_action = "escalate emergency response, isolate the area, and protect occupants immediately"
         department = "Safety & Security"
         verify_action = "confirm the site has been declared safe and the immediate danger is cleared"
-    elif any(term in details for term in ("wifi", "internet", "network", "server", "system", "login")):
+    elif has_term("wifi", "internet", "network", "server", "system", "login"):
         first_action = "check the affected service status and restore connectivity for impacted users"
         department = "IT"
         verify_action = "confirm users can access the service normally again"
-    elif any(term in details for term in ("rat", "rodent", "mouse", "mice", "pest", "cockroach", "insect", "exterminator")):
+    elif has_term("rat", "rodent", "mouse", "mice", "pest", "cockroach", "insect", "exterminator"):
         first_action = "isolate the affected area and dispatch pest control immediately"
         department = "Facilities"
         verify_action = "confirm the infestation risk is removed and the area is safe for normal use"
-    elif any(term in details for term in ("rent", "lease", "pricing", "cost", "office cost", "offices cost")):
+    elif has_term("rent", "lease", "pricing", "cost", "office cost", "offices cost"):
         first_action = "review the customer’s pricing or leasing request and provide the correct commercial information"
         department = "Leasing"
         verify_action = "confirm the customer received the requested pricing details"

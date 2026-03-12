@@ -24,13 +24,15 @@ logger = logging.getLogger(__name__)
 
 INQUIRY_HINTS = (
     "how", "what", "where", "when", "can i", "could i", "would it",
-    "help", "guide", "question", "information", "status", "track",
+    "guide", "question", "information", "status", "track",
     "follow up", "follow-up",
 )
 COMPLAINT_HINTS = (
     "broken", "not working", "fault", "issue", "problem", "outage",
     "leak", "urgent", "angry", "frustrated", "complaint", "failed",
-    "error", "can't", "cannot",
+    "error", "can't", "cannot", "window", "glass", "shattered",
+    "terrified", "danger", "dangerous", "safety", "hazard",
+    "bleeding", "injured", "help me", "come help",
 )
 
 MODEL_PATH_ENV = "CLASSIFIER_MODEL_PATH"

@@ -30,7 +30,7 @@ def _fetch_open_ticket_rows(user_id: str):
     query = (
         "SELECT ticket_code, subject, status, created_at "
         "FROM tickets "
-        "WHERE created_by_user_id = :user_id AND status IN ('Open', 'Unassigned', 'Assigned', 'In Progress', 'Escalated', 'Overdue', 'Reopened') "
+        "WHERE created_by_user_id = :user_id AND status <> 'Resolved' "
         f"ORDER BY created_at DESC LIMIT {OPEN_TICKET_LIMIT}"
     )
     with _ro_engine.connect() as conn:
