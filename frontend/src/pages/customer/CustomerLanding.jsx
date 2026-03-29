@@ -266,6 +266,7 @@ const QUICK_ACTIONS = [
     setNovaView("chat");
     setIsOpen(false);
     setIsExpanded(false);
+    resetSession();
   };
   const toggleExpand = () => {
     setIsExpanded((prev) => { if (prev) setNovaView("chat"); return !prev; });
