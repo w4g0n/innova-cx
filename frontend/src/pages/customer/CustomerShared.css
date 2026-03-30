@@ -107,8 +107,9 @@
   height: 60px;
   background: var(--topbar-bg);
   border-bottom: 1px solid var(--border-subtle);
-  backdrop-filter: blur(20px);
+  /* fix: -webkit- prefix must come before the unprefixed property */
   -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
   transition: background .3s, border-color .3s;
 }
 [data-theme="light"] .cs-topbar {
@@ -205,7 +206,8 @@
   border-radius: 16px;
   background: var(--popover-bg);
   border: 1px solid var(--popover-border);
-  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
   box-shadow: 0 24px 60px rgba(0,0,0,.25);
   overflow: hidden; z-index: 1002;
   animation: clPopIn .18s var(--ease) both;
@@ -243,7 +245,8 @@
   width: 320px; max-width: calc(100vw - 24px);
   border-radius: 16px;
   background: var(--popover-bg); border: 1px solid var(--popover-border);
-  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
   box-shadow: 0 24px 60px rgba(0,0,0,.25);
   overflow: hidden; z-index: 1002;
   animation: clPopIn .18s var(--ease) both; color: var(--text);
@@ -254,7 +257,14 @@
   color: var(--pink); border-bottom: 1px solid var(--border-subtle);
   background: rgba(147,51,234,.05);
 }
-.navPopoverList { max-height:300px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:rgba(147,51,234,.2) transparent; }
+.navPopoverList {
+  max-height: 300px;
+  overflow-y: auto;
+  /* replaced scrollbar-width/scrollbar-color with cross-browser compatible approach */
+}
+.navPopoverList::-webkit-scrollbar { width: 4px; }
+.navPopoverList::-webkit-scrollbar-track { background: transparent; }
+.navPopoverList::-webkit-scrollbar-thumb { background: rgba(147,51,234,.2); border-radius: 999px; }
 .navPopoverEmpty { padding:18px 16px; color:var(--muted); font-size:13px; text-align:center; }
 .navPopoverItem { padding:11px 16px; border-bottom:1px solid var(--update-row-border); cursor:default; transition:background .15s; }
 .navPopoverItem:last-child { border-bottom:none; }
@@ -319,7 +329,8 @@
   border: 1px solid var(--card-border);
   border-radius: 20px;
   padding: 28px;
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   transition: background .3s, border-color .3s;
   position: relative; overflow: hidden;
 }
@@ -372,7 +383,15 @@
   border-color: rgba(147,51,234,.55);
   box-shadow: 0 0 0 3px rgba(147,51,234,.12);
 }
-.cs-select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(192,132,252,.6)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center; padding-right:38px; }
+.cs-select {
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(192,132,252,.6)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 38px;
+}
 .cs-textarea { resize: vertical; min-height: 100px; line-height: 1.55; }
 
 .cs-field-error {
@@ -455,12 +474,13 @@
 .cs-footer-logo:hover { opacity:.8; }
 [data-theme="light"] .cs-footer-logo { filter:none; opacity:.6; }
 .cs-footer-copy { font-size:11px; color:var(--dim); margin:0; }
+
 /* ── SHARED LOGOUT CONFIRM MODAL (used by all customer pages) ── */
 .novaCloseModal {
   position: fixed; inset: 0; z-index: 9999;
   background: rgba(0,0,0,.55);
-  backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
   animation: clFadeIn .2s var(--ease, cubic-bezier(.25,1,.5,1)) both;
 }
