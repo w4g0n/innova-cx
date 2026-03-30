@@ -36,7 +36,6 @@ export function sanitizeId(val, maxLen = 64) {
  */
 export function sanitizeFilename(val, maxLen = 255) {
   return sanitizeText(val, maxLen)
-    // eslint-disable-next-line no-control-regex
     .replace(/[^\x20-\x7E]/g, "")
     .replace(/[/\\:*?"<>|]/g, "");
 }

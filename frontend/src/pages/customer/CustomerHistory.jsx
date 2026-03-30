@@ -90,6 +90,7 @@ export default function CustomerMyTickets() {
         const data = await res.json();
         setTickets(Array.isArray(data.tickets) ? data.tickets : []);
       } catch (e) {
+        console.error(e);
         // Use a fixed message — never render raw error.message which can contain
         // server-side stack traces or injection payloads
         setError("Unable to load your tickets. Please try again later.");
