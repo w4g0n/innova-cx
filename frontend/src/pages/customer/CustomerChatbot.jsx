@@ -4,6 +4,7 @@ import PageHeader from "../../components/common/PageHeader";
 import TicketConfirmPopup from "../../components/common/TicketConfirmPopup";
 import { useNavigate } from "react-router-dom";
 import { sendChatMessage } from "../../services/api";
+import { safeParseUser, sanitizeText, sanitizeId } from "./sanitize";
 import "./CustomerChatbot.css";
 
 // "Complaint" renamed to "Agent Pipeline"
@@ -21,6 +22,9 @@ const BUTTON_MESSAGE = {
   edit_ticket: "no",
 };
 
+// Allowlist for action button keys returned by the server — never render unknown keys
+const ALLOWED_BUTTONS = Object.keys(BUTTON_TEXT);
+
 const SESSION_KEY = "chatbot_session_id";
 
 export default function CustomerChatbot() {
@@ -29,17 +33,18 @@ export default function CustomerChatbot() {
 
   const user = useMemo(() => {
     try {
-      return JSON.parse(localStorage.getItem("user") || "{}");
+      // safeParseUser validates structure — rejects arrays / primitives from storage
+      return safeParseUser(localStorage.getItem("user"));
     } catch {
-      // If localStorage has bad JSON / is unavailable, fall back safely
       return {};
     }
   }, []);
 
-  const userId = user?.id || "";
+  const userId = sanitizeId(user?.id, 64);
 
   const nameFromEmail = useMemo(() => {
-    const email = (user?.email || "").trim();
+    // sanitizeText prevents null-byte / overlong email from reaching split logic
+    const email = sanitizeText(user?.email, 254).trim();
     if (!email.includes("@")) return "there";
     const raw = email.split("@")[0] || "";
     const cleaned = raw.replace(/[._-]+/g, " ").trim();
@@ -55,9 +60,10 @@ export default function CustomerChatbot() {
 
   const [chatSessionId, setChatSessionId] = useState(() => {
     try {
-      return localStorage.getItem(SESSION_KEY) || null;
+      // Validate that the stored session ID only contains safe characters
+      const raw = localStorage.getItem(SESSION_KEY) || null;
+      return raw ? sanitizeId(raw, 128) : null;
     } catch {
-      // localStorage may be blocked/unavailable in some browsers or privacy modes
       return null;
     }
   });
@@ -67,13 +73,18 @@ export default function CustomerChatbot() {
       if (chatSessionId) localStorage.setItem(SESSION_KEY, chatSessionId);
       else localStorage.removeItem(SESSION_KEY);
     } catch {
-      // ignore storage write errors (e.g., blocked storage)
+      // ignore storage write errors
     }
   }, [chatSessionId]);
 
   const [actionButtons, setActionButtons] = useState([]);
   const [messages, setMessages] = useState([
-    { id: "m1", from: "bot", text: `Hi ${nameFromEmail}! I'm Nova. How can I help you today?` },
+    {
+      id: "m1",
+      from: "bot",
+      // nameFromEmail is already sanitized above
+      text: `Hi ${nameFromEmail}! I'm Nova. How can I help you today?`,
+    },
   ]);
 
   const [ticketPopup, setTicketPopup] = useState(null);
@@ -85,24 +96,35 @@ export default function CustomerChatbot() {
   }, [messages, actionButtons]);
 
   const pushUser = (t) => {
-    setMessages((prev) => [...prev, { id: `u-${Date.now()}`, from: "user", text: t }]);
+    setMessages((prev) => [
+      ...prev,
+      { id: `u-${Date.now()}`, from: "user", text: sanitizeText(t, 5000) },
+    ]);
   };
 
   const pushBot = useCallback((t) => {
-    setMessages((prev) => [...prev, { id: `b-${Date.now()}`, from: "bot", text: t }]);
+    setMessages((prev) => [
+      ...prev,
+      { id: `b-${Date.now()}`, from: "bot", text: sanitizeText(t, 5000) },
+    ]);
   }, []);
 
   const goToForm = (prefillType) => {
+    // sanitizeId prevents path traversal or injection in the query param
+    const safeType = prefillType ? sanitizeId(prefillType, 32) : "";
     navigate(
-      prefillType
-        ? `/customer/fill-form?type=${encodeURIComponent(prefillType)}`
+      safeType
+        ? `/customer/fill-form?type=${encodeURIComponent(safeType)}`
         : "/customer/fill-form"
     );
   };
 
   const initSession = useCallback(async () => {
     const initData = await sendChatMessage("__init__", { userId, sessionId: null });
-    const newSid = initData?.session_id || null;
+    // Validate the session ID returned by the server before storing
+    const newSid = initData?.session_id
+      ? sanitizeId(String(initData.session_id), 128)
+      : null;
     if (newSid) setChatSessionId(newSid);
     return newSid;
   }, [userId]);
@@ -114,7 +136,10 @@ export default function CustomerChatbot() {
 
       try {
         const data = await sendChatMessage(message, { userId, sessionId: sid });
-        if (data?.session_id && data.session_id !== sid) setChatSessionId(data.session_id);
+        if (data?.session_id) {
+          const newSid = sanitizeId(String(data.session_id), 128);
+          if (newSid && newSid !== sid) setChatSessionId(newSid);
+        }
         return data;
       } catch (err) {
         if (
@@ -124,7 +149,10 @@ export default function CustomerChatbot() {
         ) {
           const newSid = await initSession();
           const data = await sendChatMessage(message, { userId, sessionId: newSid });
-          if (data?.session_id && data.session_id !== newSid) setChatSessionId(data.session_id);
+          if (data?.session_id) {
+            const validated = sanitizeId(String(data.session_id), 128);
+            if (validated && validated !== newSid) setChatSessionId(validated);
+          }
           return data;
         }
         throw err;
@@ -137,30 +165,38 @@ export default function CustomerChatbot() {
     async (message) => {
       pushUser(message);
 
-      // Add typing placeholder
-      setMessages((prev) => [...prev, { id: `typing-${Date.now()}`, from: "bot", text: "", isTyping: true }]);
+      setMessages((prev) => [
+        ...prev,
+        { id: `typing-${Date.now()}`, from: "bot", text: "", isTyping: true },
+      ]);
 
       const data = await sendToChatbot(message);
-      const botText = data?.response || data?.reply || "I could not generate a response.";
 
-      // Replace typing placeholder with real bot response
+      // Sanitize bot response text from the server before rendering
+      const rawText = data?.response || data?.reply || "I could not generate a response.";
+      const botText = sanitizeText(rawText, 5000);
+
       setMessages((prev) => [
         ...prev.slice(0, -1),
         { id: `b-${Date.now()}`, from: "bot", text: botText },
       ]);
 
-      setActionButtons(Array.isArray(data?.show_buttons) ? data.show_buttons : []);
+      // Only allow button keys that exist in our allowlist — discard unknown server-sent keys
+      const rawButtons = Array.isArray(data?.show_buttons) ? data.show_buttons : [];
+      const safeButtons = rawButtons.filter((b) => ALLOWED_BUTTONS.includes(String(b)));
+      setActionButtons(safeButtons);
 
       if (data?.response_type === "ticket_created") {
-        const ticketIdMatch = botText.match(/ticket ID is (CX-[A-Za-z0-9_-]+)/i);
+        const ticketIdMatch = botText.match(/ticket ID is (CX-[A-Za-z0-9_-]{1,40})/i);
         setTicketPopup({
-          ticketId: ticketIdMatch ? ticketIdMatch[1] : null,
+          // sanitizeId ensures ticketId only contains safe chars before it reaches a URL
+          ticketId: ticketIdMatch ? sanitizeId(ticketIdMatch[1], 48) : null,
           isInquiry: false,
           replyText: botText,
         });
       }
     },
-    [sendToChatbot] // pushUser comes from state setter, pushBot not used here
+    [sendToChatbot]
   );
 
   const handleSelect = async (type) => {
@@ -201,6 +237,8 @@ export default function CustomerChatbot() {
   };
 
   const handleActionButton = async (button) => {
+    // Double-check against allowlist at call time (belt-and-suspenders)
+    if (!ALLOWED_BUTTONS.includes(button)) return;
     const message = BUTTON_MESSAGE[button];
     if (!message || sending) return;
 
@@ -236,7 +274,6 @@ export default function CustomerChatbot() {
                 <button disabled={sending} onClick={() => handleSelect("inquiry")}>
                   Track Ticket
                 </button>
-                {/* Renamed "Open Form" → "Agent Pipeline" */}
                 <button onClick={() => goToForm("Complaint")}>Agent Pipeline</button>
               </div>
             </div>
@@ -262,7 +299,12 @@ export default function CustomerChatbot() {
             {actionButtons.length > 0 && (
               <div className="custQuickTopBtns" style={{ margin: "0 18px 12px" }}>
                 {actionButtons.map((btn) => (
-                  <button key={btn} disabled={sending} onClick={() => handleActionButton(btn)}>
+                  <button
+                    key={btn}
+                    disabled={sending}
+                    onClick={() => handleActionButton(btn)}
+                  >
+                    {/* BUTTON_TEXT lookup — key is allowlisted, value is a static constant */}
                     {BUTTON_TEXT[btn] || btn}
                   </button>
                 ))}
@@ -274,7 +316,11 @@ export default function CustomerChatbot() {
                 className="custInput"
                 value={text}
                 placeholder="Type your message..."
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  // Cap input length client-side before it reaches state or the API
+                  const val = e.target.value;
+                  if (val.length <= 5000) setText(val);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -282,6 +328,7 @@ export default function CustomerChatbot() {
                   }
                 }}
                 disabled={sending}
+                maxLength={5000}
               />
               <button type="submit" className="primaryPillBtn" disabled={sending}>
                 Send

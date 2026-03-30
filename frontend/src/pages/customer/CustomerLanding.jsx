@@ -7,76 +7,84 @@ import useNovaChatbot from "./chatbot.js";
 import TicketConfirmPopup from "../../components/common/TicketConfirmPopup";
 import { apiUrl } from "../../config/apiBase";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
-import { getToken} from "../../utils/auth";
+import { getToken } from "../../utils/auth";
 import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
+import {
+  safeParseUser,
+  sanitizeText,
+  sanitizeId,
+  formatTimeAgo,
+} from "./sanitize";
 
+// Static lookup maps — never derived from server data
 const CHATBOT_BUTTON_MESSAGES = {
   create_ticket: "I want to create a ticket",
-  track_ticket: "I want to track a ticket",
+  track_ticket:  "I want to track a ticket",
   confirm_ticket: "yes",
-  edit_ticket: "no",
+  edit_ticket:   "no",
 };
 
 const CHATBOT_BUTTON_LABELS = {
-  create_ticket: "Create a ticket",
-  track_ticket: "Track a ticket",
+  create_ticket:  "Create a ticket",
+  track_ticket:   "Track a ticket",
   confirm_ticket: "Confirm Ticket",
-  edit_ticket: "Edit Details",
+  edit_ticket:    "Edit Details",
 };
+
+// Allowlist of chatbot button keys — only these are rendered
+const ALLOWED_CHATBOT_BUTTONS = Object.keys(CHATBOT_BUTTON_LABELS);
 
 export default function CustomerLanding() {
   const navigate = useNavigate();
 
-// 3 quick actions — Settings removed (profile only), spans full grid width
-const QUICK_ACTIONS = [
-  {
-    action: "nova",
-    title: "Chat with Nova",
-    desc: "Get instant help from our AI assistant",
-    accent: "#c084fc",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        <circle cx="9" cy="10" r=".8" fill="currentColor" stroke="none"/>
-        <circle cx="12" cy="10" r=".8" fill="currentColor" stroke="none"/>
-        <circle cx="15" cy="10" r=".8" fill="currentColor" stroke="none"/>
-      </svg>
-    ),
-  },
-  {
-    action: "tickets",
-    title: "My Tickets",
-    desc: "View and track all your submitted tickets",
-    accent: "#818cf8",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="5" width="20" height="14" rx="2"/>
-        <path d="M16 2v6M8 2v6M2 10h20"/>
-        <path d="M7 15h4M7 18h2"/>
-      </svg>
-    ),
-  },
-  {
-    action: "form",
-    title: "Fill a Form",
-    desc: "Submit a new support request",
-    accent: "#e879f9",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <line x1="12" y1="18" x2="12" y2="12"/>
-        <line x1="9" y1="15" x2="15" y2="15"/>
-      </svg>
-    ),
-  },
-];
+  const QUICK_ACTIONS = [
+    {
+      action: "nova",
+      title:  "Chat with Nova",
+      desc:   "Get instant help from our AI assistant",
+      accent: "#c084fc",
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          <circle cx="9"  cy="10" r=".8" fill="currentColor" stroke="none"/>
+          <circle cx="12" cy="10" r=".8" fill="currentColor" stroke="none"/>
+          <circle cx="15" cy="10" r=".8" fill="currentColor" stroke="none"/>
+        </svg>
+      ),
+    },
+    {
+      action: "tickets",
+      title:  "My Tickets",
+      desc:   "View and track all your submitted tickets",
+      accent: "#818cf8",
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="5" width="20" height="14" rx="2"/>
+          <path d="M16 2v6M8 2v6M2 10h20"/>
+          <path d="M7 15h4M7 18h2"/>
+        </svg>
+      ),
+    },
+    {
+      action: "form",
+      title:  "Fill a Form",
+      desc:   "Submit a new support request",
+      accent: "#e879f9",
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="18" x2="12" y2="12"/>
+          <line x1="9"  y1="15" x2="15" y2="15"/>
+        </svg>
+      ),
+    },
+  ];
 
-  // ── Theme ─────────────────────────────────────────────────────────────────
   const [theme, toggleTheme] = useTheme();
 
   const [embeddedFormType, setEmbeddedFormType] = useState("Complaint");
-  const [ticketPopup, setTicketPopup] = useState(null);
+  const [ticketPopup,      setTicketPopup]      = useState(null);
 
   const {
     listRef,
@@ -94,60 +102,61 @@ const QUICK_ACTIONS = [
       setIsExpanded(true);
     },
     onTicketCreated: ({ ticketId, replyText }) => {
-      setTicketPopup({ ticketId, replyText });
+      setTicketPopup({
+        // Sanitize before storing in state — these come from the chatbot API
+        ticketId:  sanitizeId(ticketId, 48),
+        replyText: sanitizeText(replyText, 1000),
+      });
     },
   });
 
-  const profileRef = useRef(null);
-  const notifRef = useRef(null);
+  const profileRef        = useRef(null);
+  const notifRef          = useRef(null);
   const loadingTimeoutRef = useRef(null);
 
   // ── Nova chat widget state ──────────────────────────────────────────────
-  const [isOpen, setIsOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isOpen,           setIsOpen]           = useState(false);
+  const [isExpanded,       setIsExpanded]        = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // ── Fill-Form widget state ──────────────────────────────────────────────
-  const [formOpen, setFormOpen] = useState(false);
-  const [formExpanded, setFormExpanded] = useState(false);
+  const [formOpen,             setFormOpen]             = useState(false);
+  const [formExpanded,         setFormExpanded]         = useState(false);
   const [showFormCloseConfirm, setShowFormCloseConfirm] = useState(false);
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
-
-  const [novaView, setNovaView] = useState("chat");
+  const [notifOpen,       setNotifOpen]       = useState(false);
+  const [novaView,        setNovaView]        = useState("chat");
 
   const [user] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("user")) || {};
-    } catch {
-      return {};
-    }
+    // safeParseUser validates structure — rejects malformed JSON / non-object values
+    return safeParseUser(localStorage.getItem("user"));
   });
+
   const [notifications, setNotifications] = useState([]);
-  const [recentTicket, setRecentTicket] = useState(null);
+  const [recentTicket,  setRecentTicket]  = useState(null);
   const [ticketLoading, setTicketLoading] = useState(true);
 
   const hasUsableSubject = useCallback((ticket) => {
-    const subject = (ticket?.subject || ticket?.description?.subject || "").trim();
+    const subject = sanitizeText(
+      ticket?.subject || ticket?.description?.subject || "",
+      200
+    ).trim();
     return subject.length > 0;
   }, []);
 
   const fetchRecentTicket = useCallback(async () => {
     try {
       const token = getToken();
-      const res = await fetch(apiUrl("/api/customer/mytickets"), {
+      const res   = await fetch(apiUrl("/api/customer/mytickets"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const data = await res.json();
-        const tickets = data.tickets || [];
-        // Backend already returns ORDER BY created_at DESC.
+        const data    = await res.json();
+        const tickets = Array.isArray(data.tickets) ? data.tickets : [];
         const mostRecent = tickets[0] || null;
         setRecentTicket(mostRecent);
-        // Only keep loading if subject is missing AND we haven't hit the 4s cap yet.
-        // The cap is enforced by loadingTimeoutRef set at call-site.
         if (!mostRecent || hasUsableSubject(mostRecent)) {
           setTicketLoading(false);
           if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
@@ -163,10 +172,7 @@ const QUICK_ACTIONS = [
   }, [hasUsableSubject]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void fetchRecentTicket();
-    }, 0);
-    // Hard cap: never show skeleton for more than 4 seconds regardless of subject
+    const timer = setTimeout(() => { void fetchRecentTicket(); }, 0);
     loadingTimeoutRef.current = setTimeout(() => setTicketLoading(false), 4000);
     return () => {
       clearTimeout(timer);
@@ -176,9 +182,7 @@ const QUICK_ACTIONS = [
 
   useEffect(() => {
     if (!recentTicket || hasUsableSubject(recentTicket)) return undefined;
-    const timer = setTimeout(() => {
-      fetchRecentTicket();
-    }, 1200);
+    const timer = setTimeout(() => { fetchRecentTicket(); }, 1200);
     return () => clearTimeout(timer);
   }, [recentTicket, hasUsableSubject, fetchRecentTicket]);
 
@@ -191,12 +195,12 @@ const QUICK_ACTIONS = [
     async function fetchNotifications() {
       try {
         const token = getToken();
-        const res = await fetch(apiUrl("/api/customer/notifications"), {
+        const res   = await fetch(apiUrl("/api/customer/notifications"), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
           const data = await res.json();
-          setNotifications(data.notifications || []);
+          setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
         } else {
           setNotifications([]);
         }
@@ -207,15 +211,16 @@ const QUICK_ACTIONS = [
     fetchNotifications();
   }, []);
 
+  // Derived display values — all sanitized before rendering
   const initialsFromEmail = useMemo(
     () => getInitialsFromEmail(user?.email, "U"),
     [user]
   );
 
   const firstName = useMemo(() => {
-    const email = (user?.email || "").trim();
-    const name = user?.name || user?.full_name || user?.fullName || "";
+    const name  = sanitizeText(user?.name || user?.full_name || user?.fullName || "", 100);
     if (name) return name.split(" ")[0];
+    const email = sanitizeText(user?.email || "", 254).trim();
     if (!email.includes("@")) return "there";
     const raw = email.split("@")[0].replace(/[._\-\d]+/g, " ").trim();
     if (!raw) return "there";
@@ -230,7 +235,10 @@ const QUICK_ACTIONS = [
   }, []);
 
   const unreadCount = useMemo(
-    () => (Array.isArray(notifications) ? notifications.filter((n) => !n.read).length : 0),
+    () =>
+      Array.isArray(notifications)
+        ? notifications.filter((n) => !n.read).length
+        : 0,
     [notifications]
   );
 
@@ -242,15 +250,19 @@ const QUICK_ACTIONS = [
   useEffect(() => {
     const onMouseDown = (e) => {
       const t = e.target;
-      if (profileRef.current && !profileRef.current.contains(t)) setProfileMenuOpen(false);
-      if (notifRef.current && !notifRef.current.contains(t)) setNotifOpen(false);
+      if (profileRef.current && !profileRef.current.contains(t))
+        setProfileMenuOpen(false);
+      if (notifRef.current && !notifRef.current.contains(t))
+        setNotifOpen(false);
     };
-    const onKeyDown = (e) => { if (e.key === "Escape") closeAllPopovers(); };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") closeAllPopovers();
+    };
     document.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown",   onKeyDown);
     return () => {
       document.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown",   onKeyDown);
     };
   }, []);
 
@@ -260,44 +272,42 @@ const QUICK_ACTIONS = [
   }, [messages, isOpen, isExpanded, novaView, listRef]);
 
   // ── Nova widget handlers ───────────────────────────────────────────────
-  const handleClose = () => setShowCloseConfirm(true);
+  const handleClose  = () => setShowCloseConfirm(true);
   const confirmClose = () => {
     setShowCloseConfirm(false);
     setNovaView("chat");
     setIsOpen(false);
     setIsExpanded(false);
-    resetSession();
   };
   const toggleExpand = () => {
-    setIsExpanded((prev) => { if (prev) setNovaView("chat"); return !prev; });
+    setIsExpanded((prev) => {
+      if (prev) setNovaView("chat");
+      return !prev;
+    });
   };
   const minimizeWidget = () => { setIsOpen(false); setIsExpanded(false); };
 
   // ── Fill Form widget handlers ──────────────────────────────────────────
-  const openFormWidget = () => {
-    closeAllPopovers();
-    setFormOpen(true);
-  };
-  const handleFormClose = () => setShowFormCloseConfirm(true);
-  const confirmFormClose = () => {
+  const openFormWidget    = () => { closeAllPopovers(); setFormOpen(true); };
+  const handleFormClose   = () => setShowFormCloseConfirm(true);
+  const confirmFormClose  = () => {
     setShowFormCloseConfirm(false);
     setFormOpen(false);
     setFormExpanded(false);
   };
-  const toggleFormExpand = () => setFormExpanded((prev) => !prev);
-  const minimizeFormWidget = () => { setFormOpen(false); setFormExpanded(false); };
+  const toggleFormExpand      = () => setFormExpanded((prev) => !prev);
+  const minimizeFormWidget    = () => { setFormOpen(false); setFormExpanded(false); };
 
-  const openSettings = () => { closeAllPopovers(); navigate("/customer/settings"); };
-  const handleLogout = () => { closeAllPopovers(); setShowLogoutConfirm(true); };
+  const openSettings  = () => { closeAllPopovers(); navigate("/customer/settings"); };
+  const handleLogout  = () => { closeAllPopovers(); setShowLogoutConfirm(true); };
   const confirmLogout = () => {
     resetSession();
     setIsOpen(false);
     setIsExpanded(false);
     setNovaView("chat");
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
-    localStorage.removeItem("temp_token");
-    localStorage.removeItem("access_token");
+    ["user", "token", "temp_token", "access_token"].forEach((k) =>
+      localStorage.removeItem(k)
+    );
     navigate("/");
   };
 
@@ -307,11 +317,12 @@ const QUICK_ACTIONS = [
     if (!notifOpen) {
       try {
         const token = getToken();
-        const res = await fetch(apiUrl("/api/customer/notifications?mark_read=true"), {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        const res   = await fetch(
+          apiUrl("/api/customer/notifications?mark_read=true"),
+          { method: "GET", headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (res.ok)
+          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       } catch (err) {
         console.error("Error marking notifications as read:", err);
       }
@@ -320,55 +331,64 @@ const QUICK_ACTIONS = [
 
   const handleQuickAction = (action) => {
     closeAllPopovers();
-    if (action === "nova")          setIsOpen(true);
-    else if (action === "tickets")  navigate("/customer/mytickets");
-    else if (action === "form")     openFormWidget();
-  };
-
-  const formatTimeAgo = (isoString) => {
-    if (!isoString) return "";
-    const now = new Date();
-    const date = new Date(isoString);
-    const diff = Math.floor((now - date) / 1000);
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
-    return date.toLocaleDateString();
+    if (action === "nova")        setIsOpen(true);
+    else if (action === "tickets") navigate("/customer/mytickets");
+    else if (action === "form")    openFormWidget();
   };
 
   // ── Voice input for Nova ───────────────────────────────────────────────
-  const speechRef = useRef(null);
+  const speechRef   = useRef(null);
   const [voiceActive, setVoiceActive] = useState(false);
-  const [voiceDraft, setVoiceDraft] = useState("");
-  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceDraft,  setVoiceDraft]  = useState("");
+  const [voiceBusy,   setVoiceBusy]   = useState(false);
+  // State-based error replaces alert()
+  const [voiceError,  setVoiceError]  = useState("");
 
   const startVoice = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { alert("Voice input isn't supported in this browser. Try Chrome."); return; }
-    setVoiceDraft(""); setVoiceBusy(false); setVoiceActive(true);
+    if (!SR) {
+      // State-based error instead of alert() — alert text could be spoofed in some browsers
+      setVoiceError("Voice input isn't supported in this browser. Try Chrome.");
+      return;
+    }
+    setVoiceDraft("");
+    setVoiceBusy(false);
+    setVoiceActive(true);
+    setVoiceError("");
+
     const rec = new SR();
-    rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false;
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    rec.continuous     = false;
+
     rec.onresult = (event) => {
       let interim = "", finalText = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const chunk = event.results[i][0]?.transcript || "";
-        if (event.results[i].isFinal) finalText += chunk; else interim += chunk;
+        if (event.results[i].isFinal) finalText += chunk;
+        else interim += chunk;
       }
-      setVoiceDraft((finalText || interim || "").trim());
+      // Sanitize SpeechRecognition output — browser APIs can return arbitrary text
+      const raw = sanitizeText((finalText || interim || "").trim(), 5000);
+      setVoiceDraft(raw);
     };
     rec.onerror = () => { setVoiceActive(false); setVoiceBusy(false); };
-    rec.onend = () => { setVoiceBusy(false); };
+    rec.onend   = () => { setVoiceBusy(false); };
     speechRef.current = rec;
     try { rec.start(); } catch (err) { console.debug(err); }
   };
-  const cancelVoice = () => {
+
+  const cancelVoice  = () => {
     try { speechRef.current?.stop?.(); } catch { /* ignore */ }
-    setVoiceActive(false); setVoiceBusy(false); setVoiceDraft("");
+    setVoiceActive(false);
+    setVoiceBusy(false);
+    setVoiceDraft("");
+    setVoiceError("");
   };
   const confirmVoice = () => {
     const t = (voiceDraft || "").trim();
     if (!t) { cancelVoice(); return; }
+    // voiceDraft is already sanitized in onresult
     setText((prev) => (prev ? `${prev} ${t}` : t));
     cancelVoice();
   };
@@ -381,12 +401,10 @@ const QUICK_ACTIONS = [
         <div className="cl-topbar-left">
           <img src={novaLogo} alt="InnovaAI" className="cl-topbar-logo" />
           <div className="cl-topbar-divider" />
-          {/* Removed "Dubai CommerCity" — replaced with InnovaAI */}
           <span className="cl-topbar-portal">Customer Portal</span>
         </div>
 
         <div className="cl-topbar-right">
-          {/* Light / Dark Mode Toggle */}
           <ThemeToggleBtn theme={theme} onToggle={toggleTheme} />
 
           {/* Notifications */}
@@ -397,12 +415,24 @@ const QUICK_ACTIONS = [
               aria-label="Notifications"
               onClick={toggleNotifications}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
               {unreadCount > 0 && (
-                <span className="notifBadge" aria-label={`${unreadCount} notifications`}>
+                <span
+                  className="notifBadge"
+                  aria-label={`${unreadCount} notifications`}
+                >
                   {unreadCount}
                 </span>
               )}
@@ -416,12 +446,24 @@ const QUICK_ACTIONS = [
                     <div className="navPopoverEmpty">No notifications yet</div>
                   ) : (
                     notifications.map((n) => (
-                      <div key={n.id} className={`navPopoverItem ${n.read ? "" : "unread"}`}>
+                      <div
+                        key={n.id}
+                        className={`navPopoverItem ${n.read ? "" : "unread"}`}
+                      >
                         <div className="navPopoverItemHeader">
-                          <div className="navPopoverItemTitle">{n.title || n.type || "Notification"}</div>
-                          {n.createdAt && <div className="navPopoverItemTime">{formatTimeAgo(n.createdAt)}</div>}
+                          {/* Sanitize server-supplied notification fields */}
+                          <div className="navPopoverItemTitle">
+                            {sanitizeText(n.title || n.type || "Notification", 100)}
+                          </div>
+                          {n.createdAt && (
+                            <div className="navPopoverItemTime">
+                              {formatTimeAgo(n.createdAt)}
+                            </div>
+                          )}
                         </div>
-                        <div className="navPopoverItemMeta">{n.message || ""}</div>
+                        <div className="navPopoverItemMeta">
+                          {sanitizeText(n.message || "", 300)}
+                        </div>
                       </div>
                     ))
                   )}
@@ -436,20 +478,44 @@ const QUICK_ACTIONS = [
               type="button"
               className={`cl-avatar-btn ${profileMenuOpen ? "is-active" : ""}`}
               aria-label="Profile menu"
-              onClick={() => { setNotifOpen(false); setProfileMenuOpen((v) => !v); }}
+              onClick={() => {
+                setNotifOpen(false);
+                setProfileMenuOpen((v) => !v);
+              }}
             >
+              {/* initialsFromEmail and firstName are derived from sanitized values */}
               <span className="cl-avatar-initials">{initialsFromEmail}</span>
               <span className="cl-avatar-name">{firstName}</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M6 9l6 6 6-6"/>
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              >
+                <path d="M6 9l6 6 6-6" />
               </svg>
             </button>
 
             {profileMenuOpen && (
               <div className="navDropdown" role="menu" aria-label="Profile">
-                <button type="button" className="navDropdownItem" onClick={openSettings}>Settings</button>
+                <button
+                  type="button"
+                  className="navDropdownItem"
+                  onClick={openSettings}
+                >
+                  Settings
+                </button>
                 <div className="navDropdownDivider" />
-                <button type="button" className="navDropdownItem danger" onClick={handleLogout}>Log out</button>
+                <button
+                  type="button"
+                  className="navDropdownItem danger"
+                  onClick={handleLogout}
+                >
+                  Log out
+                </button>
               </div>
             )}
           </div>
@@ -459,7 +525,7 @@ const QUICK_ACTIONS = [
       {/* ─── MAIN ──────────────────────────────────────────────── */}
       <main className="cl-main">
 
-        {/* GREETING HERO — bigger headline */}
+        {/* GREETING HERO */}
         <section className="cl-greeting-section">
           <div className="cl-greeting-bg" aria-hidden="true">
             <div className="cl-greeting-neb cl-greeting-neb1" />
@@ -471,15 +537,14 @@ const QUICK_ACTIONS = [
               <span className="cl-live-dot" />
               InnovaAI · Customer Portal
             </div>
-            {/* Bigger greeting text */}
             <h1 className="cl-greeting-headline">
               {greeting},<br />
+              {/* firstName is derived from sanitized email/name fields */}
               <span className="cl-greeting-name">{firstName}.</span>
             </h1>
             <p className="cl-greeting-sub">
               Welcome back to your InnovaAI dashboard. How can we help you today?
             </p>
-            {/* Removed small My Tickets + Chat with Nova buttons per request */}
           </div>
 
           <div className="cl-greeting-badge">
@@ -514,8 +579,18 @@ const QUICK_ACTIONS = [
                   <div className="cl-quick-desc">{q.desc}</div>
                 </div>
                 <div className="cl-quick-footer">
-                  <svg className="cl-quick-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12h14M13 6l6 6-6 6"/>
+                  <svg
+                    className="cl-quick-arrow"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M5 12h14M13 6l6 6-6 6" />
                   </svg>
                 </div>
               </button>
@@ -530,9 +605,24 @@ const QUICK_ACTIONS = [
               <h2 className="cl-section-title">Most Recent Ticket</h2>
               <p className="cl-section-sub">Latest activity on your account</p>
             </div>
-            <button type="button" className="cl-view-all-btn" onClick={() => navigate("/customer/mytickets")}>
+            <button
+              type="button"
+              className="cl-view-all-btn"
+              onClick={() => navigate("/customer/mytickets")}
+            >
               View all
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
             </button>
           </div>
 
@@ -545,83 +635,176 @@ const QUICK_ACTIONS = [
           ) : !recentTicket ? (
             <div className="cl-ticket-empty">
               <div className="cl-ticket-empty-icon">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M2 9a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v1.5a1.5 1.5 0 0 0 0 3V15a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1.5a1.5 1.5 0 0 0 0-3V9z"/>
-                  <path d="M9 12h6M9 15h4"/>
+                <svg
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M2 9a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v1.5a1.5 1.5 0 0 0 0 3V15a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1.5a1.5 1.5 0 0 0 0-3V9z" />
+                  <path d="M9 12h6M9 15h4" />
                 </svg>
               </div>
               <p className="cl-ticket-empty-title">No tickets yet</p>
-              <p className="cl-ticket-empty-sub">Your submitted tickets will appear here.</p>
-              <button className="cl-btn-primary" style={{ marginTop: "16px" }} onClick={openFormWidget}>
+              <p className="cl-ticket-empty-sub">
+                Your submitted tickets will appear here.
+              </p>
+              <button
+                className="cl-btn-primary"
+                style={{ marginTop: "16px" }}
+                onClick={openFormWidget}
+              >
                 Submit your first ticket
               </button>
             </div>
-          ) : (
-            <div
-              className="cl-ticket-card"
-              onClick={() => navigate(`/customer/ticket/${recentTicket.ticketId}`)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") navigate(`/customer/ticket/${recentTicket.ticketId}`); }}
-            >
-              <div className="cl-ticket-toprow">
-                <span className="cl-ticket-id">{recentTicket.ticketId}</span>
-                <span className="cl-ticket-dot">·</span>
-                <span className="cl-ticket-type">{recentTicket.ticketType || recentTicket.type}</span>
-                <span className="cl-ticket-dot">·</span>
-                <span className={`cl-ticket-status cl-status--${(recentTicket.status || "").toLowerCase().replace(/\s+/g, "")}`}>
-                  <span className="cl-status-dot" />
-                  {recentTicket.status}
-                </span>
-                <span className="cl-ticket-dot cl-ticket-dot--spacer" />
-                <span className="cl-ticket-priority">{recentTicket.priority}</span>
-              </div>
+          ) : (() => {
+            // Sanitize all ticket fields from the API before rendering
+            const ticketId   = sanitizeId(recentTicket.ticketId, 48);
+            const ticketType = sanitizeText(recentTicket.ticketType || recentTicket.type, 60);
+            const status     = sanitizeText(recentTicket.status, 40);
+            const priority   = sanitizeText(recentTicket.priority, 20);
+            const subject    = sanitizeText(
+              recentTicket.subject || recentTicket.description?.subject || "",
+              200
+            );
+            const issueDate  = sanitizeText(recentTicket.issueDate || recentTicket.date, 40);
+            const statusKey  = status.toLowerCase().replace(/\s+/g, "");
 
-              <h3 className="cl-ticket-subject">{recentTicket.subject || recentTicket.description?.subject}</h3>
-
-              {recentTicket.updates && recentTicket.updates.length > 0 ? (
-                <div className="cl-updates-feed">
-                  <div className="cl-updates-label">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                    Activity
-                  </div>
-                  <div className="cl-updates-list">
-                    {recentTicket.updates.slice(-3).reverse().map((u, i) => {
-                      const typeMap = {
-                        system: { dot: "#a855f7", tag: "AI" },
-                        status_change: { dot: "#4ade80", tag: "Status" },
-                        priority_change: { dot: "#fb923c", tag: "Priority" },
-                      };
-                      const tone = typeMap[u.type] || { dot: "rgba(147,51,234,.5)", tag: "Update" };
-                      return (
-                        <div key={i} className="cl-update-row">
-                          <span className="cl-update-dot" style={{ background: tone.dot }} />
-                          <span className="cl-update-tag" style={{ color: tone.dot }}>{tone.tag}</span>
-                          <span className="cl-update-msg">{u.message || u.text}</span>
-                          {u.date && <span className="cl-update-time">{formatTimeAgo(u.date)}</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
+            return (
+              <div
+                className="cl-ticket-card"
+                onClick={() =>
+                  navigate(`/customer/ticket/${encodeURIComponent(ticketId)}`)
+                }
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ")
+                    navigate(`/customer/ticket/${encodeURIComponent(ticketId)}`);
+                }}
+              >
+                <div className="cl-ticket-toprow">
+                  <span className="cl-ticket-id">{ticketId}</span>
+                  <span className="cl-ticket-dot">·</span>
+                  <span className="cl-ticket-type">{ticketType}</span>
+                  <span className="cl-ticket-dot">·</span>
+                  <span
+                    className={`cl-ticket-status cl-status--${statusKey}`}
+                  >
+                    <span className="cl-status-dot" />
+                    {status}
+                  </span>
+                  <span className="cl-ticket-dot cl-ticket-dot--spacer" />
+                  <span className="cl-ticket-priority">{priority}</span>
                 </div>
-              ) : (
-                <div className="cl-updates-feed cl-updates-feed--empty">
-                  <span className="cl-updates-label">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                    No activity yet — our team is reviewing your ticket.
+
+                <h3 className="cl-ticket-subject">{subject}</h3>
+
+                {recentTicket.updates && recentTicket.updates.length > 0 ? (
+                  <div className="cl-updates-feed">
+                    <div className="cl-updates-label">
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 6v6l4 2" />
+                      </svg>
+                      Activity
+                    </div>
+                    <div className="cl-updates-list">
+                      {recentTicket.updates
+                        .slice(-3)
+                        .reverse()
+                        .map((u, i) => {
+                          const typeMap = {
+                            system:          { dot: "#a855f7", tag: "AI"       },
+                            status_change:   { dot: "#4ade80", tag: "Status"   },
+                            priority_change: { dot: "#fb923c", tag: "Priority" },
+                          };
+                          // Sanitize update type key before using as object lookup
+                          const safeType = sanitizeText(u.type, 40);
+                          const tone     = typeMap[safeType] || { dot: "rgba(147,51,234,.5)", tag: "Update" };
+                          return (
+                            <div key={i} className="cl-update-row">
+                              <span
+                                className="cl-update-dot"
+                                style={{ background: tone.dot }}
+                              />
+                              <span
+                                className="cl-update-tag"
+                                style={{ color: tone.dot }}
+                              >
+                                {/* tone.tag is from our static typeMap — safe */}
+                                {tone.tag}
+                              </span>
+                              <span className="cl-update-msg">
+                                {/* Sanitize update message from server */}
+                                {sanitizeText(u.message || u.text || "", 300)}
+                              </span>
+                              {u.date && (
+                                <span className="cl-update-time">
+                                  {formatTimeAgo(u.date)}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="cl-updates-feed cl-updates-feed--empty">
+                    <span className="cl-updates-label">
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 6v6l4 2" />
+                      </svg>
+                      No activity yet — our team is reviewing your ticket.
+                    </span>
+                  </div>
+                )}
+
+                <div className="cl-ticket-footer">
+                  {/* issueDate is sanitizeText'd — never raw ISO string */}
+                  <span className="cl-ticket-date">Submitted {issueDate}</span>
+                  <span className="cl-ticket-cta">
+                    View full details
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M5 12h14M13 6l6 6-6 6" />
+                    </svg>
                   </span>
                 </div>
-              )}
-
-              <div className="cl-ticket-footer">
-                <span className="cl-ticket-date">Submitted {recentTicket.issueDate || recentTicket.date}</span>
-                <span className="cl-ticket-cta">
-                  View full details
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-                </span>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </section>
       </main>
 
@@ -629,10 +812,19 @@ const QUICK_ACTIONS = [
       <footer className="cl-footer">
         <img src={novaLogo} alt="InnovaAI" className="cl-footer-logo" />
         <div className="cl-footer-links">
-          <button className="cl-footer-link" onClick={() => navigate("/customer/mytickets")}>My Tickets</button>
-          <button className="cl-footer-link" onClick={() => navigate("/customer/settings")}>Settings</button>
+          <button
+            className="cl-footer-link"
+            onClick={() => navigate("/customer/mytickets")}
+          >
+            My Tickets
+          </button>
+          <button
+            className="cl-footer-link"
+            onClick={() => navigate("/customer/settings")}
+          >
+            Settings
+          </button>
         </div>
-        {/* Removed Dubai CommerCity */}
         <p className="cl-footer-copy">© 2026 InnovaAI</p>
       </footer>
 
@@ -684,22 +876,34 @@ const QUICK_ACTIONS = [
               <>
                 <div className="novaChatList" ref={listRef}>
                   {messages.map((m) => (
-                    <div key={m.id} className={`novaMsg ${m.from === "user" ? "novaMsg--user" : "novaMsg--bot"}`}>
+                    <div
+                      key={m.id}
+                      className={`novaMsg ${m.from === "user" ? "novaMsg--user" : "novaMsg--bot"}`}
+                    >
                       <div className="novaBubble">
                         {m.typing ? (
                           <div className="novaTyping"><span /><span /><span /></div>
-                        ) : m.text}
+                        ) : (
+                          // React text nodes escape by default — safe
+                          sanitizeText(m.text, 5000)
+                        )}
                       </div>
-                      {!m.typing && m.buttons?.length > 0 && (
+                      {!m.typing && Array.isArray(m.buttons) && m.buttons.length > 0 && (
                         <div className="novaQuickRow">
-                          {m.buttons.map((btn) => (
-                            <button
-                              key={btn}
-                              onClick={() => handleSend(CHATBOT_BUTTON_MESSAGES[btn] || btn)}
-                            >
-                              {CHATBOT_BUTTON_LABELS[btn] || btn}
-                            </button>
-                          ))}
+                          {m.buttons
+                            // Filter to allowlist before rendering
+                            .filter((btn) => ALLOWED_CHATBOT_BUTTONS.includes(String(btn)))
+                            .map((btn) => (
+                              <button
+                                key={btn}
+                                onClick={() =>
+                                  handleSend(CHATBOT_BUTTON_MESSAGES[btn] || btn)
+                                }
+                              >
+                                {/* CHATBOT_BUTTON_LABELS lookup — key is allowlisted */}
+                                {CHATBOT_BUTTON_LABELS[btn] || btn}
+                              </button>
+                            ))}
                         </div>
                       )}
                     </div>
@@ -707,35 +911,98 @@ const QUICK_ACTIONS = [
                 </div>
 
                 <div className="novaComposerWrap">
+                  {/* Voice error display — replaces alert() */}
+                  {voiceError && (
+                    <div
+                      style={{
+                        padding: "6px 12px",
+                        fontSize: "0.8rem",
+                        color: "#ef4444",
+                        background: "rgba(239,68,68,.06)",
+                        borderRadius: 6,
+                        margin: "0 12px 6px",
+                      }}
+                      role="alert"
+                    >
+                      {voiceError}
+                    </div>
+                  )}
+
                   {voiceActive && (
                     <div className="novaVoiceBar">
                       <div className="novaVoiceLeft">
                         <div className="novaVoiceText">
-                          {voiceBusy ? "Transcribing…" : voiceDraft.trim() ? "Review & insert" : "Listening…"}
+                          {voiceBusy
+                            ? "Transcribing…"
+                            : voiceDraft.trim()
+                            ? "Review & insert"
+                            : "Listening…"}
                         </div>
                         <div className="novaWaves" aria-hidden="true">
-                          <span className="novaWave"/><span className="novaWave"/><span className="novaWave"/><span className="novaWave"/><span className="novaWave"/>
+                          <span className="novaWave"/>
+                          <span className="novaWave"/>
+                          <span className="novaWave"/>
+                          <span className="novaWave"/>
+                          <span className="novaWave"/>
                         </div>
                       </div>
                       <div className="novaVoiceActions">
-                        <button type="button" className="novaVoiceIconBtn" onClick={cancelVoice} disabled={voiceBusy} aria-label="Cancel">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                        <button
+                          type="button"
+                          className="novaVoiceIconBtn"
+                          onClick={cancelVoice}
+                          disabled={voiceBusy}
+                          aria-label="Cancel"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
                         </button>
-                        <button type="button" className="novaVoiceIconBtn confirm" onClick={confirmVoice} disabled={voiceBusy} aria-label="Insert">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        <button
+                          type="button"
+                          className="novaVoiceIconBtn confirm"
+                          onClick={confirmVoice}
+                          disabled={voiceBusy}
+                          aria-label="Insert"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
                         </button>
                       </div>
                     </div>
                   )}
-                  <form className="novaComposer" onSubmit={(e) => { e.preventDefault(); handleSend(text); setText(""); }}>
-                    <button type="button" className={`novaMicBtn ${voiceActive ? "active" : ""}`} onClick={() => voiceActive ? cancelVoice() : startVoice()} aria-label="Voice">
+
+                  <form
+                    className="novaComposer"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSend(text);
+                      setText("");
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className={`novaMicBtn ${voiceActive ? "active" : ""}`}
+                      onClick={() => (voiceActive ? cancelVoice() : startVoice())}
+                      aria-label="Voice"
+                    >
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                         <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" fill="currentColor" opacity=".95"/>
                         <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
                         <path d="M12 18v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
                       </svg>
                     </button>
-                    <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"/>
+                    <input
+                      value={text}
+                      onChange={(e) => {
+                        // Cap input length client-side
+                        const v = e.target.value;
+                        if (v.length <= 5000) setText(v);
+                      }}
+                      placeholder="Type a message…"
+                      maxLength={5000}
+                    />
                     <button type="submit">Send</button>
                   </form>
                 </div>
@@ -757,16 +1024,18 @@ const QUICK_ACTIONS = [
         </div>
       )}
 
-      {/* ─── FILL FORM WIDGET (same style as Nova, opens bottom-right) ── */}
+      {/* ─── FILL FORM WIDGET ── */}
       {formOpen && (
         <div
           className={`novaWidget ${formExpanded ? "expanded" : ""} open`}
           style={!formExpanded && isOpen ? { right: "558px" } : {}}
         >
-          {/* Header */}
           <div className="novaWidgetHeader">
             <div className="novaWidgetHeaderLeft">
-              <div className="novaAvatar" style={{ background: "linear-gradient(135deg,rgba(232,121,249,.4),rgba(109,40,217,.6))" }}>
+              <div
+                className="novaAvatar"
+                style={{ background: "linear-gradient(135deg,rgba(232,121,249,.4),rgba(109,40,217,.6))" }}
+              >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "rgba(255,255,255,.85)" }}>
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -794,7 +1063,6 @@ const QUICK_ACTIONS = [
             </div>
           </div>
 
-          {/* Body */}
           <div className="novaWidgetBody novaWidgetBody--form">
             <div className="novaFormHost">
               <CustomerFillForm
@@ -820,7 +1088,7 @@ const QUICK_ACTIONS = [
         </div>
       )}
 
-      {/* ─── TICKET CONFIRM POPUP (chatbot ticket creation) ────── */}
+      {/* ─── TICKET CONFIRM POPUP ────── */}
       {ticketPopup && (
         <TicketConfirmPopup
           open
@@ -831,6 +1099,7 @@ const QUICK_ACTIONS = [
           onClose={() => setTicketPopup(null)}
         />
       )}
+
       {/* ─── LOGOUT CONFIRM ────────────────────────────────────── */}
       {showLogoutConfirm && (
         <div className="novaCloseModal">
