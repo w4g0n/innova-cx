@@ -57,6 +57,7 @@ export default function CustomerChatbot() {
 
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const [chatSessionId, setChatSessionId] = useState(() => {
     try {
@@ -253,6 +254,21 @@ export default function CustomerChatbot() {
     }
   };
 
+  const handleResetConfirmed = () => {
+    setText("");
+    setChatSessionId(null);
+    setActionButtons([]);
+    setTicketPopup(null);
+    setMessages([
+      {
+        id: `m-${Date.now()}`,
+        from: "bot",
+        text: `Hi ${nameFromEmail}! I'm Nova. How can I help you today?`,
+      },
+    ]);
+    setShowResetConfirm(false);
+  };
+
   return (
     <Layout role="customer">
       <div className="custChatPage">
@@ -275,6 +291,13 @@ export default function CustomerChatbot() {
                   Track Ticket
                 </button>
                 <button onClick={() => goToForm("Complaint")}>Agent Pipeline</button>
+                <button
+                  className="softPillBtn"
+                  disabled={sending}
+                  onClick={() => setShowResetConfirm(true)}
+                >
+                  New Conversation
+                </button>
               </div>
             </div>
 
@@ -346,6 +369,37 @@ export default function CustomerChatbot() {
           replyText={ticketPopup.replyText}
           onClose={() => setTicketPopup(null)}
         />
+      )}
+
+      {showResetConfirm && (
+        <div className="custConfirmOverlay">
+          <div className="custConfirmModal">
+            <div className="custConfirmIconWrap">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
+              </svg>
+            </div>
+            <p className="custConfirmTitle">Start a new conversation?</p>
+            <p className="custConfirmBody">
+              This will clear your current conversation and start fresh. This action cannot be undone.
+            </p>
+            <div className="custConfirmActions">
+              <button
+                className="softPillBtn"
+                onClick={() => setShowResetConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="primaryPillBtn"
+                onClick={handleResetConfirmed}
+              >
+                Start New
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </Layout>
   );
