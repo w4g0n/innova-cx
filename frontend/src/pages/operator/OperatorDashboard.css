@@ -5,6 +5,15 @@
   flex-direction: column;
 }
 
+/* ===== Greeting ===== */
+.opDash__greeting {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(17, 17, 17, 0.50);
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
 /* ===== KPI row — 5 cards ===== */
 .opDash__kpiRow {
   display: grid;

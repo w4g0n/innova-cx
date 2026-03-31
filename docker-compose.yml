@@ -1,6 +1,6 @@
 services:
   postgres:
-    profiles: ["frontend", "pipeline", "dev"]
+    profiles: ["frontend", "pipeline", "live"]
     image: postgres:14-alpine
     container_name: innovacx-db
     restart: unless-stopped
@@ -22,13 +22,13 @@ services:
       retries: 10
 
   backend:
-    profiles: ["frontend", "pipeline", "dev"]
+    profiles: ["frontend", "pipeline", "live"]
     build: ./backend
     container_name: innovacx-backend
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
-      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innovacx.net}"
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-}"
       DISABLE_MFA: "${DISABLE_MFA:-false}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
       CHATBOT_PROXY_TIMEOUT_SECONDS: "${CHATBOT_PROXY_TIMEOUT_SECONDS:-30}"
@@ -53,8 +53,10 @@ services:
       - innovacx-network
 
   chatbot:
-    profiles: ["pipeline", "dev"]
+    profiles: ["live"]
     build: ./backend/services/chatbot
+    image: innova-cx-chatbot:latest
+    pull_policy: never
     container_name: innovacx-chatbot
     restart: unless-stopped
     environment:
@@ -90,7 +92,7 @@ services:
       - innovacx-network
 
   transcriber:
-    profiles: ["dev"]
+    profiles: ["live"]
     build: ./backend/services/transcriber
     container_name: innovacx-transcriber
     restart: unless-stopped
@@ -100,15 +102,17 @@ services:
       - innovacx-network
 
   orchestrator:
-    profiles: ["pipeline", "dev"]
+    profiles: ["pipeline", "live"]
     build:
       context: .
       dockerfile: ai-models/MultiAgentPipeline/Orchestrator/Dockerfile
+    image: innova-cx-orchestrator:latest
+    pull_policy: never
     container_name: innovacx-orchestrator
     restart: unless-stopped
     environment:
       PYTHONPATH: /app
-      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innovacx.net}"
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-}"
       DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
       SENTIMENT_MODEL_DIR: "${SENTIMENT_MODEL_DIR:-/app/agents/step04_sentimentanalysis/model}"
       CLASSIFIER_MODEL_DIR: "${CLASSIFIER_MODEL_DIR:-/app/agents/step03_classifier/model}"
@@ -119,6 +123,7 @@ services:
       SUGGESTED_RESOLUTION_MODEL_NAME: "${SUGGESTED_RESOLUTION_MODEL_NAME:-google/flan-t5-small}"
       SUGGESTED_RESOLUTION_MODEL_PATH: "${SUGGESTED_RESOLUTION_MODEL_PATH:-}"
       SUGGESTED_RESOLUTION_AUTO_DOWNLOAD: "${SUGGESTED_RESOLUTION_AUTO_DOWNLOAD:-false}"
+      CHATBOT_STARTUP_TIMEOUT_SECONDS: "${CHATBOT_STARTUP_TIMEOUT_SECONDS:-0}"
       FEATURE_LABELER_MODEL_PATH: "${FEATURE_LABELER_MODEL_PATH:-/app/agents/step08_featureengineering/model}"
       FEATURE_LABELER_MODEL_NAME: "${FEATURE_LABELER_MODEL_NAME:-MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli}"
       FEATURE_LABELER_AUTO_DOWNLOAD: "${FEATURE_LABELER_AUTO_DOWNLOAD:-false}"
@@ -138,8 +143,6 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-      chatbot:
-        condition: service_healthy
     ports:
       - "8004:8004"
     healthcheck:
@@ -152,7 +155,7 @@ services:
       - innovacx-network
 
   frontend:
-    profiles: ["frontend", "pipeline", "dev"]
+    profiles: ["frontend", "pipeline", "live"]
     build: ./frontend
     container_name: innovacx-frontend
     entrypoint:

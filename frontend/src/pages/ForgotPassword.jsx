@@ -337,7 +337,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="fpBg">
+    <div className={`fpBg ${window.location.hostname.startsWith("staff.") ? "fpBg--staff" : ""}`}>
       <Starfield />
       <div className="fp-neb fp-neb1" />
       <div className="fp-neb fp-neb2" />

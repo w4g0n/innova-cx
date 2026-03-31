@@ -191,7 +191,6 @@ function ChatbotAgentView({ data, loading, error, onRetry }) {
   return (
     <div className="ma-view">
       <div className="ma-kpi-row">
-        <KpiCard label="Containment Rate" value={`${kpis.containmentRate}%`} pill="resolved_without_ticket" sub="Sessions resolved without creating a ticket or escalating" />
         <KpiCard label="Escalation Rate" value={`${kpis.escalationRate}%`} pill="escalated_to_human" sub="Sessions ending in human handoff" flag={kpis.escalationRate > 20 ? "warn" : undefined} />
         <KpiCard label="Avg Session Length" value={kpis.avgMessagesPerSession ?? "—"} pill="Messages / session" sub="Average messages exchanged per conversation" />
         <KpiCard label="Total Sessions" value={kpis.totalSessions.toLocaleString()} pill="Period" sub="From sessions + user_chat_logs" />
