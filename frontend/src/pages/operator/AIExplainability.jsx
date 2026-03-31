@@ -535,33 +535,6 @@ function formatStageVal(v) {
   return String(v);
 }
 
-// ── Module-level fetch helpers ───────────────────────────────────────────────
-
-async function apiPost(path, body = undefined) {
-  const token = getStoredToken();
-  const res = await fetch(apiUrl(`/api${path}`), {
-    method: "POST",
-    headers: {
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  if (res.status === 401 || res.status === 403) { window.location.href = "/login"; throw new Error("Session expired."); }
-  if (!res.ok) { const d = await res.text().catch(() => "Request failed"); throw new Error(d || "Request failed"); }
-  return res.json();
-}
-
-async function apiDelete(path) {
-  const token = getStoredToken();
-  const res = await fetch(apiUrl(`/api${path}`), {
-    method: "DELETE",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) { const d = await res.text().catch(() => "Request failed"); throw new Error(d || "Request failed"); }
-  return res.status === 204 ? null : res.json().catch(() => null);
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 
 export default function AIExplainability() {
@@ -920,7 +893,7 @@ export default function AIExplainability() {
       ]);
       setQueueItems(Array.isArray(items) ? items : []);
       setQueueStats(stats || {});
-    } catch (e) {
+    } catch {
       /* silent — polling will retry */
     } finally {
       setQueueLoading(false);
@@ -1156,7 +1129,7 @@ export default function AIExplainability() {
                   <table className="pq-table">
                     <thead><tr><th>#</th><th>Ticket</th><th>Subject</th><th>Status</th><th>Stage Failed</th><th>Retries</th><th>Entered</th></tr></thead>
                     <tbody>
-                      {queueItems.map((item, idx) => (
+                      {queueItems.map((item) => (
                         <tr
                           key={item.id}
                           className={`pq-row ${item.id === selectedQueueId ? "pq-row--selected" : ""} ${item.status === "held" ? "pq-row--held" : ""}`}
