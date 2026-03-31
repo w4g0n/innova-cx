@@ -37,6 +37,24 @@
   pointer-events: none;
 }
 
+.backBtn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.6);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s, transform 0.2s;
+}
+
+.backBtn:hover {
+  color: #c084fc;
+  transform: translateX(-2px);
+}
+
 /* Nebula blobs */
 .login-neb {
   position: fixed;
