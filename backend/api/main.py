@@ -53,6 +53,10 @@ try:
 except Exception:
     from ai_explainability import router as ai_explainability_router
 try:
+    from api.pipeline_queue_api import router as pipeline_queue_router
+except Exception:
+    from pipeline_queue_api import router as pipeline_queue_router
+try:
     from api.event_logger import log_application_event
 except Exception:
     from event_logger import log_application_event
@@ -646,6 +650,11 @@ def require_operator(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[s
 
 
 api.include_router(ai_explainability_router, dependencies=[Depends(require_operator)])
+api.include_router(
+    pipeline_queue_router,
+    prefix="/operator/pipeline-queue",
+    dependencies=[Depends(require_operator)],
+)
 
 # =========================================================
 # Recurring complaint prediction
@@ -4785,20 +4794,28 @@ class ChatbotProxyRequest(BaseModel):
 def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
     """
     Internal endpoint called by the orchestrator service.
-    Creates a ticket using the system user account (no JWT required).
-    Relies on Docker-network isolation for security.
+    Creates a ticket on behalf of the submitting user (or any active customer
+    as fallback). No JWT required — relies on Docker-network isolation.
     """
-    system_email = os.getenv("SYSTEM_USER_EMAIL", "customer1@innova.cx")
-
-    row = fetch_one(
-        "SELECT id FROM users WHERE email = %s LIMIT 1",
-        (system_email,),
-    )
+    from api.ticket_creation_gate import create_ticket_via_gate
+    # Resolve the user who submitted the ticket
+    row = None
+    if body.created_by_user_id:
+        row = fetch_one(
+            "SELECT id FROM users WHERE id = %s::uuid LIMIT 1",
+            (body.created_by_user_id,),
+        )
+    if not row:
+        # Fallback: any active customer
+        row = fetch_one(
+            "SELECT id FROM users WHERE role = 'customer' AND is_active = TRUE ORDER BY created_at ASC LIMIT 1",
+            (),
+        )
     if not row:
         raise HTTPException(
             status_code=503,
-            detail=f"System user '{system_email}' not found. "
-                   "Set SYSTEM_USER_EMAIL to a valid user.",
+            detail="No usable customer account found to create ticket. "
+                   "Ensure at least one active customer user exists.",
         )
 
     incoming_ticket_code = (body.ticket_id or "").strip() or None
@@ -4861,7 +4878,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
 
             if not incoming_ticket_code:
                 # ── No ticket_id supplied → create a new ticket ──
-                from api.ticket_creation_gate import create_ticket_via_gate
                 effective_department_id = department_id if (not has_routing_decision or routing_is_confident) else None
                 effective_status = normalized_status or "Open"
                 if has_routing_decision and routing_is_confident:
@@ -4913,7 +4929,8 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         ),
                     )
                 return {
-                    "ticket_id":   created["ticket_code"],
+                    "ticket_id":   str(created["id"]),
+                    "ticket_code": created["ticket_code"],
                     "status":      created["status"],
                     "priority":    created["priority"],
                     "asset_type":  None,
@@ -5125,7 +5142,8 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         )
 
                     return {
-                        "ticket_id":        updated[0],
+                        "ticket_id":        str(existing[0]),
+                        "ticket_code":      updated[0],
                         "status":           updated[1],
                         "priority":         updated[2],
                         "asset_type":       updated[3],
@@ -5214,7 +5232,8 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     )
 
             return {
-                "ticket_id": created.get("ticket_code"),
+                "ticket_id": str(created["id"]) if created.get("id") else created.get("ticket_code"),
+                "ticket_code": created.get("ticket_code"),
                 "status": created.get("status"),
                 "priority": created.get("priority"),
                 "asset_type": requested_asset_type,
@@ -6462,6 +6481,67 @@ async def tts_speak(body: TTSSpeakRequest):
             status_code=503,
             content={"detail": f"TTS unavailable: {exc}"},
         )
+
+
+# =========================================================
+# Internal — pipeline queue notifications
+# (called by orchestrator queue_manager, no user auth)
+# =========================================================
+
+class InternalNotifyOperatorsRequest(BaseModel):
+    ticket_id: Optional[str] = None
+    ticket_code: Optional[str] = None
+    notification_type: Optional[str] = None  # "pipeline_held" or "system"
+    title: str
+    message: str
+
+@api.post("/internal/notify-operators")
+def internal_notify_operators(body: InternalNotifyOperatorsRequest):
+    """Send a notification to all active operators (pipeline_held or system warning)."""
+    notif_type = body.notification_type or "pipeline_held"
+    priority = "Medium" if notif_type == "system" else "High"
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id FROM users WHERE role = 'operator' AND is_active = TRUE")
+                operator_ids = [r["id"] for r in cur.fetchall()]
+                for op_id in operator_ids:
+                    _insert_notification(
+                        cur,
+                        user_id=str(op_id),
+                        notif_type=notif_type,
+                        title=body.title,
+                        message=body.message,
+                        ticket_id=body.ticket_id,
+                        priority=priority,
+                    )
+    except Exception as exc:
+        logger.error("internal_notify_operators | failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"ok": True, "notified": len(operator_ids)}
+
+
+# =========================================================
+# Operator — delete ticket
+# =========================================================
+
+@api.delete("/operator/tickets/{ticket_id}")
+def operator_delete_ticket(
+    ticket_id: str,
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """
+    Hard-delete a ticket and all related rows (cascades via FK).
+    Also removes the ticket from pipeline_queue if present.
+    """
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT id, ticket_code FROM tickets WHERE id = %s::uuid", (ticket_id,))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Ticket not found")
+            cur.execute("DELETE FROM tickets WHERE id = %s::uuid", (ticket_id,))
+    return {"ok": True, "deleted_ticket_id": ticket_id}
 
 
 # =========================================================

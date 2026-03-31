@@ -53,7 +53,8 @@ DO $$ BEGIN
     'customer_reply',
     'status_change',
     'report_ready',
-    'system'
+    'system',
+    'pipeline_held'
   );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
@@ -1201,6 +1202,63 @@ CREATE TABLE IF NOT EXISTS system_config_kv (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- =========================================================
+-- Pipeline Queue
+-- =========================================================
+DO $$ BEGIN
+  CREATE TYPE pipeline_queue_status AS ENUM (
+    'queued',
+    'processing',
+    'held',
+    'completed',
+    'failed'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS pipeline_queue (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ticket_id            UUID REFERENCES tickets(id) ON DELETE CASCADE,
+    ticket_code          TEXT,
+
+    -- Queue state
+    status               pipeline_queue_status NOT NULL DEFAULT 'queued',
+    queue_position       INT,
+    retry_count          INT NOT NULL DEFAULT 0,
+
+    -- Failure tracking
+    failed_stage         TEXT,
+    failed_at_step       INT,
+    failure_reason       TEXT,
+    failure_category     TEXT,                         -- 'timeout' | 'model_error' | 'connection_error' | 'unknown'
+    failure_history      JSONB NOT NULL DEFAULT '[]',  -- [{attempt, stage, category, reason, ts}]
+
+    -- State snapshots for resume
+    checkpoint_state     JSONB NOT NULL DEFAULT '{}',
+    operator_corrections JSONB NOT NULL DEFAULT '{}',
+
+    -- Initial ticket data needed to start / restart pipeline
+    ticket_input         JSONB NOT NULL DEFAULT '{}',
+
+    -- Execution linkage
+    execution_id         UUID,
+
+    -- Timestamps
+    entered_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at           TIMESTAMPTZ,
+    completed_at         TIMESTAMPTZ,
+    held_at              TIMESTAMPTZ,
+    released_at          TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_pq_status
+    ON pipeline_queue(status, queue_position NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_pq_ticket_id
+    ON pipeline_queue(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_pq_ticket_code
+    ON pipeline_queue(ticket_code);
+CREATE INDEX IF NOT EXISTS idx_pq_entered_at
+    ON pipeline_queue(entered_at DESC);
 
 \ir migrations/001_agent_execution_logs.sql
 \ir migrations/002_operator_notifications.sql

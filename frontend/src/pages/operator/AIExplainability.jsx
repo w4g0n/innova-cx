@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -490,19 +491,83 @@ function stageHasAudio(stage) {
   return false;
 }
 
+// ── Module-level constants (never recreated on render) ──────────────────────
+
+const STATUS_FILTERS = ["Open", "Assigned", "In Progress", "Resolved", "Escalated", "Overdue"];
+const STATUS_CLASS = {
+  Open: "ev-status-open",
+  Assigned: "ev-status-assigned",
+  "In Progress": "ev-status-inprogress",
+  Escalated: "ev-status-escalated",
+  Overdue: "ev-status-overdue",
+  Resolved: "ev-status-resolved",
+};
+
+const QUEUE_STATUS_LABEL = { queued: "Queued", processing: "Processing", held: "Held", completed: "Completed", failed: "Failed" };
+const QUEUE_STATUS_COLOR = { queued: "#3b82f6", processing: "#f59e0b", held: "#ef4444", completed: "#22c55e", failed: "#6b7280" };
+const CRITICAL_STAGES = new Set([
+  "ClassificationAgent","SentimentAgent","AudioAnalysisAgent","SentimentCombinerAgent",
+  "FeatureEngineeringAgent","PrioritizationAgent","DepartmentRoutingAgent",
+]);
+const QUEUE_STAT_CARDS = [
+  ["queued",     "Queued",          "pq-stat-card--blue"],
+  ["processing", "Processing",      "pq-stat-card--amber"],
+  ["held",       "Held",            "pq-stat-card--red"],
+  ["completed",  "Completed (24h)", "pq-stat-card--green"],
+];
+const STAGE_OUTPUT_NOISE = new Set([
+  "text","details","ticket_id","created_by_user_id","ticket_source",
+  "audio_features","ticket_code","name","email","asset_type",
+  "ticket_type","label","status","has_audio","_pipeline_total_steps",
+  "is_recurring_checked","audio_analysis_mode","audio_sentiment",
+]);
+const MAX_PIPELINE_RETRIES = 3;
+
+function formatStageVal(v) {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (Array.isArray(v)) {
+    if (v.length === 0) return "—";
+    if (typeof v[0] === "object") return v.map(item => item.department || item.label || JSON.stringify(item)).join(", ");
+    return v.join(", ");
+  }
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
+// ── Module-level fetch helpers ───────────────────────────────────────────────
+
+async function apiPost(path, body = undefined) {
+  const token = getStoredToken();
+  const res = await fetch(apiUrl(`/api${path}`), {
+    method: "POST",
+    headers: {
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401 || res.status === 403) { window.location.href = "/login"; throw new Error("Session expired."); }
+  if (!res.ok) { const d = await res.text().catch(() => "Request failed"); throw new Error(d || "Request failed"); }
+  return res.json();
+}
+
+async function apiDelete(path) {
+  const token = getStoredToken();
+  const res = await fetch(apiUrl(`/api${path}`), {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) { const d = await res.text().catch(() => "Request failed"); throw new Error(d || "Request failed"); }
+  return res.status === 204 ? null : res.json().catch(() => null);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 export default function AIExplainability() {
   const navigate = useNavigate();
   const { ticketCode } = useParams();
   const detailMode = Boolean(ticketCode);
-  const STATUS_FILTERS = ["Open", "Assigned", "In Progress", "Resolved", "Escalated", "Overdue"];
-  const STATUS_CLASS = {
-    Open: "ev-status-open",
-    Assigned: "ev-status-assigned",
-    "In Progress": "ev-status-inprogress",
-    Escalated: "ev-status-escalated",
-    Overdue: "ev-status-overdue",
-    Resolved: "ev-status-resolved",
-  };
 
   const [activeStatus, setActiveStatus] = useState("");
   const [ticketList, setTicketList] = useState([]);
@@ -532,6 +597,23 @@ export default function AIExplainability() {
   const [recurrenceQuery, setRecurrenceQuery] = useState("");
   const [recurrenceResults, setRecurrenceResults] = useState([]);
   const [recurrenceLoading, setRecurrenceLoading] = useState(false);
+
+  // ── Pipeline Queue tab ──────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState("explainability");
+  const [queueItems, setQueueItems] = useState([]);
+  const [queueStats, setQueueStats] = useState({});
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [selectedQueueId, setSelectedQueueId] = useState(null);
+  const [queueDetail, setQueueDetail] = useState(null);
+  const [queueDetailLoading, setQueueDetailLoading] = useState(false);
+  const [corrections, setCorrections] = useState({});
+  const [releaseBusy, setReleaseBusy] = useState(false);
+  const [rerunBusyQueue, setRerunBusyQueue] = useState(false);
+  const [releaseMsg, setReleaseMsg] = useState("");
+  const [releaseErr, setReleaseErr] = useState("");
+  const [redispatchBusy, setRedispatchBusy] = useState(false);
+  const [redispatchMsg, setRedispatchMsg] = useState("");
+  const [expandedStage, setExpandedStage] = useState(null);
 
   async function loadTicketList(statusValue = "") {
     setListLoading(true);
@@ -821,17 +903,170 @@ export default function AIExplainability() {
           ? `Overrides applied. Priority changed: ${beforePriority} -> ${afterPriority}.`
           : `Overrides applied. Prioritization rerun completed (priority unchanged: ${afterPriority}).`,
       );
-      window.alert(
-        result?.priorityChanged
-          ? `Priority changed: ${beforePriority} -> ${afterPriority}`
-          : `Prioritization rerun completed (priority unchanged: ${afterPriority})`,
-      );
     } catch (e) {
       setOverrideErr(e?.message || "Failed to apply overrides.");
     } finally {
       setOverrideBusy(false);
     }
   }
+
+  // ── Queue functions ─────────────────────────────────────────────────────
+  async function loadQueue() {
+    setQueueLoading(true);
+    try {
+      const [items, stats] = await Promise.all([
+        apiFetch("/operator/pipeline-queue"),
+        apiFetch("/operator/pipeline-queue/stats"),
+      ]);
+      setQueueItems(Array.isArray(items) ? items : []);
+      setQueueStats(stats || {});
+    } catch (e) {
+      /* silent — polling will retry */
+    } finally {
+      setQueueLoading(false);
+    }
+  }
+
+  async function loadQueueDetail(queueId) {
+    setQueueDetailLoading(true);
+    setQueueDetail(null);
+    setCorrections({});
+    setReleaseMsg("");
+    setReleaseErr("");
+    try {
+      const res = await apiFetch(`/operator/pipeline-queue/${queueId}`);
+      setQueueDetail(res);
+      setCorrections(res.operator_corrections || {});
+    } catch (e) {
+      setReleaseErr(e?.message || "Failed to load queue item.");
+    } finally {
+      setQueueDetailLoading(false);
+    }
+  }
+
+  async function rerunStage() {
+    if (!selectedQueueId) return;
+    setRerunBusyQueue(true);
+    setReleaseMsg("");
+    setReleaseErr("");
+    try {
+      const token = getStoredToken();
+      const res = await fetch(apiUrl(`/api/operator/pipeline-queue/${selectedQueueId}/rerun-stage`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (!res.ok) { const d = await res.text().catch(() => "Failed"); throw new Error(d); }
+      const data = await res.json();
+      if (data.succeeded) {
+        setReleaseMsg("Stage rerun succeeded — ticket re-queued.");
+        setSelectedQueueId(null);
+        setQueueDetail(null);
+      } else {
+        setReleaseErr(`Stage still failing: ${data.reason || "unknown error"}. You can manually correct the output below.`);
+        await loadQueueDetail(selectedQueueId);
+      }
+      await loadQueue();
+    } catch (e) {
+      setReleaseErr(e?.message || "Rerun failed.");
+    } finally {
+      setRerunBusyQueue(false);
+    }
+  }
+
+  async function deleteQueueItem(queueId, e) {
+    e?.stopPropagation();
+    if (!window.confirm("Remove from queue and permanently delete this ticket and all its data? This cannot be undone.")) return;
+    try {
+      const token = getStoredToken();
+      await fetch(apiUrl(`/api/operator/pipeline-queue/${queueId}`), {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (selectedQueueId === queueId) { setSelectedQueueId(null); setQueueDetail(null); }
+      await loadQueue();
+    } catch (e) {
+      alert(`Failed to remove from queue: ${e?.message}`);
+    }
+  }
+
+  async function deleteTicket(ticketId, e) {
+    e?.stopPropagation();
+    if (!window.confirm("Permanently delete this ticket and all its data? This cannot be undone.")) return;
+    try {
+      const token = getStoredToken();
+      const res = await fetch(apiUrl(`/api/operator/tickets/${ticketId}`), {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) { const d = await res.text().catch(() => "Failed"); throw new Error(d); }
+      await loadQueue();
+      await loadTicketList(activeStatus);
+    } catch (e) {
+      alert(`Failed to delete ticket: ${e?.message}`);
+    }
+  }
+
+  async function releaseTicket() {
+    if (!selectedQueueId) return;
+    setReleaseBusy(true);
+    setReleaseMsg("");
+    setReleaseErr("");
+    try {
+      const token = getStoredToken();
+      const res = await fetch(apiUrl(`/api/operator/pipeline-queue/${selectedQueueId}/release`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ corrections }),
+      });
+      if (!res.ok) { const d = await res.text().catch(() => "Failed"); throw new Error(d); }
+      setReleaseMsg("Ticket released and re-queued.");
+      await loadQueue();
+      setSelectedQueueId(null);
+      setQueueDetail(null);
+    } catch (e) {
+      setReleaseErr(e?.message || "Release failed.");
+    } finally {
+      setReleaseBusy(false);
+    }
+  }
+
+  async function redispatchUnprocessed() {
+    setRedispatchBusy(true);
+    setRedispatchMsg("");
+    try {
+      const res = await apiFetch("/operator/pipeline-queue/redispatch-unprocessed", { method: "POST" });
+      const count = res?.dispatched?.filter(d => d.ok).length ?? 0;
+      const total = res?.dispatched?.length ?? 0;
+      setRedispatchMsg(total === 0 ? "No unprocessed tickets found." : `Re-dispatched ${count}/${total} tickets.`);
+      if (count > 0) loadQueue();
+    } catch (e) {
+      setRedispatchMsg(e?.message || "Failed to re-dispatch.");
+    } finally {
+      setRedispatchBusy(false);
+    }
+  }
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (selectedQueueId) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [selectedQueueId]);
+
+  // Poll queue every 5s when tab is active
+  useEffect(() => {
+    if (activeTab !== "queue") return;
+    loadQueue();
+    const id = setInterval(loadQueue, 5000);
+    return () => clearInterval(id);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (selectedQueueId) loadQueueDetail(selectedQueueId);
+  }, [selectedQueueId]);
 
   const modelSelectedSummary = useMemo(() => {
     const classificationOut = stageOutputMap.ClassificationAgent || {};
@@ -860,10 +1095,327 @@ export default function AIExplainability() {
     };
   }, [stageOutputMap, detailTicket]);
 
+
   return (
     <Layout role="operator">
       <section className="aix-wrap">
-        {!detailMode ? (
+        {/* ── Tab bar ── */}
+        <div className="aix-tab-bar">
+          <button type="button" className={`aix-tab ${activeTab === "explainability" ? "aix-tab--active" : ""}`} onClick={() => setActiveTab("explainability")}>
+            Ticket Explainability
+          </button>
+          <button type="button" className={`aix-tab ${activeTab === "queue" ? "aix-tab--active" : ""}`} onClick={() => setActiveTab("queue")}>
+            Pipeline Queue
+            {(queueStats.held > 0 || queueStats.processing > 0) && (
+              <span className="aix-tab__badge" style={{ background: queueStats.held > 0 ? "#ef4444" : "#f59e0b" }}>
+                {queueStats.held > 0 ? queueStats.held : queueStats.processing}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* ── Pipeline Queue tab ── */}
+        {activeTab === "queue" && (
+          <article className="aix-list">
+            <PageHeader
+              title="Pipeline Queue"
+              subtitle="Live view of tickets moving through the pipeline. Correct and release held tickets."
+              actions={
+                <div className="pq-header-actions">
+                  <button
+                    type="button"
+                    className="aix-open-btn"
+                    disabled={redispatchBusy}
+                    onClick={redispatchUnprocessed}
+                  >
+                    {redispatchBusy ? "Dispatching..." : "Re-dispatch Unprocessed"}
+                  </button>
+                  {redispatchMsg && <span className="pq-redispatch-msg">{redispatchMsg}</span>}
+                </div>
+              }
+            />
+
+            {/* Stats */}
+            <div className="pq-stats">
+              {QUEUE_STAT_CARDS.map(([key, label, mod]) => (
+                <div key={key} className={`pq-stat-card ${mod}`}>
+                  <div className="pq-stat-value">{queueStats[key] ?? 0}</div>
+                  <div className="pq-stat-label">{label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pq-body">
+              {/* Queue list */}
+              <div className="pq-list">
+                {queueLoading && queueItems.length === 0 ? (
+                  <div className="pq-empty">Loading queue…</div>
+                ) : queueItems.length === 0 ? (
+                  <div className="pq-empty">Queue is empty.</div>
+                ) : (
+                  <table className="pq-table">
+                    <thead><tr><th>#</th><th>Ticket</th><th>Subject</th><th>Status</th><th>Stage Failed</th><th>Retries</th><th>Entered</th></tr></thead>
+                    <tbody>
+                      {queueItems.map((item, idx) => (
+                        <tr
+                          key={item.id}
+                          className={`pq-row ${item.id === selectedQueueId ? "pq-row--selected" : ""} ${item.status === "held" ? "pq-row--held" : ""}`}
+                          onClick={() => setSelectedQueueId(item.id === selectedQueueId ? null : item.id)}
+                        >
+                          <td className="pq-pos">{item.queue_position ?? "—"}</td>
+                          <td><span className="pq-code">{item.ticket_code || "—"}</span></td>
+                          <td className="pq-subject">{item.subject || "—"}</td>
+                          <td><span className="pq-status-badge" style={{ background: QUEUE_STATUS_COLOR[item.status] || "#6b7280" }}>{QUEUE_STATUS_LABEL[item.status] || item.status}</span></td>
+                          <td>{item.failed_stage ? <span className="pq-failed-stage">{item.failed_stage.replace("Agent","")}</span> : "—"}</td>
+                          <td>{item.retry_count}</td>
+                          <td>{item.entered_at ? new Date(item.entered_at).toLocaleTimeString() : "—"}</td>
+                          <td onClick={e => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
+                            <button type="button" className="pq-row-action pq-row-action--del" title="Remove from queue" onClick={e => deleteQueueItem(item.id, e)}>Remove</button>
+                            {item.ticket_id && <button type="button" className="pq-row-action pq-row-action--del" title="Delete ticket" onClick={e => deleteTicket(item.ticket_id, e)}>Delete</button>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Detail modal overlay — rendered via portal to escape article container */}
+              {selectedQueueId && createPortal(
+                <div className="pq-modal-overlay" onClick={() => { setSelectedQueueId(null); setQueueDetail(null); setExpandedStage(null); }}>
+                  <div className="pq-modal" onClick={e => e.stopPropagation()}>
+                    {queueDetailLoading ? (
+                      <div className="pq-empty">Loading...</div>
+                    ) : queueDetail ? (
+                      <>
+                        {/* Modal header */}
+                        <div className="pq-modal-header">
+                          <div className="pq-modal-header-left">
+                            <div className="pq-detail-code">{queueDetail.ticket_code || "—"}</div>
+                            <div className="pq-detail-subject">{queueDetail.subject || "—"}</div>
+                          </div>
+                          <button type="button" className="pq-close-btn" onClick={() => { setSelectedQueueId(null); setQueueDetail(null); setExpandedStage(null); }}>
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                          </button>
+                        </div>
+
+                        {/* Failure banner */}
+                        {queueDetail.failure_reason && (
+                          <div className="pq-failure-banner">
+                            <div className="pq-failure-top">
+                              <span className={`pq-failure-cat pq-failure-cat--${queueDetail.failure_category || "unknown"}`}>
+                                {{ timeout: "Timeout", model_error: "Model Error", connection_error: "Connection Error", unknown: "Error" }[queueDetail.failure_category] || "Error"}
+                              </span>
+                              <span className="pq-failure-stage">{queueDetail.failed_stage?.replace("Agent","") || "Unknown stage"}</span>
+                            </div>
+                            <div className="pq-failure-reason">{queueDetail.failure_reason}</div>
+                            {Array.isArray(queueDetail.failure_history) && queueDetail.failure_history.length > 1 && (
+                              <details className="pq-failure-history">
+                                <summary>Failure history ({queueDetail.failure_history.length} attempts)</summary>
+                                {[...queueDetail.failure_history].reverse().map((h, i) => (
+                                  <div key={i} className="pq-failure-hist-row">
+                                    <span className={`pq-failure-cat pq-failure-cat--${h.category || "unknown"}`}>{h.category || "error"}</span>
+                                    <span>{h.stage?.replace("Agent","")}</span>
+                                    <span className="pq-failure-hist-reason">{h.reason}</span>
+                                    <span className="pq-failure-hist-ts">{h.ts ? new Date(h.ts).toLocaleTimeString() : ""}</span>
+                                  </div>
+                                ))}
+                              </details>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Stage grid */}
+                        {(queueDetail.stages || []).length === 0 ? (
+                          <div className="pq-empty" style={{ fontSize: 13 }}>No stage data yet for this run.</div>
+                        ) : (
+                          <>
+                            <div className="pq-stages-header">
+                              <span className="pq-stages-title">Pipeline Stages</span>
+                              <span className="pq-stages-progress">
+                                <span className="pq-stages-progress-count">{queueDetail.stages.filter(s => s.stage_name !== queueDetail.failed_stage).length}</span>
+                                <span className="pq-stages-progress-sep">/</span>
+                                <span className="pq-stages-progress-total">10</span>
+                                <span className="pq-stages-progress-label">completed</span>
+                              </span>
+                            </div>
+                          <div className="pq-stages-grid">
+                            {queueDetail.stages.map((stage, stageIdx) => {
+                              const isFailed = stage.stage_name === queueDetail.failed_stage;
+                              const isTimeout = stage.error_message?.toLowerCase().includes("timeout");
+                              const isMock = stage.error_message?.toLowerCase().includes("fallback");
+                              const statusClass = isFailed ? "pq-stage--failed" : (isTimeout || isMock) ? "pq-stage--warn" : "pq-stage--ok";
+                              const isExpanded = expandedStage === stage.stage_name;
+                              const isLast = stageIdx === queueDetail.stages.length - 1;
+                              return (
+                                <div key={stage.stage_name} className="pq-stage-flow-item">
+                                <div className={`pq-stage-row ${statusClass} ${isFailed ? "pq-stage-row--failed" : ""} ${isExpanded ? "pq-stage-row--expanded" : ""}`}>
+                                  <button
+                                    type="button"
+                                    className="pq-stage-summary"
+                                    onClick={() => setExpandedStage(isExpanded ? null : stage.stage_name)}
+                                  >
+                                    <div className="pq-stage-icon-wrap">
+                                      <div className="pq-stage-num">{stageIdx + 1}</div>
+                                    </div>
+                                    <div className="pq-stage-summary-body">
+                                      <div className="pq-stage-name">
+                                        {stage.stage_name.replace("Agent","")}
+                                        {CRITICAL_STAGES.has(stage.stage_name) && <span className="pq-critical-badge">Critical</span>}
+                                      </div>
+                                      <div className="pq-stage-explain">{stage.explanation}</div>
+                                    </div>
+                                    <div className="pq-stage-meta">
+                                      {stage.inference_time_ms && <span className="pq-stage-time">{(stage.inference_time_ms/1000).toFixed(1)}s</span>}
+                                      <svg className={`pq-stage-chevron ${isExpanded ? "pq-stage-chevron--open" : ""}`} width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                    </div>
+                                  </button>
+
+                                  {isExpanded && (
+                                    <div className="pq-stage-detail">
+                                      <div className="pq-stage-desc">{stage.description}</div>
+
+                                      {/* Input: show ticket text going into this stage */}
+                                      {(() => {
+                                        const inp = stage.input_state || {};
+                                        const isAudio = stage.stage_name === "AudioAnalysisAgent";
+                                        if (isAudio) {
+                                          const hasAudio = inp.has_audio || (inp.audio_features && Object.keys(inp.audio_features).length > 0);
+                                          return (
+                                            <div className="pq-stage-output">
+                                              <div className="pq-stage-output-title">Input</div>
+                                              <div className="pq-stage-input-text pq-stage-input-null">
+                                                {hasAudio ? "Audio file provided." : "No audio provided — stage skipped."}
+                                              </div>
+                                            </div>
+                                          );
+                                        }
+                                        const inputText = inp.details || inp.text || "";
+                                        if (!inputText) return null;
+                                        return (
+                                          <div className="pq-stage-output">
+                                            <div className="pq-stage-output-title">Input</div>
+                                            <div className="pq-stage-input-text">{String(inputText)}</div>
+                                          </div>
+                                        );
+                                      })()}
+
+                                      {/* Output: only keys that changed/were added vs input */}
+                                      {(() => {
+                                        const inp = stage.input_state || {};
+                                        const out = stage.output_state || {};
+                                        const changed = Object.entries(out).filter(([k, v]) => {
+                                          if (k.startsWith("_") || STAGE_OUTPUT_NOISE.has(k)) return false;
+                                          return JSON.stringify(v) !== JSON.stringify(inp[k]);
+                                        });
+                                        if (changed.length === 0) return null;
+                                        return (
+                                          <div className="pq-stage-output">
+                                            <div className="pq-stage-output-title">Output</div>
+                                            <div className="pq-stage-output-grid">
+                                              {changed.map(([k, v]) => (
+                                                <div key={k} className="pq-stage-output-row">
+                                                  <span className="pq-stage-output-key">{k.replace(/_/g," ")}</span>
+                                                  <span className="pq-stage-output-val">{formatStageVal(v)}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        );
+                                      })()}
+
+                                      {/* Correction fields for held failed stage */}
+                                      {isFailed && queueDetail.status === "held" && (stage.correctable_fields || []).length > 0 && (
+                                        <div className="pq-correction-form">
+                                          <div className="pq-correction-title">Correct this stage output</div>
+                                          {stage.correctable_fields.map((field) => {
+                                            const val = corrections[field] !== undefined ? corrections[field] : (stage.output_state?.[field] ?? "");
+                                            const isLevel = ["issue_severity","issue_urgency","business_impact"].includes(field);
+                                            const isSentimentLabel = field === "sentiment_score";
+                                            const isPriority = field === "priority_label";
+                                            const isLabel = field === "label";
+                                            const isBool = field === "safety_concern";
+                                            return (
+                                              <label key={field} className="pq-correction-field">
+                                                <span>{field.replace(/_/g," ").replace(/\b\w/g, c => c.toUpperCase())}</span>
+                                                {isLevel ? (
+                                                  <select value={val} onChange={e => setCorrections(c => ({...c, [field]: e.target.value}))}>
+                                                    {["low","medium","high"].map(o => <option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
+                                                  </select>
+                                                ) : isPriority ? (
+                                                  <select value={val} onChange={e => setCorrections(c => ({...c, [field]: e.target.value}))}>
+                                                    {["Low","Medium","High","Critical"].map(o => <option key={o} value={o}>{o}</option>)}
+                                                  </select>
+                                                ) : isLabel ? (
+                                                  <select value={val} onChange={e => setCorrections(c => ({...c, [field]: e.target.value}))}>
+                                                    {["complaint","inquiry"].map(o => <option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
+                                                  </select>
+                                                ) : isSentimentLabel ? (
+                                                  <select value={val} onChange={e => setCorrections(c => ({...c, [field]: e.target.value}))}>
+                                                    {["Negative","Neutral","Positive"].map(o => <option key={o} value={o}>{o}</option>)}
+                                                  </select>
+                                                ) : isBool ? (
+                                                  <select value={String(val)} onChange={e => setCorrections(c => ({...c, [field]: e.target.value === "true"}))}>
+                                                    <option value="false">No</option>
+                                                    <option value="true">Yes</option>
+                                                  </select>
+                                                ) : (
+                                                  <input type="text" value={String(val)} onChange={e => setCorrections(c => ({...c, [field]: e.target.value}))} />
+                                                )}
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                {!isLast && (
+                                  <div className="pq-stage-arrow">
+                                    <svg width="20" height="28" viewBox="0 0 20 28" fill="none">
+                                      <line x1="10" y1="0" x2="10" y2="18" stroke="#c4b5fd" strokeWidth="2"/>
+                                      <path d="M3 16 L10 26 L17 16" stroke="#c4b5fd" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  </div>
+                                )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          </>
+                        )}
+
+                        {/* Release action */}
+                        {queueDetail.status === "held" && (
+                          <div className="pq-release-row">
+                            {releaseMsg && <div className="pq-msg pq-msg--ok">{releaseMsg}</div>}
+                            {releaseErr && <div className="pq-msg pq-msg--err">{releaseErr}</div>}
+                            <div className="pq-action-row">
+                              <button type="button" className="pq-rerun-btn" disabled={rerunBusyQueue || releaseBusy} onClick={rerunStage}>
+                                {rerunBusyQueue ? "Running..." : "Rerun Stage"}
+                              </button>
+                              <button type="button" className="pq-release-btn" disabled={releaseBusy || rerunBusyQueue} onClick={releaseTicket}>
+                                {releaseBusy ? "Releasing..." : "Apply Corrections & Release"}
+                              </button>
+                            </div>
+                            <div className="pq-release-hint">
+                              {queueDetail.retry_count >= MAX_PIPELINE_RETRIES - 1 ? "Final retry — permanently held if this run fails." : `Retry ${queueDetail.retry_count + 1} of ${MAX_PIPELINE_RETRIES}`}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : releaseErr ? (
+                      <div className="pq-msg pq-msg--err">{releaseErr}</div>
+                    ) : null}
+                  </div>
+                </div>
+              , document.body)}
+            </div>
+          </article>
+        )}
+
+        {/* ── Explainability tab ── */}
+        {activeTab === "explainability" && !detailMode && (
           <article className="aix-list">
             <PageHeader
               title="AI Explainability"
@@ -912,6 +1464,7 @@ export default function AIExplainability() {
                     <th>Assignee</th>
                     <th>Created</th>
                     <th></th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -952,6 +1505,16 @@ export default function AIExplainability() {
                               View Pipeline
                             </button>
                           </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="aix-delete-btn"
+                              title="Delete ticket"
+                              onClick={e => deleteTicket(t.ticketId, e)}
+                            >
+                              Delete
+                            </button>
+                          </td>
                         </tr>
                       ))
                   )}
@@ -959,7 +1522,9 @@ export default function AIExplainability() {
               </table>
             </div>
           </article>
-        ) : (
+        )}
+
+        {activeTab === "explainability" && detailMode && (
           <>
             <div className="aix-detail-actions">
               <button

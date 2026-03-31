@@ -9,6 +9,7 @@ Endpoints:
     GET  /health         — liveness probe
 """
 
+import asyncio
 import logging
 import json
 import uuid
@@ -19,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from pipeline import pipeline
+from queue_manager import enqueue_ticket, queue_worker_loop, release_held_ticket, rerun_failed_stage
 from agents.step04_sentimentanalysis.step import get_sentiment_diagnostics
 from agents.step03_classifier.step import get_classifier_diagnostics
 from agents.step08_featureengineering.step import get_feature_engineering_diagnostics
@@ -82,6 +84,8 @@ async def _startup():
     if ensure_log_tables:
         ensure_log_tables()
     _log_model_mode_summary()
+    # Start the persistent queue background worker
+    asyncio.create_task(queue_worker_loop())
 
 
 async def _wait_for_chatbot_health() -> None:
@@ -363,6 +367,43 @@ async def priority_relearn_from_manager_approval(body: PriorityRelearnRequest):
     }
 
 
+class QueueReleaseRequest(BaseModel):
+    queue_id: str
+    corrections: dict = {}
+
+
+class QueueRerunStageRequest(BaseModel):
+    queue_id: str
+
+
+@app.post("/queue/release")
+async def queue_release(body: QueueReleaseRequest):
+    """
+    Called by the backend operator API when the operator releases a held ticket.
+    Applies corrections and re-enqueues the ticket at the bottom of the queue.
+    """
+    ok = release_held_ticket(body.queue_id, body.corrections)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail="Release failed — ticket may not be held or max retries exceeded",
+        )
+    return {"ok": True, "queue_id": body.queue_id}
+
+
+@app.post("/queue/rerun-stage")
+async def queue_rerun_stage(body: QueueRerunStageRequest):
+    """
+    Re-run only the failed stage through the AI model without operator corrections.
+    If it succeeds, the stage output is stored and the pipeline resumes from the next stage.
+    If it fails again, the ticket remains held with an updated failure record.
+    """
+    result = await rerun_failed_stage(body.queue_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Rerun failed"))
+    return result
+
+
 @app.post("/suggested-resolution/relearn")
 async def suggested_resolution_relearn(body: SuggestedResolutionRelearnRequest):
     try:
@@ -408,14 +449,12 @@ async def process_text(
     audio_features: str | None = Form(default=None),
 ):
     """
-    Accepts submitted ticket details text and runs full pipeline.
-    If this ticket came from audio flow, pass has_audio=true and optional
-    audio_features JSON string from transcriber service.
+    Accepts submitted ticket details and enqueues them for processing.
+    The pipeline_queue worker picks the ticket up and runs it stage by stage.
+    Returns immediately with queue_id and ticket_id.
     """
     if not text or not text.strip():
         raise HTTPException(status_code=422, detail="Text cannot be empty")
-
-    logger.info("Processing text input: %s...", text[:80])
 
     parsed_audio_features = {}
     if audio_features:
@@ -426,6 +465,7 @@ async def process_text(
         except json.JSONDecodeError:
             raise HTTPException(status_code=422, detail="audio_features must be valid JSON object")
 
+    # Create the initial open ticket in the backend first
     initial_payload = {
         "transcript": text.strip(),
         "ticket_id": ticket_id.strip() if ticket_id else None,
@@ -441,29 +481,7 @@ async def process_text(
             response.raise_for_status()
             open_ticket = response.json()
             ticket_id = open_ticket.get("ticket_id")
-            logger.info(
-                "ticket_status_update | ticket_id=%s status=%s department=%s priority=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
-                ticket_id,
-                open_ticket.get("status", "Open"),
-                open_ticket.get("department"),
-                open_ticket.get("priority"),
-                open_ticket.get("priority_assigned_at"),
-                open_ticket.get("respond_due_at"),
-                open_ticket.get("resolve_due_at"),
-            )
-            _log_application_event(
-                event_key="ticket_status_update",
-                ticket_id=ticket_id,
-                ticket_code=ticket_id if _coerce_uuid_or_none(ticket_id) is None else None,
-                payload={
-                    "status": open_ticket.get("status", "Open"),
-                    "department": open_ticket.get("department"),
-                    "priority": open_ticket.get("priority"),
-                    "priority_assigned_at": open_ticket.get("priority_assigned_at"),
-                    "respond_due_at": open_ticket.get("respond_due_at"),
-                    "resolve_due_at": open_ticket.get("resolve_due_at"),
-                },
-            )
+            ticket_code = open_ticket.get("ticket_code") or ticket_id
     except Exception as exc:
         logger.error("failed to create initial open ticket: %s", exc)
         raise HTTPException(status_code=503, detail=f"Failed to create initial ticket: {exc}")
@@ -471,92 +489,36 @@ async def process_text(
     if not ticket_id:
         raise HTTPException(status_code=503, detail="Failed to create initial ticket: missing ticket_id")
 
-    state = {
-        "text": text.strip(),
-        "ticket_id": ticket_id,
-        "subject": subject.strip() if subject else None,
-        "has_audio": bool(has_audio),
-        "audio_features": parsed_audio_features,
-        "_execution_id": str(execution_id or "").strip() or str(uuid.uuid4()),
-        "_pipeline_total_steps": 11,
-    }
-
-    execution_id = state["_execution_id"]
-    _log_application_event(
-        event_key="pipeline_start",
-        ticket_id=ticket_id,
-        ticket_code=ticket_id if _coerce_uuid_or_none(ticket_id) is None else None,
-        execution_id=execution_id,
-        payload={"has_audio": bool(has_audio)},
-    )
+    # Enqueue for background processing
     try:
-        result = await pipeline.ainvoke(state)
-    except Exception as exc:
-        logger.exception("pipeline_failed | ticket_id=%s err=%s", ticket_id, exc)
-        _log_application_event(
-            event_key="pipeline_failed",
-            level="ERROR",
+        queue_id = enqueue_ticket(
             ticket_id=ticket_id,
-            ticket_code=ticket_id if _coerce_uuid_or_none(ticket_id) is None else None,
-            execution_id=execution_id,
-            payload={"error": str(exc)},
+            ticket_code=ticket_code,
+            text=text.strip(),
+            subject=subject.strip() if subject else None,
+            has_audio=bool(has_audio),
+            audio_features=parsed_audio_features,
+            created_by_user_id=created_by_user_id.strip() if created_by_user_id else None,
+            ticket_source=ticket_source.strip() if ticket_source else None,
         )
-        raise HTTPException(status_code=503, detail=f"Pipeline failed for ticket {ticket_id}: {exc}")
-    if result.get("label") == "inquiry":
-        logger.info(
-            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f "
-            "priority=%s/%s ticket_id=%s status=%s department=%s "
-            "priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
-            result.get("label"),
-            float(result.get("class_confidence", 0.0) or 0.0),
-            float(result.get("text_sentiment", 0.0) or 0.0),
-            float(result.get("audio_sentiment", 0.0) or 0.0),
-            float(result.get("sentiment_score_numeric", 0.0) or 0.0),
-            result.get("priority_label"),
-            result.get("priority_score"),
-            result.get("ticket_id"),
-            result.get("status"),
-            result.get("department"),
-            result.get("priority_assigned_at"),
-            result.get("respond_due_at"),
-            result.get("resolve_due_at"),
-        )
-    else:
-        logger.info(
-            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f "
-            "impact=%s safety=%s severity=%s urgency=%s priority=%s/%s ticket_id=%s "
-            "status=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
-            result.get("label"),
-            float(result.get("class_confidence", 0.0) or 0.0),
-            float(result.get("text_sentiment", 0.0) or 0.0),
-            float(result.get("audio_sentiment", 0.0) or 0.0),
-            float(result.get("sentiment_score_numeric", 0.0) or 0.0),
-            result.get("business_impact"),
-            result.get("safety_concern"),
-            result.get("issue_severity"),
-            result.get("issue_urgency"),
-            result.get("priority_label"),
-            result.get("priority_score"),
-            result.get("ticket_id"),
-            result.get("status"),
-            result.get("department"),
-            result.get("priority_assigned_at"),
-            result.get("respond_due_at"),
-            result.get("resolve_due_at"),
-        )
+    except Exception as exc:
+        logger.error("failed to enqueue ticket_id=%s err=%s", ticket_id, exc)
+        raise HTTPException(status_code=503, detail=f"Failed to enqueue ticket: {exc}")
+
     _log_application_event(
-        event_key="pipeline_done",
-        ticket_id=result.get("ticket_id"),
-        ticket_code=result.get("ticket_id") if _coerce_uuid_or_none(result.get("ticket_id")) is None else None,
-        execution_id=execution_id,
-        payload={
-            "label": result.get("label"),
-            "status": result.get("status"),
-            "department": result.get("department"),
-            "priority": result.get("priority_label"),
-        },
+        event_key="pipeline_queued",
+        ticket_id=ticket_id,
+        ticket_code=ticket_code if _coerce_uuid_or_none(ticket_code) is None else None,
+        payload={"queue_id": queue_id, "has_audio": bool(has_audio)},
     )
-    return _build_response(result, execution_id)
+    logger.info("process_text | enqueued ticket_id=%s queue_id=%s", ticket_id, queue_id)
+
+    return {
+        "queued": True,
+        "ticket_id": ticket_id,
+        "ticket_code": ticket_code,
+        "queue_id": queue_id,
+    }
 
 
 # ---------------------------------------------------------------------------
