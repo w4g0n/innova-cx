@@ -115,10 +115,11 @@ export default function CustomerLanding() {
   const loadingTimeoutRef = useRef(null);
 
   // ── Nova chat widget state ──────────────────────────────────────────────
-  const [isOpen,           setIsOpen]           = useState(false);
-  const [isExpanded,       setIsExpanded]        = useState(false);
-  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isOpen,             setIsOpen]             = useState(false);
+  const [isExpanded,         setIsExpanded]          = useState(false);
+  const [showCloseConfirm,   setShowCloseConfirm]   = useState(false);
+  const [showResetConfirm,   setShowResetConfirm]   = useState(false);
+  const [showLogoutConfirm,  setShowLogoutConfirm]  = useState(false);
 
   // ── Fill-Form widget state ──────────────────────────────────────────────
   const [formOpen,             setFormOpen]             = useState(false);
@@ -275,10 +276,13 @@ export default function CustomerLanding() {
   const handleClose  = () => setShowCloseConfirm(true);
   const confirmClose = () => {
     setShowCloseConfirm(false);
+    resetSession();
     setNovaView("chat");
     setIsOpen(false);
     setIsExpanded(false);
   };
+  const handleResetClick = () => setShowResetConfirm(true);
+  const confirmReset     = () => { resetSession(); setShowResetConfirm(false); };
   const toggleExpand = () => {
     setIsExpanded((prev) => {
       if (prev) setNovaView("chat");
@@ -840,7 +844,7 @@ export default function CustomerLanding() {
               </div>
             </div>
             <div className="novaWidgetHeaderRight">
-              <button type="button" className="novaIconBtn" onClick={resetSession} aria-label="New conversation" title="New conversation">
+              <button type="button" className="novaIconBtn" onClick={handleResetClick} aria-label="New conversation" title="New conversation">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M3 3v5h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1017,6 +1021,18 @@ export default function CustomerLanding() {
                 <div className="novaCloseModalBtns">
                   <button onClick={confirmClose}>Yes, close</button>
                   <button onClick={() => setShowCloseConfirm(false)}>Keep chatting</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showResetConfirm && (
+            <div className="novaCloseModal">
+              <div className="novaCloseModalContent">
+                <p>Start a new conversation? Your current conversation will be cleared.</p>
+                <div className="novaCloseModalBtns">
+                  <button onClick={confirmReset}>Yes, start new</button>
+                  <button onClick={() => setShowResetConfirm(false)}>Keep chatting</button>
                 </div>
               </div>
             </div>

@@ -93,6 +93,12 @@ export default function OperatorDashboard() {
     return () => { cancelled = true; };
   }, []);
 
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    const tod = h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening";
+    return `${tod}, Operator`;
+  }, []);
+
   const userStats = useMemo(() => {
     if (!users || !Array.isArray(users)) return null;
     return {
@@ -146,7 +152,7 @@ export default function OperatorDashboard() {
     <Layout role="operator">
       <div className="opDash" ref={revealRef}>
         <PageHeader
-          title="Operator Dashboard"
+          title={greeting}
           subtitle="Metrics shown are from the last 30 days. Use each module's filters for deeper analysis."
         />
 

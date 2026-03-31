@@ -917,6 +917,97 @@ export default function AboutUs() {
       </section>
 
       {/* ══════════════════════════════════
+          SECURITY MEASURES
+      ══════════════════════════════════ */}
+      <section className="au-section">
+        <div className="au-features-intro">
+          <div className="au-label au-reveal">Trust &amp; Safety</div>
+          <h2 className="au-h2 au-reveal" style={{ "--rd": "0.07s" }}>
+            Our Security <em>Practices</em>
+          </h2>
+          <p className="au-body au-reveal" style={{ "--rd": "0.12s" }}>
+            InnovaCX is built with security as a first-class concern. Every layer of the
+            platform, from authentication to data storage, is designed to protect customer
+            data and keep it handled responsibly.
+          </p>
+        </div>
+        <div className="au-features-grid">
+          {[
+            {
+              icon: (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              ),
+              title: "Encryption in Transit and at Rest",
+              desc: "All data transmitted between clients and the InnovaCX platform is encrypted in transit using TLS 1.2+, with HTTPS enforced across every endpoint. Sensitive fields are encrypted at rest.",
+            },
+            {
+              icon: (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+              ),
+              title: "Multi-Factor Authentication",
+              desc: "All user accounts require MFA at login. Access tokens are short-lived, session IDs are regenerated after login, and sessions are invalidated on logout.",
+            },
+            {
+              icon: (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="8" r="4"/>
+                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+                  <path d="M17 11l2 2 4-4"/>
+                </svg>
+              ),
+              title: "Role-Based Access Control",
+              desc: "Access to data and system functions is governed by role. Each user is assigned a permission level, and permissions are checked on every request. Client-supplied roles or IDs are never trusted, and access is denied by default.",
+            },
+            {
+              icon: (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="9" y1="13" x2="15" y2="13"/>
+                  <line x1="9" y1="17" x2="13" y2="17"/>
+                </svg>
+              ),
+              title: "Audit Logging",
+              desc: "Auth events and access to sensitive data are logged. Audit logs are maintained to support accountability and review.",
+            },
+            {
+              icon: (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+              ),
+              title: "Secure Data Storage",
+              desc: "Database users follow the principle of least privilege, with application accounts limited to the operations they need. Sensitive columns are encrypted at rest, all database connections use TLS, and credentials are stored in environment variables rather than code.",
+            },
+            {
+              icon: (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="M21 21l-4.35-4.35"/>
+                  <path d="M11 8v3l2 2"/>
+                </svg>
+              ),
+              title: "Monitoring and Alerts",
+              desc: "Alerts are used to detect unusual or suspicious activity. Application-level event logs are maintained and reviewed to help identify suspicious activity.",
+            },
+          ].map((item, i) => (
+            <div key={i} className="au-feat au-reveal" style={{ "--rd": `${i * 60}ms` }}>
+              <div className="au-feat-icon">{item.icon}</div>
+              <h3 className="au-feat-title">{item.title}</h3>
+              <p className="au-feat-desc">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════
           TEAM
       ══════════════════════════════════ */}
       <section className="au-section">
