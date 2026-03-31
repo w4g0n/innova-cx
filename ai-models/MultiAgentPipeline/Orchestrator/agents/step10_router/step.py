@@ -23,7 +23,7 @@ import torch
 from langchain_core.runnables import RunnableLambda
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-BACKEND_URL = "http://backend:8000"
+BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
 logger = logging.getLogger(__name__)
 
 DEPARTMENT_CANDIDATES = {
@@ -288,52 +288,45 @@ async def _fetch_manager_calibration(client: httpx.AsyncClient, predicted: str) 
         return {}
 
 
-def _apply_feedback_calibration(labels: list[str], scores: list[float], adjustments: dict[str, float]) -> tuple[list[str], list[float], str]:
-    if not labels or not scores:
-        return labels, scores, "none"
-    if not adjustments:
-        return labels, scores, "none"
+def _rerank(
+    labels: list[str],
+    scores: list[float],
+    adjustments: dict[str, float],
+    cap: float,
+    source: str,
+) -> tuple[list[str], list[float], str]:
+    """Apply per-label score adjustments, re-sort descending, return (labels, scores, source)."""
+    paired = [(lbl, min(cap, float(scores[i]) + adjustments.get(lbl, 0.0))) for i, lbl in enumerate(labels)]
+    paired.sort(key=lambda x: x[1], reverse=True)
+    return [l for l, _ in paired], [s for _, s in paired], source
 
-    adjusted = []
-    for idx, label in enumerate(labels):
-        base = scores[idx]
-        boost = CALIBRATION_WEIGHT * float(adjustments.get(label, 0.0))
-        adjusted.append((label, min(0.999, base + boost)))
-    adjusted.sort(key=lambda x: x[1], reverse=True)
-    return [label for label, _ in adjusted], [score for _, score in adjusted], "manager_feedback"
+
+def _apply_feedback_calibration(labels: list[str], scores: list[float], adjustments: dict[str, float]) -> tuple[list[str], list[float], str]:
+    if not labels or not scores or not adjustments:
+        return labels, scores, "none"
+    weighted = {dept: CALIBRATION_WEIGHT * float(prob) for dept, prob in adjustments.items()}
+    return _rerank(labels, scores, weighted, 0.999, "manager_feedback")
 
 
 def _apply_domain_routing_boost(text: str, labels: list[str], scores: list[float]) -> tuple[list[str], list[float], str]:
     if not labels or not scores:
         return labels, scores, "none"
-
     lowered = str(text or "").lower()
-    adjustments: dict[str, float] = {}
-    for department, keywords in HEURISTIC_ROUTING_BOOSTS.items():
-        matches = sum(1 for keyword in keywords if keyword in lowered)
-        if matches:
-            adjustments[department] = min(0.65, 0.22 + (0.12 * (matches - 1)))
-
-    if not adjustments:
+    boosts: dict[str, float] = {
+        dept: min(0.65, 0.22 + 0.12 * (matches - 1))
+        for dept, keywords in HEURISTIC_ROUTING_BOOSTS.items()
+        if (matches := sum(1 for kw in keywords if kw in lowered))
+    }
+    if not boosts:
         return labels, scores, "none"
-
-    adjusted = []
-    for idx, label in enumerate(labels):
-        base = float(scores[idx])
-        adjusted.append((label, min(0.999, base + adjustments.get(label, 0.0))))
-    adjusted.sort(key=lambda x: x[1], reverse=True)
-    return [label for label, _ in adjusted], [score for _, score in adjusted], "domain_keywords"
+    return _rerank(labels, scores, boosts, 0.999, "domain_keywords")
 
 
 def _apply_flat_confidence_boost(labels: list[str], scores: list[float]) -> tuple[list[str], list[float], str]:
     if not labels or not scores:
         return labels, scores, "none"
-
-    adjusted = []
-    for idx, label in enumerate(labels):
-        adjusted.append((label, min(CONFIDENCE_MAX_CAP, float(scores[idx]) + CONFIDENCE_FLAT_BOOST)))
-    adjusted.sort(key=lambda x: x[1], reverse=True)
-    return [label for label, _ in adjusted], [score for _, score in adjusted], "flat_boost"
+    flat = {lbl: CONFIDENCE_FLAT_BOOST for lbl in labels}
+    return _rerank(labels, scores, flat, CONFIDENCE_MAX_CAP, "flat_boost")
 
 
 def _build_orchestrator_payload(
@@ -348,7 +341,7 @@ def _build_orchestrator_payload(
     # low-confidence routes for manager review.
     predicted_department = routed_department if should_auto_route else top_department
     return {
-        "ticket_id": state.get("ticket_id"),
+        "ticket_id": state.get("ticket_code") or state.get("ticket_id"),
         "subject": state.get("subject"),
         "transcript": state["text"],
         "sentiment": state.get("text_sentiment", 0.0),
@@ -368,6 +361,7 @@ def _build_orchestrator_payload(
 
 async def route_and_store(state: dict) -> dict:
     ticket_text = str(state.get("text") or "").strip()
+    data: dict = {}
     try:
         if ROUTER_RUNTIME_MODE == "subprocess":
             try:
