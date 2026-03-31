@@ -474,6 +474,13 @@ export default function Login() {
 
         {/* ── Right panel ── */}
         <section className="loginRight">
+          <button
+            className="backBtn"
+            onClick={() => navigate(-1)}
+          >
+            ← Back
+          </button>
+
           <div className="loginHeader">
             <div className="login-header-tag">InnovaCX · Dubai CommerCity</div>
             <h2 className="loginTitle">Log In</h2>
