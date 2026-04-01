@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import { sanitizeText, sanitizeId } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
 import "./RoutingReviewDetails.css";
 
@@ -105,7 +106,8 @@ function extractKeywords(text = "", targetDept = "") {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function RoutingReviewDetails() {
-  const { reviewId } = useParams();
+  const { reviewId: rawReviewId } = useParams();
+  const reviewId = sanitizeId(rawReviewId);
   const navigate     = useNavigate();
   const heroRef      = useRef(null);
 
@@ -133,6 +135,7 @@ export default function RoutingReviewDetails() {
 
   useEffect(() => {
     if (!token) { navigate("/login"); return; }
+    if (!reviewId) { setError("Invalid review ID."); setLoading(false); return; }
     setLoading(true);
 
     const DEPT_FALLBACK = [
@@ -141,8 +144,7 @@ export default function RoutingReviewDetails() {
     ];
 
     Promise.all([
-      // Use the dedicated single-item endpoint — backend enforces manager's department scope
-      fetch(apiUrl(`/api/manager/routing-review/${reviewId}`), { headers })
+      fetch(apiUrl(`/api/manager/routing-review/${encodeURIComponent(reviewId)}`), { headers })
         .then((r) => {
           if (r.status === 401) { navigate("/login"); return null; }
           if (!r.ok) throw new Error("Routing review item not found.");
@@ -154,19 +156,29 @@ export default function RoutingReviewDetails() {
     ])
       .then(([found, depts]) => {
         if (!found) { setError("Routing review item not found."); return; }
-        setItem(found);
+        const sanitized = {
+          ...found,
+          ticketCode:          sanitizeId(found.ticketCode),
+          subject:             sanitizeText(found.subject, 300),
+          status:              sanitizeText(found.status, 50),
+          predictedDepartment: sanitizeText(found.predictedDepartment, 100),
+          currentDepartment:   sanitizeText(found.currentDepartment, 100),
+          approvedDepartment:  sanitizeText(found.approvedDepartment, 100),
+          decidedBy:           sanitizeText(found.decidedBy, 100),
+          decisionNotes:       sanitizeText(found.decisionNotes, 2000),
+        };
+        setItem(sanitized);
         const deptList = Array.isArray(depts) && depts.length > 0 ? depts : DEPT_FALLBACK;
         setDepts(deptList);
 
-        // Fetch linked ticket for subject/details/keywords
-        if (found.ticketCode) {
-          return fetch(apiUrl(`/api/manager/complaints/${found.ticketCode}`), { headers })
+        if (sanitized.ticketCode) {
+          return fetch(apiUrl(`/api/manager/complaints/${encodeURIComponent(sanitized.ticketCode)}`), { headers })
             .then((r) => r.json())
             .then((t) => { if (!t.error) setTicket(t); })
             .catch(() => null);
         }
       })
-      .catch((e) => setError(e.message || "Failed to load."))
+      .catch(() => setError("Failed to load routing review. Please try again."))
       .finally(() => setLoading(false));
   }, [reviewId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -180,7 +192,7 @@ export default function RoutingReviewDetails() {
 
   const decide = async (decision, explicitDept) => {
     if (!token) { navigate("/login"); return; }
-    const dept = explicitDept || selDept;
+    const dept = sanitizeText(explicitDept || selDept, 100);
     if (decision === "Overridden" && !dept) {
       showToast("Please select a department to override to.", "error");
       return;
@@ -190,20 +202,18 @@ export default function RoutingReviewDetails() {
     triggerFlash(decision);
 
     try {
-      const res = await fetch(apiUrl(`/api/manager/routing-review/${reviewId}`), {
+      const res = await fetch(apiUrl(`/api/manager/routing-review/${encodeURIComponent(reviewId)}`), {
         method: "PATCH",
         headers,
         body: JSON.stringify({
           decision,
-          // For Denied, send no approved_department (ticket keeps current dept)
           approved_department: decision === "Overridden" ? dept
                              : decision === "Approved"   ? item.predictedDepartment
                              : undefined,
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Failed (${res.status})`);
+        throw new Error(`Failed (${res.status})`);
       }
       setItem((prev) => ({
         ...prev,
@@ -219,7 +229,7 @@ export default function RoutingReviewDetails() {
         decision === "Denied" ? "error" : "success"
       );
     } catch (e) {
-      showToast(e.message || "Failed to save decision.", "error");
+      showToast("Failed to save decision. Please try again.", "error");
     } finally {
       setDeciding(false);
     }

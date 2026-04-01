@@ -7,6 +7,7 @@ import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import { apiUrl } from "../../config/apiBase";
 import useScrollReveal from "../../utils/useScrollReveal";
+import { sanitizeText } from "./ManagerSanitize";
 
 function getAuthToken() {
   return (
@@ -37,7 +38,7 @@ export default function ManagerDashboard() {
       const raw = localStorage.getItem("user");
       if (raw) {
         const u = JSON.parse(raw);
-        return u?.full_name || "";
+        return sanitizeText(u?.full_name || "", 100);
       }
     } catch { /* ignore */ }
     return "";
@@ -63,8 +64,8 @@ export default function ManagerDashboard() {
         setKpis(data);
         // Backend returns these from the authenticated session (get_current_user
         // now joins user_profiles, so these are always the logged-in manager's values)
-        if (data.managerName) setManagerName(data.managerName);
-        if (data.departmentName) setDepartmentName(data.departmentName);
+        if (data.managerName) setManagerName(sanitizeText(data.managerName, 100));
+        if (data.departmentName) setDepartmentName(sanitizeText(data.departmentName, 100));
       })
       .catch((err) => {
         console.error("Failed to fetch manager KPIs:", err);

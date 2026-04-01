@@ -7,6 +7,7 @@ import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import { apiUrl } from "../../config/apiBase";
+import { sanitizeText, ALLOWED_SORT_KEYS } from "./ManagerSanitize";
 import useScrollReveal from "../../utils/useScrollReveal";
 
 function getAuthToken() {
@@ -152,7 +153,7 @@ function Heatmap({ data }) {
         <tbody>
           {depts.map((dept) => (
             <tr key={dept}>
-              <td className="ct-heatmap__dept">{dept}</td>
+              <td className="ct-heatmap__dept">{sanitizeText(dept, 100)}</td>
               {priorities.map((p) => {
                 const count = cellMap[`${dept}__${p}`] || 0;
                 const opacity = count ? 0.1 + (count / maxCount) * 0.85 : 0;
@@ -225,10 +226,10 @@ function EmployeeRow({ emp, teamAcceptAvg }) {
         onClick={() => setOpen((s) => !s)}
       >
         <td className="ct-empRow__name">
-          {emp.name}
+          {sanitizeText(emp.name, 100)}
           {alerts.length > 0 && <span className="ct-empRow__badge">{alerts.length} alert{alerts.length > 1 ? "s" : ""}</span>}
         </td>
-        <td>{emp.role}</td>
+        <td>{sanitizeText(emp.role, 100)}</td>
         <td><strong>{emp.ticketsHandled}</strong></td>
         <td>
           <span className={emp.breachRate > 10 ? "ct-bad" : emp.breachRate > 5 ? "ct-warn" : "ct-good"}>
@@ -332,7 +333,7 @@ export default function ComplaintTrends() {
       .then((r) => { if (r.status === 401) { navigate("/login"); return null; } return r.json(); })
       .then((data) => {
         if (!data) return;
-        const dept = data.departmentName || "";
+        const dept = sanitizeText(data.departmentName || "", 100);
         setMyDepartment(dept);
         // Only set department if it hasn't been manually changed yet (still empty)
         setDepartment((prev) => prev === "" ? (dept || "All Departments") : prev);
@@ -368,7 +369,7 @@ export default function ComplaintTrends() {
       if (!res.ok) throw new Error("Failed to load analytics");
       setApiData(await res.json());
     } catch (e) {
-      setError(e.message);
+      setError("Failed to load analytics. Please try again.");
       setApiData(null);
     } finally {
       setLoading(false);
@@ -410,49 +411,41 @@ export default function ComplaintTrends() {
         />
 
         {/* ── Global Filters ── */}
-        <section className="filtersRow">
-          <div className="filtersLeft">
-            <div className="pillSelectHolder">
-              <PillSelect value={timeRange} onChange={setTimeRange} ariaLabel="Time range"
-                options={[
-                  { value: "Last 7 Days",    label: "Last 7 Days" },
-                  { value: "Last 30 Days",   label: "Last 30 Days" },
-                  { value: "This Month",     label: "This Month" },
-                  { value: "Last 3 Months",  label: "Last 3 Months" },
-                  { value: "Last 6 Months",  label: "Last 6 Months" },
-                  { value: "Last 12 Months", label: "Last 12 Months" },
-                ]}
-              />
-              <PillSelect value={department} onChange={setDepartment} ariaLabel="Department"
-                options={[
-                  { value: "All Departments", label: "All Departments" },
-                  ...(deptOptions.length > 0
-                    ? deptOptions.map((d) => ({ value: d, label: d }))
-                    : [
-                        { value: "Safety & Security",    label: "Safety & Security" },
-                        { value: "HR",                   label: "HR" },
-                        { value: "IT",                   label: "IT" },
-                        { value: "Leasing",              label: "Leasing" },
-                        { value: "Maintenance",          label: "Maintenance" },
-                        { value: "Legal & Compliance",   label: "Legal & Compliance" },
-                        { value: "Facilities Management",label: "Facilities Management" },
-                      ]
-                  ),
-                ]}
-              />
-              <PillSelect value={priority} onChange={setPriority} ariaLabel="Priority"
-                options={[
-                  { value: "All Priorities",  label: "All Priorities" },
-                  { value: "Critical",        label: "Critical" },
-                  { value: "High",            label: "High" },
-                  { value: "Medium",          label: "Medium" },
-                  { value: "Low",             label: "Low" },
-                ]}
-              />
-            </div>
-            <FilterPillButton onClick={() => { setTimeRange("Last 12 Months"); setDepartment(myDepartment || "All Departments"); setPriority("All Priorities"); }} label="Reset" />
-          </div>
-        </section>
+        {(() => {
+          const ALLOWED_TIME_RANGES = ["Last 7 Days", "Last 30 Days", "This Month", "Last 3 Months", "Last 6 Months", "Last 12 Months"];
+          const ALLOWED_PRIORITIES_TREND = ["All Priorities", "Critical", "High", "Medium", "Low"];
+          const allDeptOptions = [
+            "All Departments",
+            ...(deptOptions.length > 0
+              ? deptOptions
+              : ["Safety & Security", "HR", "IT", "Leasing", "Maintenance", "Legal & Compliance", "Facilities Management"]
+            ),
+          ];
+          return (
+            <section className="filtersRow">
+              <div className="filtersLeft">
+                <div className="pillSelectHolder">
+                  <PillSelect value={timeRange}
+                    onChange={(v) => { if (ALLOWED_TIME_RANGES.includes(v)) setTimeRange(v); }}
+                    ariaLabel="Time range"
+                    options={ALLOWED_TIME_RANGES.map((r) => ({ value: r, label: r }))}
+                  />
+                  <PillSelect value={department}
+                    onChange={(v) => { if (allDeptOptions.includes(v)) setDepartment(v); }}
+                    ariaLabel="Department"
+                    options={allDeptOptions.map((d) => ({ value: d, label: d }))}
+                  />
+                  <PillSelect value={priority}
+                    onChange={(v) => { if (ALLOWED_PRIORITIES_TREND.includes(v)) setPriority(v); }}
+                    ariaLabel="Priority"
+                    options={ALLOWED_PRIORITIES_TREND.map((p) => ({ value: p, label: p }))}
+                  />
+                </div>
+                <FilterPillButton onClick={() => { setTimeRange("Last 12 Months"); setDepartment(myDepartment || "All Departments"); setPriority("All Priorities"); }} label="Reset" />
+              </div>
+            </section>
+          );
+        })()}
 
         {/* ── Tabs ── */}
         <div className="ct-tabs">

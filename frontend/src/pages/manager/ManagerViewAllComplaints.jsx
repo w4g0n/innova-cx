@@ -10,6 +10,16 @@ import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
 import { fireNotifRefresh } from "../../utils/notifRefresh";
+import {
+  sanitizeText,
+  sanitizeId,
+  sanitizeSearchQuery,
+  sanitizePriority,
+  ALLOWED_STATUS_FILTERS,
+  ALLOWED_PRIORITY_FILTERS,
+  ALLOWED_SORT_KEYS,
+  MAX_SEARCH_LEN,
+} from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
 import useScrollReveal from "../../utils/useScrollReveal";
 
@@ -101,6 +111,10 @@ export default function ManagerViewComplaints() {
   const [rows, setRows]           = useState([]);
   const [employees, setEmployees] = useState([]);
   const [search, setSearch]       = useState("");
+  const handleSearchChange = (v) => {
+    const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
+    setSearch(sanitizeSearchQuery(raw));
+  };
   const [statusFilter, setStatusFilter]     = useState("Hide Resolved");
   const [priorityFilter, setPriorityFilter] = useState("All Priorities");
   const [activeKpi, setActiveKpi] = useState(null); // label of active KPI filter
@@ -121,7 +135,21 @@ export default function ManagerViewComplaints() {
 
     fetch(apiUrl("/api/manager/complaints"), { headers })
       .then((res) => { if (res.status === 401) return null; return res.json(); })
-      .then((data) => data && setRows(data || []))
+      .then((data) => data && setRows(
+        (data || []).map((r) => ({
+          ...r,
+          ticket_code:  sanitizeId(r.ticket_code),
+          subject:      sanitizeText(r.subject, 300),
+          status:       sanitizeText(r.status, 50),
+          priorityText: sanitizePriority(r.priorityText || r.priority),
+          priority:     sanitizeText(r.priority, 50),
+          assignee:     sanitizeText(r.assignee, 100),
+          reroutedTo:   sanitizeText(r.reroutedTo, 100),
+          issueDate:    sanitizeText(r.issueDate, 50),
+          respondTime:  sanitizeText(r.respondTime, 50),
+          resolveTime:  sanitizeText(r.resolveTime, 50),
+        }))
+      ))
       .catch((err) => { console.error("Failed to fetch tickets:", err); setRows([]); });
 
     fetch(apiUrl("/api/manager/departments"), { headers })
@@ -154,12 +182,13 @@ export default function ManagerViewComplaints() {
 
   // ── Sort ─────────────────────────────────────────────────────────────────────
   const handleSort = (col) => {
-  if (sortCol === col) {
-    setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-  } else {
-    setSortCol(col);
-    setSortDir("asc");
-  }
+    if (!ALLOWED_SORT_KEYS.includes(col)) return;
+    if (sortCol === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
   };
 
   // ── Menu / Modal handlers ─────────────────────────────────────────────────────
@@ -344,7 +373,7 @@ export default function ManagerViewComplaints() {
         </section>
 
         <section className="mv-searchSection">
-          <PillSearch value={search} onChange={setSearch} placeholder="Search tickets by ID or summary..." />
+          <PillSearch value={search} onChange={handleSearchChange} placeholder="Search tickets by ID or summary..." maxLength={MAX_SEARCH_LEN} />
         </section>
 
         <section className="mv-filtersRow">
@@ -352,7 +381,7 @@ export default function ManagerViewComplaints() {
             <div className="mv-select">
               <PillSelect
                 value={statusFilter}
-                onChange={(v) => { setStatusFilter(v); setActiveKpi(null); }}
+                onChange={(v) => { if (ALLOWED_STATUS_FILTERS.includes(v)) { setStatusFilter(v); setActiveKpi(null); } }}
                 ariaLabel="Filter by status"
                 options={[
                   { label: "Hide Resolved", value: "Hide Resolved" },
@@ -369,7 +398,7 @@ export default function ManagerViewComplaints() {
             <div className="mv-select">
               <PillSelect
                 value={priorityFilter}
-                onChange={(v) => { setPriorityFilter(v); setActiveKpi(null); }}
+                onChange={(v) => { if (ALLOWED_PRIORITY_FILTERS.includes(v)) { setPriorityFilter(v); setActiveKpi(null); } }}
                 ariaLabel="Filter by priority"
                 options={[
                   { label: "All Priorities", value: "All Priorities" },

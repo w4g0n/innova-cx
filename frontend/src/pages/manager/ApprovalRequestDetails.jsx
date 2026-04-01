@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import { sanitizeText, sanitizeId } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
 import "./ApprovalRequestDetails.css";
 
@@ -51,7 +52,8 @@ function TypeIcon({ type }) {
 }
 
 export default function ApprovalRequestDetails() {
-  const { requestId } = useParams();
+  const { requestId: rawRequestId } = useParams();
+  const requestId = sanitizeId(rawRequestId);
   const navigate = useNavigate();
   const heroRef = useRef(null);
 
@@ -74,6 +76,7 @@ export default function ApprovalRequestDetails() {
   useEffect(() => {
     const token = getAuthToken();
     if (!token) { navigate("/login"); return; }
+    if (!requestId) { setError("Invalid request ID."); setLoading(false); return; }
 
     setLoading(true);
     setError(null);
@@ -89,10 +92,20 @@ export default function ApprovalRequestDetails() {
         if (!data) return;
         const found = data.find((a) => String(a.requestId) === String(requestId));
         if (!found) { setError("Approval request not found."); setLoading(false); return; }
-        setApproval(found);
+        const sanitized = {
+          ...found,
+          ticketCode:    sanitizeId(found.ticketCode),
+          submittedBy:   sanitizeText(found.submittedBy, 100),
+          decidedBy:     sanitizeText(found.decidedBy, 100),
+          current:       sanitizeText(found.current, 200),
+          requested:     sanitizeText(found.requested, 200),
+          description:   sanitizeText(found.description || found.reason || found.notes || "", 2000),
+          decisionNotes: sanitizeText(found.decisionNotes || found.managerNotes || "", 2000),
+        };
+        setApproval(sanitized);
 
-        if (found.ticketCode) {
-          return fetch(apiUrl(`/api/manager/complaints/${found.ticketCode}`), {
+        if (sanitized.ticketCode) {
+          return fetch(apiUrl(`/api/manager/complaints/${encodeURIComponent(sanitized.ticketCode)}`), {
             headers: { Authorization: `Bearer ${token}` },
           })
             .then((r) => r.json())
@@ -100,7 +113,7 @@ export default function ApprovalRequestDetails() {
             .catch(() => null);
         }
       })
-      .catch((e) => setError(e.message || "Failed to load request."))
+      .catch(() => setError("Failed to load request. Please try again."))
       .finally(() => setLoading(false));
   }, [requestId, navigate]);
 
@@ -143,7 +156,7 @@ export default function ApprovalRequestDetails() {
         decision === "Approved" ? "success" : "error"
       );
     } catch (e) {
-      showToast(e.message || "Failed to save decision.", "error");
+      showToast("Failed to save decision. Please try again.", "error");
     } finally {
       setDeciding(false);
     }
