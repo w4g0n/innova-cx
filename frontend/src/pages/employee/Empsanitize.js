@@ -1,28 +1,22 @@
-/**
- * sanitize.js  –  Employee module
- *
- * Mirrors the customer sanitize.js pattern so both modules share the same
- * defensive helpers. Move to utils/sanitize.js and import from there once
- * you are ready to unify across all roles.
- */
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Hard cap for free-text areas (reason, resolution, steps taken). */
-export const MAX_REASON_LEN      = 2000;
+export const MAX_REASON_LEN = 2000;
 
 /** Hard cap for long description / resolution fields. */
-export const MAX_RESOLUTION_LEN  = 5000;
+export const MAX_RESOLUTION_LEN = 5000;
 
 /** Hard cap for search / filter inputs. */
-export const MAX_SEARCH_LEN      = 200;
+export const MAX_SEARCH_LEN = 200;
 
 /** Hard cap for short display fields (name, status, priority, subject …). */
-export const MAX_FIELD_LEN       = 300;
+export const MAX_FIELD_LEN = 300;
+
 
 // Allowlists used in this module
-export const ALLOWED_PRIORITIES   = ["Low", "Medium", "High", "Critical"];
-export const ALLOWED_DEPARTMENTS  = [
+export const ALLOWED_PRIORITIES = ["Low", "Medium", "High", "Critical"];
+export const ALLOWED_DEPARTMENTS = [
   "Facilities Management",
   "Legal & Compliance",
   "Safety & Security",
@@ -33,7 +27,6 @@ export const ALLOWED_DEPARTMENTS  = [
 ];
 export const ALLOWED_TICKET_SOURCES = ["User", "Chatbot"];
 
-// ─── Core helpers ─────────────────────────────────────────────────────────────
 
 /**
  * Coerce any value to a trimmed string and hard-cap its length.
@@ -85,32 +78,26 @@ export function safeParseUser(raw) {
   }
 }
 
-/**
- * Sanitize a filename for display.
- * Strips path separators and control characters; caps length.
- */
 export function sanitizeFilename(value, maxLen = 255) {
   if (!value) return "";
+
   return String(value)
     .replace(/[/\\:*?"<>|]/g, "")
-    .replace(/[\x00-\x1f]/g, "")
+    .split("")
+    .filter((ch) => {
+      const code = ch.charCodeAt(0);
+      return code >= 32 && code !== 127;
+    })
+    .join("")
     .trim()
     .slice(0, maxLen);
 }
 
-/**
- * Validate a priority value against the allowlist.
- * Returns "Medium" as a safe default if the value is not recognised.
- */
 export function sanitizePriority(value) {
   const s = sanitizeText(value, 20);
   return ALLOWED_PRIORITIES.includes(s) ? s : "Medium";
 }
 
-/**
- * Validate a department against the allowlist.
- * Returns "" if not recognised (forces the user to pick from the UI).
- */
 export function sanitizeDepartment(value) {
   const s = sanitizeText(value, 60);
   return ALLOWED_DEPARTMENTS.includes(s) ? s : "";
@@ -134,10 +121,10 @@ export function safeFormatDate(isoString) {
   const d = new Date(isoString);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleString(undefined, {
-    year:   "numeric",
-    month:  "short",
-    day:    "2-digit",
-    hour:   "2-digit",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
     minute: "2-digit",
   });
 }
