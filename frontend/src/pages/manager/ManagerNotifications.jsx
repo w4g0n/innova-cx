@@ -92,7 +92,7 @@ export default function ManagerNotifications() {
         };
       });
       setNotifications(normalized);
-    } catch (e) {
+    } catch {
       setError("Failed to load notifications. Please try again.");
     } finally {
       setLoading(false);

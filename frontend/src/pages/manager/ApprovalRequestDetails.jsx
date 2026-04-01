@@ -155,7 +155,7 @@ export default function ApprovalRequestDetails() {
         decision === "Approved" ? "✓ Request approved successfully." : "Request rejected.",
         decision === "Approved" ? "success" : "error"
       );
-    } catch (e) {
+    } catch {
       showToast("Failed to save decision. Please try again.", "error");
     } finally {
       setDeciding(false);

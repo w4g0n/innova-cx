@@ -228,7 +228,7 @@ export default function RoutingReviewDetails() {
         :                           `↺ Routing overridden → ${dept}`,
         decision === "Denied" ? "error" : "success"
       );
-    } catch (e) {
+    } catch {
       showToast("Failed to save decision. Please try again.", "error");
     } finally {
       setDeciding(false);

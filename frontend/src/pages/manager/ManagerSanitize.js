@@ -53,7 +53,7 @@ export function sanitizeText(value, maxLen = 1000) {
  */
 export function sanitizeId(value) {
   if (!value) return "";
-  return String(value).replace(/[^a-zA-Z0-9\-]/g, "").slice(0, 50);
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 50);
 }
 
 /**
@@ -75,11 +75,19 @@ export function sanitizeSearchQuery(value) {
 /**
  * Sanitize a file name: strip path separators and control chars.
  */
-export function sanitizeFilename(name) {
-  if (!name) return "file";
-  return String(name)
-    .replace(/[/\\<>:"|?*\x00-\x1f]/g, "_")
-    .slice(0, 200) || "file";
+export function sanitizeFilename(value, maxLen = 255) {
+  if (!value) return "";
+
+  return String(value)
+    .replace(/[/\\:*?"<>|]/g, "")
+    .split("")
+    .filter((ch) => {
+      const code = ch.charCodeAt(0);
+      return code >= 32 && code !== 127;
+    })
+    .join("")
+    .trim()
+    .slice(0, maxLen);
 }
 
 /**

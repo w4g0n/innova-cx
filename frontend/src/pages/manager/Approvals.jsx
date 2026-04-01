@@ -380,7 +380,7 @@ export default function Approvals() {
           : decision === "Approved" ? "Request approved ✓" : "Request rejected",
         decision === "Rejected" ? "error" : "success"
       );
-    } catch (e) {
+    } catch {
       setRows((prev) => prev.map((r) =>
         r.requestId === safeRequestId ? { ...r, status: "Pending", overriddenValue: undefined } : r
       ));
@@ -397,7 +397,7 @@ export default function Approvals() {
       });
       if (!res.ok) { throw new Error(`Failed (${res.status})`); }
       pushToast(decision === "Approved" ? "AI routing confirmed ✓" : decision === "Denied" ? "Routing request denied" : `Routing overridden → ${sanitizeText(department, 100)}`, decision === "Denied" ? "error" : "success");
-    } catch (e) {
+    } catch {
       setRrqRows((prev) => prev.map((r) => (r.reviewId === reviewId ? { ...r, status: "Pending" } : r)));
       pushToast("Failed to save decision. Please try again.", "error");
     }

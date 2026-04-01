@@ -132,7 +132,7 @@ function ManagerTicketModalInner({
       onRerouteSuccess?.(selectedDept);
       onSuccess?.("Ticket rerouted successfully.");
       closeModal();
-    } catch (e) {
+    } catch {
       setRerouteError("Failed to reroute ticket. Please try again.");
       setConfirming(false);
     } finally {
@@ -163,7 +163,7 @@ function ManagerTicketModalInner({
       onRescoreSuccess?.(selectedPriority);
       onSuccess?.("Priority updated successfully.");
       closeModal();
-    } catch (e) {
+    } catch {
       setRescoreError("Failed to update priority. Please try again.");
       setConfirming(false);
     } finally {
@@ -196,7 +196,7 @@ function ManagerTicketModalInner({
       setResolveFiles([]);
       setResolveReviewAction("accepted");
       closeModal();
-    } catch (e) {
+    } catch {
       setResolveError("Failed to resolve ticket. Please try again.");
       setConfirming(false);
     } finally {
@@ -698,7 +698,7 @@ export default function ManagerComplaintDetails() {
           description:     sanitizeText(data.description, 5000),
           finalResolution: sanitizeText(data.finalResolution, 5000),
         });
-      } catch (e) {
+      } catch {
         setError("Failed to load ticket details. Please try again.");
       } finally {
         setLoading(false);

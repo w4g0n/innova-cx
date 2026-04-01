@@ -368,7 +368,7 @@ export default function ComplaintTrends() {
       if (res.status === 401) { navigate("/login"); return; }
       if (!res.ok) throw new Error("Failed to load analytics");
       setApiData(await res.json());
-    } catch (e) {
+    } catch {
       setError("Failed to load analytics. Please try again.");
       setApiData(null);
     } finally {
