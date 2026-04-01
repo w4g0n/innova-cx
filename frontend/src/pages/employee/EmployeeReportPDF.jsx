@@ -7,7 +7,7 @@ import {
   Image,
 } from "@react-pdf/renderer";
 import logo from "../../assets/nova-logo.png";
-import { sanitizeText } from "./EmpSanitize";
+import { sanitizeText } from "./EmployeeSanitize";
 
 // ── Brand palette ─────────────────────────────────────────────────────────────
 const B = {

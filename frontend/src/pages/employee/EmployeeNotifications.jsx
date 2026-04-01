@@ -11,7 +11,7 @@ import {
   sanitizeReportId,
   safeFormatDate,
   MAX_SEARCH_LEN,
-} from "./EmpSanitize";
+} from "./EmployeeSanitize";
 import "./EmployeeNotifications.css";
 
 // safeFormatDate already validates the date — re-export under local alias for clarity

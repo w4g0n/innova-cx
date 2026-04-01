@@ -5,7 +5,7 @@ import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
-import { sanitizeText, sanitizeId, sanitizePriority } from "./EmpSanitize";
+import { sanitizeText, sanitizeId, sanitizePriority } from "./EmployeeSanitize";
 import "./EmployeeDashboard.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 

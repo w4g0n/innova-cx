@@ -15,7 +15,7 @@ import {
   sanitizePriority,
   sanitizeTicketSource,
   MAX_SEARCH_LEN,
-} from "./EmpSanitize";
+} from "./EmployeeSanitize";
 import "./ViewAllComplaint.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 

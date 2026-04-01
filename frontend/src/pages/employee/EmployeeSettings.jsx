@@ -12,7 +12,7 @@ import {
 import "../../components/common/SettingsLayout.css";
 import "./EmployeeSettings.css";
 import { getUser } from "../../utils/auth";
-import { sanitizeText } from "./EmpSanitize";
+import { sanitizeText } from "./EmployeeSanitize";
 
 export default function EmployeeSettings() {
   const [showPwModal, setShowPwModal] = useState(false);

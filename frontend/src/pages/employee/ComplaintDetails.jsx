@@ -14,7 +14,7 @@ import {
   ALLOWED_DEPARTMENTS,
   MAX_REASON_LEN,
   MAX_RESOLUTION_LEN,
-} from "./EmpSanitize";
+} from "./EmployeeSanitize";
 import "./TicketDetails.css";
 
 const API_BASE = apiUrl("/api");
