@@ -8,6 +8,13 @@ import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { apiUrl } from "../../config/apiBase";
+import {
+  sanitizeText,
+  sanitizeId,
+  sanitizeSearchQuery,
+  ALLOWED_SORT_KEYS,
+  MAX_SEARCH_LEN,
+} from "./ManagerSanitize";
 import "./Approvals.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 
@@ -200,18 +207,18 @@ export default function Approvals() {
       .then((res) => { if (res.status === 401) navigate("/login"); return res.json(); })
       .then((data) => {
         setRows(data.map((a) => ({
-          requestId:       a.requestId,
-          ticketId:        a.ticketCode,
-          ticketUuid:      a.ticketId,
-          type:            a.type,
-          source:          a.source || "employee",
-          current:         a.current,
-          requested:       a.requested,
-          submittedBy:     a.submittedBy,
+          requestId:       sanitizeId(a.requestId),
+          ticketId:        sanitizeId(a.ticketCode),
+          ticketUuid:      sanitizeId(a.ticketId),
+          type:            sanitizeText(a.type, 50),
+          source:          sanitizeText(a.source || "employee", 50),
+          current:         sanitizeText(a.current, 200),
+          requested:       sanitizeText(a.requested, 200),
+          submittedBy:     sanitizeText(a.submittedBy, 100),
           modelConfidence: a.modelConfidence,
           submittedOn:     new Date(a.submittedOn).toLocaleString(),
           submittedOnRaw:  new Date(a.submittedOn).getTime(),
-          status:          a.status,
+          status:          sanitizeText(a.status, 50),
         })));
       })
       .catch((err) => console.error("Error fetching approvals:", err))
@@ -340,60 +347,59 @@ export default function Approvals() {
   // ── Actions ────────────────────────────────────────────────────────────────
   const decide = async (requestId, decision, selectedDepartment = undefined, overrideValue = undefined) => {
     if (!token) { navigate("/login"); return; }
+    const safeRequestId  = sanitizeId(requestId);
+    const safeOverride   = overrideValue ? sanitizeText(overrideValue, 200) : undefined;
 
     // Optimistically update UI
     setRows((prev) => prev.map((r) => {
-      if (r.requestId !== requestId) return r;
-      if (overrideValue) return { ...r, status: "Overridden", overriddenValue: overrideValue };
+      if (r.requestId !== safeRequestId) return r;
+      if (safeOverride) return { ...r, status: "Overridden", overriddenValue: safeOverride };
       return { ...r, status: decision };
     }));
 
     try {
-      const body = { decision: "Approved" }; // override is still an Approved action on the backend
-      if (overrideValue) {
-        // Manager chose a different value — backend uses override_value instead of requested_value
-        body.override_value = overrideValue;
+      const body = { decision: "Approved" };
+      if (safeOverride) {
+        body.override_value = safeOverride;
       } else if (decision === "Rejected") {
         body.decision = "Rejected";
       } else if (selectedDepartment) {
-        // Normal reroute approve — pass the requested dept so backend can look it up
-        // (backend reads requested_value from DB anyway, selectedDepartment is redundant but harmless)
+        // Normal reroute approve
       }
 
-      const res = await fetch(apiUrl(`/api/manager/approvals/${requestId}`), {
+      const res = await fetch(apiUrl(`/api/manager/approvals/${encodeURIComponent(safeRequestId)}`), {
         method: "PATCH", headers,
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Failed (${res.status})`);
+        throw new Error(`Failed (${res.status})`);
       }
       pushToast(
-        overrideValue
-          ? `Overridden → ${overrideValue} ✓`
+        safeOverride
+          ? `Overridden → ${safeOverride} ✓`
           : decision === "Approved" ? "Request approved ✓" : "Request rejected",
         decision === "Rejected" ? "error" : "success"
       );
-    } catch (e) {
+    } catch {
       setRows((prev) => prev.map((r) =>
-        r.requestId === requestId ? { ...r, status: "Pending", overriddenValue: undefined } : r
+        r.requestId === safeRequestId ? { ...r, status: "Pending", overriddenValue: undefined } : r
       ));
-      pushToast(e.message || "Failed to save decision.", "error");
+      pushToast("Failed to save decision. Please try again.", "error");
     }
   };
 
   const decideRrq = async (reviewId, decision, department) => {
     setRrqRows((prev) => prev.map((r) => (r.reviewId === reviewId ? { ...r, status: decision } : r)));
     try {
-      const res = await fetch(apiUrl(`/api/manager/routing-review/${reviewId}`), {
+      const res = await fetch(apiUrl(`/api/manager/routing-review/${encodeURIComponent(sanitizeId(reviewId))}`), {
         method: "PATCH", headers,
-        body: JSON.stringify({ decision, approved_department: department || undefined }),
+        body: JSON.stringify({ decision, approved_department: sanitizeText(department, 100) || undefined }),
       });
-      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || `Failed (${res.status})`); }
-      pushToast(decision === "Approved" ? "AI routing confirmed ✓" : decision === "Denied" ? "Routing request denied" : `Routing overridden → ${department}`, decision === "Denied" ? "error" : "success");
-    } catch (e) {
+      if (!res.ok) { throw new Error(`Failed (${res.status})`); }
+      pushToast(decision === "Approved" ? "AI routing confirmed ✓" : decision === "Denied" ? "Routing request denied" : `Routing overridden → ${sanitizeText(department, 100)}`, decision === "Denied" ? "error" : "success");
+    } catch {
       setRrqRows((prev) => prev.map((r) => (r.reviewId === reviewId ? { ...r, status: "Pending" } : r)));
-      pushToast(e.message || "Failed to save decision.", "error");
+      pushToast("Failed to save decision. Please try again.", "error");
     }
   };
 
@@ -445,7 +451,7 @@ export default function Approvals() {
             </section>
 
             <section className="searchSection">
-              <PillSearch value={query} onChange={setQuery} placeholder="Search by request ID, ticket code, or employee…" />
+              <PillSearch value={query} onChange={(v) => { const raw = typeof v === "string" ? v : (v?.target?.value ?? ""); setQuery(sanitizeSearchQuery(raw)); }} placeholder="Search by request ID, ticket code, or employee…" maxLength={MAX_SEARCH_LEN} />
             </section>
 
             <section className="filtersRow">
@@ -651,8 +657,9 @@ export default function Approvals() {
             <section className="rrq-controls">
               <PillSearch
                 value={rrqQuery}
-                onChange={(v) => typeof v === "string" ? setRrqQuery(v) : setRrqQuery(v?.target?.value ?? "")}
+                onChange={(v) => { const raw = typeof v === "string" ? v : (v?.target?.value ?? ""); setRrqQuery(sanitizeSearchQuery(raw)); }}
                 placeholder="Search by ticket, department, or subject…"
+                maxLength={MAX_SEARCH_LEN}
               />
               <div className="filtersLeft">
                 <div className="pillSelectHolder">

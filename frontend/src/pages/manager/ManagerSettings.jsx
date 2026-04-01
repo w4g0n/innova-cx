@@ -9,6 +9,7 @@ import {
 import "../../components/common/SettingsLayout.css";
 import "./ManagerSettings.css";
 import { getUser } from "../../utils/auth";
+import { sanitizeText } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
 
 // ─── Auth token helper (same pattern as all other manager pages) ──────────────
@@ -171,8 +172,8 @@ export default function ManagerSettings() {
   useEffect(() => { document.documentElement.removeAttribute("data-theme"); }, []);
 
   const user         = useMemo(() => getUser() || {}, []);
-  const displayName  = user.name || user.full_name || user.fullName || user.username || "Manager";
-  const displayEmail = user.email || "manager@innova.cx";
+  const displayName  = sanitizeText(user.name || user.full_name || user.fullName || user.username || "Manager", 100);
+  const displayEmail = sanitizeText(user.email || "manager@innova.cx", 254);
 
   return (
     <Layout role="manager">
