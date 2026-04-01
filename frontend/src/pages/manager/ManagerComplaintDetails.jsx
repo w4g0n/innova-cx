@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
+import {
+  sanitizeText,
+  sanitizeId,
+  sanitizePriority,
+  MAX_REASON_LEN,
+  MAX_RESOLUTION_LEN,
+  ALLOWED_PRIORITIES,
+} from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
 import "../employee/TicketDetails.css";
 
@@ -115,7 +123,7 @@ function ManagerTicketModalInner({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ department: selectedDept, reason: rerouteReason.trim() }),
+        body: JSON.stringify({ department: sanitizeText(selectedDept, 100), reason: sanitizeText(rerouteReason, MAX_REASON_LEN) }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -124,8 +132,8 @@ function ManagerTicketModalInner({
       onRerouteSuccess?.(selectedDept);
       onSuccess?.("Ticket rerouted successfully.");
       closeModal();
-    } catch (e) {
-      setRerouteError(e.message || "Failed to reroute ticket.");
+    } catch {
+      setRerouteError("Failed to reroute ticket. Please try again.");
       setConfirming(false);
     } finally {
       setBusy(false);
@@ -144,8 +152,8 @@ function ManagerTicketModalInner({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          new_priority: selectedPriority,
-          reason: rescoreReason.trim(),
+          new_priority: sanitizePriority(selectedPriority),
+          reason: sanitizeText(rescoreReason, MAX_REASON_LEN),
         }),
       });
       if (!res.ok) {
@@ -155,8 +163,8 @@ function ManagerTicketModalInner({
       onRescoreSuccess?.(selectedPriority);
       onSuccess?.("Priority updated successfully.");
       closeModal();
-    } catch (e) {
-      setRescoreError(e.message || "Failed to rescore ticket.");
+    } catch {
+      setRescoreError("Failed to update priority. Please try again.");
       setConfirming(false);
     } finally {
       setBusy(false);
@@ -175,8 +183,8 @@ function ManagerTicketModalInner({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          final_resolution: resolution.trim(),
-          steps_taken: stepsTaken.trim() || null,
+          final_resolution: sanitizeText(resolution, MAX_RESOLUTION_LEN),
+          steps_taken: sanitizeText(stepsTaken, MAX_REASON_LEN) || null,
         }),
       });
       if (!res.ok) {
@@ -188,8 +196,8 @@ function ManagerTicketModalInner({
       setResolveFiles([]);
       setResolveReviewAction("accepted");
       closeModal();
-    } catch (e) {
-      setResolveError(e.message || "Failed to resolve ticket.");
+    } catch {
+      setResolveError("Failed to resolve ticket. Please try again.");
       setConfirming(false);
     } finally {
       setBusy(false);
@@ -311,11 +319,15 @@ function ManagerTicketModalInner({
               className="modal-textarea"
               value={rerouteReason}
               onChange={(e) => {
-                setRerouteReason(e.target.value);
+                setRerouteReason(e.target.value.slice(0, MAX_REASON_LEN));
                 setRerouteError("");
               }}
               placeholder="Explain why this ticket should be rerouted..."
+              maxLength={MAX_REASON_LEN}
             />
+            <div style={{ fontSize: 11, color: "rgba(17,17,17,0.4)", textAlign: "right" }}>
+              {rerouteReason.length}/{MAX_REASON_LEN}
+            </div>
 
             {rerouteError && <div className="modal-inline-error">{rerouteError}</div>}
           </>
@@ -329,14 +341,13 @@ function ManagerTicketModalInner({
               <select
                 value={selectedPriority}
                 onChange={(e) => {
-                  setSelectedPriority(e.target.value);
+                  setSelectedPriority(sanitizePriority(e.target.value));
                   setRescoreError("");
                 }}
               >
-                <option>Low</option>
-                <option>Medium</option>
-                <option>High</option>
-                <option>Critical</option>
+                {ALLOWED_PRIORITIES.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
               </select>
             </div>
 
@@ -345,11 +356,15 @@ function ManagerTicketModalInner({
               className="modal-textarea"
               value={rescoreReason}
               onChange={(e) => {
-                setRescoreReason(e.target.value);
+                setRescoreReason(e.target.value.slice(0, MAX_REASON_LEN));
                 setRescoreError("");
               }}
               placeholder="Explain why the priority should be adjusted..."
+              maxLength={MAX_REASON_LEN}
             />
+            <div style={{ fontSize: 11, color: "rgba(17,17,17,0.4)", textAlign: "right" }}>
+              {rescoreReason.length}/{MAX_REASON_LEN}
+            </div>
 
             {rescoreError && <div className="modal-inline-error">{rescoreError}</div>}
           </>
@@ -377,8 +392,9 @@ function ManagerTicketModalInner({
             <textarea
               className="modal-textarea"
               value={escalateReason}
-              onChange={(e) => setEscalateReason(e.target.value)}
+              onChange={(e) => setEscalateReason(e.target.value.slice(0, MAX_REASON_LEN))}
               placeholder="Explain why this ticket must be escalated..."
+              maxLength={MAX_REASON_LEN}
             />
           </>
         );
@@ -395,11 +411,15 @@ function ManagerTicketModalInner({
                 className="modal-textarea resolution-review-box__textarea"
                 value={resolution}
                 onChange={(e) => {
-                  setResolution(e.target.value);
+                  setResolution(e.target.value.slice(0, MAX_RESOLUTION_LEN));
                   setResolveError("");
                 }}
                 placeholder="Describe the final resolution provided..."
+                maxLength={MAX_RESOLUTION_LEN}
               />
+              <div style={{ fontSize: 11, color: "rgba(17,17,17,0.4)", textAlign: "right", marginTop: 2 }}>
+                {resolution.length}/{MAX_RESOLUTION_LEN}
+              </div>
               <div className="resolution-review-box__actions">
                 <button
                   type="button"
@@ -440,9 +460,13 @@ function ManagerTicketModalInner({
             <textarea
               className="modal-textarea"
               value={stepsTaken}
-              onChange={(e) => setStepsTaken(e.target.value)}
+              onChange={(e) => setStepsTaken(e.target.value.slice(0, MAX_REASON_LEN))}
               placeholder="List the steps taken to resolve this issue..."
+              maxLength={MAX_REASON_LEN}
             />
+            <div style={{ fontSize: 11, color: "rgba(17,17,17,0.4)", textAlign: "right" }}>
+              {stepsTaken.length}/{MAX_REASON_LEN}
+            </div>
 
             <label>Attachments <span className="modal-label-optional">optional</span></label>
             <div className="modal-upload-box">
@@ -657,9 +681,25 @@ export default function ManagerComplaintDetails() {
         if (!res.ok) throw new Error("Ticket not found");
         const data = await res.json();
         if (data.error) throw new Error(data.error);
-        setTicket(data);
-      } catch (e) {
-        setError(e.message || "Could not load ticket details.");
+        setTicket({
+          ...data,
+          ticket_code:     sanitizeId(data.ticket_code || data.id),
+          subject:         sanitizeText(data.subject, 300),
+          status:          sanitizeText(data.status, 50),
+          priorityText:    sanitizePriority(data.priorityText || data.priority),
+          priority:        sanitizeText(data.priority, 50),
+          department:      sanitizeText(data.department, 100),
+          assignee:        sanitizeText(data.assignee, 100),
+          submittedBy:     sanitizeText(data.submittedBy, 100),
+          issueDate:       sanitizeText(data.issueDate, 50),
+          respondTime:     sanitizeText(data.respondTime, 50),
+          resolveTime:     sanitizeText(data.resolveTime, 50),
+          details:         sanitizeText(data.details || data.description, 5000),
+          description:     sanitizeText(data.description, 5000),
+          finalResolution: sanitizeText(data.finalResolution, 5000),
+        });
+      } catch {
+        setError("Failed to load ticket details. Please try again.");
       } finally {
         setLoading(false);
       }
