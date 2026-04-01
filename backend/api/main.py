@@ -190,6 +190,9 @@ def _ensure_runtime_schema_compatibility() -> None:
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
+                # password_changed_at: used by reset_password to stamp the moment
+                # a password was changed via reset flow, enabling stale-session detection.
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;")
                 # FIX (Issue 3 — department_routing table missing):
                 # The live DB volume may pre-date when department_routing was added to init.sql.
                 # Create it here idempotently so the routing review feature works on all envs.
@@ -363,7 +366,7 @@ def execute(sql: str, params: Optional[tuple] = None) -> int:
 # =========================================================
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "86400"))  # 24h
-DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "true").lower() == "true"
+DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "false").lower() == "true"
 DISABLE_MFA = os.getenv("DISABLE_MFA", "false").lower() == "true"
 
 DEV_SEED_USERS = os.getenv("DEV_SEED_USERS", "true").lower() == "true"
@@ -395,7 +398,10 @@ def create_jwt(payload: dict, ttl_seconds: int = JWT_TTL_SECONDS) -> str:
 
 def verify_jwt(token: str) -> dict:
     try:
-        header_b64, payload_b64, sig_b64 = token.split(".")
+        parts = token.split(".")
+        if len(parts) != 3:
+            raise ValueError("Malformed token")
+        header_b64, payload_b64, sig_b64 = parts
         signing_input = f"{header_b64}.{payload_b64}".encode()
         expected_sig = hmac.new(JWT_SECRET.encode(), signing_input, hashlib.sha256).digest()
         if not hmac.compare_digest(_b64url_encode(expected_sig), sig_b64):
@@ -406,6 +412,36 @@ def verify_jwt(token: str) -> dict:
             raise ValueError("Token expired")
         return payload
     except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def _check_token_issued_after_password_change(payload: dict, user: dict) -> None:
+    """
+    Reject JWTs issued before the user's last password change.
+    This invalidates all sessions that existed before a password reset.
+    """
+    password_changed_at = user.get("password_changed_at")
+    if password_changed_at is None:
+        return  # No password change recorded — token is fine
+
+    iat = payload.get("iat")
+    if iat is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Convert password_changed_at to a UTC Unix timestamp for comparison
+    try:
+        if hasattr(password_changed_at, "timestamp"):
+            changed_ts = password_changed_at.timestamp()
+        else:
+            # Fallback: already a numeric value
+            changed_ts = float(password_changed_at)
+    except Exception:
+        # If we cannot parse the timestamp, err on the side of caution
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Add a 2-second grace window to tolerate clock skew between
+    # the token-issuance path and the password-change write path.
+    if int(iat) < (changed_ts - 2):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
@@ -616,6 +652,7 @@ def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dic
     user = fetch_one(
         """
         SELECT u.id, u.email, u.role, u.is_active, u.totp_secret, u.mfa_enabled,
+               u.password_changed_at,
                up.full_name, up.department_id
         FROM users u
         LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -625,6 +662,8 @@ def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dic
     )
     if not user or not user.get("is_active"):
         raise HTTPException(status_code=401, detail="Invalid or inactive user")
+    # Reject tokens issued before the user's last password change
+    _check_token_issued_after_password_change(payload, user)
     return user
 
 
@@ -1106,6 +1145,16 @@ def forgot_password(body: ForgotPasswordRequest):
     if user:
         raw_token = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        # Invalidate all previous unused reset tokens for this user before issuing a new one.
+        # This prevents token accumulation and limits the attack window.
+        execute(
+            """
+            UPDATE password_reset_tokens
+            SET used_at = NOW()
+            WHERE user_id = %s AND used_at IS NULL
+            """,
+            (user["id"],),
+        )
         execute(
             """
             INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
@@ -1113,9 +1162,12 @@ def forgot_password(body: ForgotPasswordRequest):
             """,
             (user["id"], token_hash),
         )
+        # DEV_LOG_RESET_TOKENS defaults to false; set to true only in local dev envs.
+        # Never enable in production — tokens grant full account takeover.
         if DEV_LOG_RESET_TOKENS:
             print(f"[DEV] Password reset token for {email}: {raw_token}")
 
+    # Always return the same generic response regardless of whether the email exists.
     return {"ok": True, "message": "If an account exists for that email, reset instructions were sent."}
 
 
@@ -1125,9 +1177,11 @@ def reset_password(body: ResetPasswordRequest):
     new_password = body.new_password or ""
 
     if len(raw_token) < 10:
-        raise HTTPException(status_code=400, detail="Invalid token")
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
     if len(new_password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if len(new_password) > 128:
+        raise HTTPException(status_code=400, detail="Password too long")
 
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
     with db_connect() as conn:
@@ -1145,8 +1199,24 @@ def reset_password(body: ResetPasswordRequest):
                 raise HTTPException(status_code=400, detail="Invalid or expired token")
 
             new_hash = hash_password(new_password)
-            cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, row["user_id"]))
-            cur.execute("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = %s", (row["id"],))
+            # Update password and stamp password_changed_at so existing JWTs issued
+            # before this moment can be detected as stale on next verification.
+            # This is the safest session-invalidation measure available without a
+            # separate token revocation table (see ADDITIONAL FILES NEEDED below).
+            cur.execute(
+                """
+                UPDATE users
+                SET password_hash = %s,
+                    password_changed_at = NOW()
+                WHERE id = %s
+                """,
+                (new_hash, row["user_id"]),
+            )
+            # Mark token as used immediately — single-use enforcement.
+            cur.execute(
+                "UPDATE password_reset_tokens SET used_at = NOW() WHERE id = %s",
+                (row["id"],),
+            )
 
     return {"ok": True, "message": "Password updated successfully"}
 
@@ -1166,7 +1236,10 @@ def change_password(
     row = fetch_one("SELECT password_hash FROM users WHERE id = %s", (user["id"],))
     if not row or not verify_password(body.current_password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Current password is incorrect.")
-    execute("UPDATE users SET password_hash = %s WHERE id = %s", (hash_password(body.new_password), user["id"]))
+    execute(
+        "UPDATE users SET password_hash = %s, password_changed_at = NOW() WHERE id = %s",
+        (hash_password(body.new_password), user["id"]),
+    )
     return {"ok": True}
 
 # =========================================================
