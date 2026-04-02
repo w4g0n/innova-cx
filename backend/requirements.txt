@@ -16,7 +16,7 @@ pyotp==2.8.0
 qrcode[pil]
 httpx==0.28.1
 edge-tts>=6.1.9
-
+slowapi==0.1.9
 
 # We'll add AI/ML libraries later as needed:
 # transformers
