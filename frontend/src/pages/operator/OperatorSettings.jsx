@@ -12,6 +12,7 @@ import {
 import "../../components/common/SettingsLayout.css";
 import "./OperatorSettings.css";
 import { getUser } from "../../utils/auth";
+import { sanitizeText } from "./Operatorsanitize";
 
 export default function OperatorSettings() {
   const [showPwModal, setShowPwModal] = useState(false);
@@ -19,9 +20,8 @@ export default function OperatorSettings() {
   useEffect(() => { document.documentElement.removeAttribute("data-theme"); }, []);
 
   const user = useMemo(() => getUser() || {}, []);
-  const displayName =
-    user.name || user.full_name || user.fullName || user.username || "Operator";
-  const displayEmail = user.email || "operator@innova.cx";
+  const displayName  = sanitizeText(user.name || user.full_name || user.fullName || user.username || "Operator", 100);
+  const displayEmail = sanitizeText(user.email || "operator@innova.cx", 254);
 
   return (
     <Layout role="operator">

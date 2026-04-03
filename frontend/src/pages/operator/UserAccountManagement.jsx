@@ -7,6 +7,7 @@ import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { apiUrl } from "../../config/apiBase";
+import { sanitizeText } from "./Operatorsanitize";
 import "./UserAccountManagement.css";
 
 // ── API helpers (same pattern as QualityControl) ───────────────────────────────
@@ -166,7 +167,7 @@ export default function UserAccountManagement() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      setToast({ type: "success", message: data?.message ?? "User created successfully." });
+      setToast({ type: "success", message: sanitizeText(data?.message ?? "User created successfully.", 200) });
       setForm({
         fullName: "",
         email: "",
@@ -179,7 +180,7 @@ export default function UserAccountManagement() {
         confirmPassword: "",
       });
     } catch (err) {
-      setToast({ type: "error", message: err.message || "Failed to create user. Check the backend and network." });
+      setToast({ type: "error", message: "Failed to create user. Please try again." });
     }
   };
 
