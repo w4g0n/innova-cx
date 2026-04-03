@@ -7,11 +7,10 @@ import { apiUrl } from "../../config/apiBase";
 import PillSearch from "../../components/common/PillSearch";
 import PriorityPill from "../../components/common/PriorityPill";
 import {
-  sanitizeText,
   sanitizeId,
   sanitizeSearchQuery,
   MAX_SEARCH_LEN,
-} from "./OperatorSanitize";
+} from "./Operatorsanitize";
 import "./AIExplainability.css";
 
 function getStoredToken() {
@@ -603,7 +602,7 @@ export default function AIExplainability() {
       const res = await apiFetch(`/operator/ai-explainability/tickets${qs}`);
       setTicketList(Array.isArray(res?.items) ? res.items : []);
       setStatusCounts(res?.statusCounts || {});
-    } catch (e) {
+    } catch {
       setListError("Failed to load tickets. Please try again.");
       setTicketList([]);
     } finally {
@@ -739,7 +738,7 @@ export default function AIExplainability() {
         setSelectedExecutionId(nextExecutionId);
       }
       setOverrideMsg("Pipeline rerun completed from the beginning.");
-    } catch (e) {
+    } catch {
       setOverrideErr("Failed to rerun pipeline. Please try again.");
     } finally {
       setRerunBusy(false);
@@ -754,7 +753,7 @@ export default function AIExplainability() {
     try {
       const res = await apiFetch(`/operator/ai-explainability/tickets/${encodeURIComponent(q)}`);
       setData(res);
-    } catch (e) {
+    } catch {
       setDetailError("Failed to load explainability data. Please try again.");
       setData(null);
     } finally {
@@ -883,7 +882,7 @@ export default function AIExplainability() {
           ? `Overrides applied. Priority changed: ${beforePriority} -> ${afterPriority}.`
           : `Overrides applied. Prioritization rerun completed (priority unchanged: ${afterPriority}).`,
       );
-    } catch (e) {
+    } catch {
       setOverrideErr("Failed to apply overrides. Please try again.");
     } finally {
       setOverrideBusy(false);
@@ -917,7 +916,7 @@ export default function AIExplainability() {
       const res = await apiFetch(`/operator/pipeline-queue/${queueId}`);
       setQueueDetail(res);
       setCorrections(res.operator_corrections || {});
-    } catch (e) {
+    } catch {
       setReleaseErr("Failed to load queue item. Please try again.");
     } finally {
       setQueueDetailLoading(false);
@@ -946,7 +945,7 @@ export default function AIExplainability() {
         await loadQueueDetail(selectedQueueId);
       }
       await loadQueue();
-    } catch (e) {
+    } catch {
       setReleaseErr("Stage rerun failed. Please try again.");
     } finally {
       setRerunBusyQueue(false);
@@ -964,7 +963,7 @@ export default function AIExplainability() {
       });
       if (selectedQueueId === queueId) { setSelectedQueueId(null); setQueueDetail(null); }
       await loadQueue();
-    } catch (e) {
+    } catch {
       alert("Failed to remove item from queue. Please try again.");
     }
   }
@@ -981,7 +980,7 @@ export default function AIExplainability() {
       if (!res.ok) { const d = await res.text().catch(() => "Failed"); throw new Error(d); }
       await loadQueue();
       await loadTicketList(activeStatus);
-    } catch (e) {
+    } catch {
       alert("Failed to delete ticket. Please try again.");
     }
   }
@@ -1003,7 +1002,7 @@ export default function AIExplainability() {
       await loadQueue();
       setSelectedQueueId(null);
       setQueueDetail(null);
-    } catch (e) {
+    } catch {
       setReleaseErr("Release failed. Please try again.");
     } finally {
       setReleaseBusy(false);
@@ -1019,7 +1018,7 @@ export default function AIExplainability() {
       const total = res?.dispatched?.length ?? 0;
       setRedispatchMsg(total === 0 ? "No unprocessed tickets found." : `Re-dispatched ${count}/${total} tickets.`);
       if (count > 0) loadQueue();
-    } catch (e) {
+    } catch{
       setRedispatchMsg("Failed to re-dispatch. Please try again.");
     } finally {
       setRedispatchBusy(false);
