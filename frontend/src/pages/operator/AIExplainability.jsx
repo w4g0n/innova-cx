@@ -6,6 +6,12 @@ import PageHeader from "../../components/common/PageHeader";
 import { apiUrl } from "../../config/apiBase";
 import PillSearch from "../../components/common/PillSearch";
 import PriorityPill from "../../components/common/PriorityPill";
+import {
+  sanitizeText,
+  sanitizeId,
+  sanitizeSearchQuery,
+  MAX_SEARCH_LEN,
+} from "./OperatorSanitize";
 import "./AIExplainability.css";
 
 function getStoredToken() {
@@ -539,7 +545,8 @@ function formatStageVal(v) {
 
 export default function AIExplainability() {
   const navigate = useNavigate();
-  const { ticketCode } = useParams();
+  const { ticketCode: rawTicketCode } = useParams();
+  const ticketCode = sanitizeId(rawTicketCode);
   const detailMode = Boolean(ticketCode);
 
   const [activeStatus, setActiveStatus] = useState("");
@@ -597,7 +604,7 @@ export default function AIExplainability() {
       setTicketList(Array.isArray(res?.items) ? res.items : []);
       setStatusCounts(res?.statusCounts || {});
     } catch (e) {
-      setListError(e?.message || "Failed to load tickets.");
+      setListError("Failed to load tickets. Please try again.");
       setTicketList([]);
     } finally {
       setListLoading(false);
@@ -733,14 +740,14 @@ export default function AIExplainability() {
       }
       setOverrideMsg("Pipeline rerun completed from the beginning.");
     } catch (e) {
-      setOverrideErr(e?.message || "Failed to rerun pipeline.");
+      setOverrideErr("Failed to rerun pipeline. Please try again.");
     } finally {
       setRerunBusy(false);
     }
   }
 
-  async function loadTicket(ticketId) {
-    const q = String(ticketId || "").trim();
+  async function loadTicket(code) {
+    const q = sanitizeId(String(code || "").trim());
     if (!q) return;
     setDetailLoading(true);
     setDetailError("");
@@ -748,7 +755,7 @@ export default function AIExplainability() {
       const res = await apiFetch(`/operator/ai-explainability/tickets/${encodeURIComponent(q)}`);
       setData(res);
     } catch (e) {
-      setDetailError(e?.message || "Failed to load explainability data.");
+      setDetailError("Failed to load explainability data. Please try again.");
       setData(null);
     } finally {
       setDetailLoading(false);
@@ -877,7 +884,7 @@ export default function AIExplainability() {
           : `Overrides applied. Prioritization rerun completed (priority unchanged: ${afterPriority}).`,
       );
     } catch (e) {
-      setOverrideErr(e?.message || "Failed to apply overrides.");
+      setOverrideErr("Failed to apply overrides. Please try again.");
     } finally {
       setOverrideBusy(false);
     }
@@ -911,7 +918,7 @@ export default function AIExplainability() {
       setQueueDetail(res);
       setCorrections(res.operator_corrections || {});
     } catch (e) {
-      setReleaseErr(e?.message || "Failed to load queue item.");
+      setReleaseErr("Failed to load queue item. Please try again.");
     } finally {
       setQueueDetailLoading(false);
     }
@@ -935,12 +942,12 @@ export default function AIExplainability() {
         setSelectedQueueId(null);
         setQueueDetail(null);
       } else {
-        setReleaseErr(`Stage still failing: ${data.reason || "unknown error"}. You can manually correct the output below.`);
+        setReleaseErr("Stage still failing. You can manually correct the output below.");
         await loadQueueDetail(selectedQueueId);
       }
       await loadQueue();
     } catch (e) {
-      setReleaseErr(e?.message || "Rerun failed.");
+      setReleaseErr("Stage rerun failed. Please try again.");
     } finally {
       setRerunBusyQueue(false);
     }
@@ -958,7 +965,7 @@ export default function AIExplainability() {
       if (selectedQueueId === queueId) { setSelectedQueueId(null); setQueueDetail(null); }
       await loadQueue();
     } catch (e) {
-      alert(`Failed to remove from queue: ${e?.message}`);
+      alert("Failed to remove item from queue. Please try again.");
     }
   }
 
@@ -975,7 +982,7 @@ export default function AIExplainability() {
       await loadQueue();
       await loadTicketList(activeStatus);
     } catch (e) {
-      alert(`Failed to delete ticket: ${e?.message}`);
+      alert("Failed to delete ticket. Please try again.");
     }
   }
 
@@ -997,7 +1004,7 @@ export default function AIExplainability() {
       setSelectedQueueId(null);
       setQueueDetail(null);
     } catch (e) {
-      setReleaseErr(e?.message || "Release failed.");
+      setReleaseErr("Release failed. Please try again.");
     } finally {
       setReleaseBusy(false);
     }
@@ -1013,7 +1020,7 @@ export default function AIExplainability() {
       setRedispatchMsg(total === 0 ? "No unprocessed tickets found." : `Re-dispatched ${count}/${total} tickets.`);
       if (count > 0) loadQueue();
     } catch (e) {
-      setRedispatchMsg(e?.message || "Failed to re-dispatch.");
+      setRedispatchMsg("Failed to re-dispatch. Please try again.");
     } finally {
       setRedispatchBusy(false);
     }
@@ -1420,8 +1427,12 @@ export default function AIExplainability() {
             <section className="search-section-EV-VAC">
               <PillSearch
                 value={ticketSearch}
-                onChange={setTicketSearch}
+                onChange={(v) => {
+                  const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
+                  setTicketSearch(sanitizeSearchQuery(raw));
+                }}
                 placeholder="Search by ticket code..."
+                maxLength={MAX_SEARCH_LEN}
               />
             </section>
 
@@ -1665,8 +1676,9 @@ export default function AIExplainability() {
                         <input
                           type="text"
                           value={recurrenceQuery}
-                          onChange={(e) => setRecurrenceQuery(e.target.value)}
+                          onChange={(e) => setRecurrenceQuery(sanitizeSearchQuery(e.target.value))}
                           placeholder="Type ticket code or subject..."
+                          maxLength={MAX_SEARCH_LEN}
                         />
                       </label>
                       {recurrenceLoading ? <div className="aix-subtle">Searching tickets...</div> : null}
