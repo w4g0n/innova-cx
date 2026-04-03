@@ -212,7 +212,7 @@ jobs:
           run: pip-audit -r backend/requirements.txt -f json -o audit-results.json
         - name: Upload audit results
           if: always()
-          uses: actions/upload-artifact@v4
+          uses: actions/upload-artifact@v7
           with:
             name: pip-audit-results
             path: audit-results.json
