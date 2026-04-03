@@ -10,6 +10,15 @@ import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { apiUrl } from "../../config/apiBase";
+import {
+  sanitizeText,
+  sanitizeId,
+  sanitizeSearchQuery,
+  sanitizeRole,
+  ALLOWED_ROLE_FILTERS,
+  ALLOWED_STATUSES,
+  MAX_SEARCH_LEN,
+} from "./Operatorsanitize";
 import "./UsersManagement.css";
 
 // ── API helpers ────────────────────────────────────────────────────────────────
@@ -339,22 +348,22 @@ export default function UsersManagement() {
       const data = await apiFetch("/operator/users");
       const list = Array.isArray(data) ? data : [];
       const normalized = list.map((u) => ({
-        id: u.id ?? u.userId ?? u.user_id ?? "",
-        fullName: u.fullName ?? u.full_name ?? u.name ?? "",
-        email: u.email ?? "",
-        phone: u.phone ?? "",
-        location: u.location ?? "",
-        department: u.department ?? "",
-        role: (u.role ?? "customer").toLowerCase(),
-        status: (u.status ?? "active").toLowerCase(),
-        createdAt: u.createdAt ?? u.created_at ?? "",
-        lastLogin: u.lastLogin ?? u.last_login ?? "—",
+        id:         sanitizeId(u.id ?? u.userId ?? u.user_id ?? ""),
+        fullName:   sanitizeText(u.fullName ?? u.full_name ?? u.name ?? "", 100),
+        email:      sanitizeText(u.email ?? "", 254),
+        phone:      sanitizeText(u.phone ?? "", 30),
+        location:   sanitizeText(u.location ?? "", 200),
+        department: sanitizeText(u.department ?? "", 100),
+        role:       sanitizeRole(u.role ?? "customer"),
+        status:     ["active", "inactive"].includes((u.status ?? "").toLowerCase())
+                      ? (u.status ?? "active").toLowerCase()
+                      : "active",
+        createdAt:  sanitizeText(u.createdAt ?? u.created_at ?? "", 50),
+        lastLogin:  sanitizeText(u.lastLogin ?? u.last_login ?? "—", 50),
       }));
       setUsers(normalized);
-    } catch (err) {
-      setUsersError(
-        err.message || "Failed to load users. Check the backend and network."
-      );
+    } catch {
+      setUsersError("Failed to load users. Please try again.");
       setUsers([]);
     } finally {
       setLoadingUsers(false);
@@ -493,22 +502,12 @@ export default function UsersManagement() {
     };
 
     try {
-      const data = await apiFetch(`/operator/users/${selectedId}`, {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      });
-      setToast({
-        type: "success",
-        message: data?.message ?? "User updated successfully.",
-      });
+      const data = await apiFetch(`/operator/users/${encodeURIComponent(sanitizeId(selectedId))}`, { method: "PUT", body: JSON.stringify(payload) });
+      setToast({ type: "success", message: data?.message ?? "User updated successfully." });
       closeManage();
       await fetchUsers();
-    } catch (err) {
-      setToast({
-        type: "error",
-        message:
-          err.message || "Failed to update user. Check the backend and network.",
-      });
+    } catch{
+      setToast({ type: "error", message: "Failed to update user. Please try again." });
     }
   };
 
@@ -610,12 +609,10 @@ export default function UsersManagement() {
       });
       closeCreate();
       await fetchUsers();
-    } catch (err) {
-      const msg =
-        err.status === 409
-          ? "A user with that email already exists."
-          : err.message ||
-            "Failed to create user. Check the backend and network.";
+    } catch {
+      const msg = err.status === 409
+        ? "A user with that email already exists."
+        : "Failed to create user. Please try again.";
       setToast({ type: "error", message: msg });
     }
   };
@@ -637,7 +634,7 @@ export default function UsersManagement() {
       variant: isActive ? "warning" : "success",
       onConfirm: async () => {
         try {
-          const data = await apiFetch(`/operator/users/${id}/status`, {
+          const data = await apiFetch(`/operator/users/${encodeURIComponent(sanitizeId(id))}/status`, {
             method: "PATCH",
             body: JSON.stringify({ status: isActive ? "inactive" : "active" }),
           });
@@ -649,13 +646,8 @@ export default function UsersManagement() {
           });
           closeConfirm();
           await fetchUsers();
-        } catch (err) {
-          setToast({
-            type: "error",
-            message:
-              err.message ||
-              "Failed to update user status. Check backend/network.",
-          });
+        } catch {
+          setToast({ type: "error", message: "Failed to update user status. Please try again." });
           closeConfirm();
         }
       },
@@ -676,21 +668,12 @@ export default function UsersManagement() {
       variant: "danger",
       onConfirm: async () => {
         try {
-          const data = await apiFetch(`/operator/users/${id}`, {
-            method: "DELETE",
-          });
-          setToast({
-            type: "success",
-            message: data?.message ?? "User deleted.",
-          });
+          const data = await apiFetch(`/operator/users/${encodeURIComponent(sanitizeId(id))}`, { method: "DELETE" });
+          setToast({ type: "success", message: data?.message ?? "User deleted." });
           closeConfirm();
           await fetchUsers();
-        } catch (err) {
-          setToast({
-            type: "error",
-            message:
-              err.message || "Failed to delete user. Check backend/network.",
-          });
+        } catch {
+          setToast({ type: "error", message: "Failed to delete user. Please try again." });
           closeConfirm();
         }
       },
@@ -772,19 +755,19 @@ export default function UsersManagement() {
         <div className="umSearchRow">
           <PillSearch
             value={query}
-            onChange={(v) =>
-              typeof v === "string"
-                ? setQuery(v)
-                : setQuery(v?.target?.value ?? "")
-            }
+            onChange={(v) => {
+              const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
+              setQuery(sanitizeSearchQuery(raw));
+            }}
             placeholder="Search by name, email, ID, role, department, or location…"
+            maxLength={MAX_SEARCH_LEN}
           />
         </div>
 
         <div className="umFilters">
           <PillSelect
             value={statusFilter}
-            onChange={setStatusFilter}
+            onChange={(v) => { if (ALLOWED_STATUSES.includes(v)) setStatusFilter(v); }}
             ariaLabel="Filter by status"
             options={[
               { value: "all", label: "All Status" },
@@ -794,13 +777,13 @@ export default function UsersManagement() {
           />
           <PillSelect
             value={roleFilter}
-            onChange={setRoleFilter}
+            onChange={(v) => { if (ALLOWED_ROLE_FILTERS.includes(v)) setRoleFilter(v); }}
             ariaLabel="Filter by role"
             options={[
-              { value: "all", label: "All Roles" },
+              { value: "all",      label: "All Roles" },
               { value: "customer", label: "Customer" },
               { value: "employee", label: "Employee" },
-              { value: "manager", label: "Manager" },
+              { value: "manager",  label: "Manager" },
               { value: "operator", label: "Operator" },
             ]}
           />

@@ -7,6 +7,11 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 import "./QualityControl.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 import { apiUrl } from "../../config/apiBase";
+import {
+  ALLOWED_TIME_FILTERS,
+  ALLOWED_DEPARTMENTS,
+  ALLOWED_QC_SECTIONS,
+} from "./Operatorsanitize";
 
 function getStoredToken() {
   const direct = localStorage.getItem("access_token") || localStorage.getItem("token") || localStorage.getItem("jwt") || localStorage.getItem("authToken");
@@ -287,7 +292,7 @@ export default function QualityControl() {
       const data = await apiFetch(section.endpoint, buildParams());
       setTabData((p) => ({ ...p, [sectionId]: data }));
     } catch (err) {
-      setTabError((p) => ({ ...p, [sectionId]: err.message }));
+      setTabError((p) => ({ ...p, [sectionId]: "Failed to load data. Please try again." }));
     } finally {
       setTabLoading((p) => ({ ...p, [sectionId]: false }));
     }
@@ -310,9 +315,9 @@ export default function QualityControl() {
           subtitle="Acceptance, rescoring, and rerouting analytics for InnovaCX agents."
           actions={
             <div className="ma-top-actions">
-              <PillSelect value={timeFilter} onChange={handleFilterChange(setTimeFilter)} ariaLabel="Filter by time range"
+              <PillSelect value={timeFilter} onChange={handleFilterChange((v) => { if (ALLOWED_TIME_FILTERS.includes(v)) setTimeFilter(v); })} ariaLabel="Filter by time range"
                 options={[{ label: "Last 7 days", value: "last7days" }, { label: "Last 30 days", value: "last30days" }, { label: "This quarter", value: "quarter" }]} />
-              <PillSelect value={deptFilter} onChange={handleFilterChange(setDeptFilter)} ariaLabel="Filter by department"
+              <PillSelect value={deptFilter} onChange={handleFilterChange((v) => { if (ALLOWED_DEPARTMENTS.includes(v)) setDeptFilter(v); })} ariaLabel="Filter by department"
                 options={[{ label: "All Departments", value: "All Departments" }, { label: "Facilities Management", value: "Facilities Management" }, { label: "Legal & Compliance", value: "Legal & Compliance" }, { label: "Safety & Security", value: "Safety & Security" }, { label: "HR", value: "HR" }, { label: "Leasing", value: "Leasing" }, { label: "Maintenance", value: "Maintenance" }, { label: "IT", value: "IT" }]} />
               <DateRangePicker dateRange={dateRange} onChange={handleDateRangeChange} />
             </div>
@@ -320,7 +325,8 @@ export default function QualityControl() {
         />
         <div className="ma-nav">
           {QC_SECTIONS.map((s) => (
-            <button key={s.id} className={`ma-nav__btn ${activeSection === s.id ? "ma-nav__btn--active" : ""}`} onClick={() => setActiveSection(s.id)} type="button">
+            <button key={s.id} className={`ma-nav__btn ${activeSection === s.id ? "ma-nav__btn--active" : ""}`}
+              onClick={() => { if (ALLOWED_QC_SECTIONS.includes(s.id)) setActiveSection(s.id); }} type="button">
               {s.label}
             </button>
           ))}
