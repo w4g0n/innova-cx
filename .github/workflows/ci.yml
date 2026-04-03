@@ -209,7 +209,7 @@ jobs:
         - name: Install pip-audit
           run: pip install pip-audit
         - name: Run vulnerability scan
-          run: pip-audit -r backend/requirements.txt --output=json --output-file=audit-results.json
+          run: pip-audit -r backend/requirements.txt -f json -o audit-results.json
         - name: Upload audit results
           if: always()
           uses: actions/upload-artifact@v4
@@ -217,15 +217,25 @@ jobs:
             name: pip-audit-results
             path: audit-results.json
 
-  slack-security-alert:
+  email-security-alert:
       runs-on: self-hosted
       needs: security-audit
       if: failure()
       steps:
-        - name: Notify Slack of vulnerability found
-          run: |
-            curl -X POST "${{ secrets.SLACK_SECURITY_WEBHOOK }}" \
-              -H 'Content-type: application/json' \
-              --data '{
-                "text": ":rotating_light: *pip-audit failed* on `${{ github.repository }}`\nBranch: `${{ github.ref_name }}`\nCommit: `${{ github.sha }}`\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>"
-              }'
+        - name: Notify Email of vulnerability found
+          uses: dawidd6/action-send-mail@v3
+          with:
+            server_address: smtp.gmail.com
+            server_port: 465
+            username: ${{ secrets.EMAIL_USER }}
+            password: ${{ secrets.EMAIL_PASS }}
+            to: hamadsaleh316@gmail.com
+            from: innovacx.alerts@gmail.com
+            subject: "🚨 pip-audit failed on ${{ github.repository }}"
+            body: |
+              pip-audit failed on ${{ github.repository }}
+              
+              Branch: ${{ github.ref_name }}
+              Commit: ${{ github.sha }}
+              
+              View run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
