@@ -137,7 +137,25 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO innovacx_app;
 ALTER FUNCTION refresh_analytics_mvs() SECURITY DEFINER;
 
 -- -------------------------------------------------------------------------
--- 9. Default privileges
+-- 9. Add columns that the application requires but that are not created
+--    by init.sql.
+--
+--    password_changed_at on users:
+--    Used by get_current_user() (main.py line 701) to detect JWTs issued
+--    before a password reset. The column is added by
+--    _ensure_runtime_schema_compatibility() via ALTER TABLE, but that
+--    function runs as innovacx_app which does not own the table, so the
+--    ALTER TABLE fails silently. Without this column every authenticated
+--    API request crashes with:
+--      UndefinedColumn: column u.password_changed_at does not exist
+--    This statement runs as innovacx_admin (the table owner), so it
+--    succeeds. IF NOT EXISTS makes it safe to re-run.
+-- -------------------------------------------------------------------------
+ALTER TABLE public.users
+    ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
+
+-- -------------------------------------------------------------------------
+-- 10. Default privileges
 --    Any object created in the future by innovacx_admin (new migration
 --    tables, functions, MVs) is automatically accessible to innovacx_app.
 --    Without this each new migration would need a manual re-grant.
