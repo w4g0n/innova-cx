@@ -351,7 +351,7 @@ export default function ComplaintTrends() {
         }
       })
       .catch(() => {});
-  }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [navigate]); 
 
   const fetchData = useCallback(async () => {
     // Don't fetch until we know which department to default to

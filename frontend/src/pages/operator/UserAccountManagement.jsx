@@ -179,7 +179,7 @@ export default function UserAccountManagement() {
         password: "",
         confirmPassword: "",
       });
-    } catch (err) {
+    } catch {
       setToast({ type: "error", message: "Failed to create user. Please try again." });
     }
   };

@@ -609,7 +609,7 @@ export default function UsersManagement() {
       });
       closeCreate();
       await fetchUsers();
-    } catch {
+    } catch (err){
       const msg = err.status === 409
         ? "A user with that email already exists."
         : "Failed to create user. Please try again.";

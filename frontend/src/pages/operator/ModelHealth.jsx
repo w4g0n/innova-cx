@@ -440,7 +440,7 @@ export default function ModelHealth() {
     try {
       const data = await apiFetch(agent.endpoint, buildParams(agentId));
       setAgentData((prev) => ({ ...prev, [agentId]: data }));
-    } catch (err) {
+    } catch {
       setAgentError((prev) => ({ ...prev, [agentId]: "Failed to load agent data. Please try again." }));
     } finally {
       setAgentLoading((prev) => ({ ...prev, [agentId]: false }));
