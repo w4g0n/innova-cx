@@ -9,8 +9,7 @@
  * Keeps: Unicode letters, Unicode digits, whitespace, newlines, and common
  * punctuation needed in complaint text. Everything else is stripped.
  */
-// eslint-disable-next-line no-misleading-character-class
-const _ALLOWED_TEXT_RE = /[^\p{L}\p{N}\s\-.,!?'"+()\[\]@/:;#%&*\n]/gu;
+const _ALLOWED_TEXT_RE = /[^\p{L}\p{N}\s\-.,!?'"+()\[]@/:;#%&*\n]/gu;
 
 /**
  * Coerce any value to a safe, trimmed string.

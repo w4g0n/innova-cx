@@ -42,8 +42,7 @@ export const ALLOWED_MODEL_AGENTS = ["chatbot", "sentiment", "feature"];
  * Allowlist for general text fields.
  * Keeps Unicode letters, digits, whitespace, and common punctuation. Strips everything else.
  */
-// eslint-disable-next-line no-misleading-character-class
-const _ALLOWED_TEXT_RE = /[^\p{L}\p{N}\s\-.,!?'"+()\[\]@/:;#%&*\n]/gu;
+const _ALLOWED_TEXT_RE = /[^\p{L}\p{N}\s\-.,!?'"+()\[]@/:;#%&*\n]/gu;
 
 /**
  * Trim, apply allowlist, and truncate a string to maxLen. Returns "" for nullish input.

@@ -351,6 +351,7 @@ export default function Login() {
   );
 
   const [touched, setTouched] = useState({ email: false, password: false });
+  const [capsLock, setCapsLock] = useState(false);
 
   const emailError = validators.email(email);
   const passwordError = validators.password(password);
@@ -595,7 +596,7 @@ export default function Login() {
                 <input
                   id="login-password"
                   name="password"
-                  className="input passwordInput"
+                  className={`input passwordInput${capsLock ? " has-capslock" : ""}`}
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={password}
@@ -603,7 +604,9 @@ export default function Login() {
                     setPassword(e.target.value);
                     if (loginError) setLoginError("");
                   }}
-                  onBlur={() => markTouched("password")}
+                  onKeyDown={(e) => { if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
+                  onKeyUp={(e) => { if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
+                  onBlur={() => { markTouched("password"); setCapsLock(false); }}
                   autoComplete="current-password"
                   aria-invalid={touched.password && !!passwordError}
                   aria-describedby="password-msg"
