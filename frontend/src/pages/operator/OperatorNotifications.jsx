@@ -149,8 +149,8 @@ export default function OperatorNotifications() {
         headers: { Authorization: `Bearer ${token}` },
       });
       showToast("All notifications marked as read");
-    } catch {
-      console.error("Failed to mark all notifications as read:", e);
+    } catch (e) {
+  console.error("Failed to mark all notifications as read:", e);
     }
   };
 
@@ -170,7 +170,7 @@ export default function OperatorNotifications() {
         headers: { Authorization: `Bearer ${token}` },
       });
       showToast("Notification marked as read");
-    } catch {
+    } catch (e) {
       console.error("Failed to mark notification as read:", e);
     }
     if (n.userId)   navigate(`/operator/users`);

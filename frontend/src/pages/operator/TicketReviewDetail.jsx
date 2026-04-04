@@ -295,7 +295,7 @@ export default function TicketReviewDetail() {
       t.overrideReason      = sanitizeText(t.overrideReason, 1000);
       setTicketData(t);
       setFeedbackAct(t.feedbackDecision);
-    } catch (err) {
+    } catch {
       setError("Failed to load ticket details. Please try again.");
     } finally {
       setLoading(false);

@@ -51,7 +51,9 @@ export function sanitizeText(value, maxLen = MAX_TEXT_LEN) {
  */
 export function sanitizeId(value) {
   if (!value) return "";
-  return String(value).replace(/[^a-zA-Z0-9\-]/g, "").slice(0, 50);
+  return String(value)
+    .replace(/[^a-zA-Z0-9-]/g, "")
+    .slice(0, 50);
 }
 
 /**
@@ -74,11 +76,12 @@ export function sanitizeRole(value) {
  */
 export function sanitizeFilename(name) {
   if (!name) return "file";
-  return String(name)
-    .replace(/[/\\<>:"|?*\x00-\x1f]/g, "_")
-    .slice(0, 200) || "file";
+  return (
+    String(name)
+      .replace(/[/\\<>:"|?*]/g, "_")
+      .slice(0, 200) || "file"
+  );
 }
-
 /**
  * Safely parse the user object from localStorage. Returns {} on failure.
  */

@@ -291,7 +291,7 @@ export default function QualityControl() {
     try {
       const data = await apiFetch(section.endpoint, buildParams());
       setTabData((p) => ({ ...p, [sectionId]: data }));
-    } catch (err) {
+    } catch {
       setTabError((p) => ({ ...p, [sectionId]: "Failed to load data. Please try again." }));
     } finally {
       setTabLoading((p) => ({ ...p, [sectionId]: false }));
