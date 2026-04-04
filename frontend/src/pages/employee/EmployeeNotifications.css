@@ -161,3 +161,23 @@
 .empNotifs__actionBtn {
   font-weight: 700;
 }
+
+/* Dismiss (X) button */
+.empNotifs__dismiss {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(17, 17, 17, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.empNotifs__dismiss:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+}

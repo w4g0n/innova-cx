@@ -155,6 +155,12 @@ export default function EmployeeNotifications() {
     }
   };
 
+  const dismissOne = async (e, id) => {
+    e.stopPropagation(); // don't trigger the card's onClick
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    await markOneRead(id);
+  };
+
   const onNotificationClick = async (n) => {
     setNotifications((prev) =>
       prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
@@ -277,6 +283,16 @@ export default function EmployeeNotifications() {
                   </div>
 
                   <div className="empNotifs__right">
+                    <button
+                      type="button"
+                      className="empNotifs__dismiss"
+                      onClick={(e) => dismissOne(e, n.id)}
+                      aria-label="Dismiss notification"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+                      </svg>
+                    </button>
                     {!n.read && <span className="empNotifs__dot" />}
                     {(safeTicketId || safeReportId) && (
                       <span className="empNotifs__chev">›</span>
