@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiUrl } from "../../config/apiBase";
 import { safeParseUser, sanitizeText } from "./sanitize";
+import { getCsrfToken } from "../../services/api";
 import "./CustomerAuthPage.css";
 
 // Allowed role values — anything else redirects to "/"
@@ -124,11 +125,15 @@ export default function CustomerAuthPage() {
     setErrorMsg("");
 
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(
         apiUrl("/api/auth/totp-verify"),
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+          },
           body: JSON.stringify({
             login_token: loginToken,
             otp_code: otpCode,
@@ -150,11 +155,15 @@ export default function CustomerAuthPage() {
       setTimeout(async () => {
         try {
           if (needsSetup) {
+            const csrf2 = await getCsrfToken();
             await fetch(
               apiUrl("/api/auth/totp-setup-complete"),
               {
                 method: "POST",
-                headers: { Authorization: `Bearer ${loginToken}` },
+                headers: {
+                  Authorization: `Bearer ${loginToken}`,
+                  ...(csrf2 ? { "X-CSRF-Token": csrf2 } : {}),
+                },
               }
             );
           }

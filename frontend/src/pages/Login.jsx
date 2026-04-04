@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import logo from "../assets/nova-logo.png";
 import { apiUrl } from "../config/apiBase";
+import { getCsrfToken } from "../services/api";
 import { isStaffHost } from "../utils/hostUtils";
 import "./Login.css";
 
@@ -370,9 +371,13 @@ export default function Login() {
     setLoading(true);
 
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
         body: JSON.stringify({ email, password }),
       });
 
@@ -545,6 +550,7 @@ export default function Login() {
               <div className="input-wrap">
                 <input
                   id="login-email"
+                  name="email"
                   className="input"
                   type="email"
                   placeholder="you@company.com"
@@ -596,6 +602,7 @@ export default function Login() {
               <div className="input-wrap passwordField">
                 <input
                   id="login-password"
+                  name="password"
                   className={`input passwordInput${capsLock ? " has-capslock" : ""}`}
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
@@ -604,10 +611,10 @@ export default function Login() {
                     setPassword(e.target.value);
                     if (loginError) setLoginError("");
                   }}
+                  onFocus={(e) => { setFocusedField("password"); if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
+                  onKeyDown={(e) => { if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
+                  onKeyUp={(e) => { if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
                   onBlur={() => { markTouched("password"); setFocusedField(null); setCapsLock(false); }}
-                  onFocus={(e) => { setFocusedField("password"); setCapsLock(e.getModifierState("CapsLock")); }}
-                  onKeyDown={(e) => setCapsLock(e.getModifierState("CapsLock"))}
-                  onKeyUp={(e) => setCapsLock(e.getModifierState("CapsLock"))}
                   autoComplete="current-password"
                   aria-invalid={touched.password && !!passwordError}
                   aria-describedby="password-msg"
