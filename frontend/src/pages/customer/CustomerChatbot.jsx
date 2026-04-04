@@ -284,16 +284,17 @@ export default function CustomerChatbot() {
             <div className="custQuickTop">
               <div className="custQuickTopHint">Quick start:</div>
               <div className="custQuickTopBtns">
-                <button disabled={sending} onClick={() => handleSelect("complaint")}>
+                <button disabled={sending} aria-label="Start new ticket" onClick={() => handleSelect("complaint")}>
                   New Ticket
                 </button>
-                <button disabled={sending} onClick={() => handleSelect("inquiry")}>
+                <button disabled={sending} aria-label="Track an existing ticket" onClick={() => handleSelect("inquiry")}>
                   Track Ticket
                 </button>
-                <button onClick={() => goToForm("Complaint")}>Agent Pipeline</button>
+                <button aria-label="Open agent pipeline form" onClick={() => goToForm("Complaint")}>Agent Pipeline</button>
                 <button
                   className="softPillBtn"
                   disabled={sending}
+                  aria-label="Start a new conversation"
                   onClick={() => setShowResetConfirm(true)}
                 >
                   New Conversation
@@ -301,7 +302,7 @@ export default function CustomerChatbot() {
               </div>
             </div>
 
-            <div className="custChatList" ref={listRef}>
+            <div className="custChatList" ref={listRef} role="log" aria-label="Chat messages" aria-live="polite">
               {messages.map((m) => (
                 <div key={m.id} className={`custMsg custMsg--${m.from}`}>
                   <div className="custMsg__bubble">
@@ -372,7 +373,7 @@ export default function CustomerChatbot() {
       )}
 
       {showResetConfirm && (
-        <div className="custConfirmOverlay">
+        <div className="custConfirmOverlay" role="dialog" aria-modal="true" aria-label="Confirm new conversation">
           <div className="custConfirmModal">
             <div className="custConfirmIconWrap">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
