@@ -906,10 +906,19 @@ function SolarSystem({ onReady }) {
       };
     }
 
-    if (window.THREE) { init(); }
-    else {
+    const THREE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+
+    if (window.THREE) {
+      init();
+    } else {
+      const existing = document.querySelector(`script[src="${THREE_CDN}"]`);
+      if (existing) {
+        // Script already in DOM (React Strict Mode double-invoke) — reuse it
+        existing.addEventListener("load", init, { once: true });
+        return () => { if (mount._cleanup) mount._cleanup(); };
+      }
       const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+      script.src = THREE_CDN;
       script.onload = init;
       document.head.appendChild(script);
       return () => { if (mount._cleanup) mount._cleanup(); if (script.parentNode) script.parentNode.removeChild(script); };

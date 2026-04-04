@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import "./SettingsLayout.css";
 
 
@@ -79,6 +80,7 @@ export function SettingsField({
   hint,
   readOnly,
 }) {
+  const autoId = useId();
   if (readOnly) {
     return (
       <div className="sf-field">
@@ -92,8 +94,10 @@ export function SettingsField({
   const isControlled = value !== undefined && onChange !== undefined;
   return (
     <div className="sf-field">
-      <label className="sf-label">{label}</label>
+      <label className="sf-label" htmlFor={autoId}>{label}</label>
       <input
+        id={autoId}
+        name={autoId}
         className="sf-input"
         type={type}
         placeholder={placeholder}
@@ -159,12 +163,15 @@ export function SettingsSelect({
   onChange,
   description,
 }) {
+  const autoId = useId();
   const isControlled = value !== undefined && onChange !== undefined;
   return (
     <div className="sf-field">
-      <label className="sf-label">{label}</label>
+      <label className="sf-label" htmlFor={autoId}>{label}</label>
       {description && <p className="sf-hint">{description}</p>}
       <select
+        id={autoId}
+        name={autoId}
         className="sf-input sf-select"
         {...(isControlled
           ? { value, onChange: (e) => onChange(e.target.value) }
@@ -248,11 +255,13 @@ export function ChangePasswordModal({ onClose }) {
     const token = localStorage.getItem("access_token");
     setLoading(true);
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl("/api/auth/change-password"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
         body: JSON.stringify({
           current_password: form.current,
@@ -313,8 +322,10 @@ export function ChangePasswordModal({ onClose }) {
             {error && <div className="cpw-error">{error}</div>}
 
             <div className="sf-field">
-              <label className="sf-label">Current Password</label>
+              <label className="sf-label" htmlFor="cpw-current">Current Password</label>
               <input
+                id="cpw-current"
+                name="currentPassword"
                 className="sf-input"
                 type="password"
                 placeholder="Enter current password"
@@ -325,8 +336,10 @@ export function ChangePasswordModal({ onClose }) {
             </div>
 
             <div className="sf-field">
-              <label className="sf-label">New Password</label>
+              <label className="sf-label" htmlFor="cpw-new">New Password</label>
               <input
+                id="cpw-new"
+                name="newPassword"
                 className="sf-input"
                 type="password"
                 placeholder="At least 8 characters"
@@ -336,8 +349,10 @@ export function ChangePasswordModal({ onClose }) {
             </div>
 
             <div className="sf-field">
-              <label className="sf-label">Confirm New Password</label>
+              <label className="sf-label" htmlFor="cpw-confirm">Confirm New Password</label>
               <input
+                id="cpw-confirm"
+                name="confirmPassword"
                 className="sf-input"
                 type="password"
                 placeholder="Repeat new password"

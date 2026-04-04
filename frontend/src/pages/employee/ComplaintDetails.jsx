@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import TicketChat from "../../components/common/TicketChat";
 import {
   sanitizeText,
@@ -613,6 +614,7 @@ function TicketModal({
       }
       const token = getAuthToken();
       try {
+        const csrf = await getCsrfToken();
         const res = await fetch(
           `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/rescore`,
           {
@@ -620,6 +622,7 @@ function TicketModal({
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
+              ...(csrf ? { "X-CSRF-Token": csrf } : {}),
             },
             body: JSON.stringify({
               // sanitizeText applied as final trim before API call
@@ -645,6 +648,7 @@ function TicketModal({
       }
       const token = getAuthToken();
       try {
+        const csrf = await getCsrfToken();
         const res = await fetch(
           `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/reroute`,
           {
@@ -652,6 +656,7 @@ function TicketModal({
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
+              ...(csrf ? { "X-CSRF-Token": csrf } : {}),
             },
             body: JSON.stringify({
               new_department: sanitizeDepartment(rerouteDepartment),
@@ -712,6 +717,7 @@ function TicketModal({
           : undefined,
       };
 
+      const csrf = await getCsrfToken();
       const res = await fetch(
         `${API_BASE}/employee/tickets/${encodeURIComponent(id)}/resolve`,
         {
@@ -719,6 +725,7 @@ function TicketModal({
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
+            ...(csrf ? { "X-CSRF-Token": csrf } : {}),
           },
           body: JSON.stringify(payload),
         }
@@ -980,11 +987,15 @@ export default function ComplaintDetails() {
     for (const file of files) {
       const fd = new FormData();
       fd.append("file", file);
+      const csrf = await getCsrfToken();
       const upRes = await fetch(
         `${API_BASE}/employee/tickets/${encodeURIComponent(ticketCode)}/attachments`,
         {
           method:  "POST",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+          },
           body:    fd,
         }
       );

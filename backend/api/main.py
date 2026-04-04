@@ -76,6 +76,8 @@ try:
         _sanitize_filename,
         logout_user,
         is_token_revoked,
+        generate_csrf_token,
+        verify_csrf_token,
     )
 except Exception:
     from security_hardening import (
@@ -93,6 +95,8 @@ except Exception:
         _sanitize_filename,
         logout_user,
         is_token_revoked,
+        generate_csrf_token,
+        verify_csrf_token,
     )
 
 # ── Analytics service (reads from materialized views) ────────────────────────
@@ -1022,6 +1026,18 @@ def api_root():
     return {"message": "InnovaCX API is running", "time": datetime.now(timezone.utc).isoformat()}
 
 
+@api.get("/csrf-token", tags=["security"])
+def get_csrf_token():
+    """Issue a stateless HMAC-signed CSRF token for form submissions."""
+    return {"csrf_token": generate_csrf_token()}
+
+
+async def require_csrf(x_csrf_token: str = Header(None, alias="X-CSRF-Token")):
+    """FastAPI dependency: validates X-CSRF-Token header on mutating form requests."""
+    if not x_csrf_token or not verify_csrf_token(x_csrf_token):
+        raise HTTPException(status_code=403, detail="Invalid or missing CSRF token.")
+
+
 # ----------------------------
 # MFA / TOTP Setup & Verification
 # ----------------------------
@@ -1071,7 +1087,7 @@ def totp_setup(user: Dict[str, Any] = Depends(get_current_user)):
 
 @api.post("/auth/login")
 @rate_limit_auth()
-def login(request: Request, body: LoginRequest):
+def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_csrf)):
     """
     Login route returns a temporary token.
     If MFA is not yet enabled, frontend should show QR code.
@@ -1144,7 +1160,7 @@ def login(request: Request, body: LoginRequest):
     }
 
 @api.post("/auth/totp-setup-complete")
-def totp_setup_complete(user: Dict[str, Any] = Depends(get_current_user)):
+def totp_setup_complete(user: Dict[str, Any] = Depends(get_current_user), _csrf: None = Depends(require_csrf)):
     """
     Mark MFA as enabled after user has scanned QR and verified OTP.
     """
@@ -1157,7 +1173,7 @@ def totp_setup_complete(user: Dict[str, Any] = Depends(get_current_user)):
 
 @api.post("/auth/totp-verify")
 @rate_limit_auth()
-def totp_verify(request: Request, body: VerifyTOTPRequest):
+def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends(require_csrf)):
     """
     Verifies the OTP code from user.
     If correct, marks MFA as enabled (first-time setup) and returns a full JWT.
@@ -1204,7 +1220,7 @@ def totp_verify(request: Request, body: VerifyTOTPRequest):
 # =========================================================
 @api.post("/auth/forgot-password")
 @rate_limit_auth()
-def forgot_password(request: Request, body: ForgotPasswordRequest):
+def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None = Depends(require_csrf)):
     email = sanitize_email(body.email)
     client_ip = request.client.host if request and request.client else None
     user = fetch_one(
@@ -1246,7 +1262,7 @@ def forgot_password(request: Request, body: ForgotPasswordRequest):
 
 @api.post("/auth/reset-password")
 @rate_limit_auth()
-def reset_password(request: Request, body: ResetPasswordRequest, user: Dict[str, Any] = Depends(get_current_user)):
+def reset_password(request: Request, body: ResetPasswordRequest, user: Dict[str, Any] = Depends(get_current_user), _csrf: None = Depends(require_csrf)):
     raw_token = (body.token or "").strip()
     new_password = body.new_password or ""
     
@@ -1302,6 +1318,7 @@ def change_password(
     body: ChangePasswordRequest,
     request: Request,
     user: Dict[str, Any] = Depends(get_current_user),
+    _csrf: None = Depends(require_csrf),
 ):
     validate_password_complexity(body.new_password, field_name="New password", email=user["email"])
     row = fetch_one("SELECT password_hash FROM users WHERE id = %s", (user["id"],))
@@ -1826,6 +1843,7 @@ def employee_resolve_ticket(
     ticket_code: str,
     body: EmployeeResolveRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     decision = (body.decision or "").strip().lower()
@@ -1991,6 +2009,7 @@ async def employee_upload_attachment(
     ticket_code: str,
     file: UploadFile = File(...),
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     """
     Stores an uploaded file under <UPLOADS_DIR>/<ticket_code>/<filename>
@@ -2060,6 +2079,7 @@ def employee_rescore_ticket(
     ticket_code: str,
     body: EmployeeRescoreRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     new_priority = (body.new_priority or "").strip()
@@ -2144,6 +2164,7 @@ def employee_reroute_ticket(
     ticket_code: str,
     body: EmployeeRerouteRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     new_dept_name = (body.new_department or "").strip()
@@ -2282,6 +2303,7 @@ def employee_post_ticket_message(
     ticket_code: str,
     body: TicketMessageRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     text = (body.body or "").strip()
@@ -2402,6 +2424,7 @@ def customer_post_ticket_message(
     ticket_code: str,
     body: TicketMessageRequest,
     user: Dict[str, Any] = Depends(require_customer),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     text = (body.body or "").strip()
@@ -3280,6 +3303,7 @@ def create_customer_ticket(
     body: CreateTicketRequest,
     background_tasks: BackgroundTasks,
     user: Dict[str, Any] = Depends(require_customer),
+    _csrf: None = Depends(require_csrf),
 ):
     is_recurring = predict_is_recurring(user_id=user["id"], subject=body.subject, details=body.details)
     model_suggestion = json.dumps({"is_recurring": is_recurring})
@@ -3627,6 +3651,7 @@ def assign_ticket(
     ticket_id: str,
     body: AssignTicketBody,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -3695,6 +3720,7 @@ def manager_resolve_ticket(
     ticket_id: str,
     body: ManagerResolveRequest,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -3795,6 +3821,7 @@ def manager_rescore_ticket(
     ticket_id: str,
     body: ManagerRescoreRequest,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -3892,6 +3919,7 @@ def route_ticket_department(
     ticket_id: str,
     body: RouteTicketBody,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -5466,7 +5494,7 @@ def internal_generate_suggested_resolution(ticket_code: str):
 
 
 @api.post("/chatbot/chat")
-async def proxy_chatbot_chat(body: ChatbotProxyRequest):
+async def proxy_chatbot_chat(body: ChatbotProxyRequest, _csrf: None = Depends(require_csrf)):
     """
     Frontend-facing chatbot proxy.
     Keeps chatbot service private behind backend API.
@@ -6192,6 +6220,7 @@ class CreateUserRequest(BaseModel):
 def operator_create_user(
     body: CreateUserRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
+    _csrf: None = Depends(require_csrf),
 ):
     """
     Create a new user (operator-only).

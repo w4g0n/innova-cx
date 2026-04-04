@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { apiUrl } from "../config/apiBase";
+import { getCsrfToken } from "../services/api";
 import "./ForgotPassword.css";
-
-const API_BASE = "http://localhost:8000/api";
 
 /* ── Validation helpers ── */
 const validators = {
@@ -285,9 +285,13 @@ export default function ForgotPassword() {
     if (emailError) return;
     setSending(true); setStep1Error("");
     try {
-      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+      const csrf = await getCsrfToken();
+      const res = await fetch(apiUrl("/api/auth/forgot-password"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
       const data = await res.json();
@@ -304,9 +308,13 @@ export default function ForgotPassword() {
     e.preventDefault();
     setSending(true); setStep1Error("");
     try {
-      await fetch(`${API_BASE}/auth/forgot-password`, {
+      const csrf = await getCsrfToken();
+      await fetch(apiUrl("/api/auth/forgot-password"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
     } finally {
@@ -321,9 +329,13 @@ export default function ForgotPassword() {
     setResetError("");
     setResetting(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/reset-password`, {
+      const csrf = await getCsrfToken();
+      const res = await fetch(apiUrl("/api/auth/reset-password"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
         body: JSON.stringify({ token: token.trim(), new_password: newPassword }),
       });
       const data = await res.json();
@@ -384,6 +396,7 @@ export default function ForgotPassword() {
                   <div className="fp-input-wrap">
                     <input
                       id="fp-email"
+                      name="email"
                       className="fpInput"
                       type="email"
                       placeholder="you@company.com"
@@ -439,6 +452,7 @@ export default function ForgotPassword() {
                   <div className="fp-input-wrap">
                     <input
                       id="fp-token"
+                      name="resetToken"
                       className="fpInput"
                       type="text"
                       placeholder="Paste token here"
@@ -467,6 +481,7 @@ export default function ForgotPassword() {
                   <div className="fp-input-wrap" style={{ position: "relative" }}>
                     <input
                       id="fp-newpw"
+                      name="newPassword"
                       className="fpInput"
                       type={showPassword ? "text" : "password"}
                       placeholder="At least 12 characters"
@@ -510,6 +525,7 @@ export default function ForgotPassword() {
                   <div className="fp-input-wrap">
                     <input
                       id="fp-confirmpw"
+                      name="confirmPassword"
                       className="fpInput"
                       type={showPassword ? "text" : "password"}
                       placeholder="Repeat your new password"

@@ -24,9 +24,11 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import os
 import re
+import secrets
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -819,6 +821,28 @@ def sanitize_email(value: str) -> str:
 
 
 # =========================================================
+# [S15] CSRF helpers — stateless HMAC-signed token
+# =========================================================
+_CSRF_SECRET = os.getenv("CSRF_SECRET", os.getenv("JWT_SECRET", "dev-csrf-secret"))
+
+
+def generate_csrf_token() -> str:
+    """Generate a stateless CSRF token: nonce.hmac_signature."""
+    nonce = secrets.token_hex(16)
+    mac = hmac.new(_CSRF_SECRET.encode(), nonce.encode(), hashlib.sha256)
+    return f"{nonce}.{mac.hexdigest()}"
+
+
+def verify_csrf_token(token: str) -> bool:
+    """Verify a CSRF token's HMAC signature. Uses constant-time comparison."""
+    if not token or "." not in token:
+        return False
+    nonce, sig = token.split(".", 1)
+    expected = hmac.new(_CSRF_SECRET.encode(), nonce.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(sig, expected)
+
+
+# =========================================================
 # Exports — everything main.py imports from this module
 # =========================================================
 __all__ = [
@@ -853,4 +877,7 @@ __all__ = [
     # Shared utilities
     "sanitize_text",
     "sanitize_email",
+    # S15
+    "generate_csrf_token",
+    "verify_csrf_token",
 ]

@@ -337,6 +337,8 @@ export default function CustomerChatbot() {
 
             <form className="custComposer" onSubmit={handleSend}>
               <textarea
+                id="chatbot-message"
+                name="message"
                 className="custInput"
                 value={text}
                 placeholder="Type your message..."
