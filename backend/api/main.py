@@ -10,6 +10,7 @@ import base64
 import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
+from starlette.middleware.base import BaseHTTPMiddleware
 
 import bcrypt
 import psycopg2
@@ -129,7 +130,6 @@ app.add_middleware(
 # =========================================================
 # CSP Middleware
 # =========================================================
-from starlette.middleware.base import BaseHTTPMiddleware
 
 class CSPMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
