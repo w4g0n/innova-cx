@@ -175,6 +175,19 @@ export default function CustomerMyTickets() {
     }
   };
 
+  const dismissNotification = async (notifId) => {
+    // Optimistically remove from list immediately
+    setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+    // Mark as read on the backend (best-effort)
+    try {
+      const token = getToken();
+      await fetch(
+        apiUrl("/api/customer/notifications?mark_read=true"),
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch { /* non-critical */ }
+  };
+
   const handleLogout = () => {
     setProfileMenuOpen(false);
     setShowLogoutConfirm(true);
@@ -265,7 +278,7 @@ export default function CustomerMyTickets() {
                   ) : (
                     notifications.map((n, i) => (
                       <div
-                        key={i}
+                        key={n.id || i}
                         className={`navPopoverItem${n.read ? "" : " unread"}`}
                       >
                         <div className="navPopoverItemHeader">
@@ -273,9 +286,28 @@ export default function CustomerMyTickets() {
                           <span className="navPopoverItemTitle">
                             {sanitizeText(n.title || "Update", 100)}
                           </span>
-                          <span className="navPopoverItemTime">
-                            {formatTimeAgo(n.createdAt)}
-                          </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span className="navPopoverItemTime">
+                              {formatTimeAgo(n.timestamp || n.createdAt)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); dismissNotification(n.id); }}
+                              style={{
+                                background: "transparent", border: "none", cursor: "pointer",
+                                color: "var(--muted)", display: "flex", alignItems: "center",
+                                padding: "2px", borderRadius: 4, lineHeight: 1,
+                                transition: "color .15s",
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = "var(--text)"}
+                              onMouseLeave={(e) => e.currentTarget.style.color = "var(--muted)"}
+                              aria-label="Dismiss notification"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                                <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                         <div className="navPopoverItemMeta">
                           {sanitizeText(n.message || n.body || "", 300)}
