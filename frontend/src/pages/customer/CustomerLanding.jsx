@@ -333,6 +333,19 @@ export default function CustomerLanding() {
     }
   };
 
+  const dismissNotification = async (notifId) => {
+    // Optimistically remove from list immediately
+    setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+    // Mark as read on the backend (best-effort)
+    try {
+      const token = getToken();
+      await fetch(
+        apiUrl(`/api/customer/notifications?mark_read=true`),
+        { method: "GET", headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch { /* non-critical */ }
+  };
+
   const handleQuickAction = (action) => {
     closeAllPopovers();
     if (action === "nova")        setIsOpen(true);
@@ -459,11 +472,30 @@ export default function CustomerLanding() {
                           <div className="navPopoverItemTitle">
                             {sanitizeText(n.title || n.type || "Notification", 100)}
                           </div>
-                          {n.createdAt && (
-                            <div className="navPopoverItemTime">
-                              {formatTimeAgo(n.createdAt)}
-                            </div>
-                          )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            {n.timestamp && (
+                              <div className="navPopoverItemTime">
+                                {formatTimeAgo(n.timestamp)}
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); dismissNotification(n.id); }}
+                              style={{
+                                background: "transparent", border: "none", cursor: "pointer",
+                                color: "var(--muted)", display: "flex", alignItems: "center",
+                                padding: "2px", borderRadius: 4, lineHeight: 1,
+                                transition: "color .15s",
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = "var(--text)"}
+                              onMouseLeave={(e) => e.currentTarget.style.color = "var(--muted)"}
+                              aria-label="Dismiss notification"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                                <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                         <div className="navPopoverItemMeta">
                           {sanitizeText(n.message || "", 300)}

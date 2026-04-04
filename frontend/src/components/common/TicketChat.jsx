@@ -180,9 +180,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
             const isEmp = run[0].senderRole === "employee";
             return (
               <div key={ri} className={`tc-run ${isOwn ? "tc-run--own" : "tc-run--other"}`}>
-                {!isOwn && (
-                  <Avatar role={run[0].senderRole} />
-                )}
+
                 <div className="tc-bubbles">
                   {!isOwn && (
                     <span className="tc-sender-label">
@@ -198,7 +196,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
                   ))}
                   <span className="tc-time">{formatTime(run[run.length - 1].createdAt)}</span>
                 </div>
-                {isOwn && <Avatar role={role} />}
+
               </div>
             );
           })
