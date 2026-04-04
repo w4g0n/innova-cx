@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
+import { sanitizeText } from "../../pages/customer/sanitize";
 import "./TicketChat.css";
 
 /**
@@ -92,7 +94,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
   }, [messages]);
 
   /* ── send message ───────────────────────────────────────────── */
-  const send = async (content = text.trim()) => {
+  const send = async (content = sanitizeText(text.trim(), 5000)) => {
     if (!content || sending || disabled) return;
     setError("");
     setSending(true);
@@ -111,11 +113,16 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
 
     try {
       const base = role === "employee" ? "/api/employee/tickets" : "/api/customer/tickets";
+      const csrf = await getCsrfToken();
       const res = await fetch(
         apiUrl(`${base}/${encodeURIComponent(ticketId)}/messages`),
         {
           method: "POST",
-          headers: { ...authHeader(), "Content-Type": "application/json" },
+          headers: {
+            ...authHeader(),
+            "Content-Type": "application/json",
+            ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+          },
           body: JSON.stringify({ body: content }),
         }
       );

@@ -24,6 +24,23 @@ const API_CONFIG = {
     inferServiceBase(8004, "http://localhost:8004"),
 };
 
+// --- CSRF token (fetched once, cached for the page session) ---
+let _csrfToken = null;
+
+export async function getCsrfToken() {
+  if (_csrfToken) return _csrfToken;
+  try {
+    const res = await fetch(apiUrl("/api/csrf-token"));
+    if (res.ok) {
+      const data = await res.json();
+      _csrfToken = data.csrf_token;
+    }
+  } catch {
+    // silently fail — server will reject the form with 403 if token is missing
+  }
+  return _csrfToken;
+}
+
 /**
  * Transcribe audio file using Whisper service
  * @param {Blob} audioBlob - Audio blob to transcribe
@@ -117,9 +134,13 @@ export async function sendChatMessage(message, options = {}) {
     throw new Error("sendChatMessage requires options.userId");
   }
 
+  const csrf = await getCsrfToken();
   const response = await fetch(apiUrl("/api/chatbot/chat"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
     body: JSON.stringify({ message, user_id: userId, session_id: sessionId }),
   });
 
@@ -215,10 +236,12 @@ export async function submitCustomerTicket(payload = {}) {
     attachments: Array.isArray(payload.attachments) ? payload.attachments : [],
   };
 
+  const csrf = await getCsrfToken();
   const response = await fetch(apiUrl("/api/customer/tickets"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(body),

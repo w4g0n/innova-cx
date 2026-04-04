@@ -602,6 +602,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
                       </div>
                     </div>
                     <textarea
+                      id="cff-voice-draft"
+                      name="voiceDraft"
                       className="custVoiceDraft"
                       value={draftTranscript}
                       onChange={(e) => {
@@ -620,6 +622,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
 
             <textarea
               id="cff-details"
+              name="details"
               className="custTextarea"
               value={message}
               onChange={(e) => {
@@ -693,6 +696,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
                 </button>
                 <input
                   ref={fileInputRef}
+                  id="cff-attachments"
+                  name="attachments"
                   type="file"
                   className="custFileInput"
                   multiple

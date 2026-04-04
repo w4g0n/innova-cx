@@ -10,6 +10,7 @@ import {
   ALLOWED_PRIORITIES,
 } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import "../employee/TicketDetails.css";
 
 function getAuthToken() {
@@ -117,11 +118,13 @@ function ManagerTicketModalInner({
     setRerouteError("");
     try {
       const token = getAuthToken();
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/complaints/${ticket.id}/department`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
         body: JSON.stringify({ department: sanitizeText(selectedDept, 100), reason: sanitizeText(rerouteReason, MAX_REASON_LEN) }),
       });
@@ -145,11 +148,13 @@ function ManagerTicketModalInner({
     setRescoreError("");
     try {
       const token = getAuthToken();
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/complaints/${ticket.id}/priority`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
         body: JSON.stringify({
           new_priority: sanitizePriority(selectedPriority),
@@ -176,11 +181,13 @@ function ManagerTicketModalInner({
     setResolveError("");
     try {
       const token = getAuthToken();
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/complaints/${ticket.id}/resolve`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
         body: JSON.stringify({
           final_resolution: sanitizeText(resolution, MAX_RESOLUTION_LEN),

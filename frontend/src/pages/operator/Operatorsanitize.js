@@ -39,11 +39,18 @@ export const ALLOWED_MODEL_AGENTS = ["chatbot", "sentiment", "feature"];
 // ── Core helpers ──────────────────────────────────────────────────────────────
 
 /**
- * Trim and truncate a string to maxLen. Returns "" for nullish input.
+ * Allowlist for general text fields.
+ * Keeps Unicode letters, digits, whitespace, and common punctuation. Strips everything else.
+ */
+// eslint-disable-next-line no-misleading-character-class
+const _ALLOWED_TEXT_RE = /[^\p{L}\p{N}\s\-.,!?'"+()\[\]@/:;#%&*\n]/gu;
+
+/**
+ * Trim, apply allowlist, and truncate a string to maxLen. Returns "" for nullish input.
  */
 export function sanitizeText(value, maxLen = MAX_TEXT_LEN) {
   if (value === null || value === undefined) return "";
-  return String(value).trim().slice(0, maxLen);
+  return String(value).replace(_ALLOWED_TEXT_RE, "").trim().slice(0, maxLen);
 }
 
 /**
