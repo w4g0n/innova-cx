@@ -217,6 +217,7 @@ export default function CustomerMyTickets() {
           <button
             type="button"
             className="cs-back-btn"
+            aria-label="Back to dashboard"
             onClick={() => navigate("/customer")}
           >
             <svg
@@ -243,6 +244,9 @@ export default function CustomerMyTickets() {
             <button
               type="button"
               className={`cl-icon-btn${notifOpen ? " is-active" : ""}`}
+              aria-label="Notifications"
+              aria-haspopup="true"
+              aria-expanded={notifOpen}
               onClick={() => {
                 setNotifOpen((p) => !p);
                 setProfileMenuOpen(false);
@@ -270,7 +274,7 @@ export default function CustomerMyTickets() {
             </button>
 
             {notifOpen && (
-              <div className="navPopover">
+              <div className="navPopover" role="menu" aria-label="Notifications">
                 <div className="navPopoverHeader">Notifications</div>
                 <div className="navPopoverList">
                   {notifications.length === 0 ? (
@@ -325,6 +329,9 @@ export default function CustomerMyTickets() {
             <button
               type="button"
               className={`cl-avatar-btn${profileMenuOpen ? " is-active" : ""}`}
+              aria-label="Account menu"
+              aria-haspopup="true"
+              aria-expanded={profileMenuOpen}
               onClick={() => {
                 setProfileMenuOpen((p) => !p);
                 setNotifOpen(false);
@@ -348,10 +355,11 @@ export default function CustomerMyTickets() {
             </button>
 
             {profileMenuOpen && (
-              <div className="navDropdown">
+              <div className="navDropdown" role="menu">
                 <button
                   type="button"
                   className="navDropdownItem"
+                  role="menuitem"
                   onClick={() => navigate("/customer/settings")}
                 >
                   Settings
@@ -360,6 +368,7 @@ export default function CustomerMyTickets() {
                 <button
                   type="button"
                   className="navDropdownItem danger"
+                  role="menuitem"
                   onClick={handleLogout}
                 >
                   Log out
@@ -426,6 +435,7 @@ export default function CustomerMyTickets() {
               <button
                 type="button"
                 className="cmyt-search-clear"
+                aria-label="Clear search"
                 onClick={() => setSearchQuery("")}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
@@ -574,6 +584,7 @@ export default function CustomerMyTickets() {
                   className="cs-card cmyt-ticket-card"
                   role="button"
                   tabIndex={0}
+                  aria-label={`View ticket ${ticketId}: ${subject}`}
                   onClick={() => navigate(`/customer/ticket/${encodeURIComponent(ticketId)}`)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ")
@@ -640,6 +651,9 @@ export default function CustomerMyTickets() {
       {showLogoutConfirm && (
         <div
           className="novaCloseModal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm logout"
           onClick={() => setShowLogoutConfirm(false)}
         >
           <div

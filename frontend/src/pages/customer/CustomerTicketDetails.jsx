@@ -232,9 +232,13 @@ export default function CustomerTicketDetails() {
         <div className="cs-topbar-left">
           <img
             src={novaLogo}
-            alt="InnovaAI"
+            alt="InnovaAI logo"
             className="cs-topbar-logo cs-topbar-logo--clickable"
+            role="button"
+            tabIndex={0}
+            aria-label="Go to dashboard"
             onClick={() => navigate("/customer")}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") navigate("/customer"); }}
             style={{ cursor: "pointer" }}
           />
           <div className="cs-topbar-divider" />
@@ -242,6 +246,7 @@ export default function CustomerTicketDetails() {
           <button
             type="button"
             className="cs-back-btn"
+            aria-label="Back to My Tickets"
             onClick={() => navigate("/customer/mytickets")}
           >
             <svg
@@ -267,6 +272,9 @@ export default function CustomerTicketDetails() {
             <button
               type="button"
               className={`cl-avatar-btn${profileMenuOpen ? " is-active" : ""}`}
+              aria-label="Account menu"
+              aria-haspopup="true"
+              aria-expanded={profileMenuOpen}
               onClick={() => setProfileMenuOpen((p) => !p)}
             >
               <div className="cl-avatar-initials">{initials}</div>
@@ -284,10 +292,11 @@ export default function CustomerTicketDetails() {
               </svg>
             </button>
             {profileMenuOpen && (
-              <div className="navDropdown">
+              <div className="navDropdown" role="menu">
                 <button
                   type="button"
                   className="navDropdownItem"
+                  role="menuitem"
                   onClick={() => navigate("/customer/settings")}
                 >
                   Settings
@@ -296,6 +305,7 @@ export default function CustomerTicketDetails() {
                 <button
                   type="button"
                   className="navDropdownItem danger"
+                  role="menuitem"
                   onClick={() => {
                     setProfileMenuOpen(false);
                     setShowLogoutConfirm(true);
@@ -415,7 +425,7 @@ export default function CustomerTicketDetails() {
                   <div className="ctd-pipeline-top">
                     <div>
                       <div className="ctd-pipeline-eyebrow">Ticket Status</div>
-                      <div className="ctd-pipeline-current">
+                      <div className="ctd-pipeline-current" aria-live="polite" aria-atomic="true">
                         {pipeStages[stageIdx].label}
                       </div>
                     </div>
@@ -582,6 +592,9 @@ export default function CustomerTicketDetails() {
       {showLogoutConfirm && (
         <div
           className="novaCloseModal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm logout"
           onClick={() => setShowLogoutConfirm(false)}
         >
           <div

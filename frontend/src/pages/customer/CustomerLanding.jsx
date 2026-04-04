@@ -430,6 +430,8 @@ export default function CustomerLanding() {
               type="button"
               className={`cl-icon-btn ${notifOpen ? "is-active" : ""}`}
               aria-label="Notifications"
+              aria-haspopup="true"
+              aria-expanded={notifOpen}
               onClick={toggleNotifications}
             >
               <svg
@@ -513,7 +515,9 @@ export default function CustomerLanding() {
             <button
               type="button"
               className={`cl-avatar-btn ${profileMenuOpen ? "is-active" : ""}`}
-              aria-label="Profile menu"
+              aria-label="Account menu"
+              aria-haspopup="true"
+              aria-expanded={profileMenuOpen}
               onClick={() => {
                 setNotifOpen(false);
                 setProfileMenuOpen((v) => !v);
@@ -536,10 +540,11 @@ export default function CustomerLanding() {
             </button>
 
             {profileMenuOpen && (
-              <div className="navDropdown" role="menu" aria-label="Profile">
+              <div className="navDropdown" role="menu" aria-label="Account">
                 <button
                   type="button"
                   className="navDropdownItem"
+                  role="menuitem"
                   onClick={openSettings}
                 >
                   Settings
@@ -548,6 +553,7 @@ export default function CustomerLanding() {
                 <button
                   type="button"
                   className="navDropdownItem danger"
+                  role="menuitem"
                   onClick={handleLogout}
                 >
                   Log out
@@ -1150,7 +1156,7 @@ export default function CustomerLanding() {
 
       {/* ─── LOGOUT CONFIRM ────────────────────────────────────── */}
       {showLogoutConfirm && (
-        <div className="novaCloseModal">
+        <div className="novaCloseModal" role="dialog" aria-modal="true" aria-label="Confirm logout">
           <div className="novaCloseModalContent">
             <p>Are you sure you want to log out?</p>
             <div className="novaCloseModalBtns">
