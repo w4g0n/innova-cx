@@ -344,6 +344,8 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
   const [loginError, setLoginError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(
@@ -351,8 +353,6 @@ export default function Login() {
   );
 
   const [touched, setTouched] = useState({ email: false, password: false });
-  const [capsLock, setCapsLock] = useState(false);
-  const [focusedField, setFocusedField] = useState(null);
 
   const emailError = validators.email(email);
   const passwordError = validators.password(password);
@@ -559,12 +559,18 @@ export default function Login() {
                     setEmail(e.target.value);
                     if (loginError) setLoginError("");
                   }}
-                  onBlur={() => markTouched("email")}
+                  onBlur={() => { markTouched("email"); setFocusedField(null); }}
+                  onFocus={(e) => { setFocusedField("email"); setCapsLock(e.getModifierState("CapsLock")); }}
+                  onKeyDown={(e) => setCapsLock(e.getModifierState("CapsLock"))}
+                  onKeyUp={(e) => setCapsLock(e.getModifierState("CapsLock"))}
                   autoComplete="email"
                   aria-invalid={touched.email && !!emailError}
                   aria-describedby="email-msg"
                 />
                 <span className="input-icon" aria-hidden="true">
+                  {capsLock && focusedField === "email" && emailInputState !== "error" && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="7 11 12 6 17 11"/><line x1="12" y1="6" x2="12" y2="18"/><rect x="5" y="18" width="14" height="3" rx="1"/></svg>
+                  )}
                   {emailInputState === "error" && (
                     <svg
                       width="16"
@@ -613,6 +619,11 @@ export default function Login() {
                   aria-invalid={touched.password && !!passwordError}
                   aria-describedby="password-msg"
                 />
+                {capsLock && focusedField === "password" && (
+                  <span className="login-capslock-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="7 11 12 6 17 11"/><line x1="12" y1="6" x2="12" y2="18"/><rect x="5" y="18" width="14" height="3" rx="1"/></svg>
+                  </span>
+                )}
                 <button
                   type="button"
                   className="passwordToggleBtn"

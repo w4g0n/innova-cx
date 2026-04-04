@@ -228,7 +228,7 @@ export default function CustomerAuthPage() {
           <div style={{ textAlign: "center", marginBottom: "1rem" }}>
             <p>Scan this QR code with your authenticator app:</p>
             {/* qrCode is validated to start with data:image/ or https:// above */}
-            <img src={qrCode} alt="TOTP QR Code" style={{ width: "180px" }} />
+            <img src={qrCode} alt="QR code for authenticator app setup" style={{ width: "180px" }} />
           </div>
         )}
 
@@ -254,7 +254,7 @@ export default function CustomerAuthPage() {
             )}
 
             <form onSubmit={handleSubmit}>
-              <div className="otp-group">
+              <div className="otp-group" role="group" aria-label="One-time password">
                 {otp.map((digit, index) => (
                   <input
                     key={index}
@@ -268,6 +268,7 @@ export default function CustomerAuthPage() {
                       handleChange(e.target.value, index)
                     }
                     onKeyDown={(e) => handleKeyDown(e, index)}
+                    aria-label={`Digit ${index + 1} of 6`}
                     autoComplete="one-time-code"
                   />
                 ))}
@@ -283,7 +284,7 @@ export default function CustomerAuthPage() {
             </form>
           </>
         ) : (
-          <div className="auth-success">
+          <div className="auth-success" role="status" aria-live="polite">
             <div className="tick-circle">
               <svg
                 className="tick"

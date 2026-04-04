@@ -333,6 +333,19 @@ export default function CustomerLanding() {
     }
   };
 
+  const dismissNotification = async (notifId) => {
+    // Optimistically remove from list immediately
+    setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+    // Mark as read on the backend (best-effort)
+    try {
+      const token = getToken();
+      await fetch(
+        apiUrl(`/api/customer/notifications?mark_read=true`),
+        { method: "GET", headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch { /* non-critical */ }
+  };
+
   const handleQuickAction = (action) => {
     closeAllPopovers();
     if (action === "nova")        setIsOpen(true);
@@ -417,6 +430,8 @@ export default function CustomerLanding() {
               type="button"
               className={`cl-icon-btn ${notifOpen ? "is-active" : ""}`}
               aria-label="Notifications"
+              aria-haspopup="true"
+              aria-expanded={notifOpen}
               onClick={toggleNotifications}
             >
               <svg
@@ -459,11 +474,30 @@ export default function CustomerLanding() {
                           <div className="navPopoverItemTitle">
                             {sanitizeText(n.title || n.type || "Notification", 100)}
                           </div>
-                          {n.createdAt && (
-                            <div className="navPopoverItemTime">
-                              {formatTimeAgo(n.createdAt)}
-                            </div>
-                          )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            {n.timestamp && (
+                              <div className="navPopoverItemTime">
+                                {formatTimeAgo(n.timestamp)}
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); dismissNotification(n.id); }}
+                              style={{
+                                background: "transparent", border: "none", cursor: "pointer",
+                                color: "var(--muted)", display: "flex", alignItems: "center",
+                                padding: "2px", borderRadius: 4, lineHeight: 1,
+                                transition: "color .15s",
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = "var(--text)"}
+                              onMouseLeave={(e) => e.currentTarget.style.color = "var(--muted)"}
+                              aria-label="Dismiss notification"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                                <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                         <div className="navPopoverItemMeta">
                           {sanitizeText(n.message || "", 300)}
@@ -481,7 +515,9 @@ export default function CustomerLanding() {
             <button
               type="button"
               className={`cl-avatar-btn ${profileMenuOpen ? "is-active" : ""}`}
-              aria-label="Profile menu"
+              aria-label="Account menu"
+              aria-haspopup="true"
+              aria-expanded={profileMenuOpen}
               onClick={() => {
                 setNotifOpen(false);
                 setProfileMenuOpen((v) => !v);
@@ -504,10 +540,11 @@ export default function CustomerLanding() {
             </button>
 
             {profileMenuOpen && (
-              <div className="navDropdown" role="menu" aria-label="Profile">
+              <div className="navDropdown" role="menu" aria-label="Account">
                 <button
                   type="button"
                   className="navDropdownItem"
+                  role="menuitem"
                   onClick={openSettings}
                 >
                   Settings
@@ -516,6 +553,7 @@ export default function CustomerLanding() {
                 <button
                   type="button"
                   className="navDropdownItem danger"
+                  role="menuitem"
                   onClick={handleLogout}
                 >
                   Log out
@@ -1118,7 +1156,7 @@ export default function CustomerLanding() {
 
       {/* ─── LOGOUT CONFIRM ────────────────────────────────────── */}
       {showLogoutConfirm && (
-        <div className="novaCloseModal">
+        <div className="novaCloseModal" role="dialog" aria-modal="true" aria-label="Confirm logout">
           <div className="novaCloseModalContent">
             <p>Are you sure you want to log out?</p>
             <div className="novaCloseModalBtns">

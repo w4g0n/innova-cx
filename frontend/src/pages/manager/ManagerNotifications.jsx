@@ -138,6 +138,21 @@ export default function ManagerNotifications() {
     fireNotifRefresh();
   };
 
+  const dismissOne = async (e, n) => {
+    e.stopPropagation();
+    setNotifications((prev) => prev.filter((x) => x.id !== n.id));
+    if (!n.read) {
+      const token = getAuthToken();
+      try {
+        await fetch(`${API_BASE}/manager/notifications/${n.id}/read`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        fireNotifRefresh();
+      } catch { /* non-critical */ }
+    }
+  };
+
   const onNotificationClick = async (n) => {
     const token = getAuthToken();
 
@@ -239,6 +254,16 @@ export default function ManagerNotifications() {
                   </div>
                 </div>
                 <div className="empNotifs__right">
+                  <button
+                    type="button"
+                    className="empNotifs__dismiss"
+                    onClick={(e) => dismissOne(e, n)}
+                    aria-label="Dismiss notification"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                      <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+                    </svg>
+                  </button>
                   {!n.read && <span className="empNotifs__dot" />}
                   {n.ticketId && <span className="empNotifs__chev">›</span>}
                 </div>
