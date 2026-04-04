@@ -5,9 +5,16 @@ services:
     container_name: innovacx-db
     restart: unless-stopped
     environment:
+      # POSTGRES_USER is the superuser/owner used ONLY for DB initialization
+      # and migrations. It is NOT used by runtime application services.
       POSTGRES_USER: ${POSTGRES_USER:-innovacx_admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
       POSTGRES_DB: ${POSTGRES_DB:-complaints_db}
+      # These are passed into the init container so that the least-privilege
+      # shell script (011_least_privilege_password.sh) can set the correct
+      # password on the innovacx_app role during first-boot initialization.
+      APP_DB_USER: ${APP_DB_USER:-innovacx_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-changeme123}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database:/docker-entrypoint-initdb.d
@@ -16,7 +23,7 @@ services:
     networks:
       - innovacx-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -27,7 +34,9 @@ services:
     container_name: innovacx-backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
+      # Runtime DB connection uses innovacx_app (least-privilege role),
+      # NOT the superuser innovacx_admin.
+      DATABASE_URL: postgresql://${APP_DB_USER:-innovacx_app}:${APP_DB_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
       SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-}"
       DISABLE_MFA: "${DISABLE_MFA:-false}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
@@ -60,7 +69,9 @@ services:
     container_name: innovacx-chatbot
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
+      # Runtime DB connection uses innovacx_app (least-privilege role),
+      # NOT the superuser innovacx_admin.
+      DATABASE_URL: postgresql://${APP_DB_USER:-innovacx_app}:${APP_DB_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
       HF_TOKEN: "${HF_TOKEN:-}"
       HF_HOME: /app/hf_cache
       CHATBOT_LLM_PROVIDER: "${CHATBOT_LLM_PROVIDER:-template}"
@@ -113,7 +124,9 @@ services:
     environment:
       PYTHONPATH: /app
       SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-}"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
+      # Runtime DB connection uses innovacx_app (least-privilege role),
+      # NOT the superuser innovacx_admin.
+      DATABASE_URL: postgresql://${APP_DB_USER:-innovacx_app}:${APP_DB_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
       SENTIMENT_MODEL_DIR: "${SENTIMENT_MODEL_DIR:-/app/agents/step04_sentimentanalysis/model}"
       CLASSIFIER_MODEL_DIR: "${CLASSIFIER_MODEL_DIR:-/app/agents/step03_classifier/model}"
       CLASSIFIER_MODEL_PATH: "${CLASSIFIER_MODEL_PATH:-}"
