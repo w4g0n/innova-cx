@@ -352,6 +352,7 @@ export default function Login() {
 
   const [touched, setTouched] = useState({ email: false, password: false });
   const [capsLock, setCapsLock] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
 
   const emailError = validators.email(email);
   const passwordError = validators.password(password);
@@ -604,9 +605,10 @@ export default function Login() {
                     setPassword(e.target.value);
                     if (loginError) setLoginError("");
                   }}
+                  onFocus={(e) => { setFocusedField("password"); if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
                   onKeyDown={(e) => { if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
                   onKeyUp={(e) => { if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
-                  onBlur={() => { markTouched("password"); setCapsLock(false); }}
+                  onBlur={() => { markTouched("password"); setFocusedField(null); setCapsLock(false); }}
                   autoComplete="current-password"
                   aria-invalid={touched.password && !!passwordError}
                   aria-describedby="password-msg"
