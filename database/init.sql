@@ -22,7 +22,8 @@ DO $$ BEGIN
     'Assigned',
     'Escalated',
     'Overdue',
-    'Resolved'
+    'Resolved',
+    'Reopened'
   );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
@@ -192,6 +193,16 @@ ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at T
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_type TEXT;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS human_overridden BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS linked_ticket_code TEXT;
+
+DO $$ BEGIN
+  ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'recurrence_reminder';
+EXCEPTION WHEN others THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TYPE ticket_status ADD VALUE IF NOT EXISTS 'Reopened';
+EXCEPTION WHEN others THEN NULL; END $$;
+
 \ir scripts/learning.sql
 
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);
@@ -226,13 +237,23 @@ BEGIN
 
   -- Resolution timestamp must exist when resolved.
   IF NEW.status = 'Resolved' THEN
-    NEW.resolved_at := COALESCE(NEW.resolved_at, now());
-    IF TG_OP = 'UPDATE' THEN
-      NEW.resolved_by_user_id := COALESCE(NEW.resolved_by_user_id, NEW.assigned_to_user_id, OLD.resolved_by_user_id);
-    ELSE
+    IF TG_OP = 'UPDATE' AND OLD.status <> 'Resolved' THEN
+      -- Transitioning into Resolved from any other state (including Reopened):
+      -- always stamp a fresh timestamp so a second resolution overwrites the first.
+      NEW.resolved_at := now();
       NEW.resolved_by_user_id := COALESCE(NEW.resolved_by_user_id, NEW.assigned_to_user_id);
+    ELSE
+      -- INSERT, or an UPDATE that stays Resolved (e.g. updating other fields):
+      -- preserve existing values if already set.
+      NEW.resolved_at := COALESCE(NEW.resolved_at, now());
+      IF TG_OP = 'UPDATE' THEN
+        NEW.resolved_by_user_id := COALESCE(NEW.resolved_by_user_id, NEW.assigned_to_user_id, OLD.resolved_by_user_id);
+      ELSE
+        NEW.resolved_by_user_id := COALESCE(NEW.resolved_by_user_id, NEW.assigned_to_user_id);
+      END IF;
     END IF;
   END IF;
+
 
   RETURN NEW;
 END;

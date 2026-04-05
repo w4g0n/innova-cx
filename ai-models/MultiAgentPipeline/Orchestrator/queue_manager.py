@@ -17,17 +17,17 @@ Key behaviours (per agreed spec):
     queue. After 3 failures the ticket stays permanently held.
 
 Stages in order:
+    step  1  RecurrenceAgent             CRITICAL      (V11: first check — links recurring tickets)
     step  2  SubjectGenerationAgent      non-critical
     step  3  SuggestedResolutionAgent    non-critical
     step  4  ClassificationAgent         CRITICAL
     step  5  SentimentAgent              CRITICAL
     step  6  AudioAnalysisAgent          CRITICAL  (optional)
     step  7  SentimentCombinerAgent      CRITICAL
-    step  8  RecurrenceAgent             non-critical
-    step  9  FeatureEngineeringAgent     CRITICAL
-    step 10  PrioritizationAgent         CRITICAL
-    step 11  DepartmentRoutingAgent      CRITICAL
-    step 12  ReviewAgent                 CRITICAL
+    step  8  FeatureEngineeringAgent     CRITICAL
+    step  9  PrioritizationAgent         CRITICAL
+    step 10  DepartmentRoutingAgent      CRITICAL
+    step 11  ReviewAgent                 CRITICAL
 """
 
 import asyncio
@@ -49,7 +49,7 @@ from agents.step03_classifier.step import classify
 from agents.step04_sentimentanalysis.step import analyze_sentiment
 from agents.step05_audioanalysis.step import analyze_audio
 from agents.step06_sentimentcombiner.step import combine_sentiment
-from agents.step07_recurrence.step import check_recurrence
+from agents.step01_recurrence.step import check_recurrence
 from agents.step08_featureengineering.step import engineer_features
 from agents.step09_priority.step import score_priority
 from agents.step10_router.step import route_and_store
@@ -68,21 +68,24 @@ REVIEW_AGENT_STAGE_TIMEOUT_SECONDS = 180.0
 
 STAGES = [
     # (name, fn, step_order, is_critical)
+    # Step 1: Recurrence check — runs first, before any AI processing.
+    # Detects recurring submissions via transformer similarity and applies
+    # 4-way branch logic (A/B/C stop the pipeline; D continues with context).
+    ("RecurrenceAgent",            check_recurrence,               1,  True),
     ("SubjectGenerationAgent",     generate_subject,               2,  False),
     ("SuggestedResolutionAgent",   generate_suggested_resolution,  3,  False),
     ("ClassificationAgent",        classify,                       4,  True),
     ("SentimentAgent",             analyze_sentiment,              5,  True),
     ("AudioAnalysisAgent",         analyze_audio,                  6,  True),
     ("SentimentCombinerAgent",     combine_sentiment,              7,  True),
-    ("RecurrenceAgent",            check_recurrence,               8,  False),
-    ("FeatureEngineeringAgent",    engineer_features,              9,  True),
-    ("PrioritizationAgent",        score_priority,                 10, True),
-    ("DepartmentRoutingAgent",     route_and_store,                11, True),
-    # Step 12: Review Agent — automated quality gate and final release
+    ("FeatureEngineeringAgent",    engineer_features,              8,  True),
+    ("PrioritizationAgent",        score_priority,                 9,  True),
+    ("DepartmentRoutingAgent",     route_and_store,                10, True),
+    # Step 11: Review Agent — automated quality gate and final release
     # is_critical=True: if this fails, ticket must not be silently released
     # without validation. Every other critical stage has the Review Agent
     # above it to catch issues; the Review Agent has no such safety net.
-    ("ReviewAgent",                review_pipeline,                12, True),
+    ("ReviewAgent",                review_pipeline,                11, True),
 ]
 
 STAGE_BY_NAME = {name: (fn, order, critical) for name, fn, order, critical in STAGES}
@@ -974,6 +977,15 @@ async def run_pipeline_from(
         if step_order < from_step:
             continue
 
+        # Recurrence branches A/B/C absorb the ticket into an existing one —
+        # no further pipeline processing needed.
+        if state.get("_recurrence_handled"):
+            logger.info(
+                "pipeline | early exit after RecurrenceAgent (branch=%s) — ticket absorbed",
+                state.get("recurrence_branch"),
+            )
+            break
+
         if not _db_execution_is_current(queue_id, execution_id):
             return state, "__cancelled__", None, "Execution superseded by rerun"
 
@@ -1308,9 +1320,9 @@ async def _process_queue_item(item: dict) -> None:
         # then skip to the stage AFTER the failed one
         state = {**checkpoint_state, **(operator_corrections or {})}
         if failure_category == "manual_pause" and checkpoint_state.get("_resume_from_step") is not None:
-            start_step = max(2, int(checkpoint_state.get("_resume_from_step") or 2))
+            start_step = max(1, int(checkpoint_state.get("_resume_from_step") or 1))
         else:
-            start_step = max(2, failed_at_step + 1)
+            start_step = max(1, failed_at_step + 1)
         logger.info(
             "queue_worker | resuming from step %d reason=%s stage=%s",
             start_step, failure_category or "operator_corrections", failed_stage,
@@ -1318,7 +1330,7 @@ async def _process_queue_item(item: dict) -> None:
     else:
         # Fresh run from beginning
         state = _build_initial_state(ticket_id, ticket_code, ticket_input, execution_id)
-        start_step = 2
+        start_step = 1
 
     final_state, fail_stage, fail_step, fail_reason = await run_pipeline_from(
         state, start_step, queue_id, execution_id
