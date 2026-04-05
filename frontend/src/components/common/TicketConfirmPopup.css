@@ -1,12 +1,12 @@
 /* ================================================
    TicketConfirmPopup — call-centre confirmation overlay
-   Mirrors ConfirmDialog.css pattern (glass, spring anim)
+   Dark theme matching Nova chatbot / app palette
    ================================================ */
 
 .tcp__overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 10, 24, 0.45);
+  background: rgba(8, 5, 16, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -15,19 +15,32 @@
   animation: cdFadeIn 0.15s ease;
 }
 
+@keyframes cdFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
 .tcp__box {
-  background: var(--glass-bg, rgba(255, 255, 255, 0.96));
-  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.55));
-  border-radius: var(--radius-lg, 18px);
+  background: #1a1028;
+  border: 1px solid rgba(124, 58, 237, 0.28);
+  border-radius: 20px;
   padding: 34px 28px 26px;
   width: min(420px, 100%);
-  box-shadow: var(--shadow-lg, 0 14px 44px rgba(64, 28, 81, 0.17));
+  box-shadow:
+    0 0 0 1px rgba(89, 36, 180, 0.12),
+    0 20px 60px rgba(0, 0, 0, 0.55),
+    0 0 80px rgba(89, 36, 180, 0.12);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 14px;
-  animation: scaleIn 0.2s var(--ease-spring, cubic-bezier(0.22, 0.68, 0, 1.2));
+  animation: scaleIn 0.22s cubic-bezier(0.22, 0.68, 0, 1.2);
 }
 
 /* Green checkmark icon circle */
@@ -38,26 +51,31 @@
   margin-bottom: 2px;
 }
 
+.tcp__iconWrap svg circle {
+  fill: rgba(46, 204, 113, 0.15);
+}
+
 .tcp__title {
   font-family: var(--font-heading, 'Sora', system-ui, sans-serif);
   font-size: 18px;
   font-weight: 800;
-  color: var(--text-dark, #111);
+  color: #ffffff;
+  letter-spacing: -0.01em;
 }
 
 .tcp__ticketId {
   font-size: 13px;
-  color: rgba(17, 17, 17, 0.55);
+  color: rgba(255, 255, 255, 0.45);
   letter-spacing: 0.01em;
 }
 .tcp__ticketId strong {
-  color: #111;
+  color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
 }
 
 .tcp__message {
   font-size: 14px;
-  color: rgba(17, 17, 17, 0.62);
+  color: rgba(255, 255, 255, 0.6);
   line-height: 1.55;
   max-width: 340px;
   margin: 0;
@@ -66,16 +84,21 @@
 .tcp__btnClose {
   margin-top: 4px;
   padding: 11px 28px;
-  border-radius: var(--radius-pill, 999px);
+  border-radius: 999px;
   border: none;
-  background: var(--gradient-brand, linear-gradient(135deg, #5924b4, #401c51));
+  background: linear-gradient(135deg, #5924b4, #401c51);
   color: #fff;
   font-size: 14px;
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  transition: filter 0.15s;
+  transition: filter 0.15s, transform 0.15s;
+  box-shadow: 0 4px 16px rgba(89, 36, 180, 0.4);
 }
 .tcp__btnClose:hover {
-  filter: brightness(1.08);
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+.tcp__btnClose:active {
+  transform: translateY(0);
 }

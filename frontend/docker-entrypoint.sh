@@ -18,4 +18,8 @@ else
   echo "Frontend dependencies are up to date."
 fi
 
-exec npm run dev -- --host
+echo "Building for production..."
+npm run build
+
+echo "Starting preview server..."
+exec npm run preview -- --host --port 5173
