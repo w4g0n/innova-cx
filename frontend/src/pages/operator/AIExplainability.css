@@ -1,21 +1,19 @@
 /* ============================================================
-   AIExplainability — Unified Enterprise Theme
-   Matches UsersManagement design language exactly.
-   DM Sans · Purple accent · Clean cards · Consistent tokens
+   AIExplainability — matches system design tokens
+   Uses the same purple palette as ModelHealth / OperatorDashboard
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
-/* ── CSS tokens (mirror UsersManagement) ── */
+/* ── CSS tokens (mapped to system palette) ── */
 :root {
-  --aix-accent:        #7c3aed;
-  --aix-accent-deep:   #6d28d9;
-  --aix-accent-soft:   #faf5ff;
-  --aix-accent-border: #e9d5ff;
-  --aix-border:        #e8e8ed;
-  --aix-border-light:  #f0f0f5;
-  --aix-bg:            #fafafa;
-  --aix-text:          #1a1a2e;
-  --aix-muted:         #6b7280;
+  --aix-accent:        #5924b4;
+  --aix-accent-deep:   #401c51;
+  --aix-accent-soft:   rgba(89,36,180,0.06);
+  --aix-accent-border: rgba(89,36,180,0.13);
+  --aix-border:        rgba(64,28,81,0.12);
+  --aix-border-light:  rgba(64,28,81,0.07);
+  --aix-bg:            #f6f4fb;
+  --aix-text:          #111111;
+  --aix-muted:         rgba(17,17,17,0.55);
   --aix-danger:        #be123c;
   --aix-danger-bg:     #fff1f2;
   --aix-danger-border: #fecdd3;
@@ -32,8 +30,8 @@
   --aix-shadow-sm:     0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03);
   --aix-shadow:        0 1px 3px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.04);
   --aix-shadow-lg:     0 4px 6px rgba(0,0,0,.05), 0 10px 30px rgba(0,0,0,.10);
-  --aix-font:          "DM Sans", sans-serif;
-  --aix-mono:          "DM Mono", ui-monospace, monospace;
+  --aix-font:          inherit;
+  --aix-mono:          ui-monospace, monospace;
 }
 
 /* ── Page shell ── */
@@ -228,23 +226,45 @@
   padding: 9px 18px;
   font-weight: 700;
   font-size: 13px;
-  font-family: var(--aix-font);
+  font-family: inherit;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  box-shadow: 0 2px 8px rgba(109,40,217,.28);
+  box-shadow: 0 2px 8px rgba(89,36,180,.25);
   transition: box-shadow .2s, transform .15s;
   white-space: nowrap;
 }
 .aix-open-btn:hover {
-  box-shadow: 0 4px 16px rgba(109,40,217,.38);
+  box-shadow: 0 4px 14px rgba(89,36,180,.35);
   transform: translateY(-1px);
 }
 .aix-open-btn:disabled {
   opacity: .55;
   transform: none;
   cursor: not-allowed;
+}
+
+/* ── Delete / danger button ── */
+.aix-delete-btn {
+  background: transparent;
+  color: var(--aix-danger);
+  border: 1.5px solid var(--aix-danger-border);
+  border-radius: var(--aix-radius-sm);
+  padding: 6px 12px;
+  font-weight: 700;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s;
+}
+.aix-delete-btn:hover {
+  background: var(--aix-danger-bg);
+  border-color: var(--aix-danger);
 }
 
 /* ── Summary grid ── */
@@ -403,6 +423,10 @@
 
 .aix-controls-actions {
   margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 /* ── Stage menu ── */
@@ -674,28 +698,33 @@ p.aix-subtle {
 .aix-tab-bar {
   display: flex;
   gap: 4px;
-  padding: 0 0 20px 0;
-  border-bottom: 2px solid var(--aix-border);
-  margin-bottom: 24px;
+  padding: 0;
+  border-bottom: 2px solid rgba(64,28,81,0.10);
+  margin: 22px 0 24px;
 }
 .aix-tab {
   position: relative;
-  padding: 8px 20px;
+  padding: 11px 22px;
   border-radius: var(--aix-radius-sm) var(--aix-radius-sm) 0 0;
-  border: 1px solid transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
   background: transparent;
   color: var(--aix-muted);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 700;
+  font-family: inherit;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
-.aix-tab:hover { color: var(--aix-text); }
+.aix-tab:hover {
+  color: var(--aix-accent);
+  background: rgba(89,36,180,0.05);
+}
 .aix-tab--active {
   color: var(--aix-accent);
-  border-color: var(--aix-border) var(--aix-border) #fff;
-  background: #fff;
-  margin-bottom: -2px;
+  border-bottom-color: var(--aix-accent);
+  background: rgba(89,36,180,0.06);
 }
 .aix-tab__badge {
   display: inline-flex;
@@ -799,7 +828,7 @@ p.aix-subtle {
 .pq-row--selected { background: var(--aix-accent-soft); }
 .pq-row--held td { color: var(--aix-danger); }
 
-.pq-code { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500; }
+.pq-code { font-family: var(--aix-mono); font-size: 12px; font-weight: 500; }
 .pq-subject { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--aix-text); }
 .pq-pos { color: var(--aix-muted); font-size: 12px; }
 
@@ -1269,15 +1298,3 @@ p.aix-subtle {
 .pq-rerun-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .pq-release-btn { flex: 1; }
 
-/* ── Ticket list delete button ── */
-.aix-delete-btn {
-  padding: 5px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--aix-danger-border);
-  background: var(--aix-danger-bg);
-  color: var(--aix-danger);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.aix-delete-btn:hover { background: var(--aix-danger-border); }

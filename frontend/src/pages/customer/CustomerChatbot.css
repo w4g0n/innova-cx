@@ -225,6 +225,151 @@
   background: rgba(147,51,234,.08);
 }
 
+/* ── MIC BUTTON ────────────────────────────────────────────── */
+.chatMicBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(147,51,234,.28);
+  background: rgba(147,51,234,.08);
+  color: var(--pink, #c084fc);
+  cursor: pointer;
+  transition: all .2s;
+}
+.chatMicBtn:hover:not(:disabled) {
+  background: rgba(147,51,234,.18);
+  border-color: rgba(168,85,247,.5);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+.chatMicBtn:disabled { opacity: .4; cursor: not-allowed; }
+.chatMicBtn--active {
+  background: rgba(220,38,38,.12);
+  border-color: rgba(220,38,38,.4);
+  color: #f87171;
+  animation: chatMicPulse 1.4s ease-in-out infinite;
+}
+@keyframes chatMicPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.3); }
+  50%       { box-shadow: 0 0 0 6px rgba(220,38,38,.0); }
+}
+
+/* ── VOICE PANEL ───────────────────────────────────────────── */
+.chatVoicePanel {
+  padding: 10px 18px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.chatVoiceError {
+  font-size: 12px;
+  color: #f87171;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.2);
+}
+
+.chatVoiceBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: rgba(147,51,234,.06);
+  border: 1px solid rgba(147,51,234,.2);
+  transition: border-color .2s, box-shadow .2s;
+}
+.chatVoiceBar--recording {
+  border-color: rgba(220,38,38,.4);
+  box-shadow: 0 0 0 3px rgba(220,38,38,.08);
+  background: rgba(220,38,38,.06);
+}
+.chatVoiceBar--transcribing { opacity: .8; }
+
+.chatWaves { display: inline-flex; align-items: flex-end; gap: 3px; }
+.chatWave {
+  width: 3px; height: 10px; border-radius: 999px;
+  background: rgba(147,51,234,.6);
+  animation: chatWaveAnim 1.1s ease-in-out infinite;
+  transform-origin: bottom;
+}
+.chatVoiceBar--recording .chatWave { background: rgba(220,38,38,.75); }
+.chatWave:nth-child(2){ animation-delay: .1s; }
+.chatWave:nth-child(3){ animation-delay: .2s; }
+.chatWave:nth-child(4){ animation-delay: .3s; }
+.chatWave:nth-child(5){ animation-delay: .4s; }
+@keyframes chatWaveAnim {
+  0%,100% { transform: scaleY(.5); opacity: .6; }
+  50%      { transform: scaleY(1.7); opacity: 1; }
+}
+
+.chatVoiceBarText {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: "Outfit", sans-serif;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.chatVoiceActions { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.chatVoiceIconBtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; width: 32px; height: 32px;
+  border: 1px solid rgba(147,51,234,.25);
+  background: rgba(147,51,234,.08);
+  cursor: pointer; color: var(--muted);
+  transition: all .18s;
+}
+.chatVoiceIconBtn:hover:not(:disabled) { background: rgba(147,51,234,.18); color: var(--text); }
+.chatVoiceIconBtn:disabled { opacity: .4; cursor: not-allowed; }
+.chatVoiceIconBtn--confirm {
+  background: linear-gradient(135deg,#6d28d9,#9333ea);
+  border-color: #6d28d9;
+  color: #fff;
+}
+.chatVoiceIconBtn--confirm:hover:not(:disabled) { filter: brightness(1.1); }
+
+.chatVoiceReview { display: flex; flex-direction: column; gap: 8px; }
+.chatVoiceReviewTop {
+  display: flex; align-items: center;
+  justify-content: space-between; gap: 10px;
+}
+.chatVoiceHint {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  font-family: "Outfit", sans-serif;
+}
+
+.chatVoiceDraft {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  padding: 10px 13px;
+  border: 1px solid rgba(147,51,234,.22);
+  background: rgba(147,51,234,.05);
+  color: var(--text);
+  font-size: 13.5px;
+  font-family: "Outfit", sans-serif;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+.chatVoiceDraft:focus {
+  border-color: rgba(147,51,234,.5);
+  box-shadow: 0 0 0 3px rgba(147,51,234,.1);
+}
+
 /* ── RESET CONFIRMATION MODAL ──────────────────────────────── */
 .custConfirmOverlay {
   position: fixed;

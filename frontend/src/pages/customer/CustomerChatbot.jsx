@@ -3,7 +3,7 @@ import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import TicketConfirmPopup from "../../components/common/TicketConfirmPopup";
 import { useNavigate } from "react-router-dom";
-import { sendChatMessage } from "../../services/api";
+import { sendChatMessage, transcribeAudio } from "../../services/api";
 import { safeParseUser, sanitizeText, sanitizeId } from "./sanitize";
 import "./CustomerChatbot.css";
 
@@ -58,6 +58,101 @@ export default function CustomerChatbot() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  // ── Voice transcriber ────────────────────────────────────────────────────
+  const mediaRecorderRef   = useRef(null);
+  const streamRef          = useRef(null);
+  const chunksRef          = useRef([]);
+  const cancelRecordingRef = useRef(false);
+
+  const [isRecording,    setIsRecording]    = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [voiceStage,     setVoiceStage]     = useState("idle"); // idle | recording | review
+  const [draftTranscript, setDraftTranscript] = useState("");
+  const [voiceError,     setVoiceError]     = useState("");
+
+  const cleanupStream = () => {
+    try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch {}
+    streamRef.current = null;
+  };
+
+  const startRecording = async () => {
+    setVoiceError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      cancelRecordingRef.current = false;
+
+      const preferredTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const supportedType =
+        typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported
+          ? preferredTypes.find((t) => MediaRecorder.isTypeSupported(t))
+          : null;
+
+      const recorder = supportedType
+        ? new MediaRecorder(stream, { mimeType: supportedType })
+        : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => { chunksRef.current.push(e.data); };
+
+      recorder.onstop = async () => {
+        const wasCancelled = cancelRecordingRef.current;
+        setIsRecording(false);
+        cleanupStream();
+        if (wasCancelled) { setIsTranscribing(false); setVoiceStage("idle"); return; }
+        setIsTranscribing(true);
+        try {
+          const mimeType = recorder.mimeType || supportedType || "audio/webm";
+          const blob     = new Blob(chunksRef.current, { type: mimeType });
+          const filename = mimeType.includes("mp4") ? "mic.mp4" : "mic.webm";
+          const data     = await transcribeAudio(blob, filename);
+          const transcript = sanitizeText(data?.transcript || "", 5000);
+          setDraftTranscript(transcript);
+          setVoiceStage("review");
+        } catch {
+          setVoiceError("Transcription failed. Please try again.");
+          setVoiceStage("idle");
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setDraftTranscript("");
+      setVoiceStage("recording");
+    } catch {
+      setVoiceError("Microphone access is required. Please allow it in your browser settings.");
+    }
+  };
+
+  const cancelRecording = () => {
+    if (!mediaRecorderRef.current) return;
+    cancelRecordingRef.current = true;
+    try { if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop(); }
+    catch { setIsRecording(false); cleanupStream(); setVoiceStage("idle"); }
+  };
+
+  const stopAndTranscribe = () => {
+    if (!mediaRecorderRef.current) return;
+    cancelRecordingRef.current = false;
+    try { if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop(); }
+    catch { setIsRecording(false); cleanupStream(); setVoiceStage("idle"); }
+  };
+
+  const discardTranscript = () => {
+    setDraftTranscript(""); setVoiceStage("idle"); setVoiceError("");
+  };
+
+  const approveTranscript = () => {
+    const t = (draftTranscript || "").trim();
+    if (!t) { setVoiceStage("idle"); return; }
+    setText(t);
+    setDraftTranscript("");
+    setVoiceStage("idle");
+  };
 
   const [chatSessionId, setChatSessionId] = useState(() => {
     try {
@@ -335,15 +430,86 @@ export default function CustomerChatbot() {
               </div>
             )}
 
+            {/* ── Voice transcriber panel ── */}
+            {(voiceStage !== "idle" || isTranscribing || voiceError) && (
+              <div className="chatVoicePanel">
+                {voiceError && (
+                  <div className="chatVoiceError">{voiceError}</div>
+                )}
+
+                {(voiceStage === "recording" || isTranscribing) && (
+                  <div className={`chatVoiceBar${voiceStage === "recording" ? " chatVoiceBar--recording" : ""}${isTranscribing ? " chatVoiceBar--transcribing" : ""}`}>
+                    <div className="chatWaves" aria-hidden="true">
+                      <span className="chatWave" />
+                      <span className="chatWave" />
+                      <span className="chatWave" />
+                      <span className="chatWave" />
+                      <span className="chatWave" />
+                    </div>
+                    <div className="chatVoiceBarText">
+                      {isTranscribing ? "Transcribing…" : "Listening…"}
+                    </div>
+                    <div className="chatVoiceActions">
+                      <button type="button" className="chatVoiceIconBtn chatVoiceIconBtn--cancel" onClick={cancelRecording} disabled={isTranscribing || !isRecording} aria-label="Cancel recording">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                      </button>
+                      <button type="button" className="chatVoiceIconBtn chatVoiceIconBtn--confirm" onClick={stopAndTranscribe} disabled={isTranscribing || !isRecording} aria-label="Stop and transcribe">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {voiceStage === "review" && (
+                  <div className="chatVoiceReview">
+                    <div className="chatVoiceReviewTop">
+                      <span className="chatVoiceHint">Review transcript — then approve to send</span>
+                      <div className="chatVoiceActions">
+                        <button type="button" className="chatVoiceIconBtn chatVoiceIconBtn--cancel" onClick={discardTranscript} aria-label="Discard transcript">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                        </button>
+                        <button type="button" className="chatVoiceIconBtn chatVoiceIconBtn--confirm" onClick={approveTranscript} aria-label="Approve transcript">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                    <textarea
+                      className="chatVoiceDraft"
+                      value={draftTranscript}
+                      onChange={(e) => { if (e.target.value.length <= 5000) setDraftTranscript(e.target.value); }}
+                      rows={3}
+                      placeholder="Transcript will appear here…"
+                      maxLength={5000}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             <form className="custComposer" onSubmit={handleSend}>
+              <button
+                type="button"
+                className={`chatMicBtn${voiceStage === "recording" ? " chatMicBtn--active" : ""}`}
+                onClick={voiceStage === "idle" && !isTranscribing ? startRecording : cancelRecording}
+                disabled={sending || voiceStage === "review" || isTranscribing}
+                aria-label={voiceStage === "recording" ? "Cancel recording" : "Start voice input"}
+              >
+                {voiceStage === "recording" ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.8"/>
+                    <path d="M5 10a7 7 0 0 0 14 0M12 19v3M8 22h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
+                )}
+              </button>
               <textarea
                 id="chatbot-message"
                 name="message"
                 className="custInput"
                 value={text}
-                placeholder="Type your message..."
+                placeholder="Type your message…"
                 onChange={(e) => {
-                  // Cap input length client-side before it reaches state or the API
                   const val = e.target.value;
                   if (val.length <= 5000) setText(val);
                 }}

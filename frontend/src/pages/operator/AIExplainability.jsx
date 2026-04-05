@@ -1078,6 +1078,29 @@ export default function AIExplainability() {
   return (
     <Layout role="operator">
       <section className="aix-wrap">
+        {/* ── Page header (always visible, above tabs) ── */}
+        <PageHeader
+          title="AI Explainability"
+          subtitle={
+            activeTab === "queue"
+              ? "Live view of tickets moving through the pipeline. Correct and release held tickets."
+              : "Inspect the full ticket pipeline, step-by-step, with stage inputs and outputs."
+          }
+          actions={activeTab === "queue" ? (
+            <div className="pq-header-actions">
+              <button
+                type="button"
+                className="aix-open-btn"
+                disabled={redispatchBusy}
+                onClick={redispatchUnprocessed}
+              >
+                {redispatchBusy ? "Dispatching..." : "Re-dispatch Unprocessed"}
+              </button>
+              {redispatchMsg && <span className="pq-redispatch-msg">{redispatchMsg}</span>}
+            </div>
+          ) : null}
+        />
+
         {/* ── Tab bar ── */}
         <div className="aix-tab-bar">
           <button type="button" className={`aix-tab ${activeTab === "explainability" ? "aix-tab--active" : ""}`} onClick={() => setActiveTab("explainability")}>
@@ -1096,23 +1119,6 @@ export default function AIExplainability() {
         {/* ── Pipeline Queue tab ── */}
         {activeTab === "queue" && (
           <article className="aix-list">
-            <PageHeader
-              title="Pipeline Queue"
-              subtitle="Live view of tickets moving through the pipeline. Correct and release held tickets."
-              actions={
-                <div className="pq-header-actions">
-                  <button
-                    type="button"
-                    className="aix-open-btn"
-                    disabled={redispatchBusy}
-                    onClick={redispatchUnprocessed}
-                  >
-                    {redispatchBusy ? "Dispatching..." : "Re-dispatch Unprocessed"}
-                  </button>
-                  {redispatchMsg && <span className="pq-redispatch-msg">{redispatchMsg}</span>}
-                </div>
-              }
-            />
 
             {/* Stats */}
             <div className="pq-stats">
@@ -1396,10 +1402,6 @@ export default function AIExplainability() {
         {/* ── Explainability tab ── */}
         {activeTab === "explainability" && !detailMode && (
           <article className="aix-list">
-            <PageHeader
-              title="AI Explainability"
-              subtitle="Inspect the full ticket pipeline, step-by-step, with stage inputs and outputs."
-            />
             <div className="aix-filters">
               <button
                 type="button"
