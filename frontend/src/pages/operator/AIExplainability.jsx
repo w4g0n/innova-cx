@@ -101,6 +101,33 @@ function renderFieldValue(value) {
   }
 }
 
+function getRecurrenceDecision(branch, isRecurring) {
+  if (!isRecurring || !branch || branch === "none") return "Not recurring";
+  if (branch === "A" || branch === "B") return "Matched to an open ticket";
+  if (branch === "C") return "Matched to a recently resolved ticket";
+  if (branch === "D") return "Matched to an older resolved ticket";
+  return "Recurring match found";
+}
+
+function getRecurrenceActionTaken(branch, isRecurring) {
+  if (!isRecurring || !branch || branch === "none") {
+    return "Continued as a new ticket because no similar prior ticket from the same user was found.";
+  }
+  if (branch === "A") {
+    return "Sent a reminder on the existing open ticket and stopped this duplicate submission from continuing in the pipeline.";
+  }
+  if (branch === "B") {
+    return "Sent a reminder on the existing open ticket, increased its priority, and stopped this duplicate submission from continuing in the pipeline.";
+  }
+  if (branch === "C") {
+    return "Reopened the previous ticket with its existing context and resolution history, and stopped this duplicate submission from continuing in the pipeline.";
+  }
+  if (branch === "D") {
+    return "Allowed a new ticket to continue through the pipeline while carrying over context from the older resolved ticket.";
+  }
+  return "Recurring issue handling was applied.";
+}
+
 function KeyValueBlock({ data }) {
   const entries = Object.entries(data || {});
   if (!entries.length) return <div className="aix-kv-empty">No data</div>;
@@ -202,6 +229,8 @@ function normalizeStageIO(stage, ticket) {
   }
 
   if (stageName === "RecurrenceAgent") {
+    const isRecurring = asBool(overrides.is_recurring ?? outputState.is_recurring, false);
+    const branch = String(unwrapValue(outputState.recurrence_branch) || "").trim().toUpperCase() || "none";
     const linkedCode =
       unwrapValue(outputState.similar_ticket_code) ||
       unwrapValue(outputState.recurrence_similar_ticket_code) ||
@@ -222,16 +251,12 @@ function normalizeStageIO(stage, ticket) {
     return {
       input: ticketDetailsInput,
       output: {
-        is_recurring: asBool(overrides.is_recurring ?? outputState.is_recurring, false),
-        similar_ticket_code: asBool(overrides.is_recurring ?? outputState.is_recurring, false)
-          ? (overrides.similar_ticket_code || linkedCode)
-          : null,
-        similar_ticket_subject: asBool(overrides.is_recurring ?? outputState.is_recurring, false)
-          ? linkedSubject
-          : null,
-        similarity_score: asBool(overrides.is_recurring ?? outputState.is_recurring, false)
-          ? linkedScore
-          : null,
+        decision: getRecurrenceDecision(branch, isRecurring),
+        action_taken: getRecurrenceActionTaken(branch, isRecurring),
+        is_recurring: isRecurring,
+        similar_ticket_code: isRecurring ? (overrides.similar_ticket_code || linkedCode) : null,
+        similar_ticket_subject: isRecurring ? linkedSubject : null,
+        similarity_score: isRecurring ? linkedScore : null,
         recurrence_reason: unwrapValue(outputState.recurrence_reason) || "",
       },
     };
@@ -593,13 +618,13 @@ export default function AIExplainability() {
     const byStage = new Map();
     const weight = { output: 3, error: 2, start: 1 };
     const stageOrder = [
+      "RecurrenceAgent",
       "SubjectGenerationAgent",
       "SuggestedResolutionAgent",
       "ClassificationAgent",
       "SentimentAgent",
       "AudioAnalysisAgent",
       "SentimentCombinerAgent",
-      "RecurrenceAgent",
       "FeatureEngineeringAgent",
       "PrioritizationAgent",
       "DepartmentRoutingAgent",

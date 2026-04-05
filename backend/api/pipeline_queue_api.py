@@ -131,17 +131,17 @@ _SENTIMENT_POSITIVE_THRESHOLD = 0.25
 _SUGGESTION_PREVIEW_MAX_LEN = 120
 
 _STAGE_STEP_ORDER = {
+    "RecurrenceAgent":           1,
     "SubjectGenerationAgent":    2,
     "SuggestedResolutionAgent":  3,
     "ClassificationAgent":       4,
     "SentimentAgent":            5,
     "AudioAnalysisAgent":        6,
     "SentimentCombinerAgent":    7,
-    "RecurrenceAgent":           8,
-    "FeatureEngineeringAgent":   9,
-    "PrioritizationAgent":       10,
-    "DepartmentRoutingAgent":    11,
-    "ReviewAgent":               12,
+    "FeatureEngineeringAgent":   8,
+    "PrioritizationAgent":       9,
+    "DepartmentRoutingAgent":    10,
+    "ReviewAgent":               11,
 }
 
 _STAGE_DESCRIPTIONS = {

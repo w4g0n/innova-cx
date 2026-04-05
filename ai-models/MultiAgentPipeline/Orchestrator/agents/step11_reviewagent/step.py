@@ -70,6 +70,7 @@ _VALID_PRIORITIES = {"low", "medium", "high", "critical"}
 # ---------------------------------------------------------------------------
 
 _MOCK_INDICATOR_KEYS: dict[str, str] = {
+    "recurrence_mode":           "heuristic_fallback",
     "classification_source":     "mock_fallback",
     "sentiment_mode":            "mock_fallback",
     "audio_analysis_mode":       "mock_fallback",
@@ -79,6 +80,7 @@ _MOCK_INDICATOR_KEYS: dict[str, str] = {
     "department_routing_source": "mock_fallback",
 }
 _INDICATOR_TO_STAGE: dict[str, str] = {
+    "recurrence_mode":           "RecurrenceAgent",
     "classification_source":     "ClassificationAgent",
     "sentiment_mode":            "SentimentAgent",
     "audio_analysis_mode":       "AudioAnalysisAgent",
@@ -88,7 +90,7 @@ _INDICATOR_TO_STAGE: dict[str, str] = {
     "department_routing_source": "DepartmentRoutingAgent",
 }
 _NON_CRITICAL_INDICATOR_KEYS = {
-    "sentiment_mode", "audio_analysis_mode", "sentiment_combiner_mode"
+    "recurrence_mode", "sentiment_mode", "audio_analysis_mode", "sentiment_combiner_mode"
 }
 
 
@@ -109,7 +111,7 @@ def _noncritical_mock_warnings(state: dict) -> list[str]:
     return [
         _INDICATOR_TO_STAGE[k]
         for k in _NON_CRITICAL_INDICATOR_KEYS
-        if str(state.get(k, "")).lower() == "mock_fallback"
+        if str(state.get(k, "")).lower() == _MOCK_INDICATOR_KEYS[k]
     ]
 
 
