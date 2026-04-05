@@ -1,8 +1,50 @@
-import { StrictMode } from 'react'
+import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { clearAllAuth } from './utils/auth'
+
+// ── Global error boundary (catches uncaught React render errors) ──────────────
+class GlobalErrorBoundary extends Component {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, info) {
+    // Log privately — never expose error details to the user
+    console.error('[ErrorBoundary]', error, info?.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', height: '100vh', background: '#06010f', color: '#fff',
+          fontFamily: 'sans-serif', gap: '12px'
+        }}>
+          <p style={{ fontSize: '18px', margin: 0 }}>Something went wrong.</p>
+          <p style={{ fontSize: '14px', opacity: 0.6, margin: 0 }}>
+            Please refresh the page or contact support if the issue persists.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: '8px', padding: '8px 20px', borderRadius: '8px',
+              border: 'none', background: '#5924b4', color: '#fff',
+              cursor: 'pointer', fontSize: '14px'
+            }}
+          >
+            Refresh
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ── Global 401 interceptor ────────────────────────────────────────────────────
 // Catches expired/invalid tokens mid-session so no page stays stuck showing empty data.
@@ -30,6 +72,8 @@ window.fetch = async (...args) => {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <GlobalErrorBoundary>
+      <App />
+    </GlobalErrorBoundary>
   </StrictMode>,
 )

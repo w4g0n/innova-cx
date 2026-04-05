@@ -138,7 +138,13 @@ _has_sla_policy_fn = False
 # =========================================================
 # App
 # =========================================================
-app = FastAPI(title="InnovaCX API (DB-backed)", version="0.1.0")
+_EXPOSE_DOCS = os.getenv("EXPOSE_API_DOCS", "false").lower() == "true"
+app = FastAPI(
+    title="InnovaCX API",
+    docs_url="/docs" if _EXPOSE_DOCS else None,
+    redoc_url="/redoc" if _EXPOSE_DOCS else None,
+    openapi_url="/openapi.json" if _EXPOSE_DOCS else None,
+)
 
 if SLOWAPI_AVAILABLE:
     try:
@@ -227,7 +233,8 @@ def db_connect():
     try:
         return psycopg2.connect(get_dsn())
     except OperationalError as e:
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        logger.error("db_connect | connection failed: %s", e)
+        raise HTTPException(status_code=500, detail="A server error occurred. Please try again later.")
 
 
 def _ensure_runtime_schema_compatibility() -> None:
@@ -5556,7 +5563,8 @@ async def proxy_chatbot_chat(body: ChatbotProxyRequest, _csrf: None = Depends(re
             last_error = exc
             continue
 
-    raise HTTPException(status_code=503, detail=f"Chatbot service unavailable: {last_error}")
+    logger.warning("chatbot_proxy | all endpoints failed: %s", last_error)
+    raise HTTPException(status_code=503, detail="Chat service is temporarily unavailable. Please try again later.")
 
 
 @api.post("/transcriber/transcribe")
@@ -5594,7 +5602,8 @@ async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
             last_error = exc
             continue
 
-    raise HTTPException(status_code=503, detail=f"Transcriber service unavailable: {last_error}")
+    logger.warning("transcriber_proxy | all endpoints failed: %s", last_error)
+    raise HTTPException(status_code=503, detail="Transcription service is temporarily unavailable. Please try again later.")
 
 
 @api.post("/orchestrator/process/text")
@@ -5646,7 +5655,8 @@ async def proxy_orchestrator_process_text(request: Request):
                 continue
         await asyncio.sleep(0.5 * attempt)
 
-    raise HTTPException(status_code=503, detail=f"Orchestrator service unavailable: {last_error}")
+    logger.warning("orchestrator_proxy | all endpoints failed: %s", last_error)
+    raise HTTPException(status_code=503, detail="Service is temporarily unavailable. Please try again later.")
 
 
 # =========================================================
