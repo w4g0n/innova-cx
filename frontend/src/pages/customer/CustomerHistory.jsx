@@ -574,7 +574,6 @@ export default function CustomerMyTickets() {
               const ticketId  = sanitizeId(t.ticketId, 48);
               const subject   = safeTicketField(t.subject || t.description?.subject || "Untitled Ticket", 200);
               const status    = safeTicketField(t.status, 40);
-              const priority  = safeTicketField(t.priority, 20);
               const ticketType = safeTicketField(t.ticketType || t.type, 60);
               const statusKey = normalizeStatus(status);
 
