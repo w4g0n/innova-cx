@@ -20,18 +20,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from pipeline import pipeline
-from queue_manager import enqueue_ticket, queue_worker_loop, release_held_ticket, rerun_failed_stage
+from queue_manager import (
+    enqueue_ticket,
+    ensure_pipeline_control_table,
+    get_pipeline_control_state,
+    pause_pipeline_globally,
+    queue_worker_loop,
+    release_held_ticket,
+    rerun_failed_stage,
+    rerun_queue_item,
+    resume_pipeline_globally,
+)
 from agents.step04_sentimentanalysis.step import get_sentiment_diagnostics
 from agents.step03_classifier.step import get_classifier_diagnostics
 from agents.step08_featureengineering.step import get_feature_engineering_diagnostics
 from agents.step01_subjectgeneration.step import get_subject_generation_diagnostics
-from agents.step02_suggestedresolution.step import (
-    get_suggested_resolution_diagnostics,
-    retrain_resolution_examples_from_db,
-)
+from agents.step02_suggestedresolution.step import get_suggested_resolution_diagnostics
 from agents.step10_router.step import get_router_diagnostics
 from agents.step05_audioanalysis.step import get_audio_analysis_diagnostics
 from agents.step09_priority.step import record_manager_feedback_from_state, get_priority_diagnostics
+from agents.step11_reviewagent.step import review_pipeline, get_review_agent_diagnostics
+from shared_model_service import get_shared_qwen
 
 try:
     from db import ensure_log_tables, db_connect
@@ -52,10 +61,6 @@ for noisy_logger in ("httpx", "httpcore", "urllib3", "uvicorn.access"):
 app = FastAPI(title="InnovaCX Orchestrator", version="1.0.0")
 
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
-CHATBOT_URL = os.getenv("CHATBOT_URL", "http://chatbot:8000").rstrip("/")
-CHATBOT_URL_LOCAL = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001").rstrip("/")
-CHATBOT_STARTUP_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_STARTUP_TIMEOUT_SECONDS", "240"))
-CHATBOT_STARTUP_POLL_INTERVAL_SECONDS = float(os.getenv("CHATBOT_STARTUP_POLL_INTERVAL_SECONDS", "5"))
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,70 +75,21 @@ class PriorityRelearnRequest(BaseModel):
     retrain_now: bool = False
 
 
-class SuggestedResolutionRelearnRequest(BaseModel):
-    max_examples: int = 12
-
-
 # ---------------------------------------------------------------------------
 # Startup — ensure logging tables exist (if db module is available)
 # ---------------------------------------------------------------------------
 
 @app.on_event("startup")
 async def _startup():
-    await _wait_for_chatbot_health()
     if ensure_log_tables:
         ensure_log_tables()
+    ensure_pipeline_control_table()
     _log_model_mode_summary()
+    # Warm the shared Qwen model at startup so the first live ticket does not
+    # spend its stage timeout budget on model load.
+    await asyncio.to_thread(get_shared_qwen)
     # Start the persistent queue background worker
     asyncio.create_task(queue_worker_loop())
-
-
-async def _wait_for_chatbot_health() -> None:
-    import time
-
-    if CHATBOT_STARTUP_TIMEOUT_SECONDS <= 0:
-        logger.info("startup | chatbot health gate disabled")
-        return
-
-    timeout = httpx.Timeout(10.0)
-    last_error = None
-    started_at = time.monotonic()
-    health_urls = [f"{CHATBOT_URL}/health"]
-    if CHATBOT_URL_LOCAL and CHATBOT_URL_LOCAL != CHATBOT_URL:
-        health_urls.append(f"{CHATBOT_URL_LOCAL}/health")
-
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        while True:
-            for health_url in health_urls:
-                try:
-                    response = await client.get(health_url)
-                    response.raise_for_status()
-                    payload = response.json() or {}
-                    if str(payload.get("status") or "").lower() == "healthy":
-                        logger.info("startup | chatbot dependency ready url=%s", health_url)
-                        return
-                    last_error = RuntimeError(f"unhealthy response from {health_url}: {payload}")
-                except Exception as exc:
-                    last_error = exc
-
-            if (time.monotonic() - started_at) >= CHATBOT_STARTUP_TIMEOUT_SECONDS:
-                break
-
-            logger.info(
-                "startup | waiting for chatbot dependency timeout=%ss poll=%ss err=%s",
-                CHATBOT_STARTUP_TIMEOUT_SECONDS,
-                CHATBOT_STARTUP_POLL_INTERVAL_SECONDS,
-                last_error,
-            )
-            await _sleep_for_chatbot_poll()
-
-    raise RuntimeError(f"chatbot dependency did not become healthy before startup deadline: {last_error}")
-
-
-async def _sleep_for_chatbot_poll() -> None:
-    import asyncio
-
-    await asyncio.sleep(max(1.0, CHATBOT_STARTUP_POLL_INTERVAL_SECONDS))
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +101,7 @@ async def health():
     return {
         "status": "healthy",
         "service": "orchestrator",
+        "pipeline_control": get_pipeline_control_state(),
         **get_subject_generation_diagnostics(),
         **get_suggested_resolution_diagnostics(),
         **get_sentiment_diagnostics(),
@@ -153,6 +110,7 @@ async def health():
         **get_feature_engineering_diagnostics(),
         **get_router_diagnostics(),
         **get_priority_diagnostics(),
+        **get_review_agent_diagnostics(),
     }
 
 
@@ -238,6 +196,15 @@ def _log_model_mode_summary() -> None:
                 "router model artifact present"
                 if router_diag.get("department_router_local_model_exists")
                 else f"model artifact missing at {router_diag.get('department_router_model_path') or '(not configured)'}"
+            ),
+        ),
+        (
+            "ReviewAgent",
+            get_review_agent_diagnostics().get("review_agent_mode", "unavailable"),
+            (
+                "review agent model artifact present"
+                if get_review_agent_diagnostics().get("review_agent_model_exists")
+                else "review agent unavailable (no Qwen artifact)"
             ),
         ),
     ]
@@ -376,6 +343,10 @@ class QueueRerunStageRequest(BaseModel):
     queue_id: str
 
 
+class QueueRerunRequest(BaseModel):
+    queue_id: str
+
+
 @app.post("/queue/release")
 async def queue_release(body: QueueReleaseRequest):
     """
@@ -391,6 +362,35 @@ async def queue_release(body: QueueReleaseRequest):
     return {"ok": True, "queue_id": body.queue_id}
 
 
+@app.post("/queue/rerun")
+async def queue_rerun(body: QueueRerunRequest):
+    """
+    Reset a queue item and enqueue a full rerun from the start of the pipeline.
+    """
+    ok = rerun_queue_item(body.queue_id)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail="Full rerun failed — ticket may be completed, missing, or out of retries",
+        )
+    return {"ok": True, "queue_id": body.queue_id}
+
+
+@app.get("/queue/control")
+async def queue_control():
+    return get_pipeline_control_state()
+
+
+@app.post("/queue/control/pause")
+async def queue_pause():
+    return pause_pipeline_globally()
+
+
+@app.post("/queue/control/resume")
+async def queue_resume():
+    return resume_pipeline_globally()
+
+
 @app.post("/queue/rerun-stage")
 async def queue_rerun_stage(body: QueueRerunStageRequest):
     """
@@ -404,14 +404,75 @@ async def queue_rerun_stage(body: QueueRerunStageRequest):
     return result
 
 
-@app.post("/suggested-resolution/relearn")
-async def suggested_resolution_relearn(body: SuggestedResolutionRelearnRequest):
+class ReviewTriggerRequest(BaseModel):
+    ticket_id: str
+
+
+@app.post("/api/review")
+async def trigger_review(body: ReviewTriggerRequest):
+    """
+    Re-run the Review Agent on a completed ticket's latest pipeline state.
+    Fetches the DepartmentRoutingAgent output from pipeline_stage_events
+    and re-runs review_pipeline(). Useful for re-reviewing after manual corrections.
+    """
+    ticket_id = str(body.ticket_id or "").strip()
+    if not ticket_id:
+        raise HTTPException(status_code=422, detail="ticket_id is required")
+
+    state = _fetch_latest_routing_state(ticket_id)
+    if not state:
+        raise HTTPException(
+            status_code=404,
+            detail="No DepartmentRoutingAgent output found for this ticket",
+        )
+
     try:
-        result = retrain_resolution_examples_from_db(max_examples=body.max_examples)
+        result = await asyncio.wait_for(review_pipeline(state), timeout=60.0)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Review Agent timed out")
     except Exception as exc:
-        logger.error("suggested_resolution_relearn | failed err=%s", exc)
-        raise HTTPException(status_code=500, detail=f"Failed to rebuild suggested resolution examples: {exc}")
-    return result
+        logger.error("api_review | failed ticket=%s err=%s", ticket_id, exc)
+        raise HTTPException(status_code=500, detail=f"Review Agent failed: {exc}")
+
+    return {
+        "ok": True,
+        "ticket_id": ticket_id,
+        "verdict": result.get("review_agent_verdict"),
+        "verdict_reason": result.get("review_agent_verdict_reason"),
+        "decision_id": result.get("review_agent_decision_id"),
+    }
+
+
+def _fetch_latest_routing_state(ticket_id: str) -> dict | None:
+    """Fetch the last DepartmentRoutingAgent output for the given ticket."""
+    if not db_connect:
+        return None
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT input_state, output_state
+                    FROM pipeline_stage_events
+                    WHERE ticket_id::text = %s
+                      AND stage_name = 'DepartmentRoutingAgent'
+                      AND status = 'success'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    (ticket_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                input_state = _json_to_dict(row[0])
+                output_state = _json_to_dict(row[1])
+                merged = dict(input_state)
+                merged.update(output_state)
+                return merged
+    except Exception as exc:
+        logger.warning("api_review | failed fetching routing state ticket=%s err=%s", ticket_id, exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -470,7 +531,7 @@ async def process_text(
         "transcript": text.strip(),
         "ticket_id": ticket_id.strip() if ticket_id else None,
         "subject": subject.strip() if subject else None,
-        "label": "complaint",
+        "label": None,
         "status": "Open",
         "created_by_user_id": created_by_user_id.strip() if created_by_user_id else None,
         "ticket_source": ticket_source.strip() if ticket_source else None,

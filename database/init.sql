@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   ticket_code         TEXT NOT NULL UNIQUE,
   subject             TEXT NOT NULL,
   details             TEXT NOT NULL,
-  ticket_type         ticket_type NOT NULL DEFAULT 'Complaint',
+  ticket_type         ticket_type,
   status              ticket_status NOT NULL DEFAULT 'Open',
   priority            ticket_priority,
   department_id       UUID REFERENCES departments(id) ON DELETE SET NULL,
@@ -192,22 +192,7 @@ ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at T
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_type TEXT;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS human_overridden BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN NOT NULL DEFAULT FALSE;
-
-CREATE TABLE IF NOT EXISTS ticket_resolution_feedback (
-    id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    ticket_id            UUID        NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-    employee_user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    decision             TEXT        NOT NULL CHECK (decision IN ('accepted', 'declined_custom')),
-    suggested_resolution TEXT,
-    employee_resolution  TEXT,
-    final_resolution     TEXT        NOT NULL,
-    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_ticket_resolution_feedback_ticket
-    ON ticket_resolution_feedback (ticket_id);
-CREATE INDEX IF NOT EXISTS idx_ticket_resolution_feedback_employee
-    ON ticket_resolution_feedback (employee_user_id);
+\ir scripts/learning.sql
 
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_priority    ON tickets(priority);
@@ -2619,13 +2604,16 @@ INSERT INTO tickets (
 ON CONFLICT (ticket_code) DO NOTHING;
 
 -- =========================================================
--- RESOLUTION FEEDBACK SEED
+-- SUGGESTED RESOLUTION USAGE SEED
 -- Provides data for Section C: AI acceptance rate analytics
 -- decision: 'accepted' = employee accepted AI suggestion
 --           'declined_custom' = employee wrote their own resolution
 -- =========================================================
-INSERT INTO ticket_resolution_feedback (ticket_id, employee_user_id, decision, suggested_resolution, employee_resolution, final_resolution)
-SELECT t.id, u.id, fb.decision, fb.suggested, fb.custom, fb.final
+INSERT INTO suggested_resolution_usage (
+  ticket_id, employee_user_id, decision, department,
+  suggested_text, final_text, used
+)
+SELECT t.id, u.id, fb.decision, d.name, fb.suggested, fb.final, (fb.decision = 'accepted')
 FROM (VALUES
   -- Ahmed: high acceptance rate (good AI alignment)
   ('CX-M01', 'ahmed@innovacx.net',  'accepted',         'Dispatch HVAC and check compressor.', NULL, 'Replaced compressor unit and recharged refrigerant.'),
@@ -2699,9 +2687,13 @@ FROM (VALUES
 ) AS fb(ticket_code, emp_email, decision, suggested, custom, final)
 JOIN tickets t ON t.ticket_code = fb.ticket_code
 JOIN users u ON u.email = fb.emp_email
+LEFT JOIN departments d ON d.id = t.department_id
 WHERE NOT EXISTS (
-  SELECT 1 FROM ticket_resolution_feedback trf
-  WHERE trf.ticket_id = t.id AND trf.employee_user_id = u.id
+  SELECT 1 FROM suggested_resolution_usage sru
+  WHERE sru.ticket_id = t.id
+    AND sru.employee_user_id = u.id
+    AND sru.decision = fb.decision
+    AND sru.final_text = fb.final
 );
 
 
@@ -3880,18 +3872,16 @@ WHERE NOT EXISTS (
 );
 
 -- ---------------------------------------------------------------------------
--- 20. RESOLUTION FEEDBACK for March 2026 tickets that were resolved
+-- 20. SUGGESTED RESOLUTION USAGE for March 2026 tickets that were resolved
 --     (CX-R01 not yet resolved — only feedback for already-closed CX-M tickets
 --      not yet covered in the original seed)
 -- ---------------------------------------------------------------------------
 
-INSERT INTO public.ticket_resolution_feedback (
-  ticket_id, employee_user_id, decision,
-  suggested_resolution, employee_resolution, final_resolution,
-  model_version, confidence_at_time
+INSERT INTO public.suggested_resolution_usage (
+  ticket_id, employee_user_id, decision, department,
+  suggested_text, final_text, used
 )
-SELECT t.id, u.id, fb.decision, fb.suggested, fb.custom, fb.final,
-  'resolution-v2.0', fb.conf
+SELECT t.id, u.id, fb.decision, d.name, fb.suggested, fb.final, (fb.decision = 'accepted')
 FROM (VALUES
   ('CX-M20','ahmed@innovacx.net','accepted',
    'Tighten mounting bolts and balance fan blade.',
@@ -3908,9 +3898,13 @@ FROM (VALUES
 ) AS fb(ticket_code, emp_email, decision, suggested, custom, final, conf)
 JOIN tickets t ON t.ticket_code = fb.ticket_code
 JOIN users u ON u.email = fb.emp_email
+LEFT JOIN departments d ON d.id = t.department_id
 WHERE NOT EXISTS (
-  SELECT 1 FROM public.ticket_resolution_feedback trf
-  WHERE trf.ticket_id=t.id AND trf.employee_user_id=u.id
+  SELECT 1 FROM public.suggested_resolution_usage sru
+  WHERE sru.ticket_id = t.id
+    AND sru.employee_user_id = u.id
+    AND sru.decision = fb.decision
+    AND sru.final_text = fb.final
 );
 
 
@@ -3957,6 +3951,8 @@ BEGIN
     (t_m53,  'Maintenance', 52.40, FALSE, 'Facilities Management', 'manager', mgr, now() - INTERVAL '5 hours'),
     (t_3862, 'HR',          45.00, FALSE, 'Legal & Compliance',    'manager', mgr, now() - INTERVAL '1 day');
 END $$;
+
+\ir scripts/learning_seed.sql
 
 -- ---------------------------------------------------------------------------
 -- NOTE: Analytics materialized views are created and refreshed by

@@ -6,7 +6,7 @@
 --   mv_ticket_base          → sourced from tickets (already seeded in seedV2)
 --   mv_daily_volume         → sourced from mv_ticket_base
 --   mv_employee_daily       → sourced from mv_ticket_base
---   mv_acceptance_daily     → sourced from ticket_resolution_feedback
+--   mv_acceptance_daily     → sourced from suggested_resolution_usage
 --   mv_operator_qc_daily    → sourced from tickets + approval_requests
 --   mv_chatbot_daily        → sourced from sessions + user_chat_logs
 --   mv_sentiment_daily      → sourced from sentiment_outputs
@@ -560,11 +560,14 @@ WHERE ticket_code IN (
 AND resolved_at IS NULL;
 
 -- =============================================================================
--- TICKET_RESOLUTION_FEEDBACK for new tickets
+-- SUGGESTED_RESOLUTION_USAGE for new tickets
 -- 80% accepted, 20% declined_custom — matches the QC dashboard display
 -- =============================================================================
-INSERT INTO ticket_resolution_feedback (ticket_id, employee_user_id, decision, suggested_resolution, employee_resolution, final_resolution)
-SELECT t.id, u.id, fb.decision, fb.suggested, fb.custom, fb.final
+INSERT INTO suggested_resolution_usage (
+  ticket_id, employee_user_id, decision, department,
+  suggested_text, final_text, used
+)
+SELECT t.id, u.id, fb.decision, d.name, fb.suggested, fb.final, (fb.decision = 'accepted')
 FROM (VALUES
   ('CX-F001','sarah@innovacx.net','accepted',
    'Shut down lift; inspect motor cooling; replace thermal relay.',
@@ -678,8 +681,13 @@ FROM (VALUES
 ) AS fb(tc, emp, decision, suggested, custom, final)
 JOIN tickets t ON t.ticket_code = fb.tc
 JOIN users u ON u.email = fb.emp
+LEFT JOIN departments d ON d.id = t.department_id
 WHERE NOT EXISTS (
-  SELECT 1 FROM ticket_resolution_feedback trf WHERE trf.ticket_id = t.id AND trf.employee_user_id = u.id
+  SELECT 1 FROM suggested_resolution_usage sru
+  WHERE sru.ticket_id = t.id
+    AND sru.employee_user_id = u.id
+    AND sru.decision = fb.decision
+    AND sru.final_text = fb.final
 );
 
 -- =============================================================================
