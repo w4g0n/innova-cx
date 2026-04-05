@@ -601,7 +601,6 @@ export default function CustomerMyTickets() {
                       <span className="cs-status-dot" />
                       {status}
                     </span>
-                    <span className="cs-priority">{priority}</span>
                   </div>
 
                   <h3 className="cmyt-ticket-subject">{subject}</h3>
