@@ -8,8 +8,19 @@ export default defineConfig({
     port: 5173,
     allowedHosts: ['innovacx.net', 'www.innovacx.net', 'localhost', 'staff.innovacx.net'],
   },
-  build: {
-    sourcemap: false,   // never ship source maps to production
-    minify: 'esbuild',  // explicit — esbuild is fast and already bundled with Vite
+  preview: {
+    host: '0.0.0.0',
+    port: 5173,
+    allowedHosts: ['innovacx.net', 'www.innovacx.net', 'localhost', 'staff.innovacx.net'],
   },
+  build: {
+    sourcemap: false, // ✅ security: no source exposure
+    minify: 'terser', // ✅ better optimization than esbuild
+    terserOptions: {
+      compress: {
+        drop_console: true, // ✅ removes console.log
+        drop_debugger: true, // ✅ removes debugger
+      }
+    }
+  }
 })
