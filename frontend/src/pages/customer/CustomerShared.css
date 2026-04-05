@@ -528,3 +528,86 @@
   background: rgba(147,51,234,.07);
   color: var(--text);
 }
+/* ── ACCESSIBILITY — Focus visible styles ────────────────────── */
+/* Visible keyboard focus ring for all interactive elements */
+:focus-visible {
+  outline: 2px solid var(--orchid);
+  outline-offset: 2px;
+}
+
+/* Remove outline for mouse users, keep for keyboard */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Ensure buttons and interactive elements have visible focus */
+.cs-btn:focus-visible,
+.cl-icon-btn:focus-visible,
+.cl-theme-btn:focus-visible,
+.cl-avatar-btn:focus-visible,
+.cs-back-btn:focus-visible,
+.navDropdownItem:focus-visible,
+.navPopoverItem:focus-visible,
+.cmyt-tab:focus-visible,
+.cmyt-sort-btn:focus-visible {
+  outline: 2px solid var(--orchid);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.18);
+}
+
+/* Skip-to-content link for keyboard users */
+.skip-to-content {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  z-index: 9999;
+  padding: 10px 18px;
+  background: var(--orchid);
+  color: #fff;
+  font-family: "Outfit", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 0 0 10px 10px;
+  text-decoration: none;
+  transition: top .15s;
+}
+.skip-to-content:focus {
+  top: 0;
+}
+
+/* ── ACCESSIBILITY — Contrast improvements ───────────────────── */
+/* Boost muted text contrast: dark mode rgba(255,255,255,.42) → .58 = ~4.5:1 on dark bg */
+/* Applied via class override to avoid breaking visual design */
+.cs-topbar-label,
+.ctd-page-sub,
+.cmyt-ticket-date,
+.ctd-meta-label,
+.ctd-pipeline-eyebrow,
+.ctd-log-date {
+  color: rgba(255, 255, 255, 0.58);
+}
+[data-theme="light"] .cs-topbar-label,
+[data-theme="light"] .ctd-page-sub,
+[data-theme="light"] .cmyt-ticket-date,
+[data-theme="light"] .ctd-meta-label,
+[data-theme="light"] .ctd-pipeline-eyebrow,
+[data-theme="light"] .ctd-log-date {
+  color: rgba(15, 10, 30, 0.62);
+}
+
+/* Notification popover items — ensure readable contrast */
+.navPopoverItemTime {
+  color: rgba(255, 255, 255, 0.55);
+}
+[data-theme="light"] .navPopoverItemTime {
+  color: rgba(15, 10, 30, 0.55);
+}
+
+/* ── ACCESSIBILITY — Reduced motion ─────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

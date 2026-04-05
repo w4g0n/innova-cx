@@ -5,16 +5,22 @@
  */
 
 /**
+ * Allowlist for general free-text fields (complaint descriptions, chat messages).
+ * Keeps: Unicode letters, Unicode digits, whitespace, newlines, and common
+ * punctuation needed in complaint text. Everything else is stripped.
+ */
+const _ALLOWED_TEXT_RE = /[^\p{L}\p{N}\s\-.,!?'"+()\u005B\u005D@/:;#%&*\n]/gu;
+
+/**
  * Coerce any value to a safe, trimmed string.
- * Strips null bytes (\x00) which can confuse downstream parsers.
+ * Strips characters not in the allowed whitelist, then caps length.
  * @param {*}      val    - any value
  * @param {number} maxLen - hard character cap (default 1000)
  * @returns {string}
  */
 export function sanitizeText(val, maxLen = 1000) {
   if (val === null || val === undefined) return "";
-  // eslint-disable-next-line no-control-regex
-  return String(val).replace(/\x00/g, "").trim().slice(0, maxLen);
+  return String(val).replace(_ALLOWED_TEXT_RE, "").trim().slice(0, maxLen);
 }
 
 /**

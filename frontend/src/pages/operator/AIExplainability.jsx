@@ -5,6 +5,11 @@ import PageHeader from "../../components/common/PageHeader";
 import { apiUrl } from "../../config/apiBase";
 import PillSearch from "../../components/common/PillSearch";
 import PriorityPill from "../../components/common/PriorityPill";
+import {
+  sanitizeId,
+  sanitizeSearchQuery,
+  MAX_SEARCH_LEN,
+} from "./Operatorsanitize";
 import "./AIExplainability.css";
 
 function getStoredToken() {
@@ -518,7 +523,8 @@ const STATUS_CLASS = {
 
 export default function AIExplainability() {
   const navigate = useNavigate();
-  const { ticketCode } = useParams();
+  const { ticketCode: rawTicketCode } = useParams();
+  const ticketCode = sanitizeId(rawTicketCode);
   const detailMode = Boolean(ticketCode);
 
   const [ticketList, setTicketList] = useState([]);
@@ -556,8 +562,8 @@ export default function AIExplainability() {
       const res = await apiFetch("/operator/ai-explainability/tickets");
       setTicketList(Array.isArray(res?.items) ? res.items : []);
       setStatusCounts(res?.statusCounts || {});
-    } catch (e) {
-      setListError(e?.message || "Failed to load tickets.");
+    } catch {
+      setListError("Failed to load tickets. Please try again.");
       setTicketList([]);
     } finally {
       setListLoading(false);
@@ -689,23 +695,23 @@ export default function AIExplainability() {
         setSelectedExecutionId(nextExecutionId);
       }
       setOverrideMsg("Pipeline rerun completed from the beginning.");
-    } catch (e) {
-      setOverrideErr(e?.message || "Failed to rerun pipeline.");
+    } catch {
+      setOverrideErr("Failed to rerun pipeline. Please try again.");
     } finally {
       setRerunBusy(false);
     }
   }
 
-  async function loadTicket(ticketId) {
-    const q = String(ticketId || "").trim();
+  async function loadTicket(code) {
+    const q = sanitizeId(String(code || "").trim());
     if (!q) return;
     setDetailLoading(true);
     setDetailError("");
     try {
       const res = await apiFetch(`/operator/ai-explainability/tickets/${encodeURIComponent(q)}`);
       setData(res);
-    } catch (e) {
-      setDetailError(e?.message || "Failed to load explainability data.");
+    } catch {
+      setDetailError("Failed to load explainability data. Please try again.");
       setData(null);
     } finally {
       setDetailLoading(false);
@@ -833,8 +839,8 @@ export default function AIExplainability() {
           ? `Overrides applied. Priority changed: ${beforePriority} -> ${afterPriority}.`
           : `Overrides applied. Prioritization rerun completed (priority unchanged: ${afterPriority}).`,
       );
-    } catch (e) {
-      setOverrideErr(e?.message || "Failed to apply overrides.");
+    } catch {
+      setOverrideErr("Failed to apply overrides. Please try again.");
     } finally {
       setOverrideBusy(false);
     }
@@ -855,7 +861,6 @@ export default function AIExplainability() {
       alert(`Failed to delete ticket: ${e?.message}`);
     }
   }
-
   const modelSelectedSummary = useMemo(() => {
     const classificationOut = stageOutputMap.ClassificationAgent || {};
     const featureOut = stageOutputMap.FeatureEngineeringAgent || {};
@@ -909,8 +914,12 @@ export default function AIExplainability() {
             <section className="search-section-EV-VAC">
               <PillSearch
                 value={ticketSearch}
-                onChange={setTicketSearch}
+                onChange={(v) => {
+                  const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
+                  setTicketSearch(sanitizeSearchQuery(raw));
+                }}
                 placeholder="Search by ticket code..."
+                maxLength={MAX_SEARCH_LEN}
               />
             </section>
 
@@ -1140,8 +1149,9 @@ export default function AIExplainability() {
                         <input
                           type="text"
                           value={recurrenceQuery}
-                          onChange={(e) => setRecurrenceQuery(e.target.value)}
+                          onChange={(e) => setRecurrenceQuery(sanitizeSearchQuery(e.target.value))}
                           placeholder="Type ticket code or subject..."
+                          maxLength={MAX_SEARCH_LEN}
                         />
                       </label>
                       {recurrenceLoading ? <div className="aix-subtle">Searching tickets...</div> : null}

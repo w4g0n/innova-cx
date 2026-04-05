@@ -184,7 +184,7 @@ def _build_default_dsn() -> str:
     host = os.getenv("DB_HOST", "localhost")
     port = os.getenv("DB_PORT", "5432")
     name = os.getenv("DB_NAME", "complaints_db")
-    user = os.getenv("DB_USER", "innovacx_admin")
+    user = os.getenv("DB_USER", "innovacx_app")
     password = os.getenv("DB_PASSWORD", "changeme123")
     return f"postgresql://{user}:{password}@{host}:{port}/{name}"
 

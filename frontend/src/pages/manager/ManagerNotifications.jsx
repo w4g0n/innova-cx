@@ -6,6 +6,13 @@ import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import { apiUrl } from "../../config/apiBase";
 import { fireNotifRefresh } from "../../utils/notifRefresh";
+import {
+  sanitizeText,
+  sanitizeId,
+  sanitizeSearchQuery,
+  ALLOWED_NOTIF_FILTERS,
+  MAX_SEARCH_LEN,
+} from "./ManagerSanitize";
 import "./ManagerNotifications.css";
 
 function getAuthToken() {
@@ -65,7 +72,7 @@ export default function ManagerNotifications() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 401) { navigate("/login"); return; }
-      if (!res.ok) throw new Error((await res.text()) || "Failed to load notifications");
+      if (!res.ok) throw new Error("Failed to load notifications.");
       const data = await res.json();
       const normalized = (data.notifications || []).map((n) => {
         const typeMap = {
@@ -73,17 +80,20 @@ export default function ManagerNotifications() {
           escalation: "status_change",
           sla_breach: "sla_warning",
         };
-        const codeMatch = (n.title || "").match(/([A-Z]{2,}-\d+)/);
+        const rawTitle = sanitizeText(n.title, 200);
+        const codeMatch = rawTitle.match(/([A-Z]{2,}-\d+)/);
+        const rawTicketId = n.ticketId || (codeMatch ? codeMatch[1] : null);
         return {
           ...n,
           type: typeMap[n.type] || n.type,
-          message: n.message || n.body || "",
-          ticketId: n.ticketId || (codeMatch ? codeMatch[1] : null),
+          title: rawTitle,
+          message: sanitizeText(n.message || n.body || "", 500),
+          ticketId: sanitizeId(rawTicketId),
         };
       });
       setNotifications(normalized);
-    } catch (e) {
-      setError(e?.message || "Failed to load notifications.");
+    } catch {
+      setError("Failed to load notifications. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -128,6 +138,21 @@ export default function ManagerNotifications() {
     fireNotifRefresh();
   };
 
+  const dismissOne = async (e, n) => {
+    e.stopPropagation();
+    setNotifications((prev) => prev.filter((x) => x.id !== n.id));
+    if (!n.read) {
+      const token = getAuthToken();
+      try {
+        await fetch(`${API_BASE}/manager/notifications/${n.id}/read`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        fireNotifRefresh();
+      } catch { /* non-critical */ }
+    }
+  };
+
   const onNotificationClick = async (n) => {
     const token = getAuthToken();
 
@@ -146,7 +171,7 @@ export default function ManagerNotifications() {
     }
 
     // Navigate AFTER state update and API call
-    if (n.ticketId) navigate(`/manager/complaints/${n.ticketId}`);
+    if (n.ticketId) navigate(`/manager/complaints/${encodeURIComponent(n.ticketId)}`);
   };
 
   return (
@@ -169,13 +194,16 @@ export default function ManagerNotifications() {
         <div className="empNotifs__controls">
           <PillSearch
             value={query}
-            onChange={(v) => typeof v === "string" ? setQuery(v) : setQuery(v?.target?.value ?? "")}
+            onChange={(v) => {
+              const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
+              setQuery(sanitizeSearchQuery(raw));
+            }}
             placeholder="Search notifications..."
+            maxLength={MAX_SEARCH_LEN}
           />
           <div className="empNotifs__filtersRow">
             <PillSelect
               value={filter}
-              onChange={setFilter}
               ariaLabel="Filter notifications"
               options={[
                 { value: "All",     label: "All" },
@@ -184,6 +212,9 @@ export default function ManagerNotifications() {
                 { value: "Reports", label: "Reports" },
                 { value: "System",  label: "System" },
               ]}
+              onChange={(v) => {
+                if (ALLOWED_NOTIF_FILTERS.includes(v)) setFilter(v);
+              }}
             />
             <button
               className="filterPillBtn empNotifs__actionBtn"
@@ -223,6 +254,16 @@ export default function ManagerNotifications() {
                   </div>
                 </div>
                 <div className="empNotifs__right">
+                  <button
+                    type="button"
+                    className="empNotifs__dismiss"
+                    onClick={(e) => dismissOne(e, n)}
+                    aria-label="Dismiss notification"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                      <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+                    </svg>
+                  </button>
                   {!n.read && <span className="empNotifs__dot" />}
                   {n.ticketId && <span className="empNotifs__chev">›</span>}
                 </div>

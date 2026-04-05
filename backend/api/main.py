@@ -10,6 +10,7 @@ import base64
 import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
+from starlette.middleware.base import BaseHTTPMiddleware
 
 import bcrypt
 import psycopg2
@@ -60,6 +61,44 @@ try:
     from api.event_logger import log_application_event
 except Exception:
     from event_logger import log_application_event
+try:
+    from api.security_hardening import (
+        SecurityHeadersMiddleware,
+        get_limiter,
+        rate_limit_auth,
+        SLOWAPI_AVAILABLE,
+        validate_password_complexity,
+        is_account_locked,
+        check_and_record_failed_login,
+        clear_failed_logins,
+        log_auth_event,
+        sanitize_email,
+        validate_upload_file,
+        _sanitize_filename,
+        logout_user,
+        is_token_revoked,
+        generate_csrf_token,
+        verify_csrf_token,
+    )
+except Exception:
+    from security_hardening import (
+        SecurityHeadersMiddleware,
+        get_limiter,
+        rate_limit_auth,
+        SLOWAPI_AVAILABLE,
+        validate_password_complexity,
+        is_account_locked,
+        check_and_record_failed_login,
+        clear_failed_logins,
+        log_auth_event,
+        sanitize_email,
+        validate_upload_file,
+        _sanitize_filename,
+        logout_user,
+        is_token_revoked,
+        generate_csrf_token,
+        verify_csrf_token,
+    )
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
@@ -98,7 +137,19 @@ _has_sla_policy_fn = False
 # =========================================================
 # App
 # =========================================================
-app = FastAPI(title="InnovaCX API (DB-backed)", version="0.1.0")
+_EXPOSE_DOCS = os.getenv("EXPOSE_API_DOCS", "false").lower() == "true"
+app = FastAPI(
+    title="InnovaCX API",
+    docs_url="/docs" if _EXPOSE_DOCS else None,
+    redoc_url="/redoc" if _EXPOSE_DOCS else None,
+    openapi_url="/openapi.json" if _EXPOSE_DOCS else None,
+)
+
+if SLOWAPI_AVAILABLE:
+    try:
+        app.state.limiter = get_limiter()
+    except Exception as exc:
+        logger.warning("rate_limit | limiter init failed: %s", exc)
 
 
 def _parse_allowed_origins() -> List[str]:
@@ -116,6 +167,7 @@ def _parse_allowed_origins() -> List[str]:
 
 ALLOWED_ORIGINS = _parse_allowed_origins()
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -123,6 +175,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# =========================================================
+# CSP Middleware
+# =========================================================
+
+class CSPMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: blob:; "
+            "media-src 'self' blob:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self';"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+app.add_middleware(CSPMiddleware)
+
 
 api = APIRouter(prefix="/api")
 def _ensure_uploads_root() -> str:
@@ -139,7 +219,7 @@ def build_default_dsn() -> str:
     host = os.getenv("DB_HOST", "localhost")
     port = os.getenv("DB_PORT", "5432")
     name = os.getenv("DB_NAME", "complaints_db")
-    user = os.getenv("DB_USER", "innovacx_admin")
+    user = os.getenv("DB_USER", "innovacx_app")
     password = os.getenv("DB_PASSWORD", "changeme123")
     return f"postgresql://{user}:{password}@{host}:{port}/{name}"
 
@@ -152,7 +232,8 @@ def db_connect():
     try:
         return psycopg2.connect(get_dsn())
     except OperationalError as e:
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        logger.error("db_connect | connection failed: %s", e)
+        raise HTTPException(status_code=500, detail="A server error occurred. Please try again later.")
 
 
 def _ensure_runtime_schema_compatibility() -> None:
@@ -231,6 +312,9 @@ def _ensure_runtime_schema_compatibility() -> None:
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
+                # password_changed_at: used by reset_password to stamp the moment
+                # a password was changed via reset flow, enabling stale-session detection.
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;")
                 # FIX (Issue 3 — department_routing table missing):
                 # The live DB volume may pre-date when department_routing was added to init.sql.
                 # Create it here idempotently so the routing review feature works on all envs.
@@ -404,7 +488,7 @@ def execute(sql: str, params: Optional[tuple] = None) -> int:
 # =========================================================
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "86400"))  # 24h
-DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "true").lower() == "true"
+DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "false").lower() == "true"
 DISABLE_MFA = os.getenv("DISABLE_MFA", "false").lower() == "true"
 
 DEV_SEED_USERS = os.getenv("DEV_SEED_USERS", "true").lower() == "true"
@@ -423,6 +507,8 @@ def _b64url_decode(s: str) -> bytes:
 def create_jwt(payload: dict, ttl_seconds: int = JWT_TTL_SECONDS) -> str:
     header = {"alg": "HS256", "typ": "JWT"}
     now = int(time.time())
+    if "jti" not in payload:
+        payload = {**payload, "jti": os.urandom(16).hex()}
     payload = {**payload, "iat": now, "exp": now + ttl_seconds}
 
     header_b64 = _b64url_encode(json.dumps(header, separators=(",", ":")).encode())
@@ -436,7 +522,10 @@ def create_jwt(payload: dict, ttl_seconds: int = JWT_TTL_SECONDS) -> str:
 
 def verify_jwt(token: str) -> dict:
     try:
-        header_b64, payload_b64, sig_b64 = token.split(".")
+        parts = token.split(".")
+        if len(parts) != 3:
+            raise ValueError("Malformed token")
+        header_b64, payload_b64, sig_b64 = parts
         signing_input = f"{header_b64}.{payload_b64}".encode()
         expected_sig = hmac.new(JWT_SECRET.encode(), signing_input, hashlib.sha256).digest()
         if not hmac.compare_digest(_b64url_encode(expected_sig), sig_b64):
@@ -447,6 +536,36 @@ def verify_jwt(token: str) -> dict:
             raise ValueError("Token expired")
         return payload
     except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def _check_token_issued_after_password_change(payload: dict, user: dict) -> None:
+    """
+    Reject JWTs issued before the user's last password change.
+    This invalidates all sessions that existed before a password reset.
+    """
+    password_changed_at = user.get("password_changed_at")
+    if password_changed_at is None:
+        return  # No password change recorded — token is fine
+
+    iat = payload.get("iat")
+    if iat is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Convert password_changed_at to a UTC Unix timestamp for comparison
+    try:
+        if hasattr(password_changed_at, "timestamp"):
+            changed_ts = password_changed_at.timestamp()
+        else:
+            # Fallback: already a numeric value
+            changed_ts = float(password_changed_at)
+    except Exception:
+        # If we cannot parse the timestamp, err on the side of caution
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Add a 2-second grace window to tolerate clock skew between
+    # the token-issuance path and the password-change write path.
+    if int(iat) < (changed_ts - 2):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
@@ -654,9 +773,13 @@ def _get_bearer_token(authorization: Optional[str]) -> str:
 def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
     token = _get_bearer_token(authorization)
     payload = verify_jwt(token)
+    jti = str(payload.get("jti") or "").strip()
+    if jti and is_token_revoked(jti):
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
     user = fetch_one(
         """
         SELECT u.id, u.email, u.role, u.is_active, u.totp_secret, u.mfa_enabled,
+               u.password_changed_at,
                up.full_name, up.department_id
         FROM users u
         LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -666,6 +789,8 @@ def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dic
     )
     if not user or not user.get("is_active"):
         raise HTTPException(status_code=401, detail="Invalid or inactive user")
+    # Reject tokens issued before the user's last password change
+    _check_token_issued_after_password_change(payload, user)
     return user
 
 
@@ -956,6 +1081,18 @@ def api_root():
     return {"message": "InnovaCX API is running", "time": datetime.now(timezone.utc).isoformat()}
 
 
+@api.get("/csrf-token", tags=["security"])
+def get_csrf_token():
+    """Issue a stateless HMAC-signed CSRF token for form submissions."""
+    return {"csrf_token": generate_csrf_token()}
+
+
+async def require_csrf(x_csrf_token: str = Header(None, alias="X-CSRF-Token")):
+    """FastAPI dependency: validates X-CSRF-Token header on mutating form requests."""
+    if not x_csrf_token or not verify_csrf_token(x_csrf_token):
+        raise HTTPException(status_code=403, detail="Invalid or missing CSRF token.")
+
+
 # ----------------------------
 # MFA / TOTP Setup & Verification
 # ----------------------------
@@ -1004,28 +1141,41 @@ def totp_setup(user: Dict[str, Any] = Depends(get_current_user)):
 
 
 @api.post("/auth/login")
-def login(body: LoginRequest):
+@rate_limit_auth()
+def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_csrf)):
     """
     Login route returns a temporary token.
     If MFA is not yet enabled, frontend should show QR code.
     """
-    email = body.email.strip().lower()
+    email = sanitize_email(body.email)
+    client_ip = request.client.host if request and request.client else None
+
+    if is_account_locked(email):
+        log_auth_event("login_blocked_locked", email=email, ip=client_ip)
+        raise HTTPException(status_code=423, detail="Account temporarily locked. Please try again later.")
+
     user = fetch_one(
         "SELECT id, email, password_hash, role, is_active, totp_secret, mfa_enabled FROM users WHERE email = %s",
         (email,),
     )
 
     if not user or not user.get("is_active"):
+        check_and_record_failed_login(email)
+        log_auth_event("login_failed_unknown_email", email=email, ip=client_ip)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not verify_password(body.password, user["password_hash"]):
+        check_and_record_failed_login(email)
+        log_auth_event("login_failed", user_id=str(user["id"]), email=email, ip=client_ip)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    clear_failed_logins(email)
     execute("UPDATE users SET last_login_at = NOW() WHERE id = %s", (user["id"],))
 
     # Bypass TOTP when explicitly disabled (dev/demo only — set DISABLE_MFA=true in .env on VM)
     if DISABLE_MFA:
         access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
         profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+        log_auth_event("login_success", user_id=str(user["id"]), email=email, ip=client_ip, extra={"mfa_bypassed": True})
         return {
             "access_token": access_token,
             "token_type": "bearer",
@@ -1045,12 +1195,13 @@ def login(body: LoginRequest):
         user["totp_secret"] = secret
 
     # Temporary token valid for 10 minutes
-    temp_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=600)
+    temp_token = create_jwt({"sub": str(user["id"]), "type": "mfa_temp"}, ttl_seconds=600)
 
     # Flag to indicate MFA setup required
     requires_setup = not user.get("mfa_enabled", False)
 
     _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    log_auth_event("login_success", user_id=str(user["id"]), email=email, ip=client_ip, extra={"requires_setup": bool(requires_setup), "temporary_token": True})
     return {
         "access_token": temp_token,
         "token_type": "temporary",
@@ -1062,7 +1213,9 @@ def login(body: LoginRequest):
             "full_name": (_profile or {}).get("full_name") or user["email"],
         },
     }
-def totp_setup_complete(user: Dict[str, Any] = Depends(get_current_user)):
+
+@api.post("/auth/totp-setup-complete")
+def totp_setup_complete(user: Dict[str, Any] = Depends(get_current_user), _csrf: None = Depends(require_csrf)):
     """
     Mark MFA as enabled after user has scanned QR and verified OTP.
     """
@@ -1074,31 +1227,37 @@ def totp_setup_complete(user: Dict[str, Any] = Depends(get_current_user)):
     return {"success": True}
 
 @api.post("/auth/totp-verify")
-def totp_verify(body: VerifyTOTPRequest):
+@rate_limit_auth()
+def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends(require_csrf)):
     """
     Verifies the OTP code from user.
     If correct, marks MFA as enabled (first-time setup) and returns a full JWT.
     """
     payload = verify_jwt(body.login_token)
+    client_ip = request.client.host if request and request.client else None
     user = fetch_one(
         "SELECT id, email, role, totp_secret, mfa_enabled FROM users WHERE id = %s",
         (payload.get("sub"),),
     )
 
     if not user or not user.get("totp_secret"):
+        log_auth_event("totp_failed", email=None if not user else user.get("email"), ip=client_ip, extra={"reason": "not_configured"})
         raise HTTPException(status_code=400, detail="TOTP not configured")
 
     totp = pyotp.TOTP(user["totp_secret"])
     if not totp.verify(body.otp_code, valid_window=1):
+        log_auth_event("totp_failed", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
         raise HTTPException(status_code=401, detail="Invalid OTP code")
 
     # Enable MFA if first-time verification
     if not user.get("mfa_enabled"):
         execute("UPDATE users SET mfa_enabled = TRUE WHERE id = %s", (user["id"],))
+        log_auth_event("mfa_setup_complete", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
 
     # Issue real JWT valid for standard TTL
     access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
     _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    log_auth_event("totp_success", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -1115,8 +1274,10 @@ def totp_verify(body: VerifyTOTPRequest):
 # Routes: Password Reset
 # =========================================================
 @api.post("/auth/forgot-password")
-def forgot_password(body: ForgotPasswordRequest):
-    email = body.email.strip().lower()
+@rate_limit_auth()
+def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None = Depends(require_csrf)):
+    email = sanitize_email(body.email)
+    client_ip = request.client.host if request and request.client else None
     user = fetch_one(
         "SELECT id FROM users WHERE email = %s AND is_active = TRUE",
         (email,),
@@ -1125,6 +1286,16 @@ def forgot_password(body: ForgotPasswordRequest):
     if user:
         raw_token = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        # Invalidate all previous unused reset tokens for this user before issuing a new one.
+        # This prevents token accumulation and limits the attack window.
+        execute(
+            """
+            UPDATE password_reset_tokens
+            SET used_at = NOW()
+            WHERE user_id = %s AND used_at IS NULL
+            """,
+            (user["id"],),
+        )
         execute(
             """
             INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
@@ -1132,22 +1303,29 @@ def forgot_password(body: ForgotPasswordRequest):
             """,
             (user["id"], token_hash),
         )
+        # DEV_LOG_RESET_TOKENS defaults to false; set to true only in local dev envs.
+        # Never enable in production — tokens grant full account takeover.
         if DEV_LOG_RESET_TOKENS:
             print(f"[DEV] Password reset token for {email}: {raw_token}")
+        log_auth_event("password_reset_requested", user_id=str(user["id"]), email=email, ip=client_ip)
+    else:
+        log_auth_event("password_reset_requested", email=email, ip=client_ip, extra={"user_exists": False})
 
+    # Always return the same generic response regardless of whether the email exists.
     return {"ok": True, "message": "If an account exists for that email, reset instructions were sent."}
 
 
 @api.post("/auth/reset-password")
-def reset_password(body: ResetPasswordRequest):
+@rate_limit_auth()
+def reset_password(request: Request, body: ResetPasswordRequest, user: Dict[str, Any] = Depends(get_current_user), _csrf: None = Depends(require_csrf)):
     raw_token = (body.token or "").strip()
     new_password = body.new_password or ""
-
+    
     if len(raw_token) < 10:
-        raise HTTPException(status_code=400, detail="Invalid token")
-    if len(new_password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    validate_password_complexity(body.new_password, field_name="New password", email=user["email"])
 
+    client_ip = request.client.host if request and request.client else None
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -1164,9 +1342,26 @@ def reset_password(body: ResetPasswordRequest):
                 raise HTTPException(status_code=400, detail="Invalid or expired token")
 
             new_hash = hash_password(new_password)
-            cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, row["user_id"]))
-            cur.execute("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = %s", (row["id"],))
+            # Update password and stamp password_changed_at so existing JWTs issued
+            # before this moment can be detected as stale on next verification.
+            # This is the safest session-invalidation measure available without a
+            # separate token revocation table (see ADDITIONAL FILES NEEDED below).
+            cur.execute(
+                """
+                UPDATE users
+                SET password_hash = %s,
+                    password_changed_at = NOW()
+                WHERE id = %s
+                """,
+                (new_hash, row["user_id"]),
+            )
+            # Mark token as used immediately — single-use enforcement.
+            cur.execute(
+                "UPDATE password_reset_tokens SET used_at = NOW() WHERE id = %s",
+                (row["id"],),
+            )
 
+    log_auth_event("password_reset_complete", user_id=str(row["user_id"]), ip=client_ip)
     return {"ok": True, "message": "Password updated successfully"}
 
 class ChangePasswordRequest(BaseModel):
@@ -1176,16 +1371,39 @@ class ChangePasswordRequest(BaseModel):
 @api.post("/auth/change-password")
 def change_password(
     body: ChangePasswordRequest,
+    request: Request,
     user: Dict[str, Any] = Depends(get_current_user),
+    _csrf: None = Depends(require_csrf),
 ):
-    if len(body.new_password) < 8:
-        raise HTTPException(status_code=422, detail="New password must be at least 8 characters.")
-    if len(body.new_password) > 128:
-        raise HTTPException(status_code=422, detail="Password too long.")
+    validate_password_complexity(body.new_password, field_name="New password", email=user["email"])
     row = fetch_one("SELECT password_hash FROM users WHERE id = %s", (user["id"],))
     if not row or not verify_password(body.current_password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Current password is incorrect.")
-    execute("UPDATE users SET password_hash = %s WHERE id = %s", (hash_password(body.new_password), user["id"]))
+    execute(
+        "UPDATE users SET password_hash = %s, password_changed_at = NOW() WHERE id = %s",
+        (hash_password(body.new_password), user["id"]),
+    )
+    client_ip = request.client.host if request and request.client else None
+    log_auth_event("password_changed", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
+    return {"ok": True}
+
+
+@api.post("/auth/logout")
+def auth_logout(
+    authorization: Optional[str] = Header(default=None),
+    request: Request = None,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    token = _get_bearer_token(authorization)
+    payload = verify_jwt(token)
+    client_ip = request.client.host if request and request.client else None
+    logout_user(
+        jti=str(payload.get("jti") or "") or None,
+        token_exp=float(payload.get("exp")) if payload.get("exp") is not None else None,
+        user_id=str(user["id"]),
+        db_execute=execute,
+        ip=client_ip,
+    )
     return {"ok": True}
 
 # =========================================================
@@ -1680,6 +1898,7 @@ def employee_resolve_ticket(
     ticket_code: str,
     body: EmployeeResolveRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     decision = (body.decision or "").strip().lower()
@@ -1852,6 +2071,7 @@ async def employee_upload_attachment(
     ticket_code: str,
     file: UploadFile = File(...),
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     """
     Stores an uploaded file under <UPLOADS_DIR>/<ticket_code>/<filename>
@@ -1868,17 +2088,14 @@ async def employee_upload_attachment(
 
     ticket_id = row["id"]
 
-    safe_name = os.path.basename(file.filename or "attachment").replace(" ", "_")
+    safe_name = _sanitize_filename(file.filename or "attachment")
+    contents = await validate_upload_file(file)
 
     uploads_root = _ensure_uploads_root()
     upload_dir = os.path.join(uploads_root, ticket_code)
     os.makedirs(upload_dir, exist_ok=True)
 
     file_path = os.path.join(upload_dir, safe_name)
-
-    contents = await file.read()
-    if not contents:
-        raise HTTPException(status_code=400, detail="Empty upload")
 
     with open(file_path, "wb") as f_out:
         f_out.write(contents)
@@ -1924,6 +2141,7 @@ def employee_rescore_ticket(
     ticket_code: str,
     body: EmployeeRescoreRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     new_priority = (body.new_priority or "").strip()
@@ -2008,6 +2226,7 @@ def employee_reroute_ticket(
     ticket_code: str,
     body: EmployeeRerouteRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     new_dept_name = (body.new_department or "").strip()
@@ -2146,6 +2365,7 @@ def employee_post_ticket_message(
     ticket_code: str,
     body: TicketMessageRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     text = (body.body or "").strip()
@@ -2266,6 +2486,7 @@ def customer_post_ticket_message(
     ticket_code: str,
     body: TicketMessageRequest,
     user: Dict[str, Any] = Depends(require_customer),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     text = (body.body or "").strip()
@@ -3144,6 +3365,7 @@ def create_customer_ticket(
     body: CreateTicketRequest,
     background_tasks: BackgroundTasks,
     user: Dict[str, Any] = Depends(require_customer),
+    _csrf: None = Depends(require_csrf),
 ):
     is_recurring = predict_is_recurring(user_id=user["id"], subject=body.subject, details=body.details)
     model_suggestion = json.dumps({"is_recurring": is_recurring})
@@ -3491,6 +3713,7 @@ def assign_ticket(
     ticket_id: str,
     body: AssignTicketBody,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -3559,6 +3782,7 @@ def manager_resolve_ticket(
     ticket_id: str,
     body: ManagerResolveRequest,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -3659,6 +3883,7 @@ def manager_rescore_ticket(
     ticket_id: str,
     body: ManagerRescoreRequest,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -3756,6 +3981,7 @@ def route_ticket_department(
     ticket_id: str,
     body: RouteTicketBody,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -5331,7 +5557,7 @@ def internal_generate_suggested_resolution(ticket_code: str):
 
 
 @api.post("/chatbot/chat")
-async def proxy_chatbot_chat(body: ChatbotProxyRequest):
+async def proxy_chatbot_chat(body: ChatbotProxyRequest, _csrf: None = Depends(require_csrf)):
     """
     Frontend-facing chatbot proxy.
     Keeps chatbot service private behind backend API.
@@ -5364,7 +5590,8 @@ async def proxy_chatbot_chat(body: ChatbotProxyRequest):
             last_error = exc
             continue
 
-    raise HTTPException(status_code=503, detail=f"Chatbot service unavailable: {last_error}")
+    logger.warning("chatbot_proxy | all endpoints failed: %s", last_error)
+    raise HTTPException(status_code=503, detail="Chat service is temporarily unavailable. Please try again later.")
 
 
 @api.post("/transcriber/transcribe")
@@ -5402,7 +5629,8 @@ async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
             last_error = exc
             continue
 
-    raise HTTPException(status_code=503, detail=f"Transcriber service unavailable: {last_error}")
+    logger.warning("transcriber_proxy | all endpoints failed: %s", last_error)
+    raise HTTPException(status_code=503, detail="Transcription service is temporarily unavailable. Please try again later.")
 
 
 @api.post("/orchestrator/process/text")
@@ -5454,7 +5682,8 @@ async def proxy_orchestrator_process_text(request: Request):
                 continue
         await asyncio.sleep(0.5 * attempt)
 
-    raise HTTPException(status_code=503, detail=f"Orchestrator service unavailable: {last_error}")
+    logger.warning("orchestrator_proxy | all endpoints failed: %s", last_error)
+    raise HTTPException(status_code=503, detail="Service is temporarily unavailable. Please try again later.")
 
 
 # =========================================================
@@ -6156,6 +6385,7 @@ class CreateUserRequest(BaseModel):
 def operator_create_user(
     body: CreateUserRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
+    _csrf: None = Depends(require_csrf),
 ):
     """
     Create a new user (operator-only).
@@ -6185,11 +6415,7 @@ def operator_create_user(
         raise HTTPException(status_code=422, detail=f"Invalid status '{body.status}'.")
 
     raw_password = body.password
-    if not raw_password or len(raw_password) < 8:
-        raise HTTPException(status_code=422, detail="Password must be at least 8 characters.")
-    if len(raw_password) > 128:
-        raise HTTPException(status_code=422, detail="Password too long (max 128 characters).")
-
+    validate_password_complexity(raw_password, field_name="Password", email=email)
     # Hash with bcrypt cost-12
     password_hash = bcrypt.hashpw(
         raw_password.encode("utf-8"), bcrypt.gensalt(rounds=12)
@@ -6380,10 +6606,11 @@ def operator_update_user(
     # Optional password update
     password_hash: Optional[str] = None
     if body.password is not None:
-        if not body.password or len(body.password) < 8:
-            raise HTTPException(status_code=422, detail="Password must be at least 8 characters.")
-        if len(body.password) > 128:
-            raise HTTPException(status_code=422, detail="Password too long (max 128 characters).")
+        validate_password_complexity(
+            body.password,
+            field_name="Password",
+            email=new_email,
+        )
         password_hash = bcrypt.hashpw(
             body.password.encode("utf-8"), bcrypt.gensalt(rounds=12)
         ).decode("utf-8")

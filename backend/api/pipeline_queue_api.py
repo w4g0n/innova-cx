@@ -46,11 +46,11 @@ def _get_dsn() -> str:
     dsn = os.getenv("DATABASE_URL")
     if dsn:
         return dsn
-    host = os.getenv("DB_HOST", "db")
+    host = os.getenv("DB_HOST", "localhost")
     port = os.getenv("DB_PORT", "5432")
-    name = os.getenv("DB_NAME", "innovacx")
-    user = os.getenv("DB_USER", "postgres")
-    pw   = os.getenv("DB_PASSWORD", "")
+    name = os.getenv("DB_NAME", "complaints_db")
+    user = os.getenv("DB_USER", "innovacx_app")
+    pw   = os.getenv("DB_PASSWORD", "changeme123")
     return f"host={host} port={port} dbname={name} user={user} password={pw}"
 
 

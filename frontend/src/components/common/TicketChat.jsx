@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
+import { sanitizeText } from "../../pages/customer/sanitize";
 import "./TicketChat.css";
 
 /**
@@ -92,7 +94,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
   }, [messages]);
 
   /* ── send message ───────────────────────────────────────────── */
-  const send = async (content = text.trim()) => {
+  const send = async (content = sanitizeText(text.trim(), 5000)) => {
     if (!content || sending || disabled) return;
     setError("");
     setSending(true);
@@ -111,11 +113,16 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
 
     try {
       const base = role === "employee" ? "/api/employee/tickets" : "/api/customer/tickets";
+      const csrf = await getCsrfToken();
       const res = await fetch(
         apiUrl(`${base}/${encodeURIComponent(ticketId)}/messages`),
         {
           method: "POST",
-          headers: { ...authHeader(), "Content-Type": "application/json" },
+          headers: {
+            ...authHeader(),
+            "Content-Type": "application/json",
+            ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+          },
           body: JSON.stringify({ body: content }),
         }
       );
@@ -180,9 +187,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
             const isEmp = run[0].senderRole === "employee";
             return (
               <div key={ri} className={`tc-run ${isOwn ? "tc-run--own" : "tc-run--other"}`}>
-                {!isOwn && (
-                  <Avatar role={run[0].senderRole} />
-                )}
+
                 <div className="tc-bubbles">
                   {!isOwn && (
                     <span className="tc-sender-label">
@@ -198,7 +203,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
                   ))}
                   <span className="tc-time">{formatTime(run[run.length - 1].createdAt)}</span>
                 </div>
-                {isOwn && <Avatar role={role} />}
+
               </div>
             );
           })
