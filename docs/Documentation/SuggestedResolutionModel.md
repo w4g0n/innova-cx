@@ -1,64 +1,49 @@
-# Suggested Resolution Model (Falcon)
+# Suggested Resolution Flow
 
 ## Goal
 Generate a suggested employee resolution after priority and department are first assigned, capture employee acceptance/decline, and continuously improve future suggestions using captured outcomes.
 
 ## Components
-- Suggestion generation endpoint (chatbot service):
-  - `POST /api/suggest-resolution`
-  - file: `backend/services/chatbot/api/chat.py`
-- Retraining trigger endpoint (chatbot service):
-  - `POST /api/retrain-resolution-model`
-  - file: `backend/services/chatbot/api/chat.py`
+- Suggestion generation agent (orchestrator pipeline):
+  - `ai-models/MultiAgentPipeline/Orchestrator/agents/step02_suggestedresolution/step.py`
+- Review and correction gate:
+  - `ai-models/MultiAgentPipeline/Orchestrator/agents/step11_reviewagent/step.py`
 - Backend integration and resolve workflow:
   - `backend/api/main.py`
 - Employee resolve UI:
   - `frontend/src/pages/employee/ComplaintDetails.jsx`
-- Suggestion schema (separate SQL file):
-  - `database/services/suggested.sql`
+- Learning schema:
+  - `database/scripts/learning.sql`
 
 ## Prompt (Current)
-System prompt used for suggestion generation:
-- "You are a senior support resolution assistant..."
-- Constraints:
-  - practical/safe/concise
-  - no invented access
-  - include verification/closure steps
-  - under 180 words
-  - plain text only
-
-If retraining examples exist, they are injected as few-shot style guidance.
+The orchestrator suggested-resolution agent builds prompts directly from ticket context and SQL-backed learning examples from `suggested_resolution_usage`.
 
 ## End-to-End Workflow
 1. Ticket receives first priority assignment (`priority_assigned_at`) with department.
-2. Backend generates suggestion immediately and stores on ticket:
+2. Orchestrator generates suggestion and stores on ticket:
    - `suggested_resolution`
    - `suggested_resolution_model`
    - `suggested_resolution_generated_at`
 3. Employee opens Resolve modal:
    - UI fetches suggestion via:
-     - `GET /api/employee/tickets/{ticket_code}/resolution-suggestion`
+     - backend ticket details / resolution endpoints
 4. Employee chooses:
    - `accepted` (use suggestion), or
    - `declined_custom` (provide own final resolution)
 5. Resolve submit API:
    - `POST /api/employee/tickets/{ticket_code}/resolve`
    - Saves ticket as resolved and writes `final_resolution`.
-   - Captures feedback row in `ticket_resolution_feedback`.
-6. Backend triggers retraining endpoint.
-7. Retrainer rebuilds few-shot example file:
-   - `backend/services/chatbot/core/data/resolution_examples.json`
-8. Next suggestions use latest examples in prompt context.
+   - Captures learning row in `suggested_resolution_usage`.
+6. Future suggestions read directly from `suggested_resolution_usage`.
 
 ## Retraining Data Captured
-`ticket_resolution_feedback` includes:
+`suggested_resolution_usage` includes:
 - `decision` (`accepted` | `declined_custom`)
-- `suggested_resolution`
-- `employee_resolution`
-- `final_resolution`
+- `actor_role`
+- `suggested_text`
+- `final_text`
 - `ticket_id`, `employee_user_id`, timestamps
 
 ## Important Clarification
-Current retraining is prompt-level (few-shot memory refresh), not model weight fine-tuning.
-If full fine-tune (LoRA/SFT) is required, add a separate training pipeline that consumes `ticket_resolution_feedback`.
-
+Current learning is prompt-level and SQL-backed, not model weight fine-tuning.
+There is no chatbot-owned suggested-resolution path anymore.

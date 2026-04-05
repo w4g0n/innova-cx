@@ -9,9 +9,9 @@
 
 \if :{?suggested_stats}
 SELECT
-  decision,
+  CASE WHEN used THEN 'accepted' ELSE 'declined_custom' END AS decision,
   COUNT(*) AS count
-FROM ticket_resolution_feedback
+FROM suggested_resolution_usage
 GROUP BY decision
 ORDER BY count DESC;
 \endif

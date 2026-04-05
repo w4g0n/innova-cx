@@ -64,8 +64,7 @@ except Exception:
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
     import sys
-    import os as _os
-    sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..'))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
     from services import analytics_service as _analytics
     _ANALYTICS_READY = True
 except Exception as _analytics_import_err:
@@ -173,20 +172,62 @@ def _ensure_runtime_schema_compatibility() -> None:
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE tickets ALTER COLUMN ticket_type DROP NOT NULL;")
+                cur.execute("ALTER TABLE tickets ALTER COLUMN ticket_type DROP DEFAULT;")
                 cur.execute(
                     """
-                    CREATE TABLE IF NOT EXISTS ticket_resolution_feedback (
+                    CREATE TABLE IF NOT EXISTS suggested_resolution_usage (
                       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                      ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-                      employee_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-                      decision TEXT NOT NULL CHECK (decision IN ('accepted', 'declined_custom')),
-                      suggested_resolution TEXT,
-                      employee_resolution TEXT,
-                      final_resolution TEXT NOT NULL,
+                      ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+                      employee_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+                      decision TEXT CHECK (decision IN ('accepted', 'declined_custom')),
+                      actor_role TEXT NOT NULL DEFAULT 'employee' CHECK (actor_role IN ('manager', 'operator', 'employee')),
+                      department TEXT NOT NULL,
+                      suggested_text TEXT,
+                      final_text TEXT,
+                      used BOOLEAN NOT NULL DEFAULT TRUE,
                       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                     );
                     """
                 )
+                cur.execute("ALTER TABLE suggested_resolution_usage ADD COLUMN IF NOT EXISTS employee_user_id UUID REFERENCES users(id) ON DELETE SET NULL;")
+                cur.execute("ALTER TABLE suggested_resolution_usage ADD COLUMN IF NOT EXISTS decision TEXT;")
+                cur.execute("ALTER TABLE suggested_resolution_usage ADD COLUMN IF NOT EXISTS actor_role TEXT;")
+                cur.execute("UPDATE suggested_resolution_usage SET actor_role = 'employee' WHERE actor_role IS NULL OR btrim(actor_role) = '';")
+                cur.execute(
+                    """
+                    DO $$
+                    BEGIN
+                      IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'suggested_resolution_usage_decision_check'
+                      ) THEN
+                        ALTER TABLE suggested_resolution_usage
+                        ADD CONSTRAINT suggested_resolution_usage_decision_check
+                        CHECK (decision IN ('accepted', 'declined_custom') OR decision IS NULL);
+                      END IF;
+                    END$$;
+                    """
+                )
+                cur.execute(
+                    """
+                    DO $$
+                    BEGIN
+                      IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'suggested_resolution_usage_actor_role_check'
+                      ) THEN
+                        ALTER TABLE suggested_resolution_usage
+                        ADD CONSTRAINT suggested_resolution_usage_actor_role_check
+                        CHECK (actor_role IN ('manager', 'operator', 'employee'));
+                      END IF;
+                    END$$;
+                    """
+                )
+                cur.execute("ALTER TABLE suggested_resolution_usage ALTER COLUMN actor_role SET DEFAULT 'employee';")
+                cur.execute("ALTER TABLE suggested_resolution_usage ALTER COLUMN actor_role SET NOT NULL;")
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
@@ -329,9 +370,9 @@ async def _analytics_refresh_loop() -> None:
                 "analytics_refresh | MVs refreshed (interval_s=%s)",
                 ANALYTICS_REFRESH_INTERVAL_SECONDS,
             )
-        except Exception as _e:
+        except Exception as exc:
             logger.warning(
-                "analytics_refresh | refresh failed — will retry next cycle. err=%s", _e
+                "analytics_refresh | refresh failed — will retry next cycle. err=%s", exc
             )
 
 
@@ -736,28 +777,6 @@ def _insert_notification(
         """,
         (user_id, notif_type, title, message, priority, ticket_id),
     )
-
-
-def _trigger_resolution_retraining() -> None:
-    max_examples = max(1, min(int(os.getenv("SUGGESTED_RESOLUTION_RETRAIN_MAX_EXAMPLES", "12")), 50))
-    payload = {"max_examples": max_examples}
-    for base in [ORCHESTRATOR_URL, ORCHESTRATOR_URL_LOCAL]:
-        try:
-            with httpx.Client(timeout=8.0) as client:
-                response = client.post(f"{base}/suggested-resolution/relearn", json=payload)
-                response.raise_for_status()
-                result = response.json() if response.content else {}
-                logger.info(
-                    "resolution_retrain | triggered via %s examples_written=%s feedback_rows=%s path=%s",
-                    base,
-                    result.get("examples_written"),
-                    result.get("feedback_rows"),
-                    result.get("path"),
-                )
-                return
-        except Exception:
-            continue
-    logger.warning("resolution_retrain | failed to trigger orchestrator relearning")
 
 
 def _trigger_priority_relearning(ticket_id: str, approved_priority: str, retrain_now: bool = False) -> None:
@@ -1672,10 +1691,15 @@ def employee_resolve_ticket(
             cur.execute(
                 """
                 SELECT
-                  id, ticket_code, status, suggested_resolution
+                  t.id,
+                  t.ticket_code,
+                  t.status,
+                  t.suggested_resolution,
+                  COALESCE(d.name, 'Unassigned') AS department_name
                 FROM tickets
-                WHERE ticket_code = %s
-                  AND assigned_to_user_id = %s
+                LEFT JOIN departments d ON d.id = t.department_id
+                WHERE t.ticket_code = %s
+                  AND t.assigned_to_user_id = %s
                 LIMIT 1;
                 """,
                 (ticket_code, user_id),
@@ -1741,23 +1765,27 @@ def employee_resolve_ticket(
 
             cur.execute(
                 """
-                INSERT INTO ticket_resolution_feedback (
+                INSERT INTO suggested_resolution_usage (
                   ticket_id,
                   employee_user_id,
                   decision,
-                  suggested_resolution,
-                  employee_resolution,
-                  final_resolution
+                  actor_role,
+                  department,
+                  suggested_text,
+                  final_text,
+                  used
                 )
-                VALUES (%s, %s, %s, %s, %s, %s);
+                VALUES (%s, %s, %s, %s, %s, %s, %s);
                 """,
                 (
                     row["id"],
                     user_id,
                     decision,
+                    "employee",
+                    str(existing.get("department_name") or "Unassigned").strip() or "Unassigned",
                     suggested_resolution or None,
-                    (body.final_resolution or "").strip() or None,
                     final_resolution,
+                    decision == "accepted",
                 ),
             )
 
@@ -1806,8 +1834,6 @@ def employee_resolve_ticket(
             "resolved_at": row["resolved_at"],
         },
     )
-    _trigger_resolution_retraining()
-
     return {
         "ok": True,
         "ticketId": row["ticket_code"],
@@ -4379,7 +4405,7 @@ def get_manager_trends(
 
     employee_perf = fetch_all(f"SELECT up.full_name AS name, up.employee_code AS emp_id, up.job_title AS role, COUNT(t.id) AS total, COUNT(t.id) FILTER(WHERE t.status='Resolved') AS resolved, COUNT(t.id) FILTER(WHERE t.resolve_breached OR t.respond_breached) AS breached, ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve_mins, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond_mins FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where}{_emp_dept_clause} GROUP BY up.full_name,up.employee_code,up.job_title ORDER BY resolved DESC", _emp_params)
     company_avg = fetch_one(f"SELECT ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond, COUNT(*) FILTER(WHERE t.resolve_breached OR t.respond_breached)::float/NULLIF(COUNT(*),0)*100 AS breach_rate FROM tickets t {dept_join} WHERE {where}", params) or {}
-    acceptance_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) AS total, COUNT(*) FILTER(WHERE trf.decision='accepted') AS accepted, COUNT(*) FILTER(WHERE trf.decision='declined_custom') AS declined FROM ticket_resolution_feedback trf JOIN tickets t ON t.id=trf.ticket_id JOIN user_profiles up ON up.user_id=trf.employee_user_id WHERE t.created_at>=%s AND t.created_at<%s{_acc_dept_clause} GROUP BY up.full_name", _acc_params)
+    acceptance_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) AS total, COUNT(*) FILTER(WHERE sru.decision='accepted') AS accepted, COUNT(*) FILTER(WHERE sru.decision='declined_custom') AS declined FROM suggested_resolution_usage sru JOIN tickets t ON t.id=sru.ticket_id JOIN user_profiles up ON up.user_id=sru.employee_user_id WHERE sru.employee_user_id IS NOT NULL AND sru.decision IS NOT NULL AND t.created_at>=%s AND t.created_at<%s{_acc_dept_clause} GROUP BY up.full_name", _acc_params)
     acceptance_map = {r["name"]:{"total":r["total"],"accepted":r["accepted"],"declined":r["declined"],"rate":round(r["accepted"]/r["total"]*100,1) if r["total"] else 0} for r in acceptance_rows}
     rescore_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority) AS rescored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Low' AND t.priority IN('Medium','High','Critical'))OR(t.model_priority='Medium' AND t.priority IN('High','Critical'))OR(t.model_priority='High' AND t.priority='Critical'))) AS upscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Critical' AND t.priority IN('Low','Medium','High'))OR(t.model_priority='High' AND t.priority IN('Low','Medium'))OR(t.model_priority='Medium' AND t.priority='Low'))) AS downscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL) AS total_with_model FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where}{_emp_dept_clause} GROUP BY up.full_name", _emp_params)
     rescore_map = {r["name"]:{"rescored":r["rescored"],"upscored":r["upscored"],"downscored":r["downscored"],"totalWithModel":r["total_with_model"],"rescoreRate":round(r["rescored"]/r["total_with_model"]*100,1) if r["total_with_model"] else 0} for r in rescore_rows}
@@ -4849,6 +4875,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
         "Escalated",
         "Overdue",
         "Resolved",
+        "Review",
     }
     if normalized_status and normalized_status not in allowed_statuses:
         raise HTTPException(status_code=422, detail=f"Invalid status '{normalized_status}'")
@@ -4887,7 +4914,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 created = create_ticket_via_gate(
                     cur,
                     created_by_user_id=str(row["id"]),
-                    ticket_type=ticket_type or "Complaint",
+                    ticket_type=ticket_type,
                     subject=(body.transcript or "")[:120].strip() or "Customer submission",
                     details=body.transcript or "",
                     priority=priority_label,
@@ -5167,7 +5194,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             ticket_source = str(body.ticket_source or "").strip() or (
                 "chatbot" if str(body.created_by_user_id or "").strip() else "orchestrator"
             )
-            normalized_type = ticket_type or "Complaint"
+            normalized_type = ticket_type or None
             initial_priority = priority_label
             initial_status = normalized_status or "Open"
             initial_department_id = department_id
@@ -5181,7 +5208,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             subject_text = (
                 (body.subject or "").strip()
                 or (body.transcript or "").strip()[:120]
-                or f"Automated {normalized_type.lower()}"
+                or "Automated ticket"
             )
             details_text = (body.transcript or "").strip()
             created = create_ticket_via_gate(
@@ -5520,6 +5547,102 @@ def get_operator_qc_rerouting(
     except Exception as e:
         logger.error("get_operator_qc_rerouting failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+@api.get("/operator/learning/reroute")
+def get_learning_reroute(
+    department: Optional[str] = Query(None),
+    limit:      int           = Query(200),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Routing correction records from reroute_reference."""
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            sql = """
+                SELECT
+                    r.id, r.ticket_id, r.department,
+                    r.original_dept, r.corrected_dept,
+                    r.source_type, r.decided_by,
+                    r.created_at,
+                    t.ticket_code, t.subject,
+                    u.full_name AS decided_by_name
+                FROM reroute_reference r
+                LEFT JOIN tickets t ON t.id = r.ticket_id
+                LEFT JOIN user_profiles u ON u.user_id = r.decided_by
+            """
+            params: list = []
+            if department and department != "All Departments":
+                sql += " WHERE r.department = %s"
+                params.append(department)
+            sql += " ORDER BY r.created_at DESC LIMIT %s"
+            params.append(limit)
+            cur.execute(sql, params)
+            return [dict(row) for row in cur.fetchall()]
+
+
+@api.get("/operator/learning/rescore")
+def get_learning_rescore(
+    department: Optional[str] = Query(None),
+    limit:      int           = Query(200),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Priority correction records from rescore_reference."""
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            sql = """
+                SELECT
+                    r.id, r.ticket_id, r.department,
+                    r.original_priority, r.corrected_priority,
+                    r.source_type, r.decided_by,
+                    r.created_at,
+                    t.ticket_code, t.subject,
+                    u.full_name AS decided_by_name
+                FROM rescore_reference r
+                LEFT JOIN tickets t ON t.id = r.ticket_id
+                LEFT JOIN user_profiles u ON u.user_id = r.decided_by
+            """
+            params: list = []
+            if department and department != "All Departments":
+                sql += " WHERE r.department = %s"
+                params.append(department)
+            sql += " ORDER BY r.created_at DESC LIMIT %s"
+            params.append(limit)
+            cur.execute(sql, params)
+            return [dict(row) for row in cur.fetchall()]
+
+
+@api.get("/operator/learning/resolution")
+def get_learning_resolution(
+    department: Optional[str] = Query(None),
+    limit:      int           = Query(200),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Suggested resolution usage records from suggested_resolution_usage."""
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            sql = """
+                SELECT
+                    s.id, s.ticket_id, s.employee_user_id,
+                    s.decision, s.used,
+                    s.suggested_text, s.final_text,
+                    s.created_at,
+                    t.ticket_code, t.subject,
+                    t.department_id,
+                    d.name AS department,
+                    u.full_name AS employee_name
+                FROM suggested_resolution_usage s
+                LEFT JOIN tickets t ON t.id = s.ticket_id
+                LEFT JOIN departments d ON d.id = t.department_id
+                LEFT JOIN user_profiles u ON u.user_id = s.employee_user_id
+            """
+            params: list = []
+            if department and department != "All Departments":
+                sql += " WHERE d.name = %s"
+                params.append(department)
+            sql += " ORDER BY s.created_at DESC LIMIT %s"
+            params.append(limit)
+            cur.execute(sql, params)
+            return [dict(row) for row in cur.fetchall()]
+
 
 @api.get("/operator/analytics/model-health/chatbot")
 def get_operator_chatbot(
@@ -5881,9 +6004,12 @@ def get_operator_complaint_detail(
     )
     feedback = fetch_one(
         """
-        SELECT decision AS feedback_decision, final_resolution
-        FROM ticket_resolution_feedback
-        WHERE ticket_id = %s
+        SELECT
+            CASE WHEN sru.used THEN 'accepted' ELSE 'declined_custom' END AS feedback_decision,
+            sru.final_text AS final_resolution
+        FROM suggested_resolution_usage sru
+        WHERE sru.ticket_id = %s
+        ORDER BY created_at DESC
         LIMIT 1
         """,
         (tid,),
@@ -6519,6 +6645,152 @@ def internal_notify_operators(body: InternalNotifyOperatorsRequest):
         logger.error("internal_notify_operators | failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
     return {"ok": True, "notified": len(operator_ids)}
+
+
+# =========================================================
+# Internal — Review Agent verdict
+# (called by orchestrator ReviewAgent after pipeline completes)
+# =========================================================
+
+class ReviewVerdictRequest(BaseModel):
+    ticket_id: str
+    ticket_code: Optional[str] = None
+    verdict: str  # approved | approved_operator_override | approved_routing_review | held_operator_review
+    priority_label: Optional[str] = None
+    department: Optional[str] = None
+    routing_overridden: bool = False
+    routing_sent_to_review: bool = False
+    review_decision_id: Optional[str] = None
+
+
+@api.post("/internal/review-verdict")
+def internal_review_verdict(body: ReviewVerdictRequest):
+    """
+    Apply the Review Agent's verdict to the ticket.
+
+    - approved:                 no status change needed (ticket already Assigned/Open)
+    - approved_operator_override:
+                                no status change needed; operators are notified separately
+    - approved_routing_review:  mark department_routing.is_confident=FALSE so the
+                                department manager sees it in their review queue
+    - held_operator_review:     set ticket.status='Review' so operators can inspect
+    """
+    ticket_uuid: str | None = None
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Resolve ticket UUID
+                cur.execute(
+                    "SELECT id, ticket_code, status FROM tickets WHERE id = %s::uuid",
+                    (body.ticket_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Ticket not found")
+                ticket_uuid = str(row["id"])
+
+                final_priority = str(body.priority_label or "").strip().lower() or None
+                valid_priority = final_priority in {"low", "medium", "high", "critical"}
+                cur.execute(
+                    "SELECT priority::text, department_id FROM tickets WHERE id = %s::uuid",
+                    (ticket_uuid,),
+                )
+                priority_row = cur.fetchone() or {}
+                previous_ticket_priority = str(priority_row.get("priority") or "")
+
+                if body.verdict == "held_operator_review":
+                    cur.execute(
+                        "UPDATE tickets SET status = 'Review' WHERE id = %s::uuid",
+                        (ticket_uuid,),
+                    )
+                    logger.info(
+                        "review_verdict | ticket=%s verdict=held_operator_review → status=Review",
+                        body.ticket_code or ticket_uuid,
+                    )
+
+                elif body.verdict == "approved_routing_review":
+                    # Mark department routing as low-confidence → manager review queue picks it up
+                    cur.execute(
+                        "UPDATE department_routing SET is_confident = FALSE WHERE ticket_id = %s::uuid",
+                        (ticket_uuid,),
+                    )
+                    # If routing was overridden by Review Agent, update final_department
+                    if body.routing_overridden and body.department:
+                        cur.execute(
+                            """
+                            UPDATE department_routing
+                               SET final_department = %s
+                             WHERE ticket_id = %s::uuid
+                            """,
+                            (body.department, ticket_uuid),
+                        )
+                        # Also update the ticket's department if it changed
+                        cur.execute(
+                            """
+                            UPDATE tickets t
+                               SET department_id = d.id
+                              FROM departments d
+                             WHERE d.name = %s
+                               AND t.id = %s::uuid
+                            """,
+                            (body.department, ticket_uuid),
+                        )
+                    logger.info(
+                        "review_verdict | ticket=%s verdict=approved_routing_review overridden=%s dept=%s",
+                        body.ticket_code or ticket_uuid,
+                        body.routing_overridden,
+                        body.department,
+                    )
+
+                elif body.verdict in {"approved", "approved_operator_override"}:
+                    cur.execute(
+                        """
+                        UPDATE tickets
+                           SET status = CASE
+                               WHEN department_id IS NOT NULL THEN 'Assigned'
+                               ELSE 'Open'
+                           END,
+                               updated_at = now()
+                         WHERE id = %s::uuid
+                        """,
+                        (ticket_uuid,),
+                    )
+
+                # Keep the final ticket row aligned with the last approved pipeline priority.
+                if body.verdict != "held_operator_review" and valid_priority:
+                    final_priority_title = final_priority.capitalize()
+                    cur.execute(
+                        """
+                        UPDATE tickets
+                        SET priority = %s::ticket_priority,
+                            model_priority = %s::ticket_priority,
+                            priority_assigned_at = COALESCE(priority_assigned_at, now()),
+                            updated_at = now()
+                        WHERE id = %s::uuid
+                        """,
+                        (final_priority_title, final_priority_title, ticket_uuid),
+                    )
+                    if previous_ticket_priority.lower() != final_priority:
+                        cur.execute(
+                            """
+                            INSERT INTO ticket_updates (
+                              ticket_id, update_type, message
+                            )
+                            VALUES (%s::uuid, 'priority_change', %s)
+                            """,
+                            (
+                                ticket_uuid,
+                                f"Review Agent finalized priority from {previous_ticket_priority or 'Unknown'} to {final_priority_title}.",
+                            ),
+                        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("review_verdict | failed ticket=%s: %s", body.ticket_id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {"ok": True, "ticket_id": ticket_uuid, "verdict": body.verdict}
 
 
 # =========================================================

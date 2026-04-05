@@ -62,6 +62,8 @@ const OperatorNotifications = lazy(() =>
 const QualityControl = lazy(() => import("./pages/operator/QualityControl"));
 const ModelHealth = lazy(() => import("./pages/operator/ModelHealth"));
 const AIExplainability = lazy(() => import("./pages/operator/AIExplainability"));
+const PipelineQueuePage = lazy(() => import("./pages/operator/PipelineQueuePage"));
+const PipelineQueueDetailPage = lazy(() => import("./pages/operator/PipelineQueueDetailPage"));
 const OperatorDashboard = lazy(() =>
   import("./pages/operator/OperatorDashboard")
 );
@@ -363,6 +365,22 @@ export default function App() {
             element={
               <ProtectedRoute role="operator">
                 <QualityControl />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operator/pipeline-queue"
+            element={
+              <ProtectedRoute role="operator">
+                <PipelineQueuePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operator/pipeline-queue/:queueId"
+            element={
+              <ProtectedRoute role="operator">
+                <PipelineQueueDetailPage />
               </ProtectedRoute>
             }
           />

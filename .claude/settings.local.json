@@ -85,7 +85,8 @@
       "Bash(git push origin prod-live)",
       "Bash(git fetch origin main)",
       "Bash(git fetch origin main:main)",
-      "Bash(bash scripts/merge-main-into-prod-live.sh)"
+      "Bash(bash scripts/merge-main-into-prod-live.sh)",
+      "Bash(find /Users/mayood/Documents_Local/innova-cx -type f \\\\\\(-name *.pyc -o -name *.pyo -o -path */__pycache__/* -o -path */node_modules/* -o -path */.git/* -o -path */dist/* -o -path */build/* -o -path */.ruff_cache/* \\\\\\) -prune -o -type f -print)"
     ]
   }
 }

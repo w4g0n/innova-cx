@@ -4,6 +4,8 @@ import "./Sidebar.css";
 import logo from "../assets/nova-logo.png";
 import ConfirmDialog from "./common/ConfirmDialog";
 
+const SIDEBAR_EXPANDED_WIDTH = "210px";
+
 /* SVG icon set */
 const Icon = {
   bell: (
@@ -110,6 +112,12 @@ const Icon = {
       <path d="M17 11h4M19 9v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   ),
+  pipeline: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <rect x="6" y="6" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M9 6V3M12 6V3M15 6V3M9 21v-3M12 21v-3M15 21v-3M6 9H3M6 12H3M6 15H3M21 9h-3M21 12h-3M21 15h-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  ),
 };
 
 /* Menu definitions */
@@ -136,14 +144,15 @@ const menus = {
   operator: [
     { label: "Notifications",    to: "/operator/notifications",    icon: "bell" },
     { label: "Dashboard",        to: "/operator", end: true,       icon: "dashboard" },
-    { label: "Model Health",   to: "/operator/model-health",   icon: "model" },
+    { label: "Model Health",     to: "/operator/model-health",     icon: "model" },
     { label: "Quality Control", to: "/operator/quality-control", icon: "chatbot" },
+    { label: "Pipeline Queue",   to: "/operator/pipeline-queue",   icon: "pipeline" },
     { label: "AI Explainability", to: "/operator/ai-explainability", icon: "reports" },
     { label: "Manage Users",     to: "/operator/users",            icon: "users" },
   ],
 };
 
-export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, pendingRrq = 0 }) {
+export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, pendingRrq = 0, heldCount = 0 }) {
   const navigate = useNavigate();
 
   /* Pinned = stays open without hover */
@@ -163,18 +172,19 @@ export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, p
   useEffect(() => {
     document.documentElement.style.setProperty(
       "--sidebar-current-width",
-      isExpanded ? "210px" : "var(--sidebar-collapsed)"
+      isExpanded ? SIDEBAR_EXPANDED_WIDTH : "var(--sidebar-collapsed)"
     );
   }, [isExpanded]);
 
   const menu = menus[role] || [];
 
   const badges = {
-    "/manager/notifications":  unreadCount,
-    "/employee/notifications":  unreadCount,
-    "/customer/notifications":  unreadCount,
-    "/operator/notifications":  unreadCount,
-    "/manager/approvals":       pendingApprovals,
+    "/manager/notifications":    unreadCount,
+    "/employee/notifications":   unreadCount,
+    "/customer/notifications":   unreadCount,
+    "/operator/notifications":   unreadCount,
+    "/manager/approvals":        pendingApprovals,
+    "/operator/pipeline-queue":  heldCount,
   };
 
   // RRQ gets its own purple badge alongside the approvals red badge
@@ -278,7 +288,7 @@ export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, p
       {/* Logout confirm dialog */}
       <ConfirmDialog
         open={logoutOpen}
-        variant="info"  
+        variant="info"
         icon="🔓"
         title="Log Out"
         message="Are you sure you want to log out of InnovaCX?"
