@@ -528,7 +528,7 @@ export default function AIExplainability() {
   const detailMode = Boolean(ticketCode);
 
   const [ticketList, setTicketList] = useState([]);
-  const [statusCounts, setStatusCounts] = useState({});
+  const [, setStatusCounts] = useState({});
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState("");
   const [ticketSearch, setTicketSearch] = useState("");
@@ -536,7 +536,7 @@ export default function AIExplainability() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [data, setData] = useState(null);
-  const [selectedExecutionId, setSelectedExecutionId] = useState("");
+  const [, setSelectedExecutionId] = useState("");
   const [selectedStageKey, setSelectedStageKey] = useState("");
   const [overrideForm, setOverrideForm] = useState({
     ticketType: "complaint",
@@ -574,15 +574,6 @@ export default function AIExplainability() {
     if (detailMode) return;
     loadTicketList();
   }, [detailMode]);
-
-  const executionOptions = useMemo(() => {
-    const arr = Array.isArray(data?.pipelineExecutions) ? data.pipelineExecutions : [];
-    return [...arr].sort((a, b) => {
-      const ta = new Date(a?.startedAt || 0).getTime();
-      const tb = new Date(b?.startedAt || 0).getTime();
-      return tb - ta;
-    });
-  }, [data]);
 
   const stages = useMemo(() => {
     const arr = Array.isArray(data?.pipelineStages) ? data.pipelineStages : [];
@@ -727,7 +718,7 @@ export default function AIExplainability() {
     loadTicket(ticketCode);
   }, [detailMode, ticketCode]);
 
-  const detailTicket = data?.ticket || {};
+  const detailTicket = useMemo(() => data?.ticket || {}, [data]);
   const selectedStageIO = useMemo(() => normalizeStageIO(selectedStage, detailTicket), [selectedStage, detailTicket]);
   const stageOutputMap = useMemo(() => {
     const map = {};
@@ -738,7 +729,7 @@ export default function AIExplainability() {
   }, [stageMenu]);
 
   useEffect(() => {
-    if (!data) return;
+    if (!detailTicket?.ticketId) return;
     const classificationOut = stageOutputMap.ClassificationAgent || {};
     const featureOut = stageOutputMap.FeatureEngineeringAgent || {};
     const recurrenceOut = stageOutputMap.RecurrenceAgent || {};
@@ -766,7 +757,7 @@ export default function AIExplainability() {
     });
     setRecurrenceQuery("");
     setRecurrenceResults([]);
-  }, [data, stageOutputMap]);
+  }, [detailTicket, stageOutputMap]);
 
   useEffect(() => {
     setOverrideMsg("");
