@@ -21,6 +21,7 @@ Flow:
         -> [9] FeatureEngineeringAgent / feature_engineering_step
         -> [10] PrioritizationAgent / priority_step (XGBoost/mock fallback)
         -> [11] DepartmentRoutingAgent / router_step
+        -> [12] ReviewAgent / review_pipeline
 """
 
 from langchain_core.runnables import RunnableLambda, RunnableSequence
@@ -35,6 +36,7 @@ from agents.step07_recurrence.step import check_recurrence
 from agents.step08_featureengineering.step import engineer_features
 from agents.step09_priority.step import score_priority
 from agents.step10_router.step import route_and_store
+from agents.step11_reviewagent.step import review_pipeline
 
 try:
     from execution_logger import logged_step
@@ -59,4 +61,5 @@ pipeline: RunnableSequence = (
     | _step("FeatureEngineeringAgent", engineer_features, 9)
     | _step("PrioritizationAgent", score_priority, 10)
     | _step("DepartmentRoutingAgent", route_and_store, 11)
+    | _step("ReviewAgent", review_pipeline, 12)
 )

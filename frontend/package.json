@@ -10,6 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
     "@react-pdf/renderer": "^4.3.2",
     "axios": "^1.13.5",
     "libphonenumber-js": "^1.12.41",

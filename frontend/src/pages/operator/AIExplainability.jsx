@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -256,7 +255,7 @@ function normalizeStageIO(stage, ticket) {
       inputState.sentiment_score_numeric ??
       inputState.text_sentiment ??
       "neutral";
-    const sentimentNormalized = _normalizeSentimentLabel(sentimentRaw);
+    const sentimentNormalized = normalizeSentimentLabel(sentimentRaw);
     const effectiveInput = {
       Safety_Concern: asBool(overrides.safety_concern ?? inputState.safety_concern, false),
       Issue_Severity: asLevel(overrides.issue_severity ?? inputState.issue_severity, "medium"),
@@ -309,15 +308,18 @@ function normalizeStageIO(stage, ticket) {
   };
 }
 
-function _normalizeSentimentLabel(value) {
+const SENTIMENT_NEGATIVE_THRESHOLD = -0.25;
+const SENTIMENT_POSITIVE_THRESHOLD = 0.25;
+
+function normalizeSentimentLabel(value) {
   const s = String(value ?? "").trim().toLowerCase();
   if (s === "negative") return "Negative";
   if (s === "positive") return "Positive";
   if (s === "neutral") return "Neutral";
   const n = Number(value);
   if (!Number.isNaN(n)) {
-    if (n < -0.25) return "Negative";
-    if (n > 0.25) return "Positive";
+    if (n < SENTIMENT_NEGATIVE_THRESHOLD) return "Negative";
+    if (n > SENTIMENT_POSITIVE_THRESHOLD) return "Positive";
   }
   return "Neutral";
 }
@@ -483,6 +485,15 @@ function formatProcessingTimeSeconds(inferenceTimeMs) {
   return `${(value / 1000).toFixed(1)}s`;
 }
 
+function compareTicketsByDate(a, b) {
+  const leftTime = new Date(a?.pipelineCompletedAt || a?.createdAt || 0).getTime();
+  const rightTime = new Date(b?.pipelineCompletedAt || b?.createdAt || 0).getTime();
+  if (rightTime !== leftTime) return rightTime - leftTime;
+  const leftCode = String(a?.ticketCode || "");
+  const rightCode = String(b?.ticketCode || "");
+  return leftCode.localeCompare(rightCode, undefined, { numeric: true, sensitivity: "base" });
+}
+
 function stageHasAudio(stage) {
   const inputState = stage?.inputState || {};
   const outputState = stage?.outputState || {};
@@ -498,7 +509,6 @@ function stageHasAudio(stage) {
 
 // ── Module-level constants (never recreated on render) ──────────────────────
 
-const STATUS_FILTERS = ["Open", "Assigned", "In Progress", "Resolved", "Escalated", "Overdue"];
 const STATUS_CLASS = {
   Open: "ev-status-open",
   Assigned: "ev-status-assigned",
@@ -506,39 +516,8 @@ const STATUS_CLASS = {
   Escalated: "ev-status-escalated",
   Overdue: "ev-status-overdue",
   Resolved: "ev-status-resolved",
+  Completed: "ev-status-resolved",
 };
-
-const QUEUE_STATUS_LABEL = { queued: "Queued", processing: "Processing", held: "Held", completed: "Completed", failed: "Failed" };
-const QUEUE_STATUS_COLOR = { queued: "#3b82f6", processing: "#f59e0b", held: "#ef4444", completed: "#22c55e", failed: "#6b7280" };
-const CRITICAL_STAGES = new Set([
-  "ClassificationAgent","SentimentAgent","AudioAnalysisAgent","SentimentCombinerAgent",
-  "FeatureEngineeringAgent","PrioritizationAgent","DepartmentRoutingAgent",
-]);
-const QUEUE_STAT_CARDS = [
-  ["queued",     "Queued",          "pq-stat-card--blue"],
-  ["processing", "Processing",      "pq-stat-card--amber"],
-  ["held",       "Held",            "pq-stat-card--red"],
-  ["completed",  "Completed (24h)", "pq-stat-card--green"],
-];
-const STAGE_OUTPUT_NOISE = new Set([
-  "text","details","ticket_id","created_by_user_id","ticket_source",
-  "audio_features","ticket_code","name","email","asset_type",
-  "ticket_type","label","status","has_audio","_pipeline_total_steps",
-  "is_recurring_checked","audio_analysis_mode","audio_sentiment",
-]);
-const MAX_PIPELINE_RETRIES = 3;
-
-function formatStageVal(v) {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "boolean") return v ? "Yes" : "No";
-  if (Array.isArray(v)) {
-    if (v.length === 0) return "—";
-    if (typeof v[0] === "object") return v.map(item => item.department || item.label || JSON.stringify(item)).join(", ");
-    return v.join(", ");
-  }
-  if (typeof v === "object") return JSON.stringify(v);
-  return String(v);
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -548,9 +527,8 @@ export default function AIExplainability() {
   const ticketCode = sanitizeId(rawTicketCode);
   const detailMode = Boolean(ticketCode);
 
-  const [activeStatus, setActiveStatus] = useState("");
   const [ticketList, setTicketList] = useState([]);
-  const [statusCounts, setStatusCounts] = useState({});
+  const [, setStatusCounts] = useState({});
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState("");
   const [ticketSearch, setTicketSearch] = useState("");
@@ -558,7 +536,7 @@ export default function AIExplainability() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [data, setData] = useState(null);
-  const [selectedExecutionId, setSelectedExecutionId] = useState("");
+  const [, setSelectedExecutionId] = useState("");
   const [selectedStageKey, setSelectedStageKey] = useState("");
   const [overrideForm, setOverrideForm] = useState({
     ticketType: "complaint",
@@ -577,29 +555,11 @@ export default function AIExplainability() {
   const [recurrenceResults, setRecurrenceResults] = useState([]);
   const [recurrenceLoading, setRecurrenceLoading] = useState(false);
 
-  // ── Pipeline Queue tab ──────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState("explainability");
-  const [queueItems, setQueueItems] = useState([]);
-  const [queueStats, setQueueStats] = useState({});
-  const [queueLoading, setQueueLoading] = useState(false);
-  const [selectedQueueId, setSelectedQueueId] = useState(null);
-  const [queueDetail, setQueueDetail] = useState(null);
-  const [queueDetailLoading, setQueueDetailLoading] = useState(false);
-  const [corrections, setCorrections] = useState({});
-  const [releaseBusy, setReleaseBusy] = useState(false);
-  const [rerunBusyQueue, setRerunBusyQueue] = useState(false);
-  const [releaseMsg, setReleaseMsg] = useState("");
-  const [releaseErr, setReleaseErr] = useState("");
-  const [redispatchBusy, setRedispatchBusy] = useState(false);
-  const [redispatchMsg, setRedispatchMsg] = useState("");
-  const [expandedStage, setExpandedStage] = useState(null);
-
-  async function loadTicketList(statusValue = "") {
+  async function loadTicketList() {
     setListLoading(true);
     setListError("");
     try {
-      const qs = statusValue ? `?status=${encodeURIComponent(statusValue)}` : "";
-      const res = await apiFetch(`/operator/ai-explainability/tickets${qs}`);
+      const res = await apiFetch("/operator/ai-explainability/tickets");
       setTicketList(Array.isArray(res?.items) ? res.items : []);
       setStatusCounts(res?.statusCounts || {});
     } catch {
@@ -612,32 +572,22 @@ export default function AIExplainability() {
 
   useEffect(() => {
     if (detailMode) return;
-    loadTicketList(activeStatus);
-  }, [activeStatus, detailMode]);
-
-  const executionOptions = useMemo(() => {
-    const arr = Array.isArray(data?.pipelineExecutions) ? data.pipelineExecutions : [];
-    return [...arr].sort((a, b) => {
-      const ta = new Date(a?.startedAt || 0).getTime();
-      const tb = new Date(b?.startedAt || 0).getTime();
-      return tb - ta;
-    });
-  }, [data]);
+    loadTicketList();
+  }, [detailMode]);
 
   const stages = useMemo(() => {
     const arr = Array.isArray(data?.pipelineStages) ? data.pipelineStages : [];
     return [...arr]
-      .filter((s) => !selectedExecutionId || s?.executionId === selectedExecutionId)
       .filter((s) => String(s?.stageName || "") !== "TicketCreationGate")
       .sort((a, b) => {
-      const sa = Number(a?.stepOrder || 0);
-      const sb = Number(b?.stepOrder || 0);
-      if (sa !== sb) return sa - sb;
-      const ta = new Date(a?.createdAt || 0).getTime();
-      const tb = new Date(b?.createdAt || 0).getTime();
-      return ta - tb;
+        const sa = Number(a?.stepOrder || 0);
+        const sb = Number(b?.stepOrder || 0);
+        if (sa !== sb) return sa - sb;
+        const ta = new Date(a?.createdAt || 0).getTime();
+        const tb = new Date(b?.createdAt || 0).getTime();
+        return ta - tb;
       });
-  }, [data, selectedExecutionId]);
+  }, [data]);
 
   const stageMenu = useMemo(() => {
     const byStage = new Map();
@@ -701,17 +651,15 @@ export default function AIExplainability() {
       setSelectedStageKey("");
       return;
     }
-    const preferredExecutionId =
-      executionOptions.find((e) => e.executionId === selectedExecutionId)?.executionId ||
-      executionOptions[0]?.executionId ||
-      "";
-    setSelectedExecutionId(preferredExecutionId);
     if (stageMenu.length > 0) {
-      setSelectedStageKey(`${stageMenu[0].stepOrder}-${stageMenu[0].stageName}`);
+      setSelectedStageKey((prev) => {
+        const exists = stageMenu.some((s) => `${s.stepOrder}-${s.stageName}` === prev);
+        return exists ? prev : `${stageMenu[0].stepOrder}-${stageMenu[0].stageName}`;
+      });
     } else {
       setSelectedStageKey("");
     }
-  }, [data, stageMenu, executionOptions, selectedExecutionId]);
+  }, [data, stageMenu]);
 
   async function rerunPipeline() {
     if (!detailTicket?.ticketId) return;
@@ -770,7 +718,7 @@ export default function AIExplainability() {
     loadTicket(ticketCode);
   }, [detailMode, ticketCode]);
 
-  const detailTicket = data?.ticket || {};
+  const detailTicket = useMemo(() => data?.ticket || {}, [data]);
   const selectedStageIO = useMemo(() => normalizeStageIO(selectedStage, detailTicket), [selectedStage, detailTicket]);
   const stageOutputMap = useMemo(() => {
     const map = {};
@@ -781,7 +729,7 @@ export default function AIExplainability() {
   }, [stageMenu]);
 
   useEffect(() => {
-    if (!data) return;
+    if (!detailTicket?.ticketId) return;
     const classificationOut = stageOutputMap.ClassificationAgent || {};
     const featureOut = stageOutputMap.FeatureEngineeringAgent || {};
     const recurrenceOut = stageOutputMap.RecurrenceAgent || {};
@@ -809,7 +757,7 @@ export default function AIExplainability() {
     });
     setRecurrenceQuery("");
     setRecurrenceResults([]);
-  }, [data, stageOutputMap]);
+  }, [detailTicket, stageOutputMap]);
 
   useEffect(() => {
     setOverrideMsg("");
@@ -889,85 +837,6 @@ export default function AIExplainability() {
     }
   }
 
-  // ── Queue functions ─────────────────────────────────────────────────────
-  async function loadQueue() {
-    setQueueLoading(true);
-    try {
-      const [items, stats] = await Promise.all([
-        apiFetch("/operator/pipeline-queue"),
-        apiFetch("/operator/pipeline-queue/stats"),
-      ]);
-      setQueueItems(Array.isArray(items) ? items : []);
-      setQueueStats(stats || {});
-    } catch {
-      /* silent — polling will retry */
-    } finally {
-      setQueueLoading(false);
-    }
-  }
-
-  async function loadQueueDetail(queueId) {
-    setQueueDetailLoading(true);
-    setQueueDetail(null);
-    setCorrections({});
-    setReleaseMsg("");
-    setReleaseErr("");
-    try {
-      const res = await apiFetch(`/operator/pipeline-queue/${queueId}`);
-      setQueueDetail(res);
-      setCorrections(res.operator_corrections || {});
-    } catch {
-      setReleaseErr("Failed to load queue item. Please try again.");
-    } finally {
-      setQueueDetailLoading(false);
-    }
-  }
-
-  async function rerunStage() {
-    if (!selectedQueueId) return;
-    setRerunBusyQueue(true);
-    setReleaseMsg("");
-    setReleaseErr("");
-    try {
-      const token = getStoredToken();
-      const res = await fetch(apiUrl(`/api/operator/pipeline-queue/${selectedQueueId}/rerun-stage`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      });
-      if (!res.ok) { const d = await res.text().catch(() => "Failed"); throw new Error(d); }
-      const data = await res.json();
-      if (data.succeeded) {
-        setReleaseMsg("Stage rerun succeeded — ticket re-queued.");
-        setSelectedQueueId(null);
-        setQueueDetail(null);
-      } else {
-        setReleaseErr("Stage still failing. You can manually correct the output below.");
-        await loadQueueDetail(selectedQueueId);
-      }
-      await loadQueue();
-    } catch {
-      setReleaseErr("Stage rerun failed. Please try again.");
-    } finally {
-      setRerunBusyQueue(false);
-    }
-  }
-
-  async function deleteQueueItem(queueId, e) {
-    e?.stopPropagation();
-    if (!window.confirm("Remove from queue and permanently delete this ticket and all its data? This cannot be undone.")) return;
-    try {
-      const token = getStoredToken();
-      await fetch(apiUrl(`/api/operator/pipeline-queue/${queueId}`), {
-        method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (selectedQueueId === queueId) { setSelectedQueueId(null); setQueueDetail(null); }
-      await loadQueue();
-    } catch {
-      alert("Failed to remove item from queue. Please try again.");
-    }
-  }
-
   async function deleteTicket(ticketId, e) {
     e?.stopPropagation();
     if (!window.confirm("Permanently delete this ticket and all its data? This cannot be undone.")) return;
@@ -978,75 +847,11 @@ export default function AIExplainability() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) { const d = await res.text().catch(() => "Failed"); throw new Error(d); }
-      await loadQueue();
-      await loadTicketList(activeStatus);
-    } catch {
-      alert("Failed to delete ticket. Please try again.");
+      await loadTicketList();
+    } catch (e) {
+      alert(`Failed to delete ticket: ${e?.message}`);
     }
   }
-
-  async function releaseTicket() {
-    if (!selectedQueueId) return;
-    setReleaseBusy(true);
-    setReleaseMsg("");
-    setReleaseErr("");
-    try {
-      const token = getStoredToken();
-      const res = await fetch(apiUrl(`/api/operator/pipeline-queue/${selectedQueueId}/release`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ corrections }),
-      });
-      if (!res.ok) { const d = await res.text().catch(() => "Failed"); throw new Error(d); }
-      setReleaseMsg("Ticket released and re-queued.");
-      await loadQueue();
-      setSelectedQueueId(null);
-      setQueueDetail(null);
-    } catch {
-      setReleaseErr("Release failed. Please try again.");
-    } finally {
-      setReleaseBusy(false);
-    }
-  }
-
-  async function redispatchUnprocessed() {
-    setRedispatchBusy(true);
-    setRedispatchMsg("");
-    try {
-      const res = await apiFetch("/operator/pipeline-queue/redispatch-unprocessed", { method: "POST" });
-      const count = res?.dispatched?.filter(d => d.ok).length ?? 0;
-      const total = res?.dispatched?.length ?? 0;
-      setRedispatchMsg(total === 0 ? "No unprocessed tickets found." : `Re-dispatched ${count}/${total} tickets.`);
-      if (count > 0) loadQueue();
-    } catch{
-      setRedispatchMsg("Failed to re-dispatch. Please try again.");
-    } finally {
-      setRedispatchBusy(false);
-    }
-  }
-
-  // Lock body scroll when modal is open
-  useEffect(() => {
-    if (selectedQueueId) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => { document.body.style.overflow = ""; };
-  }, [selectedQueueId]);
-
-  // Poll queue every 5s when tab is active
-  useEffect(() => {
-    if (activeTab !== "queue") return;
-    loadQueue();
-    const id = setInterval(loadQueue, 5000);
-    return () => clearInterval(id);
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (selectedQueueId) loadQueueDetail(selectedQueueId);
-  }, [selectedQueueId]);
-
   const modelSelectedSummary = useMemo(() => {
     const classificationOut = stageOutputMap.ClassificationAgent || {};
     const featureOut = stageOutputMap.FeatureEngineeringAgent || {};
@@ -1070,9 +875,16 @@ export default function AIExplainability() {
       issueUrgency: asLevel(overrides.issue_urgency ?? featureOut.issue_urgency, "medium"),
       safetyConcern: asBool(overrides.safety_concern ?? featureOut.safety_concern, false),
       isRecurring: asBool(overrides.is_recurring ?? recurrenceOut.is_recurring, false),
-      sentimentScore: _normalizeSentimentLabel(sentimentSource),
+      sentimentScore: normalizeSentimentLabel(sentimentSource),
     };
   }, [stageOutputMap, detailTicket]);
+
+  const visibleTicketList = useMemo(() => {
+    const search = ticketSearch.trim().toLowerCase();
+    return [...ticketList]
+      .sort(compareTicketsByDate)
+      .filter((t) => !search || String(t.ticketCode || "").toLowerCase().includes(search));
+  }, [ticketList, ticketSearch]);
 
 
   return (
@@ -1455,12 +1267,10 @@ export default function AIExplainability() {
                 <tbody>
                   {listLoading ? (
                     <tr><td colSpan={8}>Loading tickets...</td></tr>
-                  ) : ticketList.length === 0 ? (
-                    <tr><td colSpan={8}>No tickets for this filter.</td></tr>
+                  ) : visibleTicketList.length === 0 ? (
+                    <tr><td colSpan={8}>No completed pipeline tickets yet.</td></tr>
                   ) : (
-                    ticketList
-                      .filter((t) => !ticketSearch || String(t.ticketCode || "").toLowerCase().includes(ticketSearch.toLowerCase()))
-                      .map((t) => (
+                    visibleTicketList.map((t) => (
                         <tr key={t.ticketId}>
                           <td>
                             <button
@@ -1473,14 +1283,14 @@ export default function AIExplainability() {
                           </td>
                           <td>{t.subject || "—"}</td>
                           <td>
-                            <span className={`ev-status-badge ${STATUS_CLASS[t.status] || "ev-status-assigned"}`}>
-                              {t.status}
+                            <span className={`ev-status-badge ${STATUS_CLASS.Completed || "ev-status-assigned"}`}>
+                              Completed
                             </span>
                           </td>
                           <td>{t.priority ? <PriorityPill priority={t.priority} /> : "—"}</td>
                           <td>{t.department}</td>
                           <td>{t.assignedTo}</td>
-                          <td>{t.createdAt ? new Date(t.createdAt).toLocaleString() : "—"}</td>
+                          <td>{t.pipelineCompletedAt ? new Date(t.pipelineCompletedAt).toLocaleString() : (t.createdAt ? new Date(t.createdAt).toLocaleString() : "—")}</td>
                           <td>
                             <button
                               type="button"
@@ -1509,7 +1319,7 @@ export default function AIExplainability() {
           </article>
         )}
 
-        {activeTab === "explainability" && detailMode && (
+        {detailMode && (
           <>
             <div className="aix-detail-actions">
               <button
@@ -1554,18 +1364,6 @@ export default function AIExplainability() {
                     <div><span className="aix-label">Department</span><div>{detailTicket.department || "Unassigned"}</div></div>
                     <div><span className="aix-label">Pipeline Runs</span><div>{data.pipelineExecutions?.length || 0}</div></div>
                   </div>
-                  {executionOptions.length > 0 ? (
-                    <label className="aix-field">
-                      <span>Selected Pipeline Run</span>
-                      <select value={selectedExecutionId} onChange={(e) => setSelectedExecutionId(e.target.value)}>
-                        {executionOptions.map((execution, index) => (
-                          <option key={execution.executionId} value={execution.executionId}>
-                            Run {executionOptions.length - index} · {execution.startedAt || execution.executionId}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
                   <div className="aix-summary-text">
                     <span className="aix-label">Ticket Subject</span>
                     <div>{detailTicket.description?.subject || data.subject || "—"}</div>
@@ -1760,6 +1558,16 @@ export default function AIExplainability() {
                         <span>Audio Provided: {stageHasAudio(selectedStage) ? "Yes" : "No"}</span>
                       ) : null}
                     </div>
+                    {selectedStage.description || selectedStage.explanation ? (
+                      <div className="aix-stage-explainer">
+                        {selectedStage.description ? (
+                          <div className="aix-stage-explainer__description">{selectedStage.description}</div>
+                        ) : null}
+                        {selectedStage.explanation ? (
+                          <div className="aix-stage-explainer__explanation">{selectedStage.explanation}</div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {selectedStage.errorMessage ? <p className="aix-error">Error: {selectedStage.errorMessage}</p> : null}
                     {selectedStage.stageName === "PrioritizationAgent" ? (
                       <div className="aix-formula">

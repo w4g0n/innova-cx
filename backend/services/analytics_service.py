@@ -130,12 +130,15 @@ SELECT employee_id, employee_name, employee_code, employee_role, created_day, cr
 FROM mv_ticket_base WHERE employee_id IS NOT NULL
 GROUP BY employee_id, employee_name, employee_code, employee_role, created_day, created_month, department_name"""),
     ("mv_acceptance_daily", """CREATE MATERIALIZED VIEW IF NOT EXISTS mv_acceptance_daily AS
-SELECT trf.employee_user_id AS employee_id, up.full_name AS employee_name,
+SELECT sru.employee_user_id AS employee_id, up.full_name AS employee_name,
     date_trunc('day',t.created_at)::date AS created_day, date_trunc('month',t.created_at)::date AS created_month,
-    COUNT(*) AS total, COUNT(*) FILTER (WHERE trf.decision='accepted') AS accepted,
-    COUNT(*) FILTER (WHERE trf.decision='declined_custom') AS declined
-FROM ticket_resolution_feedback trf JOIN tickets t ON t.id=trf.ticket_id JOIN user_profiles up ON up.user_id=trf.employee_user_id
-GROUP BY trf.employee_user_id, up.full_name, date_trunc('day',t.created_at)::date, date_trunc('month',t.created_at)::date"""),
+    COUNT(*) AS total, COUNT(*) FILTER (WHERE sru.decision='accepted') AS accepted,
+    COUNT(*) FILTER (WHERE sru.decision='declined_custom') AS declined
+FROM suggested_resolution_usage sru
+JOIN tickets t ON t.id=sru.ticket_id
+JOIN user_profiles up ON up.user_id=sru.employee_user_id
+WHERE sru.employee_user_id IS NOT NULL AND sru.decision IS NOT NULL
+GROUP BY sru.employee_user_id, up.full_name, date_trunc('day',t.created_at)::date, date_trunc('month',t.created_at)::date"""),
     ("mv_operator_qc_daily", """CREATE MATERIALIZED VIEW IF NOT EXISTS mv_operator_qc_daily AS
 SELECT date_trunc('day',t.created_at)::date AS created_day, date_trunc('month',t.created_at)::date AS created_month,
     COALESCE(d.name,'Unassigned') AS department_name, COUNT(DISTINCT t.id) AS total,
