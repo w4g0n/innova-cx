@@ -8,7 +8,6 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from .pipeline_queue_api import _STAGE_DESCRIPTIONS, _explain_stage
 
 router = APIRouter()
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8004").rstrip("/")
