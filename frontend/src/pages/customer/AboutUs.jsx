@@ -19,7 +19,7 @@ const ICONS = {
 };
 
 /* ─────────────────────────────────────────────────
-   PIPELINE DATA  (all 14 agents, full info)
+   PIPELINE DATA
 ───────────────────────────────────────────────── */
 const LAYERS = [
   {
@@ -28,18 +28,18 @@ const LAYERS = [
     agents: [
       {
         id: "chatbot",
-        name: "Chatbot Agent - Nova", 
+        name: "Chatbot Agent - Nova",
         model: "Qwen",
-        desc: "Nova - The first touchpoint for every user. Handles inquiries using the knowledge base and seamlessly starts formal ticketing when an issue needs escalation beyond a quick answer.", 
+        desc: "Nova - The first touchpoint for every user. Handles inquiries using the knowledge base and seamlessly starts formal ticketing when an issue needs escalation beyond a quick answer.",
         inputs: ["User message", "Knowledge base context"],
-        outputs: ["Direct answer  or ticket handoff"], 
+        outputs: ["Direct answer or ticket handoff"],
         cond: null,
       },
       {
         id: "transcriber",
         name: "Transcriber Agent",
         model: "Whisper",
-        desc: "Converts audio complaint recordings into clean text via live transcription. The user confirms the transcript on-screen before it proceeds, ensuring accuracy before anything is analysed downstream.", 
+        desc: "Converts audio complaint recordings into clean text via live transcription. The user confirms the transcript on-screen before it proceeds, ensuring accuracy before anything is analysed downstream.",
         inputs: ["Audio recording"],
         outputs: ["Transcribed ticket text"],
         cond: "AUDIO-ONLY",
@@ -48,7 +48,7 @@ const LAYERS = [
         id: "ticket-gate",
         name: "Ticket Creation Gate",
         model: "Rule-based",
-        desc: "The single entry point for all ticket creation, whether from Nova or the form. Structures the incoming data into a standardised ticket payload, sets Ticket_Status = Open, and fires the orchestration pipeline, for AI processing.", 
+        desc: "The single entry point for all ticket creation, whether from Nova or the form. Structures the incoming data into a standardised ticket payload, sets Ticket_Status = Open, and fires the orchestration pipeline for AI processing.",
         inputs: ["User data + ticket details", "Optional attachment"],
         outputs: ["Ticket payload", "Ticket_Status = Open"],
         cond: null,
@@ -63,9 +63,9 @@ const LAYERS = [
         id: "orchestrator",
         name: "Controller / Orchestrator",
         model: "LangChain",
-        desc: "The central nervous system of InnovaCX. Coordinates all downstream agents in the correct sequence using LangChain, passes outputs between them, and returns the completed ticket - with Priority, SLA, department, and assigned employee - to the Ticket Creation Gate.", 
+        desc: "The central nervous system of InnovaCX. Coordinates all downstream agents in the correct sequence using LangChain, passes outputs between them, and returns the completed ticket - with Priority, SLA, department, and assigned employee - to the Ticket Creation Gate.",
         inputs: ["Ticket payload"],
-        outputs: ["Fully enriched execution state"], 
+        outputs: ["Fully enriched execution state"],
         cond: null,
       },
     ],
@@ -75,7 +75,7 @@ const LAYERS = [
     tagline: "Understanding the complaint content",
     agents: [
       {
-        id: "classification",
+        id: "subject-gen",
         name: "Subject Generation Agent",
         model: "DeBERTa NLI",
         desc: "Determines whether the ticket is a complaint or an inquiry so the system can follow the correct workflow.",
@@ -105,7 +105,7 @@ const LAYERS = [
         id: "audio-analysis",
         name: "Audio Analysis Agent",
         model: "Librosa",
-        desc: "Processes the raw audio waveform of voice submissions to extract emotional tone directly from speech - pitch, energy, and zero-crossing rate - producing a sentiment score that text alone cannot capture.", 
+        desc: "Processes the raw audio waveform of voice submissions to extract emotional tone directly from speech - pitch, energy, and zero-crossing rate - producing a sentiment score that text alone cannot capture.",
         inputs: ["Audio features (energy, pitch, zero-crossing rate)"],
         outputs: ["Audio_Sentiment (−1 to 1)"],
         cond: "AUDIO-ONLY",
@@ -138,16 +138,16 @@ const LAYERS = [
         id: "priority",
         name: "Prioritization Engine",
         model: "XGBoost",
-        desc: "An XGBoost model trained on hard-set priority rules assigns a final Priority level - Critical, High, Medium, or Low - the moment a ticket is created. It never sees raw ticket text; it works entirely from the labels produced upstream. Crucially, it relearns from every employee rescore, so its judgements continuously align with team expectations.", 
+        desc: "An XGBoost model trained on hard-set priority rules assigns a final Priority level - Critical, High, Medium, or Low - the moment a ticket is created. It never sees raw ticket text; it works entirely from the labels produced upstream. Crucially, it relearns from every employee rescore, so its judgements continuously align with team expectations.",
         inputs: ["safety_concern", "issue_severity", "issue_urgency", "business_impact", "is_recurring", "Sentiment_Score", "Ticket_Type"],
         outputs: ["Priority (Critical / High / Medium / Low)"],
         cond: null,
       },
       {
         id: "sla",
-        name: "SLA Automation", 
+        name: "SLA Automation",
         model: "Policy engine",
-        desc: "Maps Priority to concrete SLA deadlines. A heartbeat checks SLA status every 5 minutes - at 90% breach, the ticket auto-escalates, status changes to Escalated, and both the manager and employee are notified.", 
+        desc: "Maps Priority to concrete SLA deadlines. A heartbeat checks SLA status every 5 minutes - at 90% breach, the ticket auto-escalates, status changes to Escalated, and both the manager and employee are notified.",
         inputs: ["Priority"],
         outputs: ["SLA targets", "Escalation rules", "Ticket_Status = Escalated (if triggered)"],
         cond: null,
@@ -156,7 +156,7 @@ const LAYERS = [
         id: "routing",
         name: "Department Routing Agent",
         model: "DeBERTa NLI",
-        desc: "A DeBERTa NLI model trained on synthetic tickets assigns a confidence score across all departments. Above 0.7, the ticket is auto-routed. Below that threshold, it goes to the manager approval screen. The model relearns from every manager decision.", 
+        desc: "A DeBERTa NLI model trained on synthetic tickets assigns a confidence score across all departments. Above 0.7, the ticket is auto-routed. Below that threshold, it goes to the manager approval screen. The model relearns from every manager decision.",
         inputs: ["Ticket signals"],
         outputs: ["Department assignment", "Auto-routed or manager-reviewed"],
         cond: null,
@@ -180,7 +180,7 @@ const LAYERS = [
         id: "resolution",
         name: "Suggested Resolution Agent",
         model: "Qwen",
-        desc: "Generates a suggested resolution for the assigned employee at the moment of ticket creation. The employee can approve, edit, or reject it. The model learns from every one of those decisions, improving its suggestions over time.", 
+        desc: "Generates a suggested resolution for the assigned employee at the moment of ticket creation. The employee can approve, edit, or reject it. The model learns from every one of those decisions, improving its suggestions over time.",
         inputs: ["Ticket details", "Priority", "Past resolutions"],
         outputs: ["Suggested resolution steps"],
         cond: null,
@@ -203,7 +203,7 @@ const ALL_AGENTS = LAYERS.flatMap(l =>
 );
 
 /* ─────────────────────────────────────────────────
-   FEATURES DATA  (SVG icons — no emojis)
+   FEATURES DATA
 ───────────────────────────────────────────────── */
 const FEATURES = [
   {
@@ -236,7 +236,7 @@ const FEATURES = [
     ),
     title: "Instant Escalation",
     desc: "High-priority tickets are automatically flagged and routed to the appropriate team, helping reduce delays and improve response times.",
-    detail: "Once priority is assigned, an SLA Policy Engine maps it to deadline targets by priority level. A DeBERTa Department Routing Agent then assigns the ticket to the right team and employee,  auto-routing above a 0.7 confidence threshold, or sending to manager review below it. A 5-minute heartbeat monitors SLA breach proximity; at 90%, the ticket auto-escalates and both the manager and employee are notified so urgent cases are never left waiting.",
+    detail: "Once priority is assigned, an SLA Policy Engine maps it to deadline targets by priority level. A DeBERTa Department Routing Agent then assigns the ticket to the right team and employee, auto-routing above a 0.7 confidence threshold, or sending to manager review below it. A 5-minute heartbeat monitors SLA breach proximity; at 90%, the ticket auto-escalates and both the manager and employee are notified.",
   },
   {
     icon: (
@@ -287,6 +287,118 @@ const TEAM = [
   { name: "Rami Alassi",    initials: "RA" },
 ];
 
+/* ─────────────────────────────────────────────────
+   ORBIT CANVAS  — pure JS, no CSS positioning bugs
+───────────────────────────────────────────────── */
+function OrbitCanvas() {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const SIZE = 380;
+    const cx = SIZE / 2, cy = SIZE / 2;
+    const ORBIT_R = 158;
+    const RINGS = [48, 100, ORBIT_R];
+    const LABELS = ["Sentiment", "Audio Analysis", "Text Analysis", "Ticket Prioritization", "SLA Monitoring", "Chatbot"];
+    let angle = 0;
+    let raf;
+
+    canvas.width  = SIZE;
+    canvas.height = SIZE;
+
+    function pill(x, y, label) {
+      ctx.font = "600 9.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      const tw = ctx.measureText(label).width;
+      const pw = tw + 20, ph = 22, pr = 11;
+      const rx = x - pw / 2, ry = y - ph / 2;
+
+      ctx.beginPath();
+      ctx.moveTo(rx + pr, ry);
+      ctx.lineTo(rx + pw - pr, ry);
+      ctx.arcTo(rx + pw, ry, rx + pw, ry + pr, pr);
+      ctx.lineTo(rx + pw, ry + ph - pr);
+      ctx.arcTo(rx + pw, ry + ph, rx + pw - pr, ry + ph, pr);
+      ctx.lineTo(rx + pr, ry + ph);
+      ctx.arcTo(rx, ry + ph, rx, ry + ph - pr, pr);
+      ctx.lineTo(rx, ry + pr);
+      ctx.arcTo(rx, ry, rx + pr, ry, pr);
+      ctx.closePath();
+
+      ctx.fillStyle = "rgba(5,2,18,0.94)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(168,85,247,0.55)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = "#c084fc";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, x, y);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, SIZE, SIZE);
+
+      /* rings */
+      RINGS.forEach((r, i) => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(147,51,234,${0.10 + i * 0.07})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
+
+      /* core glow */
+      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 52);
+      glow.addColorStop(0, "rgba(147,51,234,0.28)");
+      glow.addColorStop(1, "rgba(147,51,234,0)");
+      ctx.beginPath();
+      ctx.arc(cx, cy, 52, 0, Math.PI * 2);
+      ctx.fillStyle = glow;
+      ctx.fill();
+
+      /* core circle */
+      const core = ctx.createRadialGradient(cx - 10, cy - 10, 2, cx, cy, 40);
+      core.addColorStop(0, "#9333ea");
+      core.addColorStop(1, "#4c1d95");
+      ctx.beginPath();
+      ctx.arc(cx, cy, 40, 0, Math.PI * 2);
+      ctx.fillStyle = core;
+      ctx.fill();
+
+      /* core label */
+      ctx.fillStyle = "#fff";
+      ctx.font = "700 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("InnovaCX", cx, cy);
+
+      /* orbiting pills */
+      LABELS.forEach((label, i) => {
+        const a = angle + (i / LABELS.length) * Math.PI * 2;
+        const nx = cx + Math.cos(a) * ORBIT_R;
+        const ny = cy + Math.sin(a) * ORBIT_R;
+        pill(nx, ny, label);
+      });
+
+      angle += 0.0038;
+      raf = requestAnimationFrame(draw);
+    }
+
+    draw();
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ display: "block", margin: "0 auto", maxWidth: "100%" }}
+    />
+  );
+}
+
 /* ─── Privacy Modal ─── */
 function PrivacyModal({ onClose }) {
   return (
@@ -327,7 +439,7 @@ function PrivacyModal({ onClose }) {
 }
 
 /* ─────────────────────────────────────────────────
-   STARFIELD CANVAS  (subtle, fixed, behind everything)
+   STARFIELD CANVAS
 ───────────────────────────────────────────────── */
 function Starfield() {
   const canvasRef = useRef(null);
@@ -392,7 +504,7 @@ function Starfield() {
           s.timer  = 200 + Math.random() * 400;
           return;
         }
-        const sx = s.x * canvas.width, sy = s.y * canvas.height;
+        const sx = s.x * canvas.width,  sy = s.y * canvas.height;
         const ex = (s.x - Math.cos(s.angle) * s.len / canvas.width)  * canvas.width;
         const ey = (s.y - Math.sin(s.angle) * s.len / canvas.height) * canvas.height;
         const g  = ctx.createLinearGradient(sx, sy, ex, ey);
@@ -507,7 +619,6 @@ function Pipeline() {
         </p>
       </div>
 
-      {/* Phase tabs */}
       <div className="au-phase-pills au-reveal" style={{ "--rd": "0.1s" }}>
         {LAYERS.map(l => (
           <button
@@ -523,17 +634,13 @@ function Pipeline() {
         ))}
       </div>
 
-      {/* Phase tagline */}
       <div className="au-phase-tagline au-reveal" style={{ "--rd": "0.14s" }}>
         <span className="au-phase-tagline-bar" style={{ background: layer.color }} />
         <span style={{ color: layer.color, fontWeight: 700, marginRight: 8 }}>{layer.label}</span>
         <span>{layer.tagline}</span>
       </div>
 
-      {/* Workspace */}
       <div className="au-pipeline-workspace au-reveal" style={{ "--rd": "0.18s" }}>
-
-        {/* Left — agent list */}
         <div className="au-agent-list">
           <div className="au-agent-list-head">
             <div className="au-agent-list-accent" style={{ background: layer.color }} />
@@ -545,12 +652,11 @@ function Pipeline() {
 
           <div className="au-agent-rows">
             {layerAgents.map((agent, i) => {
-              const isActive = activeAgent.id === agent.id;
+              const isActive = activeAgent.id === agent.id && activeAgent.name === agent.name;
               const isLast   = i === layerAgents.length - 1;
               return (
-                <React.Fragment key={agent.id}>
+                <React.Fragment key={`${agent.id}-${i}`}>
                   <div className="au-agent-entry">
-                    {/* Spine */}
                     <div className="au-agent-spine">
                       <div
                         className="au-agent-spine-dot"
@@ -568,8 +674,6 @@ function Pipeline() {
                         />
                       )}
                     </div>
-
-                    {/* Button */}
                     <button
                       className={`au-agent-btn${isActive ? " active" : ""}`}
                       style={{ "--ac": layer.color }}
@@ -578,13 +682,12 @@ function Pipeline() {
                       <div className="au-agent-btn-name">{agent.name}</div>
                       <div className="au-agent-btn-model">{agent.model}</div>
                       {agent.cond && (
-                        <span className={`au-agent-cond au-cond-${agent.cond.toLowerCase().replace(/-/g,"")}`}>
+                        <span className={`au-agent-cond au-cond-${agent.cond.toLowerCase().replace(/-/g, "")}`}>
                           {agent.cond}
                         </span>
                       )}
                     </button>
                   </div>
-
                   {!isLast && (
                     <div className="au-agent-entry" style={{ paddingTop: 0, paddingBottom: 0 }}>
                       <div className="au-agent-spine">
@@ -601,7 +704,6 @@ function Pipeline() {
             })}
           </div>
 
-          {/* Cross-layer nav */}
           <div className="au-agent-crossnav">
             <button
               className="au-crossnav-btn"
@@ -623,13 +725,11 @@ function Pipeline() {
           </div>
         </div>
 
-        {/* Right — detail card */}
-        <div className="au-agent-detail" key={activeAgent.id} style={{ "--ac": activeAgent.layerColor }}>
+        <div className="au-agent-detail" key={`${activeAgent.id}-${activeAgent.name}`} style={{ "--ac": activeAgent.layerColor }}>
           <div
             className="au-detail-glow"
             style={{ background: `radial-gradient(ellipse at 50% -20%, ${activeAgent.layerColor}, transparent 68%)` }}
           />
-
           <div className="au-detail-head">
             <div className="au-detail-phase" style={{ color: activeAgent.layerColor }}>
               {activeAgent.layerLabel}
@@ -643,10 +743,8 @@ function Pipeline() {
               <div className="au-detail-cond">{activeAgent.cond}</div>
             )}
           </div>
-
           <div className="au-detail-body">
             <p className="au-detail-desc">{activeAgent.desc}</p>
-
             <div className="au-detail-io">
               <div className="au-io-block au-io-in">
                 <div className="au-io-head">Inputs</div>
@@ -665,7 +763,6 @@ function Pipeline() {
         </div>
       </div>
 
-      {/* Legend */}
       <div className="au-pipe-legend au-reveal" style={{ "--rd": "0.22s" }}>
         {[
           { dot: "#fbbf24", text: "AUDIO-ONLY — runs for voice submissions only" },
@@ -690,14 +787,12 @@ const HERO_WORDS = ["Intelligent", "Empathetic", "Precise", "Instant"];
 export default function AboutUs() {
   const navigate = useNavigate();
 
-  // Hero word cycle
   const [wordIdx, setWordIdx] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setWordIdx(i => (i + 1) % HERO_WORDS.length), 2500);
     return () => clearInterval(id);
   }, []);
 
-  // Mouse parallax for blobs
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
   useEffect(() => {
     const fn = e => setMouse({ x: e.clientX, y: e.clientY });
@@ -705,7 +800,6 @@ export default function AboutUs() {
     return () => window.removeEventListener("mousemove", fn);
   }, []);
 
-  // Stats counter trigger
   const statsRef = useRef(null);
   const [statsOn, setStatsOn] = useState(false);
   useEffect(() => {
@@ -717,11 +811,9 @@ export default function AboutUs() {
     return () => obs.disconnect();
   }, []);
 
-  // Modal + contact state
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showContact, setShowContact] = useState(false);
 
-  // Scroll reveal
   useReveal();
 
   return (
@@ -729,7 +821,6 @@ export default function AboutUs() {
       <Starfield />
       <div className="au-nebula" />
 
-      {/* Parallax blobs */}
       <div
         className="au-blob au-blob-1"
         style={{ transform: `translate(${mouse.x * 0.01}px, ${mouse.y * 0.01}px)` }}
@@ -739,7 +830,7 @@ export default function AboutUs() {
         style={{ transform: `translate(${-mouse.x * 0.007}px, ${-mouse.y * 0.007}px)` }}
       />
 
-      {/* ── NAV ── */}
+      {/* NAV */}
       <nav className="au-nav">
         <div className="au-nav-logo" onClick={() => navigate("/")} role="button" tabIndex={0}>
           <img src={novaLogo} alt="InnovaAI" />
@@ -749,36 +840,29 @@ export default function AboutUs() {
         </button>
       </nav>
 
-      {/* ══════════════════════════════════
-          HERO
-      ══════════════════════════════════ */}
+      {/* HERO */}
       <section className="au-hero">
         <div className="au-hero-badge">
           InnovaAI · Dubai CommerCity
         </div>
-
         <h1 className="au-hero-title">
           Customer Support,
           <span className="au-hero-title-grad">
             <span key={wordIdx} className="au-word-in">{HERO_WORDS[wordIdx]}</span>
           </span>
         </h1>
-
         <p className="au-hero-sub">
           InnovaCX is a multi-agent AI platform that analyses text and voice complaints,
           detects emotion and urgency, then automatically prioritises and routes every ticket
           to the right team in real time.
         </p>
-
         <div className="au-hero-ctas">
           <a href="#mission"  className="au-btn-primary">Our Mission</a>
           <a href="#pipeline" className="au-btn-ghost">See the Pipeline →</a>
         </div>
       </section>
 
-      {/* ══════════════════════════════════
-          MISSION
-      ══════════════════════════════════ */}
+      {/* MISSION */}
       <section className="au-section" id="mission">
         <div className="au-mission-grid">
           <div>
@@ -795,7 +879,7 @@ export default function AboutUs() {
               and ensure that no complaint is overlooked.
             </p>
             <p className="au-body au-reveal" style={{ "--rd": "0.2s" }}>
-              Operating within the Dubai CommerCity ecosystem, InnovaCX supports 
+              Operating within the Dubai CommerCity ecosystem, InnovaCX supports
               e-commerce businesses, logistics providers, and retail brands by helping their
               customer support teams manage complaints more efficiently. The platform acts
               as an AI assistant that works alongside support teams to analyze incoming
@@ -804,22 +888,14 @@ export default function AboutUs() {
             </p>
           </div>
 
-          {/* Orbit visual */}
+          {/* Canvas orbit — no CSS positioning */}
           <div className="au-orbit-wrap au-reveal" style={{ "--rd": "0.18s" }}>
-            <div className="au-orbit-ring au-ring-1" />
-            <div className="au-orbit-ring au-ring-2" />
-            <div className="au-orbit-ring au-ring-3" />
-            <div className="au-orbit-center">InnovaCX</div>
-            {["Sentiment", "Audio Analysis", "Text Analysis", "Ticket Prioritization", "SLA Monitoring", "Chatbot"].map((lbl, i) => (
-              <div key={lbl} className="au-orbit-node" style={{ "--oi": i }}>{lbl}</div>
-            ))}
+            <OrbitCanvas />
           </div>
         </div>
       </section>
 
-      {/* ══════════════════════════════════
-          FEATURES
-      ══════════════════════════════════ */}
+      {/* FEATURES */}
       <section className="au-section" id="features">
         <div className="au-features-intro">
           <div className="au-label au-reveal">What We Do</div>
@@ -834,14 +910,10 @@ export default function AboutUs() {
         </div>
       </section>
 
-      {/* ══════════════════════════════════
-          PIPELINE
-      ══════════════════════════════════ */}
+      {/* PIPELINE */}
       <Pipeline />
 
-      {/* ══════════════════════════════════
-          STATS
-      ══════════════════════════════════ */}
+      {/* STATS */}
       <section className="au-section" ref={statsRef}>
         <div className="au-stats-header">
           <div className="au-label au-reveal">Real Impact</div>
@@ -851,10 +923,10 @@ export default function AboutUs() {
         </div>
         <div className="au-stats-grid">
           {[
-            { end: 98,   suffix: "%",  label: "Triage Accuracy",   note: "of tickets correctly classified and prioritised on first pass" },
-            { end: 40,   suffix: "%",  label: "Faster Resolution",  note: "reduction in first-response time for Critical tickets" },
-            { end: 3,    suffix: "×",  label: "Throughput Gain",    note: "more tickets handled per agent per shift" },
-            { end: 0,    suffix: "",   label: "Missed Complaints",  note: "every complaint is captured, categorised, and routed" },
+            { end: 98,  suffix: "%", label: "Triage Accuracy",  note: "of tickets correctly classified and prioritised on first pass" },
+            { end: 40,  suffix: "%", label: "Faster Resolution", note: "reduction in first-response time for Critical tickets" },
+            { end: 3,   suffix: "×", label: "Throughput Gain",  note: "more tickets handled per agent per shift" },
+            { end: 0,   suffix: "",  label: "Missed Complaints", note: "every complaint is captured, categorised, and routed" },
           ].map((s, i) => (
             <div key={i} className="au-stat au-reveal" style={{ "--rd": `${i * 80}ms` }}>
               <div className="au-stat-num">
@@ -867,9 +939,7 @@ export default function AboutUs() {
         </div>
       </section>
 
-      {/* ══════════════════════════════════
-          BUSINESS VALUE
-      ══════════════════════════════════ */}
+      {/* BUSINESS VALUE */}
       <section className="au-section">
         <div className="au-value-grid">
           <div>
@@ -881,7 +951,6 @@ export default function AboutUs() {
               Inefficient customer support can lead to lost customers, wasted agent time, and poor reviews.
               InnovaCX helps businesses manage support more intelligently by identifying important issues
               faster and organizing incoming requests more effectively.
-              
             </p>
             <ul className="au-value-list">
               {[
@@ -916,9 +985,7 @@ export default function AboutUs() {
         </div>
       </section>
 
-      {/* ══════════════════════════════════
-          SECURITY MEASURES
-      ══════════════════════════════════ */}
+      {/* SECURITY */}
       <section className="au-section">
         <div className="au-features-intro">
           <div className="au-label au-reveal">Trust &amp; Safety</div>
@@ -934,66 +1001,32 @@ export default function AboutUs() {
         <div className="au-features-grid">
           {[
             {
-              icon: (
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                </svg>
-              ),
+              icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
               title: "Encryption in Transit and at Rest",
               desc: "All data transmitted between clients and the InnovaCX platform is encrypted in transit using TLS 1.2+, with HTTPS enforced across every endpoint. Sensitive fields are encrypted at rest.",
             },
             {
-              icon: (
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                </svg>
-              ),
+              icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
               title: "Multi-Factor Authentication",
               desc: "All user accounts require MFA at login. Access tokens are short-lived, session IDs are regenerated after login, and sessions are invalidated on logout.",
             },
             {
-              icon: (
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="8" r="4"/>
-                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-                  <path d="M17 11l2 2 4-4"/>
-                </svg>
-              ),
+              icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><path d="M17 11l2 2 4-4"/></svg>,
               title: "Role-Based Access Control",
               desc: "Access to data and system functions is governed by role. Each user is assigned a permission level, and permissions are checked on every request. Client-supplied roles or IDs are never trusted, and access is denied by default.",
             },
             {
-              icon: (
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                  <line x1="9" y1="13" x2="15" y2="13"/>
-                  <line x1="9" y1="17" x2="13" y2="17"/>
-                </svg>
-              ),
+              icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>,
               title: "Audit Logging",
               desc: "Auth events and access to sensitive data are logged. Audit logs are maintained to support accountability and review.",
             },
             {
-              icon: (
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                </svg>
-              ),
+              icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>,
               title: "Secure Data Storage",
               desc: "Database users follow the principle of least privilege, with application accounts limited to the operations they need. Sensitive columns are encrypted at rest, all database connections use TLS, and credentials are stored in environment variables rather than code.",
             },
             {
-              icon: (
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8"/>
-                  <path d="M21 21l-4.35-4.35"/>
-                  <path d="M11 8v3l2 2"/>
-                </svg>
-              ),
+              icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M11 8v3l2 2"/></svg>,
               title: "Monitoring and Alerts",
               desc: "Alerts are used to detect unusual or suspicious activity. Application-level event logs are maintained and reviewed to help identify suspicious activity.",
             },
@@ -1007,9 +1040,7 @@ export default function AboutUs() {
         </div>
       </section>
 
-      {/* ══════════════════════════════════
-          TEAM
-      ══════════════════════════════════ */}
+      {/* TEAM */}
       <section className="au-section">
         <div className="au-team-header">
           <div className="au-label au-reveal">The People Behind It</div>
@@ -1027,15 +1058,13 @@ export default function AboutUs() {
         </div>
       </section>
 
-      {/* ══════════════════════════════════
-          CTA
-      ══════════════════════════════════ */}
+      {/* CTA */}
       <section className="au-cta">
         <h2 className="au-cta-h">
           Ready to Experience<br /><em>Smarter Support?</em>
         </h2>
         <p className="au-cta-p">
-          Submit a ticket, chat with Nova, or explore the dashboard
+          Submit a ticket, chat with Nova, or explore the dashboard —
           your team&apos;s new AI co-pilot is ready.
         </p>
         <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
@@ -1049,7 +1078,7 @@ export default function AboutUs() {
         </div>
       </section>
 
-      {/* ── FOOTER ── */}
+      {/* FOOTER */}
       <footer className="au-footer">
         <p>© 2026 InnovaAI · Dubai CommerCity</p>
         <div className="au-footer-links">
