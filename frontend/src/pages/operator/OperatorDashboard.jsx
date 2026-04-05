@@ -62,7 +62,6 @@ function ModuleCard({ tag, title, desc, to, rows, loading }) {
   );
 }
 
-
 export default function OperatorDashboard() {
   const revealRef = useScrollReveal();
 
@@ -152,7 +151,7 @@ export default function OperatorDashboard() {
     {
       tag: "Pipeline", title: "Pipeline Queue",
       desc: "Live ticket processing queue. Held tickets require operator correction before continuing.",
-      to: "/operator/ai-explainability", loading: queueStatsLoading,
+      to: "/operator/pipeline-queue", loading: queueStatsLoading,
       rows: [
         { label: "Queued",     value: queueStats?.queued     ?? "—" },
         { label: "Processing", value: queueStats?.processing ?? "—" },

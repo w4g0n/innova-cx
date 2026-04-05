@@ -13,7 +13,7 @@
 --  7.  ticket_attachments
 --  8.  ticket_updates
 --  9.  ticket_work_steps
--- 10.  ticket_resolution_feedback
+-- 10.  suggested_resolution_usage
 -- 11.  approval_requests
 -- 12.  chat_conversations
 -- 13.  chat_messages
@@ -929,10 +929,13 @@ WHERE NOT EXISTS (
 );
 
 -- =============================================================================
--- 10. TICKET_RESOLUTION_FEEDBACK
+-- 10. SUGGESTED_RESOLUTION_USAGE
 -- =============================================================================
-INSERT INTO ticket_resolution_feedback (ticket_id, employee_user_id, decision, suggested_resolution, employee_resolution, final_resolution)
-SELECT t.id, u.id, fb.decision, fb.suggested, fb.custom, fb.final
+INSERT INTO suggested_resolution_usage (
+  ticket_id, employee_user_id, decision, department,
+  suggested_text, final_text, used
+)
+SELECT t.id, u.id, fb.decision, d.name, fb.suggested, fb.final, (fb.decision = 'accepted')
 FROM (VALUES
   ('CX-H001','ahmed@innovacx.net','accepted',
    'Isolate gas supply and replace faulty valve.',
@@ -986,8 +989,13 @@ FROM (VALUES
 ) AS fb(tc, emp, decision, suggested, custom, final)
 JOIN tickets t ON t.ticket_code = fb.tc
 JOIN users u ON u.email = fb.emp
+LEFT JOIN departments d ON d.id = t.department_id
 WHERE NOT EXISTS (
-  SELECT 1 FROM ticket_resolution_feedback trf WHERE trf.ticket_id = t.id AND trf.employee_user_id = u.id
+  SELECT 1 FROM suggested_resolution_usage sru
+  WHERE sru.ticket_id = t.id
+    AND sru.employee_user_id = u.id
+    AND sru.decision = fb.decision
+    AND sru.final_text = fb.final
 );
 
 -- =============================================================================

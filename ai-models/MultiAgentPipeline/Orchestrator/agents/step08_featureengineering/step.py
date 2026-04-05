@@ -3,16 +3,16 @@ Step 6 — Feature Engineering Agent
 ==================================
 Single agent that executes:
   1) feature labeling (NLI model or mock fallback)
-  2) deterministic safety/normalization rules
+  2) lightweight normalization only
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import json
 import gc
-import subprocess
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -35,30 +35,13 @@ HF_TOKEN = os.getenv("HF_TOKEN", "").strip() or None
 FEATURE_RUNTIME_WORKER_PATH = Path(__file__).with_name("feature_labeler_runtime_worker.py")
 FEATURE_RUNTIME_TIMEOUT_SECONDS = float(os.getenv("FEATURE_RUNTIME_TIMEOUT_SECONDS", "60"))
 FEATURE_RUNTIME_MODE = os.getenv("FEATURE_RUNTIME_MODE", "subprocess").strip().lower()
+# Minimum available RAM (MB) required before spawning the model subprocess.
+# The DeBERTa model is ~715 MB; default threshold adds ~25% headroom.
+FEATURE_MIN_AVAILABLE_MB = float(os.getenv("FEATURE_MIN_AVAILABLE_MB", "900"))
 UNLOAD_FEATURE_LABELER_AFTER_USE = os.getenv(
     "UNLOAD_FEATURE_LABELER_AFTER_USE",
     "false",
 ).lower() in {"1", "true", "yes"}
-
-SAFETY_KEYWORDS = (
-    "fire",
-    "smoke",
-    "gas leak",
-    "electrical",
-    "electric shock",
-    "shock",
-    "sparking",
-    "short circuit",
-    "flood",
-    "water leak",
-    "leak",
-    "hazard",
-    "unsafe",
-    "emergency",
-    "alarm",
-    "chemical",
-    "toxic",
-)
 
 LABEL_CONFIGS = {
     "issue_severity": {
@@ -147,35 +130,29 @@ def _optional_bool(value):
     return None
 
 
-def _has_safety_signal(text: str) -> bool:
-    t = str(text or "").lower()
-    return any(keyword in t for keyword in SAFETY_KEYWORDS)
+def _get_available_memory_mb() -> float | None:
+    """Return available system RAM in MB, or None if it cannot be determined."""
+    try:
+        import psutil  # type: ignore
+        return psutil.virtual_memory().available / (1024 * 1024)
+    except ImportError:
+        pass
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) / 1024
+    except Exception:
+        pass
+    return None
 
 
 def _mock_labels(text: str) -> dict[str, Any]:
-    t = text.lower()
-    issue_severity = "medium"
-    issue_urgency = "medium"
-    business_impact = "medium"
-    safety_concern = False
-
-    if any(k in t for k in ("fire", "smoke", "electric", "shock", "gas leak", "flood", "hazard", "unsafe")):
-        safety_concern = True
-        issue_severity = "high"
-    if any(k in t for k in ("urgent", "asap", "immediate", "today", "right now", "emergency")):
-        issue_urgency = "high"
-    if any(k in t for k in ("operations stopped", "cannot work", "business halted", "financial loss", "losing money")):
-        business_impact = "high"
-    if any(k in t for k in ("minor", "cosmetic", "small inconvenience")):
-        issue_severity = "low"
-        issue_urgency = "low"
-        business_impact = "low"
-
     return {
-        "issue_severity": issue_severity,
-        "issue_urgency": issue_urgency,
-        "business_impact": business_impact,
-        "safety_concern": safety_concern,
+        "issue_severity": "medium",
+        "issue_urgency": "medium",
+        "business_impact": "medium",
+        "safety_concern": False,
     }
 
 
@@ -356,40 +333,65 @@ def _classify_ticket(classifier, text: str) -> dict[str, Any]:
     return output_labels
 
 
-def _apply_labeling_step(state: dict, text: str) -> None:
+async def _apply_labeling_step(state: dict, text: str) -> None:
     if FEATURE_RUNTIME_MODE == "subprocess":
-        try:
-            completed = subprocess.run(
-                [sys.executable, str(FEATURE_RUNTIME_WORKER_PATH), text],
-                capture_output=True,
-                text=True,
-                timeout=FEATURE_RUNTIME_TIMEOUT_SECONDS,
-                check=False,
+        # Memory guard: skip subprocess if available RAM is below model size threshold
+        available_mb = _get_available_memory_mb()
+        if available_mb is not None and available_mb < FEATURE_MIN_AVAILABLE_MB:
+            logger.warning(
+                "feature_engineering | low memory (%.0f MB available < %.0f MB threshold), skipping subprocess → mock",
+                available_mb,
+                FEATURE_MIN_AVAILABLE_MB,
             )
-            if completed.returncode == 0:
-                payload = json.loads((completed.stdout or "").strip())
-                labels = {
-                    "issue_severity": str(payload.get("issue_severity") or "medium").lower(),
-                    "issue_urgency": str(payload.get("issue_urgency") or "medium").lower(),
-                    "business_impact": str(payload.get("business_impact") or "medium").lower(),
-                    "safety_concern": bool(payload.get("safety_concern")),
-                }
-                label_source = str(payload.get("feature_labels_source") or "nli").strip().lower() or "nli"
-            else:
-                raise RuntimeError((completed.stderr or "").strip() or f"rc={completed.returncode}")
-        except subprocess.TimeoutExpired:
-            logger.warning("feature_engineering | subprocess timed out after %.1fs, using mock", FEATURE_RUNTIME_TIMEOUT_SECONDS)
             labels = _mock_labels(text)
-            label_source = "mock"
-        except Exception as exc:
-            logger.warning("feature_engineering | subprocess failed (%s), using mock", exc)
-            labels = _mock_labels(text)
-            label_source = "mock"
+            label_source = "mock_fallback"
+        else:
+            if available_mb is not None:
+                logger.info("feature_engineering | available memory %.0f MB, spawning subprocess", available_mb)
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    sys.executable,
+                    str(FEATURE_RUNTIME_WORKER_PATH),
+                    text,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                try:
+                    stdout, stderr = await asyncio.wait_for(
+                        proc.communicate(),
+                        timeout=FEATURE_RUNTIME_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+                    logger.warning(
+                        "feature_engineering | subprocess timed out after %.1fs, using mock",
+                        FEATURE_RUNTIME_TIMEOUT_SECONDS,
+                    )
+                    labels = _mock_labels(text)
+                    label_source = "mock_fallback"
+                else:
+                    if proc.returncode == 0:
+                        payload = json.loads((stdout or b"").decode().strip())
+                        labels = {
+                            "issue_severity": str(payload.get("issue_severity") or "medium").lower(),
+                            "issue_urgency": str(payload.get("issue_urgency") or "medium").lower(),
+                            "business_impact": str(payload.get("business_impact") or "medium").lower(),
+                            "safety_concern": bool(payload.get("safety_concern")),
+                        }
+                        label_source = str(payload.get("feature_labels_source") or "nli").strip().lower() or "nli"
+                    else:
+                        err = (stderr or b"").decode().strip() or f"rc={proc.returncode}"
+                        raise RuntimeError(err)
+            except (RuntimeError, OSError, json.JSONDecodeError) as exc:
+                logger.warning("feature_engineering | subprocess failed (%s), using mock", exc)
+                labels = _mock_labels(text)
+                label_source = "mock_fallback"
     else:
         classifier = _load_feature_labeler()
         if classifier is None:
             labels = _mock_labels(text)
-            label_source = "mock"
+            label_source = "mock_fallback"
         else:
             try:
                 labels = _classify_ticket(classifier, text)
@@ -397,13 +399,14 @@ def _apply_labeling_step(state: dict, text: str) -> None:
             except Exception as exc:
                 logger.warning("feature_engineering | labeler inference failed (%s), using mock", exc)
                 labels = _mock_labels(text)
-                label_source = "mock"
+                label_source = "mock_fallback"
 
     state["issue_severity"] = str(labels["issue_severity"]).lower()
     state["issue_urgency"] = str(labels["issue_urgency"]).lower()
     state["business_impact"] = str(labels["business_impact"]).lower()
     state["safety_concern"] = bool(labels["safety_concern"])
     state["feature_labels_source"] = label_source
+    state["feature_labeler_mode"] = label_source
 
 
 def _release_feature_labeler() -> None:
@@ -454,44 +457,36 @@ async def engineer_features(state: dict) -> dict:
 
     try:
         # Step 1: labeling (NLI model/mock)
-        _apply_labeling_step(state, text)
+        await _apply_labeling_step(state, text)
     finally:
         if UNLOAD_FEATURE_LABELER_AFTER_USE:
             _release_feature_labeler()
 
-    # Step 2: deterministic safety/normalization rules on top of NLI labels
+    # Step 2: lightweight normalization on top of model labels
     business_impact = state.get("business_impact") or "medium"
     issue_severity = state.get("issue_severity") or "medium"
     issue_urgency = state.get("issue_urgency") or "medium"
     explicit_safety = _optional_bool(state.get("safety_concern"))
 
     severity_norm = _normalize_level(issue_severity, default="medium")
-    safety_from_keywords = _has_safety_signal(text)
-    safety_from_severity = severity_norm == "high"
+    urgency_norm = _normalize_level(issue_urgency, default="medium")
+    impact_norm = _normalize_level(business_impact, default="medium")
 
-    state["business_impact"] = _normalize_level(business_impact, default="medium")
+    state["business_impact"] = impact_norm
     if explicit_safety is not None:
         state["safety_concern"] = explicit_safety
     else:
-        state["safety_concern"] = bool(safety_from_keywords or safety_from_severity)
+        state["safety_concern"] = bool(state.get("safety_concern", False))
     state["issue_severity"] = severity_norm
-    state["issue_urgency"] = _normalize_level(issue_urgency, default="medium")
+    state["issue_urgency"] = urgency_norm
 
     logger.info(
-        "feature_engineering | labels_source=%s impact=%s safety=%s severity=%s urgency=%s",
+        "feature_engineering | labels_source=%s severity=%s urgency=%s impact=%s safety=%s",
         state.get("feature_labels_source"),
-        state["business_impact"],
-        state["safety_concern"],
         state["issue_severity"],
         state["issue_urgency"],
-    )
-    logger.info(
-        "feature_decision | business_impact=%s issue_severity=%s issue_urgency=%s safety_concern=%s source=%s",
         state["business_impact"],
-        state["issue_severity"],
-        state["issue_urgency"],
         state["safety_concern"],
-        state.get("feature_labels_source"),
     )
 
     return state
