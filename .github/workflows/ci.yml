@@ -40,10 +40,6 @@ jobs:
   guard-no-prod-prune-into-dev-main:
     runs-on: ubuntu-latest
     steps:
-      - name: Reset runner workspace
-        run: |
-          docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
       - uses: actions/checkout@v4
         with:
           clean: false
@@ -75,10 +71,6 @@ jobs:
   guard-prod-live-no-dev-paths:
     runs-on: ubuntu-latest
     steps:
-      - name: Reset runner workspace
-        run: |
-          docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
       - uses: actions/checkout@v4
         with:
           clean: false
@@ -102,10 +94,6 @@ jobs:
   guard-prod-live-model-volumes:
     runs-on: ubuntu-latest
     steps:
-      - name: Reset runner workspace
-        run: |
-          docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
       - uses: actions/checkout@v4
         with:
           clean: false
@@ -145,10 +133,6 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - name: Reset runner workspace
-        run: |
-          docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
       - uses: actions/checkout@v4
         with:
           clean: false
@@ -167,10 +151,6 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - name: Reset runner workspace
-        run: |
-          docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
       - uses: actions/checkout@v4
         with:
           clean: false
@@ -185,10 +165,6 @@ jobs:
   lint-backend:
     runs-on: ubuntu-latest
     steps:
-      - name: Reset runner workspace
-        run: |
-          docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
       - uses: actions/checkout@v4
         with:
           clean: false
@@ -216,10 +192,6 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - name: Reset runner workspace
-        run: |
-          docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
       - uses: actions/checkout@v4
         with:
           clean: false
@@ -234,10 +206,6 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     steps:
-      - name: Reset runner workspace
-        run: |
-          docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
-            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
       - uses: actions/checkout@v4
         with:
           clean: false
@@ -248,10 +216,6 @@ jobs:
   security-audit:
       runs-on: ubuntu-latest
       steps:
-        - name: Reset runner workspace
-          run: |
-            docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
-              sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
         - uses: actions/checkout@v4
           with:
             clean: false
