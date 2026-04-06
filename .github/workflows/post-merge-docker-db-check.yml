@@ -14,8 +14,15 @@ jobs:
     timeout-minutes: 90
 
     steps:
+      - name: Reset runner workspace
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          clean: false
 
       - name: Sweep all compose profiles
         run: |
