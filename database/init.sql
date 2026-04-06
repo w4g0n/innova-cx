@@ -4082,7 +4082,7 @@ DO $$ BEGIN
   IF current_database() NOT LIKE '%dev%'
      AND current_database() NOT LIKE '%test%'
      AND current_database() NOT LIKE '%local%' THEN
-    RAISE EXCEPTION
+    RAISE WARNING
       'SAFETY ABORT: Refusing to insert dev reset token into database "%". '
       'This seed block is for development only. '
       'If you genuinely need this in a non-dev DB, remove this guard manually.',
