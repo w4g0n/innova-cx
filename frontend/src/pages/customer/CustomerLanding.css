@@ -299,4 +299,22 @@
   .cl-footer{flex-direction:column;text-align:center;}
   .cl-ticket-card{padding:20px 18px 18px;}
   .cl-section-header{flex-direction:column;align-items:flex-start;}
+
+  /* Topbar: hide the portal label and avatar name on small screens */
+  .cl-topbar-portal { display: none; }
+  .cl-topbar-divider { display: none; }
+  .cl-avatar-name { display: none; }
+  .cl-avatar-btn { padding: 0 8px; }
+
+  /* Notification + profile popover: full-width anchored to viewport */
+  .navPopover, .navDropdown {
+    position: fixed;
+    top: 64px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    border-radius: 14px;
+  }
+  .navPopoverList { max-height: 60vh; }
 }

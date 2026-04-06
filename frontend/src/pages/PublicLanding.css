@@ -1386,6 +1386,32 @@
 }
 
 
+/* ── FIXED SOCIAL DOCK ── */
+.pl-social-dock {
+  position: fixed;
+  bottom: 48px;
+  right: clamp(20px, 5vw, 60px);
+  z-index: 800;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 860px) {
+  .pl-social-dock {
+    bottom: 24px;
+    right: 50%;
+    transform: translateX(50%);
+    gap: 8px;
+  }
+  .pl-social-dock .pl-social-link {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+  }
+}
+
+
 /* ═══════════════════════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════════════════════ */

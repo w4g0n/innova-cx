@@ -15,7 +15,7 @@
 #   - innovacx-chatbot container must be running (docker compose profile=dev)
 #   - innovacx-db container must be running
 #   - At least 4GB free disk space for Qwen model download
-#   - HF_TOKEN env var or internet access to Hugging Face
+#   - Qwen model must already exist locally at /app/hf_cache/qwen2.5-1.5b-instruct
 # =============================================================================
 
 set -euo pipefail
@@ -160,41 +160,17 @@ run_tier1 "current"
 run_tier2 "current"
 
 # =============================================================================
-# Step 3 — Download Qwen2.5-1.5B-Instruct
+# Step 3 — Verify local Qwen model
 # =============================================================================
-log "=== STEP 3: DOWNLOAD QWEN MODEL ==="
+log "=== STEP 3: VERIFY LOCAL QWEN MODEL ==="
 
-# Check if already downloaded
-QWEN_EXISTS=$(docker exec "$CHATBOT_CONTAINER" \
-    python -c "from pathlib import Path; print('yes' if (Path('${QWEN_LOCAL_PATH}')/'config.json').exists() else 'no')" 2>/dev/null || echo "no")
-
-if [[ "$QWEN_EXISTS" == "yes" ]]; then
-    log "Qwen model already at ${QWEN_LOCAL_PATH} — skipping download."
-else
-    log "Downloading ${QWEN_MODEL_ID} to ${QWEN_LOCAL_PATH} inside container ..."
-    log "This may take 5-15 minutes depending on network speed ..."
-    docker exec "$CHATBOT_CONTAINER" python3 -c "
-from huggingface_hub import snapshot_download
-import sys
-print('Downloading ${QWEN_MODEL_ID} ...', flush=True)
-snapshot_download(
-    '${QWEN_MODEL_ID}',
-    local_dir='${QWEN_LOCAL_PATH}',
-    ignore_patterns=['*.gguf', '*.bin'],   # prefer safetensors
-)
-print('Download complete.', flush=True)
-"
-    log "Qwen download complete."
-fi
-
-# Verify config.json exists
 docker exec "$CHATBOT_CONTAINER" \
     python -c "
 from pathlib import Path
 p = Path('${QWEN_LOCAL_PATH}') / 'config.json'
 assert p.exists(), f'config.json not found at {p}'
 print('config.json verified at ${QWEN_LOCAL_PATH}')
-" || die "Qwen model directory is missing config.json — download may have failed."
+" || die "Qwen model directory is missing config.json. Preload the model locally before running this benchmark."
 
 # =============================================================================
 # Step 4 — Update .env and restart chatbot with Qwen
