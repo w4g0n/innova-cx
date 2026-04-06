@@ -97,11 +97,16 @@ CREATE INDEX IF NOT EXISTS idx_aol_created_at   ON agent_output_log(created_at);
 -- ---------------------------------------------------------
 
 -- ticket_resolution_feedback columns: add model_version + confidence_at_time
--- (table itself is created in init.sql before this file is included,
---  but the ALTER below is idempotent)
-ALTER TABLE public.ticket_resolution_feedback
-    ADD COLUMN IF NOT EXISTS model_version       TEXT        NOT NULL DEFAULT 'resolution-v1.0',
-    ADD COLUMN IF NOT EXISTS confidence_at_time  NUMERIC(5,4);
+-- Some clean setups do not create ticket_resolution_feedback anymore, so guard
+-- this ALTER to keep fresh-volume initialization deterministic.
+DO $$
+BEGIN
+    IF to_regclass('public.ticket_resolution_feedback') IS NOT NULL THEN
+        ALTER TABLE public.ticket_resolution_feedback
+            ADD COLUMN IF NOT EXISTS model_version       TEXT        NOT NULL DEFAULT 'resolution-v1.0',
+            ADD COLUMN IF NOT EXISTS confidence_at_time  NUMERIC(5,4);
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.sentiment_outputs (
     id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),

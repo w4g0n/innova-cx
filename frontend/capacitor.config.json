@@ -1,0 +1,9 @@
+{
+  "appId": "com.innovaai.innovacx",
+  "appName": "InnovaCX",
+  "webDir": "dist",
+  "server": {
+    "url": "https://innovacx.net",
+    "cleartext": true
+  }
+}

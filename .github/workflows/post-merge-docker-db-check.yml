@@ -103,6 +103,7 @@ jobs:
               "select rolname from pg_roles where rolname='innovacx_app';" | grep -q "^innovacx_app$"
             docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
               "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" | grep -q "^4$"
+
             # Fresh-volume initialization must complete cleanly.
             # Avoid pipefail+SIGPIPE false negatives from `docker logs | grep -q`.
             docker logs innovacx-db > /tmp/innovacx-db.log 2>&1 || true
