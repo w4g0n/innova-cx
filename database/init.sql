@@ -7,7 +7,6 @@
 -- -------------------------
 CREATE EXTENSION IF NOT EXISTS pgcrypto; -- gen_random_uuid() + crypt()
 CREATE EXTENSION IF NOT EXISTS citext;   -- case-insensitive email
-
 -- -------------------------
 -- Enums (match UI strings exactly)
 -- -------------------------
@@ -78,6 +77,80 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- =========================================================
+-- AUDIT LOGGING
+-- =========================================================
+-- WHY THIS EXISTS:
+--   RIGHT NOW: if someone changes a ticket's status, deletes a user,
+--   or approves a request, there is NO record of it happening beyond
+--   whatever your app logs. If something goes wrong (or someone does
+--   something they shouldn't), you can't reconstruct what changed,
+--   who did it, or when.
+--
+-- HOW IT WORKS:
+--   The audit_log table records every INSERT / UPDATE / DELETE on the
+--   tables you care about. Each row captures:
+--     - which table was affected
+--     - what the row looked like BEFORE the change (old_data)
+--     - what the row looks like AFTER the change (new_data)
+--     - which DB role made the change (changed_by)
+--     - when it happened (changed_at)
+--
+-- HOW TO ENABLE AUDITING ON A TABLE:
+--   After creating any table, attach the trigger like this:
+--     CREATE TRIGGER audit_<tablename>
+--     AFTER INSERT OR UPDATE OR DELETE ON <tablename>
+--     FOR EACH ROW EXECUTE FUNCTION audit_trigger();
+--   (We do this below for: users, tickets, approval_requests)
+--
+-- HOW TO QUERY THE AUDIT LOG:
+--   -- See all changes to a specific ticket:
+--   SELECT * FROM audit_log WHERE table_name='tickets'
+--     AND (old_data->>'id' = '<uuid>' OR new_data->>'id' = '<uuid>')
+--     ORDER BY changed_at DESC;
+--
+--   -- See all password changes:
+--   SELECT changed_at, changed_by, old_data->>'email'
+--   FROM audit_log WHERE table_name='users' AND operation='UPDATE'
+--     AND old_data->>'password_hash' IS DISTINCT FROM new_data->>'password_hash';
+-- =========================================================
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id          BIGSERIAL    PRIMARY KEY,
+  table_name  TEXT         NOT NULL,
+  operation   TEXT         NOT NULL CHECK (operation IN ('INSERT','UPDATE','DELETE')),
+  old_data    JSONB,        -- NULL on INSERT
+  new_data    JSONB,        -- NULL on DELETE
+  changed_by  TEXT         NOT NULL DEFAULT current_user,
+  changed_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_table      ON audit_log(table_name, changed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_changed_at ON audit_log(changed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_changed_by ON audit_log(changed_by);
+
+CREATE OR REPLACE FUNCTION audit_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO audit_log (table_name, operation, old_data, new_data)
+    VALUES (TG_TABLE_NAME, 'INSERT', NULL, to_jsonb(NEW));
+    RETURN NEW;
+  ELSIF TG_OP = 'UPDATE' THEN
+    -- Only log if something actually changed (skip no-op updates)
+    IF to_jsonb(OLD) IS DISTINCT FROM to_jsonb(NEW) THEN
+      INSERT INTO audit_log (table_name, operation, old_data, new_data)
+      VALUES (TG_TABLE_NAME, 'UPDATE', to_jsonb(OLD), to_jsonb(NEW));
+    END IF;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    INSERT INTO audit_log (table_name, operation, old_data, new_data)
+    VALUES (TG_TABLE_NAME, 'DELETE', to_jsonb(OLD), NULL);
+    RETURN OLD;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- -------------------------
 -- Reference tables
 -- -------------------------
@@ -90,14 +163,37 @@ CREATE TABLE IF NOT EXISTS departments (
 -- -------------------------
 -- Users + Profiles (Identity)
 -- -------------------------
+-- =========================================================
+-- CREDENTIAL ROTATION EXPLAINED
+-- =========================================================
+-- RIGHT NOW: Every user has the same static password ('Innova@2025').
+-- It was set once during seeding and never tracked. If someone gets
+-- hold of that password, there is no way to know how long they've had
+-- access or when it was last changed.
+--
+-- WHAT WE'RE ADDING:
+--   1. password_last_rotated_at — tracks WHEN the password was last
+--      changed so you can enforce a "must rotate every 90 days" policy.
+--   2. rotate_user_password() function — a safe, reusable way for your
+--      app/scripts to change a password without writing raw SQL.
+--   3. Production guard on the dev reset token — stops the hardcoded
+--      dev token from being inserted into a production database.
+--   4. Token cleanup function — deletes expired/used reset tokens
+--      automatically so they can't pile up and be exploited.
+-- =========================================================
+
 CREATE TABLE IF NOT EXISTS users (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email         CITEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  role          user_role NOT NULL,
-  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_login_at TIMESTAMPTZ
+  id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email                    CITEXT NOT NULL UNIQUE,
+  password_hash            TEXT NOT NULL,
+  role                     user_role NOT NULL,
+  is_active                BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at            TIMESTAMPTZ,
+  -- ADDED: tracks when the password was last rotated.
+  -- Without this column you have NO way to know if a password is 3 days
+  -- old or 3 years old. Your app can query this to enforce expiry rules.
+  password_last_rotated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- -------------------------
@@ -127,6 +223,74 @@ ADD COLUMN IF NOT EXISTS totp_secret TEXT;
 
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Also safe-add the rotation column on existing volumes
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS password_last_rotated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+-- =========================================================
+-- CREDENTIAL ROTATION: rotate_user_password()
+-- =========================================================
+-- WHY THIS EXISTS:
+--   Before this function, changing a password meant writing raw SQL
+--   like: UPDATE users SET password_hash = crypt(...)
+--   That's fine in dev, but in production it's risky — easy to forget
+--   the bcrypt call, easy to accidentally skip the active-user check,
+--   and nothing ever updates password_last_rotated_at.
+--
+-- HOW TO USE IT (run this whenever you want to rotate a password):
+--   SELECT rotate_user_password('ahmed@innovacx.net', 'NewSecurePass!99');
+--
+-- It will:
+--   - Reject the call if the user doesn't exist or is inactive
+--   - Hash the password with bcrypt cost 12 (current best practice)
+--   - Update password_last_rotated_at to NOW() automatically
+-- =========================================================
+CREATE OR REPLACE FUNCTION rotate_user_password(
+  p_email  CITEXT,
+  p_new_pw TEXT
+) RETURNS VOID AS $$
+BEGIN
+  UPDATE users
+  SET
+    password_hash            = crypt(p_new_pw, gen_salt('bf', 12)),
+    password_last_rotated_at = now()
+  WHERE email     = p_email
+    AND is_active = TRUE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'rotate_user_password: user not found or inactive: %', p_email;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =========================================================
+-- CREDENTIAL ROTATION: cleanup_expired_tokens()
+-- =========================================================
+-- WHY THIS EXISTS:
+--   RIGHT NOW: expired and already-used password reset tokens stay in
+--   the database forever. They can't be used (expires_at is in the past
+--   or used_at is set), but they clutter the table and could leak info
+--   if the DB is ever compromised.
+--
+-- HOW TO USE IT:
+--   SELECT cleanup_expired_tokens();
+--   Run this on a schedule (e.g. nightly via pg_cron or a cron job):
+--     SELECT cron.schedule('token-cleanup','0 3 * * *','SELECT cleanup_expired_tokens()');
+-- =========================================================
+CREATE OR REPLACE FUNCTION cleanup_expired_tokens()
+RETURNS INTEGER AS $$
+DECLARE
+  deleted_count INTEGER;
+BEGIN
+  DELETE FROM password_reset_tokens
+  WHERE expires_at < now()
+     OR used_at IS NOT NULL;
+
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+  RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
 
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id       UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -208,6 +372,27 @@ CREATE INDEX IF NOT EXISTS idx_tickets_priority    ON tickets(priority);
 CREATE INDEX IF NOT EXISTS idx_tickets_created_at  ON tickets(created_at);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee    ON tickets(assigned_to_user_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_creator     ON tickets(created_by_user_id);
+
+-- =========================================================
+-- AUDIT TRIGGERS: attach to sensitive tables
+-- =========================================================
+-- These fire automatically on every change — you don't need to call
+-- anything. Check audit_log to see a full history of what changed.
+-- =========================================================
+
+-- Track all user changes (password rotations, role changes, deactivation)
+DROP TRIGGER IF EXISTS audit_users ON users;
+CREATE TRIGGER audit_users
+AFTER INSERT OR UPDATE OR DELETE ON users
+FOR EACH ROW EXECUTE FUNCTION audit_trigger();
+
+-- Track all ticket changes (status, assignment, priority)
+DROP TRIGGER IF EXISTS audit_tickets ON tickets;
+CREATE TRIGGER audit_tickets
+AFTER INSERT OR UPDATE OR DELETE ON tickets
+FOR EACH ROW EXECUTE FUNCTION audit_trigger();
+
+-- NOTE: audit_approval_requests is attached after approval_requests table is created below
 
 DROP TRIGGER IF EXISTS trg_tickets_updated_at ON tickets;
 CREATE TRIGGER trg_tickets_updated_at
@@ -513,6 +698,17 @@ CREATE TABLE IF NOT EXISTS approval_requests (
 CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(status);
 CREATE INDEX IF NOT EXISTS idx_approval_requests_ticket ON approval_requests(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_approval_requests_requested_to ON approval_requests(requested_to_user_id);
+
+-- Audit + validation triggers for approval_requests (must be after table creation)
+DROP TRIGGER IF EXISTS audit_approval_requests ON approval_requests;
+CREATE TRIGGER audit_approval_requests
+AFTER INSERT OR UPDATE OR DELETE ON approval_requests
+FOR EACH ROW EXECUTE FUNCTION audit_trigger();
+
+DROP TRIGGER IF EXISTS trg_validate_approval_requests ON approval_requests;
+CREATE TRIGGER trg_validate_approval_requests
+BEFORE INSERT OR UPDATE ON approval_requests
+FOR EACH ROW EXECUTE FUNCTION validate_approval_requests();
 
 CREATE TABLE IF NOT EXISTS department_routing_feedback (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -3882,6 +4078,22 @@ ON CONFLICT (component) DO UPDATE
 -- ---------------------------------------------------------------------------
 -- 19. PASSWORD RESET TOKEN  (for testing the auth / reset-password views)
 -- ---------------------------------------------------------------------------
+-- ⚠️  SECURITY: This inserts a KNOWN, HARDCODED token into the database.
+--     RIGHT NOW there is nothing stopping this from running in production,
+--     which would leave a publicly-known backdoor token in your live DB.
+--     The guard below aborts with an error if you're in a prod database.
+-- ---------------------------------------------------------------------------
+DO $$ BEGIN
+  IF current_database() NOT LIKE '%dev%'
+     AND current_database() NOT LIKE '%test%'
+     AND current_database() NOT LIKE '%local%' THEN
+    RAISE EXCEPTION
+      'SAFETY ABORT: Refusing to insert dev reset token into database "%". '
+      'This seed block is for development only. '
+      'If you genuinely need this in a non-dev DB, remove this guard manually.',
+      current_database();
+  END IF;
+END $$;
 
 INSERT INTO public.password_reset_tokens (user_id, token_hash, expires_at)
 SELECT
