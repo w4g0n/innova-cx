@@ -46,14 +46,6 @@ def ensure_log_tables() -> None:
                         created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
                     );
                 """)
-                # Backward/forward compatibility with older/newer schemas.
-                cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS agent_name_old VARCHAR(120);")
-                cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;")
-                cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;")
-                cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS status VARCHAR(30);")
-                cur.execute(
-                    "ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS infra_metadata JSONB DEFAULT '{}'::jsonb;"
-                )
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS agent_output_log (
                         id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -69,14 +61,53 @@ def ensure_log_tables() -> None:
                         created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
                     );
                 """)
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_execution_id ON model_execution_log(execution_id);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_ticket_id    ON model_execution_log(ticket_id);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_agent_name   ON model_execution_log(agent_name);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_created_at   ON model_execution_log(created_at);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_execution_id ON agent_output_log(execution_id);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_ticket_id    ON agent_output_log(ticket_id);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_agent_name   ON agent_output_log(agent_name);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_created_at   ON agent_output_log(created_at);")
+                cur.execute(
+                    """
+                    SELECT
+                      EXISTS (
+                        SELECT 1
+                        FROM pg_class c
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public'
+                          AND c.relname = 'model_execution_log'
+                          AND c.relkind = 'r'
+                          AND pg_get_userbyid(c.relowner) = current_user
+                      ),
+                      EXISTS (
+                        SELECT 1
+                        FROM pg_class c
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public'
+                          AND c.relname = 'agent_output_log'
+                          AND c.relkind = 'r'
+                          AND pg_get_userbyid(c.relowner) = current_user
+                      )
+                    """
+                )
+                owns_model_execution_log, owns_agent_output_log = cur.fetchone() or (False, False)
+                if owns_model_execution_log:
+                    # Backward/forward compatibility with older/newer schemas.
+                    cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS agent_name_old VARCHAR(120);")
+                    cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;")
+                    cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;")
+                    cur.execute("ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS status VARCHAR(30);")
+                    cur.execute(
+                        "ALTER TABLE model_execution_log ADD COLUMN IF NOT EXISTS infra_metadata JSONB DEFAULT '{}'::jsonb;"
+                    )
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_execution_id ON model_execution_log(execution_id);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_ticket_id    ON model_execution_log(ticket_id);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_agent_name   ON model_execution_log(agent_name);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_mel_created_at   ON model_execution_log(created_at);")
+                else:
+                    logger.info("execution_log | skipping owner-only compatibility DDL for model_execution_log")
+
+                if owns_agent_output_log:
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_execution_id ON agent_output_log(execution_id);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_ticket_id    ON agent_output_log(ticket_id);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_agent_name   ON agent_output_log(agent_name);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_aol_created_at   ON agent_output_log(created_at);")
+                else:
+                    logger.info("execution_log | skipping owner-only index DDL for agent_output_log")
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS pipeline_executions (
                         id             UUID PRIMARY KEY,
@@ -120,15 +151,57 @@ def ensure_log_tables() -> None:
                         created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
                     );
                 """)
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_exec_ticket_id ON pipeline_executions(ticket_id);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_exec_ticket_code ON pipeline_executions(ticket_code);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_exec_started_at ON pipeline_executions(started_at DESC);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_pse_execution_id ON pipeline_stage_events(execution_id);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_pse_ticket_code ON pipeline_stage_events(ticket_code);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_pse_created_at ON pipeline_stage_events(created_at DESC);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_ael_service_event ON application_event_log(service, event_key, created_at DESC);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_ael_ticket_code ON application_event_log(ticket_code);")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_ael_execution_id ON application_event_log(execution_id);")
+                cur.execute(
+                    """
+                    SELECT
+                      EXISTS (
+                        SELECT 1
+                        FROM pg_class c
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public'
+                          AND c.relname = 'pipeline_executions'
+                          AND c.relkind = 'r'
+                          AND pg_get_userbyid(c.relowner) = current_user
+                      ),
+                      EXISTS (
+                        SELECT 1
+                        FROM pg_class c
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public'
+                          AND c.relname = 'pipeline_stage_events'
+                          AND c.relkind = 'r'
+                          AND pg_get_userbyid(c.relowner) = current_user
+                      ),
+                      EXISTS (
+                        SELECT 1
+                        FROM pg_class c
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public'
+                          AND c.relname = 'application_event_log'
+                          AND c.relkind = 'r'
+                          AND pg_get_userbyid(c.relowner) = current_user
+                      )
+                    """
+                )
+                owns_pipeline_executions, owns_pipeline_stage_events, owns_application_event_log = cur.fetchone() or (False, False, False)
+                if owns_pipeline_executions:
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_exec_ticket_id ON pipeline_executions(ticket_id);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_exec_ticket_code ON pipeline_executions(ticket_code);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_exec_started_at ON pipeline_executions(started_at DESC);")
+                else:
+                    logger.info("execution_log | skipping owner-only index DDL for pipeline_executions")
+                if owns_pipeline_stage_events:
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_pse_execution_id ON pipeline_stage_events(execution_id);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_pse_ticket_code ON pipeline_stage_events(ticket_code);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_pse_created_at ON pipeline_stage_events(created_at DESC);")
+                else:
+                    logger.info("execution_log | skipping owner-only index DDL for pipeline_stage_events")
+                if owns_application_event_log:
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_ael_service_event ON application_event_log(service, event_key, created_at DESC);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_ael_ticket_code ON application_event_log(ticket_code);")
+                    cur.execute("CREATE INDEX IF NOT EXISTS idx_ael_execution_id ON application_event_log(execution_id);")
+                else:
+                    logger.info("execution_log | skipping owner-only index DDL for application_event_log")
         logger.info("execution_log | tables ensured")
     except Exception as exc:
         logger.warning("execution_log | DDL failed (non-fatal): %s", exc)

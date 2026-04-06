@@ -203,8 +203,6 @@ DO $$ BEGIN
   ALTER TYPE ticket_status ADD VALUE IF NOT EXISTS 'Reopened';
 EXCEPTION WHEN others THEN NULL; END $$;
 
-\ir scripts/learning.sql
-
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_priority    ON tickets(priority);
 CREATE INDEX IF NOT EXISTS idx_tickets_created_at  ON tickets(created_at);
@@ -549,6 +547,10 @@ CREATE INDEX IF NOT EXISTS idx_department_routing_pending
   ON department_routing(is_confident, final_department, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_department_routing_finalized
   ON department_routing(final_department, routed_by, updated_at DESC);
+
+-- Learning-loop triggers depend on approval_requests and department_routing.
+-- Include after both base tables exist to keep fresh-volume init deterministic.
+\ir scripts/learning.sql
 
 -- -------------------------
 -- Auto-notify manager on new approval requests

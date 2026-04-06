@@ -1,0 +1,172 @@
+name: Merge Gate Docker + DB Sweep
+
+on:
+  pull_request:
+    branches: ["**"]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  docker-db-profile-sweep:
+    runs-on: self-hosted
+    timeout-minutes: 90
+
+    steps:
+      - name: Reset runner workspace
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Sweep all compose profiles
+        env:
+          BACKUP_PASSPHRASE: ci-merge-gate-passphrase
+        run: |
+          set -euo pipefail
+          wait_health() {
+            local container="$1"
+            local max_attempts="${2:-50}"
+            for i in $(seq 1 "$max_attempts"); do
+              status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null || echo 'missing')"
+              if [ "$status" = "healthy" ]; then
+                echo "$container is healthy"
+                return 0
+              fi
+              echo "Waiting for $container health... attempt $i/$max_attempts (status=$status)"
+              sleep 5
+            done
+            echo "::error::$container did not become healthy in time"
+            return 1
+          }
+
+          wait_http_inside() {
+            local container="$1"
+            local url="$2"
+            local max_attempts="${3:-60}"
+            for i in $(seq 1 "$max_attempts"); do
+              if docker exec "$container" python -c "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('$url', timeout=10).status==200 else 1)" >/dev/null 2>&1; then
+                echo "$container endpoint healthy: $url"
+                return 0
+              fi
+              echo "Waiting for $container endpoint $url ... attempt $i/$max_attempts"
+              sleep 5
+            done
+            echo "::error::$container endpoint not healthy: $url"
+            return 1
+          }
+
+          check_running() {
+            local container="$1"
+            local status
+            status="$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null || echo 'missing')"
+            [ "$status" = "running" ] || { echo "::error::$container is not running (status=$status)"; return 1; }
+          }
+
+          run_profile() {
+            local profile="$1"
+            echo "=== Running profile: $profile ==="
+            docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+
+            # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
+            CHATBOT_USE_MOCK=true \
+            CHATBOT_AUTO_DOWNLOAD=false \
+            SHARED_QWEN_MODEL_PATH=/tmp/nonexistent-shared-qwen \
+            SHARED_QWEN_AUTO_DOWNLOAD=false \
+            CLASSIFIER_MODEL_PATH=/tmp/nonexistent-classifier/model.pkl \
+            CLASSIFIER_MODEL_DIR=/tmp/nonexistent-classifier \
+            SENTIMENT_MODEL_DIR=/tmp/nonexistent-sentiment-model \
+            FEATURE_LABELER_MODEL_PATH=/tmp/nonexistent-feature-model \
+            FEATURE_LABELER_AUTO_DOWNLOAD=false \
+            DEPARTMENT_ROUTER_MODEL_PATH=/tmp/nonexistent-router-model \
+            DEPARTMENT_ROUTER_AUTO_DOWNLOAD=false \
+            SUBJECT_GENERATOR_MODEL_PATH=/tmp/nonexistent-subject-model \
+            SUBJECT_GENERATOR_AUTO_DOWNLOAD=false \
+            SUGGESTED_RESOLUTION_MODEL_PATH=/tmp/nonexistent-suggested-model \
+            SUGGESTED_RESOLUTION_USE_MOCK=true \
+            SUGGESTED_RESOLUTION_AUTO_DOWNLOAD=false \
+            PRIORITY_USE_MOCK=true \
+            PRIORITY_MODEL_DIR=/tmp/nonexistent-priority-model \
+            docker compose --profile "$profile" up -d --build
+
+            wait_health innovacx-db
+
+            # Database wiring sanity checks
+            docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
+              "select rolname from pg_roles where rolname='innovacx_app';" | grep -q "^innovacx_app$"
+            docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
+              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" | grep -q "^4$"
+            # Fresh-volume initialization must complete cleanly.
+            # Avoid pipefail+SIGPIPE false negatives from `docker logs | grep -q`.
+            docker logs innovacx-db > /tmp/innovacx-db.log 2>&1 || true
+            grep -q "PostgreSQL init process complete; ready for start up." /tmp/innovacx-db.log
+
+            # Core services must be up for every profile
+            check_running innovacx-backend
+            check_running innovacx-frontend
+            wait_http_inside innovacx-backend "http://localhost:8000/api/health" 50
+
+            if [ "$profile" = "pipeline" ] || [ "$profile" = "live" ]; then
+              wait_health innovacx-orchestrator 80
+              wait_http_inside innovacx-orchestrator "http://localhost:8004/health" 80
+
+              # Pipeline must still work when models are unavailable.
+              payload_out="$(curl -sS -X POST http://localhost:8004/process/text \
+                --form-string 'text=Repeated network outage in Tower B for the third time this week. Staff cannot login and operations are blocked.' \
+                --form-string 'ticket_type=complaint' \
+                --form-string 'subject=')"
+              echo "pipeline submit response: $payload_out"
+              ticket_code="$(echo "$payload_out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ticket_code",""))')"
+              [ -n "$ticket_code" ] || { echo "::error::Pipeline submit did not return ticket_code"; return 1; }
+
+              # Wait for terminal success status in DB.
+              done_status=""
+              for i in $(seq 1 80); do
+                done_status="$(docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
+                  "select status from pipeline_executions where ticket_code='${ticket_code}' order by started_at desc limit 1;")"
+                if [ "$done_status" = "success" ]; then
+                  break
+                fi
+                echo "Waiting for pipeline success ($ticket_code) ... attempt $i/80 status=${done_status:-missing}"
+                sleep 5
+              done
+              [ "$done_status" = "success" ] || { echo "::error::Pipeline did not finish with success for $ticket_code"; return 1; }
+            fi
+
+            if [ "$profile" = "live" ]; then
+              wait_health innovacx-chatbot 80
+              wait_http_inside innovacx-chatbot "http://localhost:8000/health" 80
+              check_running innovacx-transcriber
+            fi
+
+            docker ps -a --format 'table {{.Names}}\t{{.Status}}'
+          }
+
+          run_profile frontend
+          run_profile pipeline
+          run_profile live
+
+      - name: Show container status
+        if: always()
+        run: docker ps -a --format 'table {{.Names}}\t{{.Status}}'
+
+      - name: Tail logs on failure
+        if: failure()
+        run: |
+          docker logs --tail 300 innovacx-db || true
+          docker logs --tail 300 innovacx-backend || true
+          docker logs --tail 300 innovacx-frontend || true
+          docker logs --tail 300 innovacx-orchestrator || true
+          docker logs --tail 300 innovacx-chatbot || true
+          docker logs --tail 300 innovacx-transcriber || true
+
+      - name: Cleanup
+        if: always()
+        env:
+          BACKUP_PASSPHRASE: ci-merge-gate-passphrase
+        run: docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true

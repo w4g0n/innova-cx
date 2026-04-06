@@ -42,6 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          clean: false
           fetch-depth: 0
       - name: Block prod-live-only path deletions in dev/main PRs
         env:
@@ -72,6 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          clean: false
           fetch-depth: 0
       - name: Block protected dev paths in prod-live PRs
         env:
@@ -93,6 +95,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
       - name: Ensure model persistence volumes remain configured
         run: |
           if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "prod-live" ]; then
@@ -130,6 +134,8 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -146,6 +152,8 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -158,6 +166,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -183,6 +193,8 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -195,6 +207,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
       - run: docker build -t innovacx-backend ./backend
       - run: docker build -t innovacx-whisper ./backend/services/transcriber
       - run: docker build -t innovacx-chatbot ./backend/services/chatbot
@@ -203,6 +217,8 @@ jobs:
       runs-on: ubuntu-latest
       steps:
         - uses: actions/checkout@v4
+          with:
+            clean: false
         - uses: actions/setup-python@v5
           with:
             python-version: "3.11"

@@ -243,6 +243,26 @@ def _ensure_runtime_schema_compatibility() -> None:
     try:
         with db_connect() as conn:
             with conn.cursor() as cur:
+                # Runtime role is least-privilege (innovacx_app). Owner-level ALTERs
+                # should only run when connected as the table owner.
+                cur.execute(
+                    """
+                    SELECT EXISTS (
+                      SELECT 1
+                      FROM pg_class c
+                      JOIN pg_namespace n ON n.oid = c.relnamespace
+                      WHERE n.nspname = 'public'
+                        AND c.relname = 'tickets'
+                        AND c.relkind = 'r'
+                        AND pg_get_userbyid(c.relowner) = current_user
+                    )
+                    """
+                )
+                owns_tickets = bool((cur.fetchone() or [False])[0])
+                if not owns_tickets:
+                    logger.info("db_compat | skipping owner-only compatibility DDL for runtime DB role")
+                    return
+
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_type TEXT;")
                 cur.execute("UPDATE tickets SET asset_type = 'General' WHERE asset_type IS NULL OR btrim(asset_type) = '';")
                 cur.execute("ALTER TABLE tickets ALTER COLUMN asset_type SET DEFAULT 'General';")
