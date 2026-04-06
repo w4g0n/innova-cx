@@ -1463,6 +1463,7 @@ CREATE INDEX IF NOT EXISTS idx_pq_entered_at
 \ir migrations/002_operator_notifications.sql
 \ir migrations/007_ticket_priority_nullable.sql
 \ir migrations/018_pipeline_runtime_control.sql
+\ir migrations/018_pipeline_runtime_control.sql
 
 -- =========================================================
 -- Seed data
