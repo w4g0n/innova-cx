@@ -72,7 +72,7 @@ export default function CustomerChatbot() {
   const [voiceError,      setVoiceError]      = useState("");
 
   const cleanupStream = () => {
-    try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch (_) { /* already stopped */ }
+    try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch { /* already stopped */ }
     streamRef.current = null;
   };
 
