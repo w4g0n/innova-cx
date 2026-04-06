@@ -19,13 +19,38 @@ done
 echo "==> Postgres is ready."
 
 # ---------------------------------------------------------------------------
-# Step 0: Migration 001 — model_execution_log + agent_output_log tables.
-#         Must run BEFORE prerequisites, which ALTER TABLE on these tables.
-#         Safe to re-run — uses CREATE TABLE IF NOT EXISTS throughout.
+# Step 0: All numbered migrations in order.
+#         init.sql covers the base schema; migrations add tables/columns that
+#         analytics_mvs.sql depends on (e.g. suggested_resolution_usage,
+#         pipeline_executions, pipeline_stage_events).
+#         Safe to re-run — every file uses CREATE TABLE/INDEX IF NOT EXISTS.
 # ---------------------------------------------------------------------------
-run_sql \
-    "migration 001 (model_execution_log, agent_output_log)" \
-    "/docker-entrypoint-initdb.d/migrations/001_agent_execution_logs.sql"
+for migration in \
+    001_agent_execution_logs \
+    002_ticket_messages \
+    003_routing_review_queue \
+    004_ticket_status_slim \
+    005_department_routing \
+    006_seed_department_routing \
+    007_ticket_priority_nullable \
+    008_pipeline_event_logging \
+    009_pipeline_queue \
+    010_pipeline_queue_failure_detail \
+    011_review_agent \
+    012_training_loop \
+    013_suggested_resolution_usage_employee_fields \
+    014_drop_ticket_resolution_feedback \
+    015_learning_actor_roles \
+    016_learning_record_views_and_seed \
+    017_ticket_type_nullable \
+; do
+    migration_file="/docker-entrypoint-initdb.d/migrations/${migration}.sql"
+    if [ -f "$migration_file" ]; then
+        run_sql "migration ${migration}" "$migration_file"
+    else
+        echo "==> [$(date -u '+%H:%M:%S')] Skipping missing migration: ${migration}.sql"
+    fi
+done
 
 # ---------------------------------------------------------------------------
 # Step 1: Prerequisites (ENUMs, missing columns, agent output tables).

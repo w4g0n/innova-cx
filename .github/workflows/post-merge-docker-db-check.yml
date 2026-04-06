@@ -174,9 +174,15 @@ jobs:
             docker ps -a --format 'table {{.Names}}\t{{.Status}}'
           }
 
-          run_profile frontend
-          run_profile pipeline
-          run_profile live
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            echo "Pull request mode: running the lightweight frontend profile smoke test only."
+            run_profile frontend
+          else
+            echo "Full sweep mode: running frontend, pipeline, and live profiles."
+            run_profile frontend
+            run_profile pipeline
+            run_profile live
+          fi
 
       - name: Show container status
         if: always()

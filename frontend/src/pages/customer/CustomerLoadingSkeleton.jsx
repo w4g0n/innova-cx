@@ -2,16 +2,16 @@ import React, { useEffect, useState } from "react";
 import "./CustomerLoadingSkeleton.css";
 import novaLogo from "../../assets/nova-logo.png"; // ← your actual logo path
 
+const PHASES = [
+  "Initialising portal…",
+  "Loading your profile…",
+  "Fetching your tickets…",
+  "Almost ready…",
+];
+
 export default function CustomerLoadingSkeleton() {
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState(0);
-
-  const PHASES = [
-    "Initialising portal…",
-    "Loading your profile…",
-    "Fetching your tickets…",
-    "Almost ready…",
-  ];
 
   useEffect(() => {
     // Smooth animated progress bar
