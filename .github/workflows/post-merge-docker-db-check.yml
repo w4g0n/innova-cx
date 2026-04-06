@@ -126,7 +126,7 @@ jobs:
               done_status=""
               for i in $(seq 1 80); do
                 done_status="$(docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
-                  \"select status from pipeline_executions where ticket_code='${ticket_code}' order by started_at desc limit 1;\")"
+                  "select status from pipeline_executions where ticket_code='${ticket_code}' order by started_at desc limit 1;")"
                 if [ "$done_status" = "success" ]; then
                   break
                 fi
