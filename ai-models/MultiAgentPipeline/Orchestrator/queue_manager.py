@@ -973,6 +973,8 @@ async def run_pipeline_from(
         (final_state, failed_stage_name, failed_at_step, failure_reason)
         If all stages succeed, failed_stage_name is None.
     """
+    first_critical_failure: tuple[str, int, str | None] | None = None
+
     for stage_name, fn, step_order, is_critical in STAGES:
         if step_order < from_step:
             continue
@@ -1016,13 +1018,32 @@ async def run_pipeline_from(
             )
 
         if critical_failed:
-            return state, stage_name, step_order, reason
+            if stage_name == "ReviewAgent":
+                return state, stage_name, step_order, reason
+
+            if first_critical_failure is None:
+                first_critical_failure = (stage_name, step_order, reason)
+
+            logger.warning(
+                "pipeline | pre-review critical failure stage=%s step=%d exec=%s reason=%s; continuing with fallback state to ReviewAgent",
+                stage_name,
+                step_order,
+                execution_id,
+                reason,
+            )
+            continue
 
         if reason:
             # Non-critical stage used a fallback — notify operator but keep going
             _notify_operator_noncritical(
                 queue_id, stage_name, reason, execution_id
             )
+
+    if first_critical_failure is not None:
+        failed_stage, failed_step, failed_reason = first_critical_failure
+        state["_pre_review_critical_failure_stage"] = failed_stage
+        state["_pre_review_critical_failure_step"] = failed_step
+        state["_pre_review_critical_failure_reason"] = failed_reason
 
     return state, None, None, None
 

@@ -59,6 +59,7 @@ const STAGE_OUTPUT_NOISE = new Set([
   "audio_features", "ticket_code", "name", "email", "asset_type",
   "ticket_type", "label", "status", "has_audio", "_pipeline_total_steps",
   "is_recurring_checked", "audio_analysis_mode", "audio_sentiment",
+  "recurrence_branch",
 ]);
 const MAX_PIPELINE_RETRIES = 3;
 const TOTAL_PIPELINE_STAGES = 11;
@@ -737,7 +738,7 @@ export default function PipelineQueueDetailPage() {
                                                 <button
                                                   type="button"
                                                   className="pq-inline-ticket-link"
-                                                  onClick={() => navigate(`/operator/complaints/${encodeURIComponent(String(v))}`)}
+                                                  onClick={() => navigate(`/operator/ai-explainability/${encodeURIComponent(String(v))}`)}
                                                 >
                                                   {String(v)}
                                                 </button>

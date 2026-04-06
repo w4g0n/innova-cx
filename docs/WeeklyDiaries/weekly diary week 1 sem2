@@ -35,7 +35,7 @@
 | Issue / Agenda Item | Resolution / Action Item | Resolution Date |
 |--------------------|--------------------------|-----------------|
 | Review of DCC & Mentor Meetings | Key takeaways from the DCC meeting (attended by Mayed and Ali) and mentor feedback (shared by Leen and Mayed from Ms. Asma) were discussed and documented to guide technical and design decisions. | 05/01/2026 |
-| Model & Tool Research Review | Research on AI models and tools was reviewed, including three Hugging Face models, DSPY for prompt optimization, and supporting tools such as Vercel and Postman. | 05/01/2026 |
+| Model & Tool Research Review | Research on AI models and tools was reviewed, including several local model options, DSPY for prompt optimization, and supporting tools such as Vercel and Postman. | 05/01/2026 |
 | Frontend & Backend Strategy | Frontend development was prioritized for the first submission and presentation. The team agreed to switch to React. Backend setup and database planning should begin early. | 05/01/2026 |
 | Project Management & Planning | Project management practices were discussed to ensure proper timelines and task tracking throughout the semester. | 05/01/2026 |
 | Task Allocation & Deadlines | Tasks were distributed with clear ownership and deadlines across frontend, backend, and model development. | 05/01/2026 |
