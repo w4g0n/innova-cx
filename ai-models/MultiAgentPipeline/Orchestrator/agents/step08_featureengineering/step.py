@@ -28,10 +28,9 @@ FEATURE_LABELER_MODEL_PATH = os.getenv(
 ).strip()
 FEATURE_LABELER_MODEL_NAME = os.getenv(
     "FEATURE_LABELER_MODEL_NAME",
-    "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+    "",
 ).strip()
-FEATURE_LABELER_AUTO_DOWNLOAD = os.getenv("FEATURE_LABELER_AUTO_DOWNLOAD", "false").lower() in {"1", "true", "yes"}
-HF_TOKEN = os.getenv("HF_TOKEN", "").strip() or None
+FEATURE_LABELER_AUTO_DOWNLOAD = False
 FEATURE_RUNTIME_WORKER_PATH = Path(__file__).with_name("feature_labeler_runtime_worker.py")
 FEATURE_RUNTIME_TIMEOUT_SECONDS = float(os.getenv("FEATURE_RUNTIME_TIMEOUT_SECONDS", "60"))
 FEATURE_RUNTIME_MODE = os.getenv("FEATURE_RUNTIME_MODE", "subprocess").strip().lower()
@@ -239,23 +238,6 @@ def _load_feature_labeler():
     multitask_loaded = _load_multitask_feature_labeler(model_path)
     if multitask_loaded is not None:
         return multitask_loaded
-
-    if not (model_path / "config.json").exists() and FEATURE_LABELER_AUTO_DOWNLOAD and FEATURE_LABELER_MODEL_NAME:
-        try:
-            from huggingface_hub import snapshot_download  # type: ignore
-
-            logger.info(
-                "feature_engineering | downloading labeler model=%s to %s",
-                FEATURE_LABELER_MODEL_NAME,
-                model_name,
-            )
-            snapshot_download(
-                repo_id=FEATURE_LABELER_MODEL_NAME,
-                local_dir=model_name,
-                token=HF_TOKEN,
-            )
-        except Exception as exc:
-            logger.warning("feature_engineering | labeler auto-download failed (%s), using mock", exc)
 
     if not (model_path / "config.json").exists():
         logger.info("feature_engineering | labeler model missing config.json at %s; using mock", model_name)

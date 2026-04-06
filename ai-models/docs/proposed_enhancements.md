@@ -643,7 +643,7 @@ The following vulnerabilities were identified in the codebase:
 | 5 | No rate limiting | All three FastAPI services | Medium |
 | 6 | Minimal input validation | Only empty string check in `api.py:146` | Medium |
 | 7 | No inter-service auth | Services communicate freely within Docker network | Low-Medium |
-| 8 | Secrets as plain env vars | `HF_TOKEN` passed in docker-compose | Low |
+| 8 | Secrets as plain env vars | Third-party credentials passed via docker-compose env vars | Low |
 
 ### 4.2 Proposed Security Measures
 

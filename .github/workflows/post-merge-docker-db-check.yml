@@ -15,6 +15,7 @@ jobs:
 
     steps:
       - name: Reset runner workspace
+        working-directory: ${{ github.workspace }}
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
             sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
@@ -27,6 +28,7 @@ jobs:
       - name: Sweep all compose profiles
         env:
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
+        working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
           wait_health() {
@@ -171,10 +173,12 @@ jobs:
 
       - name: Show container status
         if: always()
+        working-directory: ${{ github.workspace }}
         run: docker ps -a --format 'table {{.Names}}\t{{.Status}}'
 
       - name: Tail logs on failure
         if: failure()
+        working-directory: ${{ github.workspace }}
         run: |
           docker logs --tail 300 innovacx-db || true
           docker logs --tail 300 innovacx-backend || true
@@ -187,4 +191,5 @@ jobs:
         if: always()
         env:
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
+        working-directory: ${{ github.workspace }}
         run: docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true

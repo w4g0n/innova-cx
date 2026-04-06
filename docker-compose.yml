@@ -41,6 +41,7 @@ services:
     container_name: innovacx-backend
     restart: unless-stopped
     environment:
+      PYTHONPATH: /app
       # Runtime DB connection uses innovacx_app (least-privilege role),
       # NOT the superuser innovacx_admin.
       DATABASE_URL: postgresql://${APP_DB_USER:-innovacx_app}:${APP_DB_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
@@ -77,12 +78,10 @@ services:
       # Runtime DB connection uses innovacx_app (least-privilege role),
       # NOT the superuser innovacx_admin.
       DATABASE_URL: postgresql://${APP_DB_USER:-innovacx_app}:${APP_DB_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
-      HF_TOKEN: "${HF_TOKEN:-}"
-      HF_HOME: /app/hf_cache
       CHATBOT_LLM_PROVIDER: "${CHATBOT_LLM_PROVIDER:-template}"
       CHATBOT_MODEL_PATH: "${CHATBOT_MODEL_PATH:-}"
-      CHATBOT_MODEL_NAME: "${CHATBOT_MODEL_NAME:-Qwen/Qwen2.5-0.5B-Instruct}"
-      CHATBOT_AUTO_DOWNLOAD: "${CHATBOT_AUTO_DOWNLOAD:-true}"
+      CHATBOT_MODEL_NAME: "${CHATBOT_MODEL_NAME:-}"
+      CHATBOT_AUTO_DOWNLOAD: "false"
       CHATBOT_USE_MOCK: "${CHATBOT_USE_MOCK:-false}"
       CHATBOT_MAX_NEW_TOKENS: "${CHATBOT_MAX_NEW_TOKENS:-128}"
       CHATBOT_QUANTIZATION: "${CHATBOT_QUANTIZATION:-4bit}"

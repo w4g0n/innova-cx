@@ -69,7 +69,12 @@ def _find_similar_ticket(
     current_ticket_code: str | None,
     created_by_user_id: str | None = None,
 ) -> tuple[str | None, str | None, float]:
-    """Heuristic fallback used by recurrence_encoder when the transformer is unavailable."""
+    """
+    Heuristic fallback used by recurrence_encoder when the transformer is unavailable.
+
+    Mirrors the encoder candidate filter so only tickets that have already
+    progressed beyond the initial Open intake state are considered.
+    """
     query_text = str(text or "").strip().lower()
     if not query_text:
         return None, None, 0.0
@@ -82,6 +87,8 @@ def _find_similar_ticket(
                     FROM tickets
                     WHERE (%s IS NULL OR ticket_code <> %s)
                       AND (%s IS NULL OR created_by_user_id = %s::uuid)
+                      AND status <> 'Open'::ticket_status
+                      AND priority_assigned_at IS NOT NULL
                     ORDER BY created_at DESC
                     LIMIT 120
                     """,
