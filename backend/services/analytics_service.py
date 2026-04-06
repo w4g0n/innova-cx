@@ -335,6 +335,25 @@ def _ensure_analytics_mvs() -> None:
             int(mv_row.get("cnt") or 0),
             len(required_mvs),
         )
+        owner_row = _fetch_one(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname='public'
+                  AND c.relname='tickets'
+                  AND c.relkind='r'
+                  AND pg_get_userbyid(c.relowner)=current_user
+            ) AS owns_tickets
+            """
+        ) or {}
+        if not bool(owner_row.get("owns_tickets")):
+            logger.info(
+                "_ensure_analytics_mvs | skipping install for least-privilege runtime role; "
+                "waiting for DB init/migrations to provide analytics objects"
+            )
+            return
     except Exception:
         logger.info("_ensure_analytics_mvs | cannot check pg_proc — attempting MV install anyway")
 
@@ -366,6 +385,10 @@ def refresh_mvs() -> Dict[str, Any]:
     Falls back to non-concurrent refresh if CONCURRENT fails (e.g. empty MVs on first run).
     """
     _ensure_analytics_mvs()
+    fn_exists_row = _fetch_one("SELECT to_regprocedure('refresh_analytics_mvs()') IS NOT NULL AS exists") or {}
+    if not bool(fn_exists_row.get("exists")):
+        logger.info("refresh_mvs | refresh_analytics_mvs() is not available yet; skipping")
+        return {"ok": False, "skipped": "refresh function unavailable"}
     try:
         row = _fetch_one("SELECT refresh_analytics_mvs() AS result")
         return row["result"] if row else {"ok": False}
