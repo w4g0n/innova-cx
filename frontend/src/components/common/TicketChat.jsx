@@ -49,7 +49,7 @@ function Avatar({ role, initials }) {
   );
 }
 
-export default function TicketChat({ ticketId, role, authHeader, disabled }) {
+export default function TicketChat({ ticketId, role, authHeader, disabled, paused = false }) {
   const [messages, setMessages]       = useState([]);
   const [text, setText]               = useState("");
   const [sending, setSending]         = useState(false);
@@ -80,11 +80,17 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
     }
   }, [ticketId, role, authHeader]);
 
+  // Initial load
   useEffect(() => {
     fetchMessages(false);
+  }, [fetchMessages]);
+
+  // Polling — pauses while a modal is open so the background doesn't flicker
+  useEffect(() => {
+    if (paused) return;
     pollRef.current = setInterval(() => fetchMessages(true), 5000);
     return () => clearInterval(pollRef.current);
-  }, [fetchMessages]);
+  }, [fetchMessages, paused]);
 
   /* ── scroll to bottom on new messages ─────────────────────── */
   useEffect(() => {

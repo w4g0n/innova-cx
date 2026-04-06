@@ -699,16 +699,11 @@ CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(sta
 CREATE INDEX IF NOT EXISTS idx_approval_requests_ticket ON approval_requests(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_approval_requests_requested_to ON approval_requests(requested_to_user_id);
 
--- Audit + validation triggers for approval_requests (must be after table creation)
+-- Audit trigger for approval_requests (must be after table creation)
 DROP TRIGGER IF EXISTS audit_approval_requests ON approval_requests;
 CREATE TRIGGER audit_approval_requests
 AFTER INSERT OR UPDATE OR DELETE ON approval_requests
 FOR EACH ROW EXECUTE FUNCTION audit_trigger();
-
-DROP TRIGGER IF EXISTS trg_validate_approval_requests ON approval_requests;
-CREATE TRIGGER trg_validate_approval_requests
-BEFORE INSERT OR UPDATE ON approval_requests
-FOR EACH ROW EXECUTE FUNCTION validate_approval_requests();
 
 CREATE TABLE IF NOT EXISTS department_routing_feedback (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -4078,33 +4073,25 @@ ON CONFLICT (component) DO UPDATE
 -- ---------------------------------------------------------------------------
 -- 19. PASSWORD RESET TOKEN  (for testing the auth / reset-password views)
 -- ---------------------------------------------------------------------------
--- ⚠️  SECURITY: This inserts a KNOWN, HARDCODED token into the database.
---     RIGHT NOW there is nothing stopping this from running in production,
---     which would leave a publicly-known backdoor token in your live DB.
---     The guard below aborts with an error if you're in a prod database.
+-- SECURITY: This token is known and must only be seeded in dev/test/local DBs.
+-- Non-dev databases skip this seed so fresh-volume initialization can continue
+-- without creating a publicly-known reset token.
 -- ---------------------------------------------------------------------------
-DO $$ BEGIN
-  IF current_database() NOT LIKE '%dev%'
-     AND current_database() NOT LIKE '%test%'
-     AND current_database() NOT LIKE '%local%' THEN
-    RAISE EXCEPTION
-      'SAFETY ABORT: Refusing to insert dev reset token into database "%". '
-      'This seed block is for development only. '
-      'If you genuinely need this in a non-dev DB, remove this guard manually.',
-      current_database();
-  END IF;
-END $$;
-
 INSERT INTO public.password_reset_tokens (user_id, token_hash, expires_at)
 SELECT
   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
   crypt('dev-reset-token-cx1-2026', gen_salt('bf', 10)),
   now() + interval '1 hour'
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.password_reset_tokens prt
-  WHERE prt.user_id=(SELECT id FROM users WHERE email='customer1@innovacx.net')
-    AND prt.used_at IS NULL
-);
+WHERE (
+    current_database() LIKE '%dev%'
+    OR current_database() LIKE '%test%'
+    OR current_database() LIKE '%local%'
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM public.password_reset_tokens prt
+    WHERE prt.user_id=(SELECT id FROM users WHERE email='customer1@innovacx.net')
+      AND prt.used_at IS NULL
+  );
 
 -- ---------------------------------------------------------------------------
 -- 20. SUGGESTED RESOLUTION USAGE for March 2026 tickets that were resolved
