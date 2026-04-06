@@ -1135,6 +1135,7 @@ export default function ComplaintDetails() {
           role="employee"
           authHeader={() => ({ Authorization: `Bearer ${authToken}` })}
           disabled={isResolved}
+          paused={!!modalType}
         />
 
         {ticket.finalResolution && (

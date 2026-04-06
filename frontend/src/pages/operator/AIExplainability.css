@@ -1,21 +1,20 @@
 /* ============================================================
-   AIExplainability — Unified Enterprise Theme
-   Matches UsersManagement design language exactly.
-   DM Sans · Purple accent · Clean cards · Consistent tokens
+   AIExplainability — System Palette Theme
+   Matches ModelHealth design language exactly.
+   System purple tokens · Clean cards · Consistent with operator pages
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
-/* ── CSS tokens (mirror UsersManagement) ── */
+/* ── CSS tokens (mirror system palette used by ModelHealth) ── */
 :root {
-  --aix-accent:        #7c3aed;
-  --aix-accent-deep:   #6d28d9;
-  --aix-accent-soft:   #faf5ff;
-  --aix-accent-border: #e9d5ff;
-  --aix-border:        #e8e8ed;
-  --aix-border-light:  #f0f0f5;
-  --aix-bg:            #fafafa;
-  --aix-text:          #1a1a2e;
-  --aix-muted:         #6b7280;
+  --aix-accent:        #5924b4;
+  --aix-accent-deep:   #401c51;
+  --aix-accent-soft:   rgba(89,36,180,0.06);
+  --aix-accent-border: rgba(89,36,180,0.18);
+  --aix-border:        rgba(0,0,0,0.08);
+  --aix-border-light:  rgba(0,0,0,0.05);
+  --aix-bg:            rgba(64,28,81,0.03);
+  --aix-text:          #111111;
+  --aix-muted:         rgba(17,17,17,0.55);
   --aix-danger:        #be123c;
   --aix-danger-bg:     #fff1f2;
   --aix-danger-border: #fecdd3;
@@ -29,11 +28,11 @@
   --aix-radius:        12px;
   --aix-radius-lg:     14px;
   --aix-radius-xl:     16px;
-  --aix-shadow-sm:     0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03);
-  --aix-shadow:        0 1px 3px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.04);
+  --aix-shadow-sm:     0 1px 3px rgba(64,28,81,.06), 0 4px 12px rgba(64,28,81,.04);
+  --aix-shadow:        0 6px 22px rgba(64,28,81,0.09);
   --aix-shadow-lg:     0 4px 6px rgba(0,0,0,.05), 0 10px 30px rgba(0,0,0,.10);
-  --aix-font:          "DM Sans", sans-serif;
-  --aix-mono:          "DM Mono", ui-monospace, monospace;
+  --aix-font:          inherit;
+  --aix-mono:          ui-monospace, "JetBrains Mono", monospace;
 }
 
 /* ── Page shell ── */
@@ -41,12 +40,23 @@
   width: 100%;
   max-width: none;
   padding: 0 0 2rem;
-  font-family: var(--aix-font);
-  animation: aixFadeUp 0.35s cubic-bezier(0.22,1,0.36,1) both;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-dark, #111111);
+  animation: aixFadeUp 0.4s var(--ease-out, cubic-bezier(0.22,1,0.36,1)) both;
 }
 @keyframes aixFadeUp {
   from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Strip card styling from the outer list that contains PageHeader
+   so the header looks like the rest of the operator pages (no white card box) ── */
+.aix-list:has(> .pageHeader) {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 
 /* ── Shared card ── */
@@ -57,20 +67,24 @@
 .aix-detail-header,
 .aix-stage-menu {
   background: #fff;
-  border-radius: var(--aix-radius-lg);
-  border: 1px solid var(--aix-border);
-  box-shadow: var(--aix-shadow);
-  padding: 22px 24px;
-  margin-bottom: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(0,0,0,0.07);
+  box-shadow: 0 6px 22px rgba(64,28,81,0.09);
+  padding: 20px 22px;
+  margin-bottom: 16px;
 }
 
 /* ── Section title ── */
 .aix-section-title {
   margin: 0 0 14px;
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 800;
-  color: var(--aix-text);
-  letter-spacing: -.02em;
+  color: var(--btn-primary, #5924b4);
+  letter-spacing: -.01em;
+  padding: 11px 16px;
+  background: rgba(64,28,81,0.07);
+  border: 1px solid rgba(64,28,81,0.13);
+  border-radius: 12px;
 }
 
 /* ── Back button ── */
@@ -417,6 +431,10 @@
 
 .aix-controls-actions {
   margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 /* ── Stage menu ── */
@@ -709,32 +727,40 @@ p.aix-subtle {
    Pipeline Queue Tab — appended to AIExplainability.css
    ============================================================ */
 
-/* Tab bar */
+/* Tab bar — matches ModelHealth .ma-nav style */
 .aix-tab-bar {
   display: flex;
-  gap: 4px;
-  padding: 0 0 20px 0;
-  border-bottom: 2px solid var(--aix-border);
+  gap: 8px;
+  margin: 22px 0 0;
+  border-bottom: 2px solid rgba(64,28,81,0.10);
+  padding-bottom: 0;
   margin-bottom: 24px;
 }
 .aix-tab {
-  position: relative;
-  padding: 8px 20px;
-  border-radius: var(--aix-radius-sm) var(--aix-radius-sm) 0 0;
-  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border: none;
   background: transparent;
-  color: var(--aix-muted);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 700;
+  font-family: inherit;
+  color: rgba(17,17,17,0.55);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-.aix-tab:hover { color: var(--aix-text); }
-.aix-tab--active {
-  color: var(--aix-accent);
-  border-color: var(--aix-border) var(--aix-border) #fff;
-  background: #fff;
+  border-bottom: 3px solid transparent;
   margin-bottom: -2px;
+  border-radius: 8px 8px 0 0;
+  transition: color 0.18s, background 0.18s, border-color 0.18s;
+}
+.aix-tab:hover {
+  color: var(--btn-primary, #5924b4);
+  background: rgba(89,36,180,0.05);
+}
+.aix-tab--active {
+  color: var(--btn-primary, #5924b4);
+  border-bottom-color: var(--btn-primary, #5924b4);
+  background: rgba(89,36,180,0.06);
 }
 .aix-tab__badge {
   display: inline-flex;
@@ -759,9 +785,10 @@ p.aix-subtle {
 }
 .pq-stat-card {
   background: #fff;
-  border: 1px solid var(--aix-border);
-  border-radius: var(--aix-radius);
+  border: 1px solid rgba(0,0,0,0.07);
+  border-radius: 14px;
   padding: 14px 16px;
+  box-shadow: 0 4px 12px rgba(64,28,81,0.07);
 }
 .pq-stat-card--blue  { border-left: 3px solid #3b82f6; }
 .pq-stat-card--amber { border-left: 3px solid #f59e0b; }
