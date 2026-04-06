@@ -146,6 +146,7 @@ jobs:
         working-directory: frontend
     steps:
       - name: Reset runner workspace
+        working-directory: ${{ github.workspace }}
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
             sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
@@ -168,6 +169,7 @@ jobs:
         working-directory: frontend
     steps:
       - name: Reset runner workspace
+        working-directory: ${{ github.workspace }}
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
             sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
