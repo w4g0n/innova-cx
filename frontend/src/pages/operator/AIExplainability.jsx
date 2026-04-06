@@ -510,6 +510,30 @@ function formatProcessingTimeSeconds(inferenceTimeMs) {
   return `${(value / 1000).toFixed(1)}s`;
 }
 
+function stageUsesFallback(stage) {
+  const out = stage?.outputState || {};
+  const values = Object.values(out).map((value) => String(unwrapValue(value) ?? "").toLowerCase());
+  return values.some(
+    (value) =>
+      value.includes("mock_fallback") ||
+      value.includes("timeout_background") ||
+      value.includes("heuristic_fallback"),
+  );
+}
+
+function getStageVisualStatus(stage) {
+  if (stageUsesFallback(stage)) return "failed";
+  const status = String(stage?.status || "").toLowerCase();
+  if (status) return status;
+  const eventType = String(stage?.eventType || "").toLowerCase();
+  return eventType || "success";
+}
+
+function getStageStatusLabel(stage) {
+  if (stageUsesFallback(stage)) return "Fallback Used";
+  return String(stage?.status || stage?.eventType || "Success");
+}
+
 function compareTicketsByDate(a, b) {
   const leftTime = new Date(a?.pipelineCompletedAt || a?.createdAt || 0).getTime();
   const rightTime = new Date(b?.pipelineCompletedAt || b?.createdAt || 0).getTime();
@@ -669,6 +693,15 @@ export default function AIExplainability() {
     );
     return idx >= 0 ? idx + 1 : null;
   }, [selectedStage, stageMenu]);
+
+  const selectedStageVisualStatus = useMemo(
+    () => getStageVisualStatus(selectedStage),
+    [selectedStage],
+  );
+  const selectedStageStatusLabel = useMemo(
+    () => getStageStatusLabel(selectedStage),
+    [selectedStage],
+  );
 
   useEffect(() => {
     if (!data) {
@@ -1229,13 +1262,13 @@ export default function AIExplainability() {
                 </article>
 
                 {selectedStage ? (
-                  <article className="aix-stage">
+                  <article className={`aix-stage ${selectedStageVisualStatus === "failed" ? "aix-stage--failed" : ""}`}>
                     <header className="aix-stage-head">
                       <h3>
                         Step {selectedStageDisplayOrder ?? selectedStage.stepOrder}: {selectedStage.stageName}
                       </h3>
-                      <div className={`aix-pill aix-pill--${String(selectedStage.status || "").toLowerCase()}`}>
-                        {selectedStage.eventType} · {selectedStage.status}
+                      <div className={`aix-pill aix-pill--${selectedStageVisualStatus}`}>
+                        {selectedStage.eventType} · {selectedStageStatusLabel}
                       </div>
                     </header>
                     <div className="aix-meta">
