@@ -115,9 +115,9 @@ jobs:
 
               # Pipeline must still work when models are unavailable.
               payload_out="$(curl -sS -X POST http://localhost:8004/process/text \
-                -F \"text=Repeated network outage in Tower B for the third time this week. Staff cannot login and operations are blocked.\" \
-                -F \"ticket_type=complaint\" \
-                -F \"subject=\")"
+                --form-string 'text=Repeated network outage in Tower B for the third time this week. Staff cannot login and operations are blocked.' \
+                --form-string 'ticket_type=complaint' \
+                --form-string 'subject=')"
               echo "pipeline submit response: $payload_out"
               ticket_code="$(echo "$payload_out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ticket_code",""))')"
               [ -n "$ticket_code" ] || { echo "::error::Pipeline submit did not return ticket_code"; return 1; }
