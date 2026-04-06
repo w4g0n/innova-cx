@@ -25,6 +25,8 @@ jobs:
           clean: false
 
       - name: Sweep all compose profiles
+        env:
+          BACKUP_PASSPHRASE: ci-merge-gate-passphrase
         run: |
           set -euo pipefail
           wait_health() {
@@ -165,4 +167,6 @@ jobs:
 
       - name: Cleanup
         if: always()
+        env:
+          BACKUP_PASSPHRASE: ci-merge-gate-passphrase
         run: docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
