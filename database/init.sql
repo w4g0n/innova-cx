@@ -705,11 +705,6 @@ CREATE TRIGGER audit_approval_requests
 AFTER INSERT OR UPDATE OR DELETE ON approval_requests
 FOR EACH ROW EXECUTE FUNCTION audit_trigger();
 
-DROP TRIGGER IF EXISTS trg_validate_approval_requests ON approval_requests;
-CREATE TRIGGER trg_validate_approval_requests
-BEFORE INSERT OR UPDATE ON approval_requests
-FOR EACH ROW EXECUTE FUNCTION validate_approval_requests();
-
 CREATE TABLE IF NOT EXISTS department_routing_feedback (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
