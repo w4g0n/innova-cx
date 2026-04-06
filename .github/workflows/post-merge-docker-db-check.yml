@@ -61,6 +61,22 @@ jobs:
             return 1
           }
 
+          wait_db_init() {
+            local container="$1"
+            local max_attempts="${2:-60}"
+            echo "Waiting for $container initdb to complete..."
+            for i in $(seq 1 "$max_attempts"); do
+              if docker logs "$container" 2>&1 | grep -q "PostgreSQL init process complete; ready for start up."; then
+                echo "$container initdb complete"
+                return 0
+              fi
+              echo "  initdb not complete yet... attempt $i/$max_attempts"
+              sleep 5
+            done
+            echo "::error::$container initdb did not complete in time"
+            return 1
+          }
+
           check_running() {
             local container="$1"
             local status
@@ -96,15 +112,17 @@ jobs:
 
             wait_health innovacx-db
 
+            # Wait for initdb scripts to finish before querying roles/tables.
+            # Docker marks a container healthy as soon as pg_isready passes, which
+            # happens before docker-entrypoint-initdb.d scripts complete. This wait
+            # ensures zzz_least_privilege.sh and all init SQL have finished.
+            wait_db_init innovacx-db 60
+
             # Database wiring sanity checks
             docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
               "select rolname from pg_roles where rolname='innovacx_app';" | grep -q "^innovacx_app$"
             docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
               "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" | grep -q "^4$"
-            # Fresh-volume initialization must complete cleanly.
-            # Avoid pipefail+SIGPIPE false negatives from `docker logs | grep -q`.
-            docker logs innovacx-db > /tmp/innovacx-db.log 2>&1 || true
-            grep -q "PostgreSQL init process complete; ready for start up." /tmp/innovacx-db.log
 
             # Core services must be up for every profile
             check_running innovacx-backend
