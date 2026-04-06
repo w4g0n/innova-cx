@@ -23,5 +23,5 @@ slowapi==0.1.9
 # torch
 # pysentimiento
 # librosa
-# openai-whisper
+# whisper
 # webrtcvad

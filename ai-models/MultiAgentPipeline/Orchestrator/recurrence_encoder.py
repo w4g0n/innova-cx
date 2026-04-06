@@ -127,6 +127,10 @@ def _fetch_candidates(
     """
     Return list of (ticket_code, subject, details) for recent tickets
     belonging to the same user, excluding the current ticket.
+
+    Only tickets that have actually progressed out of the intake/open state
+    are eligible for recurrence matching. This prevents two brand-new queued
+    tickets from matching each other before either has completed the pipeline.
     """
     try:
         from db import db_connect  # type: ignore
@@ -138,6 +142,8 @@ def _fetch_candidates(
                     FROM tickets
                     WHERE (%s IS NULL OR ticket_code <> %s)
                       AND (%s IS NULL OR created_by_user_id = %s::uuid)
+                      AND status <> 'Open'::ticket_status
+                      AND priority_assigned_at IS NOT NULL
                     ORDER BY created_at DESC
                     LIMIT %s
                     """,

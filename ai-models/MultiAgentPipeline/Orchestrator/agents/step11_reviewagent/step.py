@@ -92,6 +92,12 @@ _INDICATOR_TO_STAGE: dict[str, str] = {
 _NON_CRITICAL_INDICATOR_KEYS = {
     "recurrence_mode", "sentiment_mode", "audio_analysis_mode", "sentiment_combiner_mode"
 }
+_SUPPORTED_REVIEW_STAGES = {
+    "ClassificationAgent",
+    "FeatureEngineeringAgent",
+    "PrioritizationAgent",
+    "DepartmentRoutingAgent",
+}
 
 
 def _detect_mock_stages(state: dict) -> list[str]:
@@ -113,6 +119,28 @@ def _noncritical_mock_warnings(state: dict) -> list[str]:
         for k in _NON_CRITICAL_INDICATOR_KEYS
         if str(state.get(k, "")).lower() == _MOCK_INDICATOR_KEYS[k]
     ]
+
+
+def _unsupported_critical_mock_results(mock_stages: list[str]) -> list[dict[str, Any]]:
+    unsupported = [
+        stage for stage in mock_stages
+        if stage not in _SUPPORTED_REVIEW_STAGES and stage != "ReviewAgent"
+    ]
+    results: list[dict[str, Any]] = []
+    for stage in unsupported:
+        results.append({
+            "stage": stage,
+            "was_mock": True,
+            "status": "flagged",
+            "issue": f"{stage} used fallback output and cannot be auto-corrected by Review Agent",
+            "fix_applied": None,
+            "operator_message": (
+                f"{stage} failed earlier in the pipeline. Review Agent cannot safely auto-correct this stage, "
+                "so manual operator review is required."
+            ),
+            "operator_override_required": False,
+        })
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -1414,6 +1442,12 @@ async def review_pipeline(state: dict) -> dict:
         logger.info(
             "review_agent | non-critical mock stages (warning only): %s", noncritical_warnings
         )
+    unsupported_mock_results = _unsupported_critical_mock_results(mock_stages)
+    if unsupported_mock_results:
+        logger.info(
+            "review_agent | unsupported critical mock stages require operator review: %s",
+            [r["stage"] for r in unsupported_mock_results],
+        )
 
     # ---- Stage 1: Classification ----
     class_result = await _review_classification(state)
@@ -1438,7 +1472,7 @@ async def review_pipeline(state: dict) -> dict:
     routing_sent_to_review = route_result["routing_sent_to_review"]
     routing_verdict        = route_result["verdict"]
 
-    stage_results = [class_result, feat_result, prio_result, route_result]
+    stage_results = [class_result, feat_result, prio_result, route_result, *unsupported_mock_results]
 
     # ---- Final verdict ----
     flagged_stages = [r for r in stage_results if r.get("status") == "flagged"]

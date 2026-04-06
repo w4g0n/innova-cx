@@ -60,13 +60,12 @@ function fmtAge(ts) {
 const AUTO_REFRESH_INTERVAL_MS = 20_000;
 const REASON_TRUNCATE_LENGTH = 140;
 
-const STATUS_TABS = ["Active", "Held", "Queued", "Processing", "Failed"];
+const STATUS_TABS = ["Active", "Held", "Queued", "Processing"];
 
 const STATUS_PILL = {
   queued:     { label: "Queued",     cls: "pq-pill--blue"   },
   processing: { label: "Processing", cls: "pq-pill--amber"  },
   held:       { label: "Held",       cls: "pq-pill--red"    },
-  failed:     { label: "Failed",     cls: "pq-pill--muted"  },
 };
 
 const PRIORITY_PILL = {
@@ -259,8 +258,13 @@ const STAGE_SHORT = {
 const TOTAL_PIPELINE_STEPS = 11;
 
 /* ─── Derived data constants (module-level to avoid re-creation on render) ── */
-const STATUS_ORDER = { processing: 0, queued: 1, held: 2, failed: 3 };
-const ACTIVE_STATUSES = new Set(["processing", "queued", "held", "failed"]);
+const STATUS_ORDER = { processing: 0, queued: 1, held: 2 };
+const ACTIVE_STATUSES = new Set(["processing", "queued", "held"]);
+
+function normalizeQueueStatus(status) {
+  const normalized = String(status || "").toLowerCase();
+  return normalized === "failed" ? "held" : normalized;
+}
 
 function StageBar({ currentStage, currentStep }) {
   if (!currentStage) return <span className="pq-muted">—</span>;
@@ -282,10 +286,11 @@ const CLASSIFICATION_STEP = 4;
 
 function QueueRow({ item, index, rerunBusy, onRerun }) {
   const navigate = useNavigate();
-  const sConf  = STATUS_PILL[(item.status || "").toLowerCase()] || { label: item.status, cls: "pq-pill--muted" };
+  const normalizedStatus = normalizeQueueStatus(item.status);
+  const sConf  = STATUS_PILL[normalizedStatus] || { label: item.status, cls: "pq-pill--muted" };
   const priorityMeta = getPriorityMeta(item.priority);
-  const isHeld       = item.status === "held";
-  const isProcessing = item.status === "processing";
+  const isHeld       = normalizedStatus === "held";
+  const isProcessing = normalizedStatus === "processing";
   const canRerun = item.status !== "completed";
   const noSuggestedResolution =
     String(item.suggested_resolution_mode || "").toLowerCase() === "timeout_background" &&
@@ -447,8 +452,8 @@ export default function PipelineQueuePage() {
   const queueItems = items.filter((item) => String(item.status || "").toLowerCase() !== "completed");
 
   const sortedItems = [...queueItems].sort((a, b) => {
-    const aStatus = String(a.status || "").toLowerCase();
-    const bStatus = String(b.status || "").toLowerCase();
+    const aStatus = normalizeQueueStatus(a.status);
+    const bStatus = normalizeQueueStatus(b.status);
     const aOrder  = STATUS_ORDER[aStatus] ?? 99;
     const bOrder  = STATUS_ORDER[bStatus] ?? 99;
     if (aOrder !== bOrder) return aOrder - bOrder;
@@ -461,11 +466,11 @@ export default function PipelineQueuePage() {
   });
 
   const heldItems = sortedItems.filter(
-    (i) => String(i.status || "").toLowerCase() === "held" && i.failure_category !== "manual_pause"
+    (i) => normalizeQueueStatus(i.status) === "held" && i.failure_category !== "manual_pause"
   );
 
   const filteredItems = sortedItems.filter((item) => {
-    const status = (item.status || "").toLowerCase();
+    const status = normalizeQueueStatus(item.status);
     const tabMatch =
       activeTab === "Active"
         ? ACTIVE_STATUSES.has(status)
@@ -495,7 +500,6 @@ export default function PipelineQueuePage() {
     queued:     tabCounts["Queued"]     ?? 0,
     processing: tabCounts["Processing"] ?? 0,
     held:       tabCounts["Held"]       ?? 0,
-    failed:     tabCounts["Failed"]     ?? 0,
   };
 
   return (
@@ -543,7 +547,6 @@ export default function PipelineQueuePage() {
           <StatCard label="Queued"     value={stats.queued}     loading={itemsLoading} />
           <StatCard label="Processing" value={stats.processing}  loading={itemsLoading} flag="amber" />
           <StatCard label="Held"       value={stats.held}        loading={itemsLoading} flag={stats.held > 0 ? "red" : undefined} />
-          <StatCard label="Failed"     value={stats.failed}      loading={itemsLoading} flag={stats.failed > 0 ? "warn" : undefined} />
         </section>
 
         {!itemsLoading && pipelineControl?.is_paused && (
@@ -661,12 +664,11 @@ export default function PipelineQueuePage() {
                       processing: "Now Processing",
                       queued:     "In Queue",
                       held:       "Held — Requires Action",
-                      failed:     "Failed",
                     };
                     let lastSection = null;
                     const rows = [];
                     filteredItems.forEach((item, idx) => {
-                      const section = (item.status || "").toLowerCase();
+                      const section = normalizeQueueStatus(item.status);
                       if (section !== lastSection) {
                         lastSection = section;
                         rows.push(
