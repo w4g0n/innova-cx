@@ -87,7 +87,13 @@ async def _startup():
     _log_model_mode_summary()
     # Warm the shared Qwen model at startup so the first live ticket does not
     # spend its stage timeout budget on model load.
-    await asyncio.to_thread(get_shared_qwen)
+    # Wrapped in try/except: warmup is an optimization, not a requirement.
+    # If the model is unavailable (CI, first boot), startup must still complete
+    # so the health endpoint becomes reachable.
+    try:
+        await asyncio.to_thread(get_shared_qwen)
+    except Exception as _qwen_err:
+        logger.warning('startup | shared Qwen warmup skipped: %s', _qwen_err)
     # Start the persistent queue background worker
     asyncio.create_task(queue_worker_loop())
 
