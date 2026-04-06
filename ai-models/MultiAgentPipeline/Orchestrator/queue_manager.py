@@ -1185,8 +1185,8 @@ def release_held_ticket(queue_id: str, corrections: dict) -> bool:
                         """
                         UPDATE tickets
                            SET status = CASE
-                               WHEN department_id IS NOT NULL THEN 'Assigned'
-                               ELSE 'Open'
+                               WHEN department_id IS NOT NULL THEN 'Assigned'::ticket_status
+                               ELSE 'Open'::ticket_status
                            END,
                                updated_at = now()
                          WHERE id = %s::uuid
