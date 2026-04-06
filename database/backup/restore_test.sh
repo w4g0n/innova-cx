@@ -18,10 +18,11 @@
 #   8. Remove temp file
 #
 # Connection note:
-#   CREATE DATABASE / DROP DATABASE / pg_restore require innovacx_admin.
+#   All operations use POSTGRES_USER (innovacx_admin / superuser).
 #   pg_hba.conf allows innovacx_admin from the Docker internal network
 #   (172.16.0.0/12) with md5 — this is the targeted backup exception.
-#   The integrity verification query runs as innovacx_app (SELECT only).
+#   innovacx_app is NOT used here: pg_restore runs with --no-privileges
+#   so no GRANTs exist on the test DB — only the owner can SELECT.
 #
 # IMPORTANT:
 #   This script NEVER touches the production database (complaints_db).
@@ -159,29 +160,20 @@ unset PGPASSWORD
 log "pg_restore completed without errors."
 
 # ---------------------------------------------------------------------------
-# 6. Structural integrity verification (runs as innovacx_app — SELECT only)
+# 6. Structural integrity verification
+#    Runs as POSTGRES_USER (superuser/owner of restored tables).
+#    Using APP_DB_USER here would fail with "permission denied" because
+#    --no-privileges on pg_restore means no GRANTs were applied to the
+#    test database — only the owner (innovacx_admin) can SELECT.
 # ---------------------------------------------------------------------------
 log "running integrity verification query..."
 
-export PGPASSWORD="${APP_DB_PASSWORD}"
-
-# Grant innovacx_app connect rights to the test DB so it can run the check
 export PGPASSWORD="${POSTGRES_PASSWORD}"
-psql \
-    --host="${PG_HOST}" \
-    --port="${PG_PORT}" \
-    --username="${POSTGRES_USER}" \
-    --dbname="postgres" \
-    --no-password \
-    -c "GRANT CONNECT ON DATABASE ${TEST_DB} TO ${APP_DB_USER};" \
-    >/dev/null 2>&1 || true
-
-export PGPASSWORD="${APP_DB_PASSWORD}"
 
 VERIFY_RESULT=$(psql \
     --host="${PG_HOST}" \
     --port="${PG_PORT}" \
-    --username="${APP_DB_USER}" \
+    --username="${POSTGRES_USER}" \
     --dbname="${TEST_DB}" \
     --no-password \
     --tuples-only \
