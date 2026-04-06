@@ -1,7 +1,19 @@
 -- =========================================================
 -- InnovaCX 
 -- =========================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'innovacx_app') THEN
+    CREATE ROLE innovacx_app WITH LOGIN PASSWORD 'changeme123';
+  END IF;
+END
+$$;
 
+GRANT CONNECT ON DATABASE complaints_db TO innovacx_app;
+GRANT USAGE ON SCHEMA public TO innovacx_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO innovacx_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO innovacx_app;
 -- -------------------------
 -- Extensions
 -- -------------------------
