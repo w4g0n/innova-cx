@@ -631,7 +631,7 @@ analyze("I'm very frustrated!")
 **What you need to do:**
 1. Add Whisper to requirements:
    ```txt
-   openai-whisper==20231117
+   whisper==20231117
    librosa==0.10.1
    webrtcvad==2.0.10
    ```

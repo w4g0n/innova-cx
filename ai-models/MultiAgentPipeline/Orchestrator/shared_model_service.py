@@ -29,12 +29,9 @@ SHARED_QWEN_MODEL_PATH: str = os.getenv(
 ).strip()
 SHARED_QWEN_MODEL_NAME: str = os.getenv(
     "SHARED_QWEN_MODEL_NAME",
-    "Qwen/Qwen2.5-0.5B-Instruct",
+    "",
 ).strip()
-SHARED_QWEN_AUTO_DOWNLOAD: bool = os.getenv(
-    "SHARED_QWEN_AUTO_DOWNLOAD", "false"
-).lower() in {"1", "true", "yes"}
-HF_TOKEN: str | None = os.getenv("HF_TOKEN", "").strip() or None
+SHARED_QWEN_AUTO_DOWNLOAD: bool = False
 
 
 @lru_cache(maxsize=1)
@@ -53,30 +50,11 @@ def get_shared_qwen() -> dict[str, Any] | None:
     model_path = Path(SHARED_QWEN_MODEL_PATH)
 
     if not (model_path / "config.json").exists():
-        if SHARED_QWEN_AUTO_DOWNLOAD and SHARED_QWEN_MODEL_NAME:
-            try:
-                from huggingface_hub import snapshot_download  # type: ignore
-
-                logger.info(
-                    "shared_model_service | downloading model=%s to %s",
-                    SHARED_QWEN_MODEL_NAME,
-                    SHARED_QWEN_MODEL_PATH,
-                )
-                snapshot_download(
-                    repo_id=SHARED_QWEN_MODEL_NAME,
-                    local_dir=SHARED_QWEN_MODEL_PATH,
-                    token=HF_TOKEN,
-                )
-            except Exception as exc:
-                logger.warning(
-                    "shared_model_service | auto-download failed (%s), model disabled", exc
-                )
-        if not (model_path / "config.json").exists():
-            logger.info(
-                "shared_model_service | no local model at %s, model disabled",
-                SHARED_QWEN_MODEL_PATH,
-            )
-            return None
+        logger.info(
+            "shared_model_service | no local model at %s, model disabled",
+            SHARED_QWEN_MODEL_PATH,
+        )
+        return None
 
     try:
         import torch  # type: ignore
@@ -93,12 +71,10 @@ def get_shared_qwen() -> dict[str, Any] | None:
         tokenizer = AutoTokenizer.from_pretrained(
             SHARED_QWEN_MODEL_PATH,
             trust_remote_code=True,
-            token=HF_TOKEN,
         )
         model = AutoModelForCausalLM.from_pretrained(
             SHARED_QWEN_MODEL_PATH,
             trust_remote_code=True,
-            token=HF_TOKEN,
             torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
             low_cpu_mem_usage=True,
         )

@@ -15,6 +15,7 @@ jobs:
 
     steps:
       - name: Reset runner workspace
+        working-directory: ${{ github.workspace }}
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
             sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
@@ -27,6 +28,7 @@ jobs:
       - name: Sweep all compose profiles
         env:
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
+        working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
           wait_health() {
@@ -101,6 +103,7 @@ jobs:
               "select rolname from pg_roles where rolname='innovacx_app';" | grep -q "^innovacx_app$"
             docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
               "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" | grep -q "^4$"
+
             # Fresh-volume initialization must complete cleanly.
             # Avoid pipefail+SIGPIPE false negatives from `docker logs | grep -q`.
             docker logs innovacx-db > /tmp/innovacx-db.log 2>&1 || true
@@ -147,16 +150,24 @@ jobs:
             docker ps -a --format 'table {{.Names}}\t{{.Status}}'
           }
 
-          run_profile frontend
-          run_profile pipeline
-          run_profile live
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            echo "Pull request mode: running the lightweight frontend profile smoke test only."
+            run_profile frontend
+          else
+            echo "Full sweep mode: running frontend, pipeline, and live profiles."
+            run_profile frontend
+            run_profile pipeline
+            run_profile live
+          fi
 
       - name: Show container status
         if: always()
+        working-directory: ${{ github.workspace }}
         run: docker ps -a --format 'table {{.Names}}\t{{.Status}}'
 
       - name: Tail logs on failure
         if: failure()
+        working-directory: ${{ github.workspace }}
         run: |
           docker logs --tail 300 innovacx-db || true
           docker logs --tail 300 innovacx-backend || true
@@ -169,4 +180,5 @@ jobs:
         if: always()
         env:
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
+        working-directory: ${{ github.workspace }}
         run: docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true

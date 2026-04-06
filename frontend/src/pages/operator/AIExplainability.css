@@ -478,6 +478,10 @@
 .aix-stage {
   margin-bottom: 18px;
 }
+.aix-stage--failed {
+  border-color: var(--aix-danger-border);
+  box-shadow: 0 0 0 1px rgba(190, 18, 60, 0.05), var(--aix-shadow);
+}
 .aix-stage-head {
   display: flex;
   align-items: center;
