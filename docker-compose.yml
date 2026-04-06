@@ -192,11 +192,44 @@ services:
     networks:
       - innovacx-network
 
+  backup:
+    profiles: ["backup", "frontend", "pipeline", "live"]
+    build: ./database/backup
+    container_name: innovacx-backup
+    restart: unless-stopped
+    environment:
+      # Superuser — used ONLY by restore_test.sh for CREATE/DROP DATABASE
+      # and pg_restore. Allowed from Docker network by pg_hba.conf rule 3
+      # (172.16.0.0/12, md5). Port 5432 is not mapped to host so this
+      # access is strictly internal to the Docker network.
+      POSTGRES_USER: ${POSTGRES_USER:-innovacx_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      # Runtime role — used by backup.sh (pg_dump) and integrity check query
+      APP_DB_USER: ${APP_DB_USER:-innovacx_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-changeme123}
+      POSTGRES_DB: ${POSTGRES_DB:-complaints_db}
+      # Backup encryption passphrase — MUST be set in .env, never use default in production
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?BACKUP_PASSPHRASE must be set in .env}
+      # How many days of backup files to retain (default: 14)
+      BACKUP_RETAIN_DAYS: ${BACKUP_RETAIN_DAYS:-14}
+      # Postgres host on the shared network
+      PG_HOST: postgres
+      PG_PORT: "5432"
+    volumes:
+      # Named volume for encrypted backup files
+      - backup_data:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - innovacx-network
+
 volumes:
   postgres_data:
   hf_cache:
   chatbot_models:
   uploads_data:
+  backup_data:
 
 networks:
   innovacx-network:
