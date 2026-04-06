@@ -66,9 +66,16 @@ jobs:
           wait_db_init() {
             local container="$1"
             local max_attempts="${2:-60}"
+            local logfile="/tmp/${container}-initdb-check.log"
             echo "Waiting for $container initdb to complete..."
             for i in $(seq 1 "$max_attempts"); do
-              if docker logs "$container" 2>&1 | grep -q "PostgreSQL init process complete; ready for start up."; then
+              # Write logs to a file first to avoid SIGPIPE false negatives.
+              # Under set -euo pipefail, `docker logs | grep -q` silently fails:
+              # grep -q exits 0 on match but docker logs gets SIGPIPE (exit 141),
+              # making the pipeline exit non-zero even when the string IS present.
+              # The original workflow had this same comment and used this same fix.
+              docker logs "$container" > "$logfile" 2>&1 || true
+              if grep -q "PostgreSQL init process complete; ready for start up." "$logfile"; then
                 echo "$container initdb complete"
                 return 0
               fi
