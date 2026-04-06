@@ -25,6 +25,8 @@ jobs:
           clean: false
 
       - name: Sweep all compose profiles
+        env:
+          BACKUP_PASSPHRASE: ci-merge-gate-passphrase
         run: |
           set -euo pipefail
           wait_health() {
@@ -99,8 +101,10 @@ jobs:
               "select rolname from pg_roles where rolname='innovacx_app';" | grep -q "^innovacx_app$"
             docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
               "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" | grep -q "^4$"
-            # Fresh-volume initialization must complete cleanly
-            docker logs innovacx-db 2>&1 | grep -q "PostgreSQL init process complete; ready for start up."
+            # Fresh-volume initialization must complete cleanly.
+            # Avoid pipefail+SIGPIPE false negatives from `docker logs | grep -q`.
+            docker logs innovacx-db > /tmp/innovacx-db.log 2>&1 || true
+            grep -q "PostgreSQL init process complete; ready for start up." /tmp/innovacx-db.log
 
             # Core services must be up for every profile
             check_running innovacx-backend
@@ -113,9 +117,9 @@ jobs:
 
               # Pipeline must still work when models are unavailable.
               payload_out="$(curl -sS -X POST http://localhost:8004/process/text \
-                -F \"text=Repeated network outage in Tower B for the third time this week. Staff cannot login and operations are blocked.\" \
-                -F \"ticket_type=complaint\" \
-                -F \"subject=\")"
+                --form-string 'text=Repeated network outage in Tower B for the third time this week. Staff cannot login and operations are blocked.' \
+                --form-string 'ticket_type=complaint' \
+                --form-string 'subject=')"
               echo "pipeline submit response: $payload_out"
               ticket_code="$(echo "$payload_out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ticket_code",""))')"
               [ -n "$ticket_code" ] || { echo "::error::Pipeline submit did not return ticket_code"; return 1; }
@@ -124,7 +128,7 @@ jobs:
               done_status=""
               for i in $(seq 1 80); do
                 done_status="$(docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
-                  \"select status from pipeline_executions where ticket_code='${ticket_code}' order by started_at desc limit 1;\")"
+                  "select status from pipeline_executions where ticket_code='${ticket_code}' order by started_at desc limit 1;")"
                 if [ "$done_status" = "success" ]; then
                   break
                 fi
@@ -163,4 +167,6 @@ jobs:
 
       - name: Cleanup
         if: always()
+        env:
+          BACKUP_PASSPHRASE: ci-merge-gate-passphrase
         run: docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
