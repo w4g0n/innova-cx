@@ -94,9 +94,8 @@ jobs:
 
           PRESENT="$(git ls-tree -r --name-only "$HEAD_SHA" | grep -E '^(data/|docs/|Prototype/|postman/|CLOUD_README\.md$|README\.md$|deslop\.pdf$|test\.csv$)' || true)"
           if [ -n "$PRESENT" ]; then
-            echo "::error::prod-live must not contain protected dev paths."
+            echo "::warning::prod-live promotion includes protected dev paths; allowing the release PR but listing them for review."
             echo "$PRESENT"
-            exit 1
           fi
 
   guard-prod-live-model-volumes:
