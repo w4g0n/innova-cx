@@ -4,6 +4,7 @@ import Layout from "../../components/Layout";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { sanitizeText, sanitizeId } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import "./RoutingReviewDetails.css";
 
 function getAuthToken() {
@@ -202,9 +203,10 @@ export default function RoutingReviewDetails() {
     triggerFlash(decision);
 
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/routing-review/${encodeURIComponent(reviewId)}`), {
         method: "PATCH",
-        headers,
+        headers: { ...headers, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify({
           decision,
           approved_department: decision === "Overridden" ? dept

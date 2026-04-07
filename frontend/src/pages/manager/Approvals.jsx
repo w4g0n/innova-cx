@@ -8,6 +8,7 @@ import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import {
   sanitizeText,
   sanitizeId,
@@ -367,8 +368,9 @@ export default function Approvals() {
         // Normal reroute approve
       }
 
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/approvals/${encodeURIComponent(safeRequestId)}`), {
-        method: "PATCH", headers,
+        method: "PATCH", headers: { ...headers, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify(body),
       });
       if (!res.ok) {
@@ -391,8 +393,9 @@ export default function Approvals() {
   const decideRrq = async (reviewId, decision, department) => {
     setRrqRows((prev) => prev.map((r) => (r.reviewId === reviewId ? { ...r, status: decision } : r)));
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/routing-review/${encodeURIComponent(sanitizeId(reviewId))}`), {
-        method: "PATCH", headers,
+        method: "PATCH", headers: { ...headers, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify({ decision, approved_department: sanitizeText(department, 100) || undefined }),
       });
       if (!res.ok) { throw new Error(`Failed (${res.status})`); }

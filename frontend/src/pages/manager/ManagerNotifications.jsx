@@ -5,6 +5,7 @@ import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import { fireNotifRefresh } from "../../utils/notifRefresh";
 import {
   sanitizeText,
@@ -127,9 +128,10 @@ export default function ManagerNotifications() {
     if (!token) return;
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     try {
+      const csrf = await getCsrfToken();
       await fetch(`${API_BASE}/manager/notifications/read-all`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
       });
     } catch (e) {
       console.error("Failed to mark all notifications as read:", e);
@@ -144,9 +146,10 @@ export default function ManagerNotifications() {
     if (!n.read) {
       const token = getAuthToken();
       try {
+        const csrf = await getCsrfToken();
         await fetch(`${API_BASE}/manager/notifications/${n.id}/read`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         });
         fireNotifRefresh();
       } catch { /* non-critical */ }
@@ -162,9 +165,10 @@ export default function ManagerNotifications() {
         prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
       );
       try {
+        const csrf = await getCsrfToken();
         await fetch(`${API_BASE}/manager/notifications/${n.id}/read`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         });
         fireNotifRefresh();
       } catch { /* silently ignore */ }

@@ -37,6 +37,13 @@ REVOKE ALL ON DATABASE complaints_db FROM PUBLIC;
 -- innovacx_admin inherits PUBLIC, so revoking from PUBLIC closes the gap.
 REVOKE CONNECT ON DATABASE postgres FROM PUBLIC;
 
+-- Block the template1 default database from all non-superuser roles.
+-- template1 is not used by any application service; restricting it removes
+-- an unnecessary default entry point. Superusers (innovacx_admin) retain
+-- access; CREATE DATABASE still works because it does not require the
+-- caller to have CONNECT on the template.
+REVOKE CONNECT ON DATABASE template1 FROM PUBLIC;
+
 -- Grant only what each role needs at database level.
 GRANT CONNECT, TEMPORARY ON DATABASE complaints_db TO innovacx_app;
 GRANT CONNECT            ON DATABASE complaints_db TO innovacx_readonly;

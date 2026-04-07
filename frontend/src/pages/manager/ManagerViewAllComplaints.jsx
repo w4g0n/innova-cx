@@ -21,6 +21,7 @@ import {
   MAX_SEARCH_LEN,
 } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import useScrollReveal from "../../utils/useScrollReveal";
 
 function getAuthToken() {
@@ -216,9 +217,10 @@ export default function ManagerViewComplaints() {
   const confirmAssignment = async () => {
     if (!activeTicketId) return;
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/complaints/${activeTicketId}/assign`), {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify({ employee_name: selectedEmployee || null }),
       });
       if (!res.ok) {
@@ -249,9 +251,10 @@ export default function ManagerViewComplaints() {
 
   const handleReroute = async (ticketId, dept) => {
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/complaints/${ticketId}/department`), {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify({ department: dept }),
       });
       if (!res.ok) {

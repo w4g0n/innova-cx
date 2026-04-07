@@ -10,6 +10,7 @@ import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import {
   sanitizeText,
   sanitizeId,
@@ -40,11 +41,14 @@ function getStoredToken() {
 async function apiFetch(path, options = {}) {
   const token = getStoredToken();
   const url = apiUrl(`/api${path}`);
+  const method = (options.method ?? "GET").toUpperCase();
+  const csrf = ["POST", "PUT", "PATCH", "DELETE"].includes(method) ? await getCsrfToken() : null;
   const res = await fetch(url, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
       ...(options.headers ?? {}),
     },
   });
