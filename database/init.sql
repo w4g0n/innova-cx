@@ -1,7 +1,25 @@
 -- =========================================================
 -- InnovaCX 
 -- =========================================================
+-- Create the application role if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'innovacx_app') THEN
+    CREATE ROLE innovacx_app WITH LOGIN PASSWORD 'changeme123';
+  END IF;
+END $$;
 
+-- Grant necessary permissions
+GRANT CONNECT ON DATABASE complaints_db TO innovacx_app;
+GRANT USAGE ON SCHEMA public TO innovacx_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO innovacx_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO innovacx_app;
+
+-- Ensure future tables are also accessible
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO innovacx_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO innovacx_app;
 -- -------------------------
 -- Extensions
 -- -------------------------
@@ -190,6 +208,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_active                BOOLEAN NOT NULL DEFAULT TRUE,
   created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login_at            TIMESTAMPTZ,
+  password_changed_at      TIMESTAMPTZ,
   -- ADDED: tracks when the password was last rotated.
   -- Without this column you have NO way to know if a password is 3 days
   -- old or 3 years old. Your app can query this to enforce expiry rules.
