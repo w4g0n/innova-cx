@@ -5,6 +5,7 @@ import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import {
   sanitizeText,
   sanitizeId,
@@ -144,9 +145,10 @@ export default function OperatorNotifications() {
   const markAllRead = async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     try {
+      const csrf = await getCsrfToken();
       await fetch(apiUrl("/api/operator/notifications/read-all"), {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
       });
       showToast("All notifications marked as read");
     } catch (e) {
@@ -165,9 +167,10 @@ export default function OperatorNotifications() {
       prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
     );
     try {
+      const csrf = await getCsrfToken();
       await fetch(apiUrl(`/api/operator/notifications/${encodeURIComponent(sanitizeId(n.id))}/read`), {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
       });
       showToast("Notification marked as read");
     } catch (e) {

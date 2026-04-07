@@ -11,6 +11,7 @@ import "./ManagerSettings.css";
 import { getUser } from "../../utils/auth";
 import { sanitizeText } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 
 // ─── Auth token helper (same pattern as all other manager pages) ──────────────
 function getAuthToken() {
@@ -54,11 +55,13 @@ function ChangePasswordModal({ onClose }) {
 
     setLoading(true);
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl("/api/auth/change-password"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
         body: JSON.stringify({
           current_password: currentPw,

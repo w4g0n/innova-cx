@@ -5,6 +5,7 @@ import PageHeader from "../../components/common/PageHeader";
 import "./PipelineQueuePage.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 
 /* ─── Auth helper ──────────────────────────────────────────────────────────── */
 function getStoredToken() {
@@ -419,7 +420,8 @@ export default function PipelineQueuePage() {
     setRerunId(item.id);
     setError(null);
     try {
-      await apiFetch(`/operator/pipeline-queue/${item.id}/rerun`, { method: "POST" });
+      const csrf = await getCsrfToken();
+      await apiFetch(`/operator/pipeline-queue/${item.id}/rerun`, { method: "POST", headers: csrf ? { "X-CSRF-Token": csrf } : {} });
       await loadAll(true);
     } catch (err) {
       setError(err.message);
@@ -439,7 +441,8 @@ export default function PipelineQueuePage() {
     setPipelineToggleBusy(true);
     setError(null);
     try {
-      await apiFetch(`/operator/pipeline-queue/control/${isPaused ? "resume" : "pause"}`, { method: "POST" });
+      const csrf = await getCsrfToken();
+      await apiFetch(`/operator/pipeline-queue/control/${isPaused ? "resume" : "pause"}`, { method: "POST", headers: csrf ? { "X-CSRF-Token": csrf } : {} });
       await loadAll(true);
     } catch (err) {
       setError(err.message);
