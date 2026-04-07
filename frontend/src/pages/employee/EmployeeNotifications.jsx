@@ -5,6 +5,7 @@ import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import {
   sanitizeText,
   sanitizeId,
@@ -131,9 +132,10 @@ export default function EmployeeNotifications() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
 
     try {
+      const csrf = await getCsrfToken();
       await fetch(`${API_BASE}/employee/notifications/read-all`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
       });
     } catch {
       // Network error — silently ignore, optimistic UI update stays
@@ -145,10 +147,11 @@ export default function EmployeeNotifications() {
     if (!token) return;
 
     try {
+      const csrf = await getCsrfToken();
       // sanitizeId ensures the ID only contains safe chars before it enters the URL
       await fetch(`${API_BASE}/employee/notifications/${encodeURIComponent(sanitizeId(id, 64))}/read`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
       });
     } catch {
       // Network error — silently ignore

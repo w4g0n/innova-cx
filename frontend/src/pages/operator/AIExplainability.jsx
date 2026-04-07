@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import PillSearch from "../../components/common/PillSearch";
 import PriorityPill from "../../components/common/PriorityPill";
 import {
@@ -725,11 +726,12 @@ export default function AIExplainability() {
     setOverrideErr("");
     setOverrideMsg("");
     try {
+      const csrf = await getCsrfToken();
       const response = await fetch(
         apiUrl(`/api/operator/ai-explainability/tickets/${encodeURIComponent(detailTicket.ticketId)}/pipeline-rerun`),
         {
           method: "POST",
-          headers: getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {},
+          headers: { ...(getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {}), ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         },
       );
       if (!response.ok) {
@@ -858,11 +860,13 @@ export default function AIExplainability() {
     setOverrideErr("");
     setOverrideMsg("");
     try {
+      const csrf = await getCsrfToken();
       const response = await fetch(apiUrl(`/api/operator/ai-explainability/tickets/${encodeURIComponent(detailTicket.ticketId)}/pipeline-overrides`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           ...(getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {}),
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
         body: JSON.stringify({
           ticket_type: overrideForm.ticketType,
@@ -900,9 +904,10 @@ export default function AIExplainability() {
     if (!window.confirm("Permanently delete this ticket and all its data? This cannot be undone.")) return;
     try {
       const token = getStoredToken();
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/operator/tickets/${ticketId}`), {
         method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
       });
       if (!res.ok) { const d = await res.text().catch(() => "Failed"); throw new Error(d); }
       await loadTicketList();
