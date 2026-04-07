@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import logo from "../assets/nova-logo.png";
 import { apiUrl } from "../config/apiBase";
+import { getCsrfToken } from "../services/api";
 import { isStaffHost } from "../utils/hostUtils";
 import "./Login.css";
 
@@ -343,6 +344,8 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
   const [loginError, setLoginError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(
@@ -368,9 +371,13 @@ export default function Login() {
     setLoading(true);
 
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
         body: JSON.stringify({ email, password }),
       });
 
@@ -474,6 +481,13 @@ export default function Login() {
 
         {/* ── Right panel ── */}
         <section className="loginRight">
+          <button
+            className="backBtn"
+            onClick={() => navigate(-1)}
+          >
+            ← Back
+          </button>
+
           <div className="loginHeader">
             <div className="login-header-tag">InnovaCX · Dubai CommerCity</div>
             <h2 className="loginTitle">Log In</h2>
@@ -536,6 +550,7 @@ export default function Login() {
               <div className="input-wrap">
                 <input
                   id="login-email"
+                  name="email"
                   className="input"
                   type="email"
                   placeholder="you@company.com"
@@ -544,12 +559,18 @@ export default function Login() {
                     setEmail(e.target.value);
                     if (loginError) setLoginError("");
                   }}
-                  onBlur={() => markTouched("email")}
+                  onBlur={() => { markTouched("email"); setFocusedField(null); }}
+                  onFocus={(e) => { setFocusedField("email"); setCapsLock(e.getModifierState("CapsLock")); }}
+                  onKeyDown={(e) => setCapsLock(e.getModifierState("CapsLock"))}
+                  onKeyUp={(e) => setCapsLock(e.getModifierState("CapsLock"))}
                   autoComplete="email"
                   aria-invalid={touched.email && !!emailError}
                   aria-describedby="email-msg"
                 />
                 <span className="input-icon" aria-hidden="true">
+                  {capsLock && focusedField === "email" && emailInputState !== "error" && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="7 11 12 6 17 11"/><line x1="12" y1="6" x2="12" y2="18"/><rect x="5" y="18" width="14" height="3" rx="1"/></svg>
+                  )}
                   {emailInputState === "error" && (
                     <svg
                       width="16"
@@ -581,7 +602,8 @@ export default function Login() {
               <div className="input-wrap passwordField">
                 <input
                   id="login-password"
-                  className="input passwordInput"
+                  name="password"
+                  className={`input passwordInput${capsLock ? " has-capslock" : ""}`}
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={password}
@@ -589,11 +611,19 @@ export default function Login() {
                     setPassword(e.target.value);
                     if (loginError) setLoginError("");
                   }}
-                  onBlur={() => markTouched("password")}
+                  onFocus={(e) => { setFocusedField("password"); if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
+                  onKeyDown={(e) => { if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
+                  onKeyUp={(e) => { if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
+                  onBlur={() => { markTouched("password"); setFocusedField(null); setCapsLock(false); }}
                   autoComplete="current-password"
                   aria-invalid={touched.password && !!passwordError}
                   aria-describedby="password-msg"
                 />
+                {capsLock && focusedField === "password" && (
+                  <span className="login-capslock-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="7 11 12 6 17 11"/><line x1="12" y1="6" x2="12" y2="18"/><rect x="5" y="18" width="14" height="3" rx="1"/></svg>
+                  </span>
+                )}
                 <button
                   type="button"
                   className="passwordToggleBtn"

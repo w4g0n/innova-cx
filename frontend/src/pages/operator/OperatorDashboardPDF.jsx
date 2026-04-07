@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import logo from "../../assets/nova-logo.png";
+import { sanitizeText } from "./Operatorsanitize";
 
 const styles = StyleSheet.create({
   page: {
@@ -103,9 +104,9 @@ export default function OperatorDashboardPDF({ data, range }) {
           <Text style={styles.sectionTitle}>Core Services Status</Text>
           {data.coreServices.map((s) => (
             <View key={s.name} style={styles.row}>
-              <Text style={styles.cell}>{s.name}</Text>
-              <Text style={styles.cell}>{s.status}</Text>
-              <Text style={styles.cell}>{s.note}</Text>
+              <Text style={styles.cell}>{sanitizeText(s.name, 100)}</Text>
+              <Text style={styles.cell}>{sanitizeText(s.status, 50)}</Text>
+              <Text style={styles.cell}>{sanitizeText(s.note, 300)}</Text>
             </View>
           ))}
         </View>
@@ -115,9 +116,9 @@ export default function OperatorDashboardPDF({ data, range }) {
           <Text style={styles.sectionTitle}>Error & Fallback Overview</Text>
           {Object.entries(data.errorFallbackOverview).map(([k, v]) => (
             <View key={k} style={styles.row}>
-              <Text style={styles.cell}>{k}</Text>
-              <Text style={styles.cell}>{v.count}</Text>
-              <Text style={styles.cell}>{v.trendLabel}</Text>
+              <Text style={styles.cell}>{sanitizeText(k, 100)}</Text>
+              <Text style={styles.cell}>{sanitizeText(String(v.count ?? ""), 50)}</Text>
+              <Text style={styles.cell}>{sanitizeText(v.trendLabel, 100)}</Text>
             </View>
           ))}
         </View>
@@ -127,9 +128,9 @@ export default function OperatorDashboardPDF({ data, range }) {
           <Text style={styles.sectionTitle}>Integrations</Text>
           {data.integrations.map((i) => (
             <View key={i.name} style={styles.row}>
-              <Text style={styles.cell}>{i.name}</Text>
-              <Text style={styles.cell}>{i.status}</Text>
-              <Text style={styles.cell}>{i.note}</Text>
+              <Text style={styles.cell}>{sanitizeText(i.name, 100)}</Text>
+              <Text style={styles.cell}>{sanitizeText(i.status, 50)}</Text>
+              <Text style={styles.cell}>{sanitizeText(i.note, 300)}</Text>
             </View>
           ))}
         </View>
@@ -139,9 +140,9 @@ export default function OperatorDashboardPDF({ data, range }) {
           <Text style={styles.sectionTitle}>Incident & Events</Text>
           {data.eventFeed.map((e, idx) => (
             <View key={idx} style={styles.row}>
-              <Text style={styles.cell}>{e.time}</Text>
-              <Text style={styles.cell}>{e.title}</Text>
-              <Text style={styles.cell}>{e.description}</Text>
+              <Text style={styles.cell}>{sanitizeText(e.time, 50)}</Text>
+              <Text style={styles.cell}>{sanitizeText(e.title, 200)}</Text>
+              <Text style={styles.cell}>{sanitizeText(e.description, 500)}</Text>
             </View>
           ))}
         </View>

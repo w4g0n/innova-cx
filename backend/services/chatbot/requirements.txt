@@ -1,7 +1,6 @@
 pandas
 scikit-learn
 transformers>=4.36.0
-huggingface_hub>=0.23.0
 torch>=2.0.0
 bitsandbytes
 accelerate
@@ -11,6 +10,5 @@ sqlalchemy
 psycopg2-binary
 langchain
 langchain-community
-langchain-huggingface
 sentence-transformers
 faiss-cpu

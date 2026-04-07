@@ -906,10 +906,19 @@ function SolarSystem({ onReady }) {
       };
     }
 
-    if (window.THREE) { init(); }
-    else {
+    const THREE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+
+    if (window.THREE) {
+      init();
+    } else {
+      const existing = document.querySelector(`script[src="${THREE_CDN}"]`);
+      if (existing) {
+        // Script already in DOM (React Strict Mode double-invoke) — reuse it
+        existing.addEventListener("load", init, { once: true });
+        return () => { if (mount._cleanup) mount._cleanup(); };
+      }
       const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+      script.src = THREE_CDN;
       script.onload = init;
       document.head.appendChild(script);
       return () => { if (mount._cleanup) mount._cleanup(); if (script.parentNode) script.parentNode.removeChild(script); };
@@ -1297,6 +1306,28 @@ export default function PublicLanding() {
         <p className="pl-footer-copy">© 2026 InnovaAI · All rights reserved.</p>
         <p className="pl-footer-copy">Sponsored By Dubai CommerCity</p>
       </footer>
+    </div>
+
+    {/* ── Fixed social dock — stays on screen while scrolling ── */}
+    <div className="pl-social-dock" aria-label="Follow us on social media">
+      <a href="https://www.instagram.com/innovacx.ai?igsh=bzVxOTNuMXUzODEz&utm_source=qr" target="_blank" rel="noopener noreferrer" className="pl-social-link" aria-label="Instagram">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="5.5" ry="5.5" stroke="currentColor" strokeWidth="1.8" fill="none"/>
+          <circle cx="12" cy="12" r="4.5" stroke="currentColor" strokeWidth="1.8" fill="none"/>
+          <circle cx="17.5" cy="6.5" r="1.1" fill="currentColor"/>
+        </svg>
+      </a>
+      <a href="https://www.tiktok.com/@innovacx" target="_blank" rel="noopener noreferrer" className="pl-social-link" aria-label="TikTok">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.34 6.34 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.75a8.28 8.28 0 004.84 1.54V6.84a4.85 4.85 0 01-1.07-.15z"/>
+        </svg>
+      </a>
+      <a href="https://www.linkedin.com/in/innovacx-ai-7b55853a2?utm_source=share_via&utm_content=profile&utm_medium=member_ios" target="_blank" rel="noopener noreferrer" className="pl-social-link" aria-label="LinkedIn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="4" stroke="currentColor" strokeWidth="1.8" fill="none"/>
+          <path d="M7 10v7M7 7v.01M11 17v-4a2 2 0 014 0v4M11 10v7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </a>
     </div>
     </>
   );

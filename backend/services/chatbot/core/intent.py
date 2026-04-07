@@ -240,15 +240,6 @@ def _llm_detect_aggression(user_text: str, history: list) -> tuple[bool, float]:
 
 # ── Public API (auto-selects keyword or LLM) ─────────────────────────────────
 
-# Short greetings that must never reach the LLM.  Qwen 0.5B misclassifies
-# them as follow_up; intercept here and return "unknown" so the controller
-# asks the user to state their actual intent.
-_GREETING_WORDS = {
-    "hello", "hi", "hey", "greetings", "howdy", "hiya", "yo", "sup",
-    "good morning", "good afternoon", "good evening", "good day",
-}
-
-
 def classify_primary_intent(user_text: str, history: list) -> str:
     """
     Classifies whether the user wants to follow up or create a ticket.
@@ -257,10 +248,6 @@ def classify_primary_intent(user_text: str, history: list) -> str:
     result = _keyword_primary_intent(user_text)
     if result != "unknown":
         return result
-    # Greetings must not reach the LLM — the small model misclassifies them.
-    normalized = user_text.strip().lower().rstrip("!.,?")
-    if normalized in _GREETING_WORDS:
-        return "unknown"
     # Keywords inconclusive — try LLM if available
     if llm_available():
         return _llm_classify_primary(user_text, history)

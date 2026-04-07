@@ -77,11 +77,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_notify_operator_acceptance_rate ON ticket_resolution_feedback;
-CREATE TRIGGER trg_notify_operator_acceptance_rate
-AFTER INSERT ON ticket_resolution_feedback
-FOR EACH ROW
-EXECUTE FUNCTION notify_operator_acceptance_rate();
+DO $$
+BEGIN
+  IF to_regclass('public.ticket_resolution_feedback') IS NOT NULL THEN
+    DROP TRIGGER IF EXISTS trg_notify_operator_acceptance_rate ON ticket_resolution_feedback;
+    CREATE TRIGGER trg_notify_operator_acceptance_rate
+    AFTER INSERT ON ticket_resolution_feedback
+    FOR EACH ROW
+    EXECUTE FUNCTION notify_operator_acceptance_rate();
+  END IF;
+END $$;
 
 
 -- ─────────────────────────────────────────────────────────

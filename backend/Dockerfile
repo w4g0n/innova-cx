@@ -34,4 +34,5 @@ RUN mkdir -p /app/uploads /app/logs
 EXPOSE 8000
 
 # Run the application
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+WORKDIR /app/api
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

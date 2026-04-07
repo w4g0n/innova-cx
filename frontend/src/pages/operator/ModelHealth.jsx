@@ -13,6 +13,11 @@ import {
 import "./ModelHealth.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 import { apiUrl } from "../../config/apiBase";
+import {
+  ALLOWED_TIME_FILTERS,
+  ALLOWED_DEPARTMENTS,
+  ALLOWED_MODEL_AGENTS,
+} from "./Operatorsanitize";
 
 function getStoredToken() {
   const direct =
@@ -191,7 +196,6 @@ function ChatbotAgentView({ data, loading, error, onRetry }) {
   return (
     <div className="ma-view">
       <div className="ma-kpi-row">
-        <KpiCard label="Containment Rate" value={`${kpis.containmentRate}%`} pill="resolved_without_ticket" sub="Sessions resolved without creating a ticket or escalating" />
         <KpiCard label="Escalation Rate" value={`${kpis.escalationRate}%`} pill="escalated_to_human" sub="Sessions ending in human handoff" flag={kpis.escalationRate > 20 ? "warn" : undefined} />
         <KpiCard label="Avg Session Length" value={kpis.avgMessagesPerSession ?? "—"} pill="Messages / session" sub="Average messages exchanged per conversation" />
         <KpiCard label="Total Sessions" value={kpis.totalSessions.toLocaleString()} pill="Period" sub="From sessions + user_chat_logs" />
@@ -436,8 +440,8 @@ export default function ModelHealth() {
     try {
       const data = await apiFetch(agent.endpoint, buildParams(agentId));
       setAgentData((prev) => ({ ...prev, [agentId]: data }));
-    } catch (err) {
-      setAgentError((prev) => ({ ...prev, [agentId]: err.message }));
+    } catch {
+      setAgentError((prev) => ({ ...prev, [agentId]: "Failed to load agent data. Please try again." }));
     } finally {
       setAgentLoading((prev) => ({ ...prev, [agentId]: false }));
     }
@@ -469,7 +473,7 @@ export default function ModelHealth() {
             <div className="ma-top-actions">
               <PillSelect
                 value={timeFilter}
-                onChange={handleFilterChange(setTimeFilter)}
+                onChange={handleFilterChange((v) => { if (ALLOWED_TIME_FILTERS.includes(v)) setTimeFilter(v); })}
                 ariaLabel="Filter by time range"
                 options={[
                   { label: "Last 7 days",  value: "last7days"  },
@@ -479,7 +483,7 @@ export default function ModelHealth() {
               />
               <PillSelect
                 value={deptFilter}
-                onChange={handleFilterChange(setDeptFilter)}
+                onChange={handleFilterChange((v) => { if (ALLOWED_DEPARTMENTS.includes(v)) setDeptFilter(v); })}
                 ariaLabel="Filter by department"
                 options={[
                   { label: "All Departments",       value: "All Departments"       },
@@ -502,7 +506,7 @@ export default function ModelHealth() {
             <button
               key={a.id}
               className={`ma-nav__btn ${activeAgent === a.id ? "ma-nav__btn--active" : ""}`}
-              onClick={() => setActiveAgent(a.id)}
+              onClick={() => { if (ALLOWED_MODEL_AGENTS.includes(a.id)) setActiveAgent(a.id); }}
               type="button"
             >
               {a.label}

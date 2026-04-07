@@ -1,0 +1,335 @@
+/* ============================================================
+   StaffLoadingSkeleton — Post-login splash for Employee,
+   Manager & Operator portals.
+   Light theme — matches the white-card / purple-accent system.
+   ============================================================ */
+
+/* ── ROOT ─────────────────────────────────────────────────── */
+.sls-root {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f3ff;
+  font-family: "Outfit", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ── BACKGROUND ──────────────────────────────────────────── */
+.sls-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.sls-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+}
+
+.sls-blob1 {
+  width: 520px;
+  height: 520px;
+  left: -120px;
+  top: -100px;
+  background: radial-gradient(circle, rgba(109, 40, 217, 0.12), transparent 70%);
+  animation: slsBlob1 14s ease-in-out infinite alternate;
+}
+
+.sls-blob2 {
+  width: 400px;
+  height: 400px;
+  right: -80px;
+  bottom: -80px;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.1), transparent 70%);
+  animation: slsBlob2 18s ease-in-out infinite alternate;
+}
+
+@keyframes slsBlob1 {
+  from { transform: translate(0, 0) scale(1);      }
+  to   { transform: translate(30px, 20px) scale(1.06); }
+}
+@keyframes slsBlob2 {
+  from { transform: translate(0, 0) scale(1);       }
+  to   { transform: translate(-20px, -15px) scale(1.05); }
+}
+
+/* Subtle dot grid */
+.sls-dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(109, 40, 217, 0.07) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 65% 65% at 50% 50%, black 40%, transparent 100%);
+}
+
+/* ── CARD ────────────────────────────────────────────────── */
+.sls-card {
+  position: relative;
+  z-index: 2;
+  width: min(400px, calc(100vw - 40px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 36px 36px;
+  border-radius: 24px;
+  background: #ffffff;
+  border: 1px solid rgba(109, 40, 217, 0.12);
+  box-shadow:
+    0 4px 6px rgba(109, 40, 217, 0.04),
+    0 20px 60px rgba(109, 40, 217, 0.1),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  overflow: hidden;
+  animation: slsCardIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes slsCardIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Animated top accent bar */
+.sls-accent-bar {
+  width: 100%;
+  height: 4px;
+  margin-bottom: 36px;
+  background: linear-gradient(90deg, #6d28d9, #9333ea, #c084fc, #9333ea, #6d28d9);
+  background-size: 300% 100%;
+  animation: slsAccentFlow 2.5s linear infinite;
+  border-radius: 0 0 4px 4px;
+  flex-shrink: 0;
+}
+
+@keyframes slsAccentFlow {
+  0%   { background-position: 0%   center; }
+  100% { background-position: 300% center; }
+}
+
+/* ── LOGO ────────────────────────────────────────────────── */
+.sls-logo-wrap {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  animation: slsFloat 4s ease-in-out infinite;
+}
+
+@keyframes slsFloat {
+  0%, 100% { transform: translateY(0);    }
+  50%       { transform: translateY(-8px); }
+}
+
+.sls-logo-ring {
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(109, 40, 217, 0.15);
+  animation: slsRingSpin 10s linear infinite;
+}
+
+@keyframes slsRingSpin {
+  to { transform: rotate(360deg); }
+}
+
+.sls-logo-glow {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(109, 40, 217, 0.12), transparent 70%);
+  animation: slsGlowPulse 3s ease-in-out infinite;
+}
+
+@keyframes slsGlowPulse {
+  0%, 100% { opacity: 0.6; transform: scale(1);    }
+  50%       { opacity: 1;   transform: scale(1.12); }
+}
+
+.sls-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 4px 16px rgba(109, 40, 217, 0.3));
+}
+
+/* ── BRAND ───────────────────────────────────────────────── */
+.sls-brand {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: #3b0764;
+  margin-bottom: 4px;
+}
+
+.sls-sub {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(109, 40, 217, 0.45);
+  margin-bottom: 28px;
+}
+
+/* ── PHASE LABEL ─────────────────────────────────────────── */
+.sls-phase-wrap {
+  position: relative;
+  height: 18px;
+  width: 100%;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sls-phase {
+  position: absolute;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(109, 40, 217, 0.4);
+  letter-spacing: 0.03em;
+  opacity: 0;
+  transform: translateY(5px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  white-space: nowrap;
+  pointer-events: none;
+  text-align: center;
+}
+
+.sls-phase--active {
+  opacity: 1;
+  transform: translateY(0);
+  color: rgba(109, 40, 217, 0.75);
+}
+
+/* ── PROGRESS BAR ────────────────────────────────────────── */
+.sls-bar-track {
+  position: relative;
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(109, 40, 217, 0.08);
+  margin-bottom: 8px;
+  overflow: visible;
+}
+
+.sls-bar-fill {
+  position: relative;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6d28d9, #9333ea, #c084fc);
+  transition: width 0.04s linear;
+  overflow: hidden;
+}
+
+.sls-bar-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: slsShimmer 1.4s linear infinite;
+}
+
+@keyframes slsShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.sls-bar-tip {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #9333ea;
+  box-shadow: 0 0 8px 3px rgba(147, 51, 234, 0.35);
+  transition: left 0.04s linear;
+  pointer-events: none;
+}
+
+.sls-percent {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: rgba(109, 40, 217, 0.35);
+  letter-spacing: 0.06em;
+  margin-bottom: 24px;
+  align-self: flex-end;
+}
+
+/* ── GHOST SKELETON ──────────────────────────────────────── */
+.sls-ghost {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* KPI cards row */
+.sls-ghost-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.sls-ghost-kpi {
+  height: 52px;
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    rgba(109, 40, 217, 0.06) 25%,
+    rgba(109, 40, 217, 0.12) 50%,
+    rgba(109, 40, 217, 0.06) 75%
+  );
+  background-size: 200% 100%;
+  animation: slsGhostPulse 1.8s ease-in-out infinite;
+}
+
+/* Content rows */
+.sls-ghost-row {
+  height: 10px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(109, 40, 217, 0.05) 25%,
+    rgba(109, 40, 217, 0.1)  50%,
+    rgba(109, 40, 217, 0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: slsGhostPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes slsGhostPulse {
+  0%   { background-position:  200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── FOOTER ──────────────────────────────────────────────── */
+.sls-footer {
+  position: fixed;
+  bottom: 16px;
+  right: 20px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: rgba(109, 40, 217, 0.2);
+  z-index: 3;
+  animation: slsCardIn 1s 0.3s both;
+}

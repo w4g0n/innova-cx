@@ -3,7 +3,6 @@
    ============================================================ */
 @import "./CustomerShared.css";
 
-.cmyt-page {}
 
 /* ── TOOLBAR ────────────────────────────────────────────────── */
 .cmyt-toolbar {
@@ -150,8 +149,13 @@
 /* ── MODAL ──────────────────────────────────────────────────── */
 .cmyt-modal-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,.55); backdrop-filter: blur(8px);
-  display: flex; align-items: center; justify-content: center; z-index: 9999;
+  background: rgba(0,0,0,.55); 
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center; 
+  justify-content: center; 
+  z-index: 9999;
   animation: clFadeIn .2s var(--ease, cubic-bezier(.25,1,.5,1)) both;
 }
 @keyframes clFadeIn { from{opacity:0;}to{opacity:1;} }

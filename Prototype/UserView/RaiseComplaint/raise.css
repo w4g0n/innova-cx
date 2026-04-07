@@ -1,0 +1,362 @@
+/* =========================================
+   RESET
+========================================= */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f7efff;
+}
+
+/* =========================================
+   LAYOUT
+========================================= */
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* =========================================
+   SIDEBAR
+========================================= */
+.sidebar {
+  width: 260px;
+  background: #3c0066;
+  color: #ffffff;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 36px;
+}
+
+.logo-img {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.logo-text {
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.sidebar-links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-link {
+  padding: 8px 12px;
+  border-radius: 999px;
+  text-decoration: none;
+  color: #f9f5ff;
+  font-size: 14px;
+}
+
+.sidebar-link:hover {
+  background: #ffffff22;
+}
+
+.sidebar-link.active {
+  background: #ffffff;
+  color: #3c0066;
+}
+
+/* SETTINGS + LOGOUT */
+.settings-btn,
+.logout-btn {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  cursor: pointer;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.settings-btn {
+  margin-top: auto;
+}
+
+.logout-btn {
+  margin-top: 8px;
+}
+
+/* =========================================
+   MAIN
+========================================= */
+.main {
+  flex: 1;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+}
+
+.raise-main {
+  max-width: 900px;
+}
+
+.page-title {
+  margin: 0 0 18px;
+  font-size: 32px;
+  font-weight: 700;
+  color: #3c0066;
+}
+
+/* =========================================
+   TABS
+========================================= */
+.complaint-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.tab-btn {
+  padding: 10px 26px;
+  border-radius: 999px;
+  border: 1px solid #a78ab3;
+  background: #f2e8fa;
+  color: #000;
+  cursor: pointer;
+  transition: 0.2s;
+  font-size: 14px;
+}
+
+.tab-btn:hover {
+  background: #e7d6f7;
+}
+
+.active-tab {
+  background: #6a0dad;
+  color: #ffffff;
+  border-color: #6a0dad;
+}
+
+/* =========================================
+   CARD / FORM (SHARED)
+========================================= */
+.form-card {
+  background: #faf7ff;
+  border-radius: 18px;
+  padding: 20px 24px 24px;
+  box-shadow: 0 4px 18px rgba(60, 0, 102, 0.10);
+}
+
+.complaint-form,
+.audio-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;  /* Increase spacing between fields */
+}
+
+.audio-card,
+.form-card {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;   /* CENTER BOTH */
+}
+
+.audio-card {
+  padding-top: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #3c0066;
+}
+
+.invisible-label {
+  visibility: hidden;
+}
+
+/* INPUTS */
+.input-field,
+.textarea-field {
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  padding: 10px 14px;
+  font-size: 14px;
+  background: #ffffff;
+  outline: none;
+}
+
+.textarea-field {
+  border-radius: 14px;
+  resize: vertical;
+}
+
+/* PHONE SPLIT */
+.phone-prefix {
+  flex: 0 0 170px;
+}
+
+.phone-main {
+  flex: 1;
+}
+
+/* UAE prefix pill */
+.phone-prefix-pill {
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+}
+
+.flag-icon {
+  width: 22px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: cover;
+}
+
+/* Submit button (shared) */
+.submit-btn {
+  display: inline-block;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 40px;
+  background: #6a0dad;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: background 0.15s ease-in-out, opacity 0.15s ease-in-out;
+  width: auto;
+  align-self: center;
+}
+
+.submit-btn:hover {
+  background: #550b8c;
+  opacity: 0.96;
+}
+
+.submit-row {
+  margin-top: 16px;
+  text-align: center;      /* centers the button */
+}
+
+/* =========================================
+   AUDIO COMPLAINT SECTION ONLY
+========================================= */
+.audio-inner {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 0 6px;
+}
+
+.audio-helper {
+  font-size: 15px;
+  font-weight: 500;
+  color: #3c0066;
+  text-align: center;
+}
+
+.audio-icon-btn {
+  width: 110px;
+  height: 110px;
+  border-radius: 26px;
+  border: none;
+  background: #6a0dad;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(60, 0, 102, 0.35);
+}
+
+.audio-icon-btn svg {
+  width: 40px;
+  height: 40px;
+}
+
+.audio-submit-btn {
+  margin-top: 4px;
+}
+
+/* =============================
+   SUCCESS MODAL OVERLAY
+============================= */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-box {
+  background: #fff;
+  padding: 32px 28px;
+  border-radius: 20px;
+  width: 360px;
+  text-align: center;
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: none;
+  border: none;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.modal-btn {
+  display: inline-block;
+  padding: 12px 20px;
+  background: #6a0dad;
+  color: white;
+  font-weight: 600;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+}
+
+.modal-icon {
+  font-size: 48px;
+  color: #22c55e; /* BRIGHT GREEN */
+  margin-bottom: 8px;
+}

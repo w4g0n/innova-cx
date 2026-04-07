@@ -5,37 +5,27 @@ import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import { apiUrl } from "../../config/apiBase";
+import {
+  sanitizeText,
+  sanitizeId,
+  sanitizeReportId,
+  safeFormatDate,
+  MAX_SEARCH_LEN,
+} from "./EmployeeSanitize";
 import "./EmployeeNotifications.css";
 
-function formatTime(isoString) {
-  if (!isoString) return "";
-  const d = new Date(isoString);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+// safeFormatDate already validates the date — re-export under local alias for clarity
+const formatTime = safeFormatDate;
 
 function iconForType(type) {
   switch (type) {
-    case "ticket_assignment":
-      return "📌";
-    case "sla_warning":
-      return "⏰";
-    case "customer_reply":
-      return "💬";
-    case "status_change":
-      return "🔄";
-    case "report_ready":
-      return "📊";
-    case "system":
-      return "🛠️";
-    default:
-      return "🔔";
+    case "ticket_assignment": return "📌";
+    case "sla_warning":       return "⏰";
+    case "customer_reply":    return "💬";
+    case "status_change":     return "🔄";
+    case "report_ready":      return "📊";
+    case "system":            return "🛠️";
+    default:                  return "🔔";
   }
 }
 
@@ -51,16 +41,19 @@ function getAuthToken() {
 
 const API_BASE = apiUrl("/api");
 
+// Allowed notification type filter values — never trust user-controlled strings directly
+const ALLOWED_FILTERS = ["All", "Ticket", "SLA", "Reports", "System"];
+
 export default function EmployeeNotifications() {
   const navigate = useNavigate();
 
   const [notifications, setNotifications] = useState([]);
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("All");
-  const [onlyUnread, setOnlyUnread] = useState(false);
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [query,         setQuery]         = useState("");
+  const [filter,        setFilter]        = useState("All");
+  const [onlyUnread,    setOnlyUnread]    = useState(false);
+  const [loading,       setLoading]       = useState(false);
+  // Fixed internal error string — raw e.message from the network is never rendered
+  const [error,         setError]         = useState("");
 
   useEffect(() => {
     fetchNotifications();
@@ -79,14 +72,15 @@ export default function EmployeeNotifications() {
       });
 
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || "Failed to load notifications");
+        // Never render raw server response text — use a fixed internal message
+        throw new Error("server_error");
       }
 
       const data = await res.json();
       setNotifications(data.notifications || []);
-    } catch (e) {
-      setError(e?.message || "Failed to load notifications.");
+    } catch {
+      // Fixed string — raw error.message is never surfaced to the DOM
+      setError("Failed to load notifications. Please try again.");
       setNotifications([]);
     } finally {
       setLoading(false);
@@ -99,22 +93,31 @@ export default function EmployeeNotifications() {
   );
 
   const filtered = useMemo(() => {
-    const q = query.toLowerCase().trim();
+    // sanitizeSearchQuery already applied at onChange; cap again here as defence-in-depth
+    const q = sanitizeText(query, MAX_SEARCH_LEN).toLowerCase();
+
+    // Validate filter against allowlist — ignore unknown values
+    const safeFilter = ALLOWED_FILTERS.includes(filter) ? filter : "All";
 
     return notifications
       .filter((n) => {
         if (onlyUnread && n.read) return false;
 
         const matchesType =
-          filter === "All" ||
-          (filter === "Ticket" &&
+          safeFilter === "All" ||
+          (safeFilter === "Ticket" &&
             ["ticket_assignment", "status_change", "customer_reply"].includes(n.type)) ||
-          (filter === "SLA" && n.type === "sla_warning") ||
-          (filter === "Reports" && n.type === "report_ready") ||
-          (filter === "System" && n.type === "system");
+          (safeFilter === "SLA"     && n.type === "sla_warning")  ||
+          (safeFilter === "Reports" && n.type === "report_ready") ||
+          (safeFilter === "System"  && n.type === "system");
 
-        const blob = `${n.title} ${n.message} ${n.ticketId ?? ""} ${n.reportId ?? ""}`
-          .toLowerCase();
+        // Sanitize all server-supplied fields before using them in filter logic
+        const blob = [
+          sanitizeText(n.title,    100),
+          sanitizeText(n.message,  300),
+          sanitizeId(n.ticketId,    48),
+          sanitizeReportId(n.reportId, 20),
+        ].join(" ").toLowerCase();
 
         return matchesType && (!q || blob.includes(q));
       })
@@ -133,7 +136,7 @@ export default function EmployeeNotifications() {
         headers: { Authorization: `Bearer ${token}` },
       });
     } catch {
-      // network error — silently ignore, notification state unchanged
+      // Network error — silently ignore, optimistic UI update stays
     }
   };
 
@@ -142,13 +145,20 @@ export default function EmployeeNotifications() {
     if (!token) return;
 
     try {
-      await fetch(`${API_BASE}/employee/notifications/${id}/read`, {
+      // sanitizeId ensures the ID only contains safe chars before it enters the URL
+      await fetch(`${API_BASE}/employee/notifications/${encodeURIComponent(sanitizeId(id, 64))}/read`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
     } catch {
-      // network error — silently ignore, notification state unchanged
+      // Network error — silently ignore
     }
+  };
+
+  const dismissOne = async (e, id) => {
+    e.stopPropagation(); // don't trigger the card's onClick
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    await markOneRead(id);
   };
 
   const onNotificationClick = async (n) => {
@@ -159,9 +169,14 @@ export default function EmployeeNotifications() {
     await markOneRead(n.id);
 
     if (n.ticketId) {
-      navigate(`/employee/details/${n.ticketId}`);
+      // sanitizeId prevents path-traversal or injection in the navigation URL
+      const safeTicketId = sanitizeId(n.ticketId, 48);
+      if (safeTicketId) navigate(`/employee/details/${safeTicketId}`);
     } else if (n.reportId) {
-      navigate(`/employee/reports?report=${encodeURIComponent(n.reportId)}`);
+      // sanitizeReportId strips chars outside [a-z0-9-]
+      const safeReportId = sanitizeReportId(n.reportId, 20);
+      if (safeReportId)
+        navigate(`/employee/reports?report=${encodeURIComponent(safeReportId)}`);
     }
   };
 
@@ -185,23 +200,29 @@ export default function EmployeeNotifications() {
         <div className="empNotifs__controls">
           <PillSearch
             value={query}
-            onChange={(v) =>
-              typeof v === "string" ? setQuery(v) : setQuery(v?.target?.value ?? "")
-            }
+            onChange={(v) => {
+              // Cap search input length client-side before it enters state
+              const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
+              if (raw.length <= MAX_SEARCH_LEN) setQuery(raw);
+            }}
             placeholder="Search notifications..."
+            maxLength={MAX_SEARCH_LEN}
           />
 
           <div className="empNotifs__filtersRow">
             <PillSelect
               value={filter}
-              onChange={setFilter}
+              onChange={(v) => {
+                // Only allow values from our allowlist
+                if (ALLOWED_FILTERS.includes(v)) setFilter(v);
+              }}
               ariaLabel="Filter notifications"
               options={[
-                { value: "All", label: "All" },
-                { value: "Ticket", label: "Ticket" },
-                { value: "SLA", label: "SLA" },
+                { value: "All",     label: "All"     },
+                { value: "Ticket",  label: "Ticket"  },
+                { value: "SLA",     label: "SLA"     },
                 { value: "Reports", label: "Reports" },
-                { value: "System", label: "System" },
+                { value: "System",  label: "System"  },
               ]}
             />
 
@@ -215,6 +236,7 @@ export default function EmployeeNotifications() {
           </div>
         </div>
 
+        {/* error is a fixed internal string — never raw network error text */}
         {error && <div className="empNotifs__empty">{error}</div>}
 
         <div className="empNotifs__list">
@@ -223,40 +245,62 @@ export default function EmployeeNotifications() {
           ) : filtered.length === 0 ? (
             <div className="empNotifs__empty">No notifications found.</div>
           ) : (
-            filtered.map((n) => (
-              <div
-                key={n.id}
-                className={`empNotifs__item ${n.read ? "read" : "unread"} ${
-                  n.ticketId || n.reportId ? "clickable" : ""
-                }`}
-                onClick={() =>
-                  n.ticketId || n.reportId ? onNotificationClick(n) : null
-                }
-              >
-                <div className="empNotifs__left">
-                  <div className="empNotifs__icon">{iconForType(n.type)}</div>
+            filtered.map((n) => {
+              // Sanitize all server-supplied fields before rendering
+              const safeTitle    = sanitizeText(n.title    || "Notification", 100);
+              const safeMessage  = sanitizeText(n.message  || "",             300);
+              const safeTicketId = sanitizeId(n.ticketId,   48);
+              const safeReportId = sanitizeReportId(n.reportId, 20);
+              const safeTime     = formatTime(n.timestamp);
 
-                  <div className="empNotifs__content">
-                    <div className="empNotifs__topRow">
-                      <div className="empNotifs__title">{n.title}</div>
-                    </div>
+              return (
+                <div
+                  key={n.id}
+                  className={`empNotifs__item ${n.read ? "read" : "unread"} ${
+                    safeTicketId || safeReportId ? "clickable" : ""
+                  }`}
+                  onClick={() =>
+                    safeTicketId || safeReportId ? onNotificationClick(n) : null
+                  }
+                >
+                  <div className="empNotifs__left">
+                    {/* iconForType uses the raw n.type only for an emoji lookup — safe */}
+                    <div className="empNotifs__icon">{iconForType(n.type)}</div>
 
-                    <div className="empNotifs__message">{n.message}</div>
+                    <div className="empNotifs__content">
+                      <div className="empNotifs__topRow">
+                        <div className="empNotifs__title">{safeTitle}</div>
+                      </div>
 
-                    <div className="empNotifs__meta">
-                      <span>{formatTime(n.timestamp)}</span>
-                      {n.ticketId && <span>• {n.ticketId}</span>}
-                      {n.reportId && <span>• {n.reportId}</span>}
+                      <div className="empNotifs__message">{safeMessage}</div>
+
+                      <div className="empNotifs__meta">
+                        <span>{safeTime}</span>
+                        {safeTicketId && <span>• {safeTicketId}</span>}
+                        {safeReportId && <span>• {safeReportId}</span>}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="empNotifs__right">
-                  {!n.read && <span className="empNotifs__dot" />}
-                  {(n.ticketId || n.reportId) && <span className="empNotifs__chev">›</span>}
+                  <div className="empNotifs__right">
+                    <button
+                      type="button"
+                      className="empNotifs__dismiss"
+                      onClick={(e) => dismissOne(e, n.id)}
+                      aria-label="Dismiss notification"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                    {!n.read && <span className="empNotifs__dot" />}
+                    {(safeTicketId || safeReportId) && (
+                      <span className="empNotifs__chev">›</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

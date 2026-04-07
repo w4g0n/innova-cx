@@ -130,12 +130,15 @@ SELECT employee_id, employee_name, employee_code, employee_role, created_day, cr
 FROM mv_ticket_base WHERE employee_id IS NOT NULL
 GROUP BY employee_id, employee_name, employee_code, employee_role, created_day, created_month, department_name"""),
     ("mv_acceptance_daily", """CREATE MATERIALIZED VIEW IF NOT EXISTS mv_acceptance_daily AS
-SELECT trf.employee_user_id AS employee_id, up.full_name AS employee_name,
+SELECT sru.employee_user_id AS employee_id, up.full_name AS employee_name,
     date_trunc('day',t.created_at)::date AS created_day, date_trunc('month',t.created_at)::date AS created_month,
-    COUNT(*) AS total, COUNT(*) FILTER (WHERE trf.decision='accepted') AS accepted,
-    COUNT(*) FILTER (WHERE trf.decision='declined_custom') AS declined
-FROM ticket_resolution_feedback trf JOIN tickets t ON t.id=trf.ticket_id JOIN user_profiles up ON up.user_id=trf.employee_user_id
-GROUP BY trf.employee_user_id, up.full_name, date_trunc('day',t.created_at)::date, date_trunc('month',t.created_at)::date"""),
+    COUNT(*) AS total, COUNT(*) FILTER (WHERE sru.decision='accepted') AS accepted,
+    COUNT(*) FILTER (WHERE sru.decision='declined_custom') AS declined
+FROM suggested_resolution_usage sru
+JOIN tickets t ON t.id=sru.ticket_id
+JOIN user_profiles up ON up.user_id=sru.employee_user_id
+WHERE sru.employee_user_id IS NOT NULL AND sru.decision IS NOT NULL
+GROUP BY sru.employee_user_id, up.full_name, date_trunc('day',t.created_at)::date, date_trunc('month',t.created_at)::date"""),
     ("mv_operator_qc_daily", """CREATE MATERIALIZED VIEW IF NOT EXISTS mv_operator_qc_daily AS
 SELECT date_trunc('day',t.created_at)::date AS created_day, date_trunc('month',t.created_at)::date AS created_month,
     COALESCE(d.name,'Unassigned') AS department_name, COUNT(DISTINCT t.id) AS total,
@@ -332,6 +335,25 @@ def _ensure_analytics_mvs() -> None:
             int(mv_row.get("cnt") or 0),
             len(required_mvs),
         )
+        owner_row = _fetch_one(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname='public'
+                  AND c.relname='tickets'
+                  AND c.relkind='r'
+                  AND pg_get_userbyid(c.relowner)=current_user
+            ) AS owns_tickets
+            """
+        ) or {}
+        if not bool(owner_row.get("owns_tickets")):
+            logger.info(
+                "_ensure_analytics_mvs | skipping install for least-privilege runtime role; "
+                "waiting for DB init/migrations to provide analytics objects"
+            )
+            return
     except Exception:
         logger.info("_ensure_analytics_mvs | cannot check pg_proc — attempting MV install anyway")
 
@@ -363,6 +385,10 @@ def refresh_mvs() -> Dict[str, Any]:
     Falls back to non-concurrent refresh if CONCURRENT fails (e.g. empty MVs on first run).
     """
     _ensure_analytics_mvs()
+    fn_exists_row = _fetch_one("SELECT to_regprocedure('refresh_analytics_mvs()') IS NOT NULL AS exists") or {}
+    if not bool(fn_exists_row.get("exists")):
+        logger.info("refresh_mvs | refresh_analytics_mvs() is not available yet; skipping")
+        return {"ok": False, "skipped": "refresh function unavailable"}
     try:
         row = _fetch_one("SELECT refresh_analytics_mvs() AS result")
         return row["result"] if row else {"ok": False}

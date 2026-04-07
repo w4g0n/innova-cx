@@ -10,6 +10,7 @@ import base64
 import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
+from starlette.middleware.base import BaseHTTPMiddleware
 
 import bcrypt
 import psycopg2
@@ -53,15 +54,56 @@ try:
 except Exception:
     from ai_explainability import router as ai_explainability_router
 try:
+    from api.pipeline_queue_api import router as pipeline_queue_router
+except Exception:
+    from pipeline_queue_api import router as pipeline_queue_router
+try:
     from api.event_logger import log_application_event
 except Exception:
     from event_logger import log_application_event
+try:
+    from api.security_hardening import (
+        SecurityHeadersMiddleware,
+        get_limiter,
+        rate_limit_auth,
+        SLOWAPI_AVAILABLE,
+        validate_password_complexity,
+        is_account_locked,
+        check_and_record_failed_login,
+        clear_failed_logins,
+        log_auth_event,
+        sanitize_email,
+        validate_upload_file,
+        _sanitize_filename,
+        logout_user,
+        is_token_revoked,
+        generate_csrf_token,
+        verify_csrf_token,
+    )
+except Exception:
+    from security_hardening import (
+        SecurityHeadersMiddleware,
+        get_limiter,
+        rate_limit_auth,
+        SLOWAPI_AVAILABLE,
+        validate_password_complexity,
+        is_account_locked,
+        check_and_record_failed_login,
+        clear_failed_logins,
+        log_auth_event,
+        sanitize_email,
+        validate_upload_file,
+        _sanitize_filename,
+        logout_user,
+        is_token_revoked,
+        generate_csrf_token,
+        verify_csrf_token,
+    )
 
 # ── Analytics service (reads from materialized views) ────────────────────────
 try:
     import sys
-    import os as _os
-    sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), '..'))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
     from services import analytics_service as _analytics
     _ANALYTICS_READY = True
 except Exception as _analytics_import_err:
@@ -95,7 +137,19 @@ _has_sla_policy_fn = False
 # =========================================================
 # App
 # =========================================================
-app = FastAPI(title="InnovaCX API (DB-backed)", version="0.1.0")
+_EXPOSE_DOCS = os.getenv("EXPOSE_API_DOCS", "false").lower() == "true"
+app = FastAPI(
+    title="InnovaCX API",
+    docs_url="/docs" if _EXPOSE_DOCS else None,
+    redoc_url="/redoc" if _EXPOSE_DOCS else None,
+    openapi_url="/openapi.json" if _EXPOSE_DOCS else None,
+)
+
+if SLOWAPI_AVAILABLE:
+    try:
+        app.state.limiter = get_limiter()
+    except Exception as exc:
+        logger.warning("rate_limit | limiter init failed: %s", exc)
 
 
 def _parse_allowed_origins() -> List[str]:
@@ -113,6 +167,7 @@ def _parse_allowed_origins() -> List[str]:
 
 ALLOWED_ORIGINS = _parse_allowed_origins()
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -120,6 +175,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# =========================================================
+# CSP Middleware
+# =========================================================
+
+class CSPMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: blob:; "
+            "media-src 'self' blob:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self';"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+app.add_middleware(CSPMiddleware)
+
 
 api = APIRouter(prefix="/api")
 def _ensure_uploads_root() -> str:
@@ -136,7 +219,7 @@ def build_default_dsn() -> str:
     host = os.getenv("DB_HOST", "localhost")
     port = os.getenv("DB_PORT", "5432")
     name = os.getenv("DB_NAME", "complaints_db")
-    user = os.getenv("DB_USER", "innovacx_admin")
+    user = os.getenv("DB_USER", "innovacx_app")
     password = os.getenv("DB_PASSWORD", "changeme123")
     return f"postgresql://{user}:{password}@{host}:{port}/{name}"
 
@@ -149,7 +232,8 @@ def db_connect():
     try:
         return psycopg2.connect(get_dsn())
     except OperationalError as e:
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+        logger.error("db_connect | connection failed: %s", e)
+        raise HTTPException(status_code=500, detail="A server error occurred. Please try again later.")
 
 
 def _ensure_runtime_schema_compatibility() -> None:
@@ -159,6 +243,26 @@ def _ensure_runtime_schema_compatibility() -> None:
     try:
         with db_connect() as conn:
             with conn.cursor() as cur:
+                # Runtime role is least-privilege (innovacx_app). Owner-level ALTERs
+                # should only run when connected as the table owner.
+                cur.execute(
+                    """
+                    SELECT EXISTS (
+                      SELECT 1
+                      FROM pg_class c
+                      JOIN pg_namespace n ON n.oid = c.relnamespace
+                      WHERE n.nspname = 'public'
+                        AND c.relname = 'tickets'
+                        AND c.relkind = 'r'
+                        AND pg_get_userbyid(c.relowner) = current_user
+                    )
+                    """
+                )
+                owns_tickets = bool((cur.fetchone() or [False])[0])
+                if not owns_tickets:
+                    logger.info("db_compat | skipping owner-only compatibility DDL for runtime DB role")
+                    return
+
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_type TEXT;")
                 cur.execute("UPDATE tickets SET asset_type = 'General' WHERE asset_type IS NULL OR btrim(asset_type) = '';")
                 cur.execute("ALTER TABLE tickets ALTER COLUMN asset_type SET DEFAULT 'General';")
@@ -169,23 +273,68 @@ def _ensure_runtime_schema_compatibility() -> None:
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;")
                 cur.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE tickets ALTER COLUMN ticket_type DROP NOT NULL;")
+                cur.execute("ALTER TABLE tickets ALTER COLUMN ticket_type DROP DEFAULT;")
                 cur.execute(
                     """
-                    CREATE TABLE IF NOT EXISTS ticket_resolution_feedback (
+                    CREATE TABLE IF NOT EXISTS suggested_resolution_usage (
                       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                      ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-                      employee_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-                      decision TEXT NOT NULL CHECK (decision IN ('accepted', 'declined_custom')),
-                      suggested_resolution TEXT,
-                      employee_resolution TEXT,
-                      final_resolution TEXT NOT NULL,
+                      ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+                      employee_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+                      decision TEXT CHECK (decision IN ('accepted', 'declined_custom')),
+                      actor_role TEXT NOT NULL DEFAULT 'employee' CHECK (actor_role IN ('manager', 'operator', 'employee')),
+                      department TEXT NOT NULL,
+                      suggested_text TEXT,
+                      final_text TEXT,
+                      used BOOLEAN NOT NULL DEFAULT TRUE,
                       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                     );
                     """
                 )
+                cur.execute("ALTER TABLE suggested_resolution_usage ADD COLUMN IF NOT EXISTS employee_user_id UUID REFERENCES users(id) ON DELETE SET NULL;")
+                cur.execute("ALTER TABLE suggested_resolution_usage ADD COLUMN IF NOT EXISTS decision TEXT;")
+                cur.execute("ALTER TABLE suggested_resolution_usage ADD COLUMN IF NOT EXISTS actor_role TEXT;")
+                cur.execute("UPDATE suggested_resolution_usage SET actor_role = 'employee' WHERE actor_role IS NULL OR btrim(actor_role) = '';")
+                cur.execute(
+                    """
+                    DO $$
+                    BEGIN
+                      IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'suggested_resolution_usage_decision_check'
+                      ) THEN
+                        ALTER TABLE suggested_resolution_usage
+                        ADD CONSTRAINT suggested_resolution_usage_decision_check
+                        CHECK (decision IN ('accepted', 'declined_custom') OR decision IS NULL);
+                      END IF;
+                    END$$;
+                    """
+                )
+                cur.execute(
+                    """
+                    DO $$
+                    BEGIN
+                      IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'suggested_resolution_usage_actor_role_check'
+                      ) THEN
+                        ALTER TABLE suggested_resolution_usage
+                        ADD CONSTRAINT suggested_resolution_usage_actor_role_check
+                        CHECK (actor_role IN ('manager', 'operator', 'employee'));
+                      END IF;
+                    END$$;
+                    """
+                )
+                cur.execute("ALTER TABLE suggested_resolution_usage ALTER COLUMN actor_role SET DEFAULT 'employee';")
+                cur.execute("ALTER TABLE suggested_resolution_usage ALTER COLUMN actor_role SET NOT NULL;")
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
+                # password_changed_at: used by reset_password to stamp the moment
+                # a password was changed via reset flow, enabling stale-session detection.
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;")
                 # FIX (Issue 3 — department_routing table missing):
                 # The live DB volume may pre-date when department_routing was added to init.sql.
                 # Create it here idempotently so the routing review feature works on all envs.
@@ -325,9 +474,9 @@ async def _analytics_refresh_loop() -> None:
                 "analytics_refresh | MVs refreshed (interval_s=%s)",
                 ANALYTICS_REFRESH_INTERVAL_SECONDS,
             )
-        except Exception as _e:
+        except Exception as exc:
             logger.warning(
-                "analytics_refresh | refresh failed — will retry next cycle. err=%s", _e
+                "analytics_refresh | refresh failed — will retry next cycle. err=%s", exc
             )
 
 
@@ -359,7 +508,7 @@ def execute(sql: str, params: Optional[tuple] = None) -> int:
 # =========================================================
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "86400"))  # 24h
-DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "true").lower() == "true"
+DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "false").lower() == "true"
 DISABLE_MFA = os.getenv("DISABLE_MFA", "false").lower() == "true"
 
 DEV_SEED_USERS = os.getenv("DEV_SEED_USERS", "true").lower() == "true"
@@ -378,6 +527,8 @@ def _b64url_decode(s: str) -> bytes:
 def create_jwt(payload: dict, ttl_seconds: int = JWT_TTL_SECONDS) -> str:
     header = {"alg": "HS256", "typ": "JWT"}
     now = int(time.time())
+    if "jti" not in payload:
+        payload = {**payload, "jti": os.urandom(16).hex()}
     payload = {**payload, "iat": now, "exp": now + ttl_seconds}
 
     header_b64 = _b64url_encode(json.dumps(header, separators=(",", ":")).encode())
@@ -391,7 +542,10 @@ def create_jwt(payload: dict, ttl_seconds: int = JWT_TTL_SECONDS) -> str:
 
 def verify_jwt(token: str) -> dict:
     try:
-        header_b64, payload_b64, sig_b64 = token.split(".")
+        parts = token.split(".")
+        if len(parts) != 3:
+            raise ValueError("Malformed token")
+        header_b64, payload_b64, sig_b64 = parts
         signing_input = f"{header_b64}.{payload_b64}".encode()
         expected_sig = hmac.new(JWT_SECRET.encode(), signing_input, hashlib.sha256).digest()
         if not hmac.compare_digest(_b64url_encode(expected_sig), sig_b64):
@@ -402,6 +556,36 @@ def verify_jwt(token: str) -> dict:
             raise ValueError("Token expired")
         return payload
     except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def _check_token_issued_after_password_change(payload: dict, user: dict) -> None:
+    """
+    Reject JWTs issued before the user's last password change.
+    This invalidates all sessions that existed before a password reset.
+    """
+    password_changed_at = user.get("password_changed_at")
+    if password_changed_at is None:
+        return  # No password change recorded — token is fine
+
+    iat = payload.get("iat")
+    if iat is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Convert password_changed_at to a UTC Unix timestamp for comparison
+    try:
+        if hasattr(password_changed_at, "timestamp"):
+            changed_ts = password_changed_at.timestamp()
+        else:
+            # Fallback: already a numeric value
+            changed_ts = float(password_changed_at)
+    except Exception:
+        # If we cannot parse the timestamp, err on the side of caution
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    # Add a 2-second grace window to tolerate clock skew between
+    # the token-issuance path and the password-change write path.
+    if int(iat) < (changed_ts - 2):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
@@ -609,9 +793,13 @@ def _get_bearer_token(authorization: Optional[str]) -> str:
 def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
     token = _get_bearer_token(authorization)
     payload = verify_jwt(token)
+    jti = str(payload.get("jti") or "").strip()
+    if jti and is_token_revoked(jti):
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
     user = fetch_one(
         """
         SELECT u.id, u.email, u.role, u.is_active, u.totp_secret, u.mfa_enabled,
+               u.password_changed_at,
                up.full_name, up.department_id
         FROM users u
         LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -621,6 +809,8 @@ def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dic
     )
     if not user or not user.get("is_active"):
         raise HTTPException(status_code=401, detail="Invalid or inactive user")
+    # Reject tokens issued before the user's last password change
+    _check_token_issued_after_password_change(payload, user)
     return user
 
 
@@ -646,6 +836,11 @@ def require_operator(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[s
 
 
 api.include_router(ai_explainability_router, dependencies=[Depends(require_operator)])
+api.include_router(
+    pipeline_queue_router,
+    prefix="/operator/pipeline-queue",
+    dependencies=[Depends(require_operator)],
+)
 
 # =========================================================
 # Recurring complaint prediction
@@ -727,28 +922,6 @@ def _insert_notification(
         """,
         (user_id, notif_type, title, message, priority, ticket_id),
     )
-
-
-def _trigger_resolution_retraining() -> None:
-    max_examples = max(1, min(int(os.getenv("SUGGESTED_RESOLUTION_RETRAIN_MAX_EXAMPLES", "12")), 50))
-    payload = {"max_examples": max_examples}
-    for base in [ORCHESTRATOR_URL, ORCHESTRATOR_URL_LOCAL]:
-        try:
-            with httpx.Client(timeout=8.0) as client:
-                response = client.post(f"{base}/suggested-resolution/relearn", json=payload)
-                response.raise_for_status()
-                result = response.json() if response.content else {}
-                logger.info(
-                    "resolution_retrain | triggered via %s examples_written=%s feedback_rows=%s path=%s",
-                    base,
-                    result.get("examples_written"),
-                    result.get("feedback_rows"),
-                    result.get("path"),
-                )
-                return
-        except Exception:
-            continue
-    logger.warning("resolution_retrain | failed to trigger orchestrator relearning")
 
 
 def _trigger_priority_relearning(ticket_id: str, approved_priority: str, retrain_now: bool = False) -> None:
@@ -928,6 +1101,18 @@ def api_root():
     return {"message": "InnovaCX API is running", "time": datetime.now(timezone.utc).isoformat()}
 
 
+@api.get("/csrf-token", tags=["security"])
+def get_csrf_token():
+    """Issue a stateless HMAC-signed CSRF token for form submissions."""
+    return {"csrf_token": generate_csrf_token()}
+
+
+async def require_csrf(x_csrf_token: str = Header(None, alias="X-CSRF-Token")):
+    """FastAPI dependency: validates X-CSRF-Token header on mutating form requests."""
+    if not x_csrf_token or not verify_csrf_token(x_csrf_token):
+        raise HTTPException(status_code=403, detail="Invalid or missing CSRF token.")
+
+
 # ----------------------------
 # MFA / TOTP Setup & Verification
 # ----------------------------
@@ -976,28 +1161,41 @@ def totp_setup(user: Dict[str, Any] = Depends(get_current_user)):
 
 
 @api.post("/auth/login")
-def login(body: LoginRequest):
+@rate_limit_auth()
+def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_csrf)):
     """
     Login route returns a temporary token.
     If MFA is not yet enabled, frontend should show QR code.
     """
-    email = body.email.strip().lower()
+    email = sanitize_email(body.email)
+    client_ip = request.client.host if request and request.client else None
+
+    if is_account_locked(email):
+        log_auth_event("login_blocked_locked", email=email, ip=client_ip)
+        raise HTTPException(status_code=423, detail="Account temporarily locked. Please try again later.")
+
     user = fetch_one(
         "SELECT id, email, password_hash, role, is_active, totp_secret, mfa_enabled FROM users WHERE email = %s",
         (email,),
     )
 
     if not user or not user.get("is_active"):
+        check_and_record_failed_login(email)
+        log_auth_event("login_failed_unknown_email", email=email, ip=client_ip)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not verify_password(body.password, user["password_hash"]):
+        check_and_record_failed_login(email)
+        log_auth_event("login_failed", user_id=str(user["id"]), email=email, ip=client_ip)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    clear_failed_logins(email)
     execute("UPDATE users SET last_login_at = NOW() WHERE id = %s", (user["id"],))
 
     # Bypass TOTP when explicitly disabled (dev/demo only — set DISABLE_MFA=true in .env on VM)
     if DISABLE_MFA:
         access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
         profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+        log_auth_event("login_success", user_id=str(user["id"]), email=email, ip=client_ip, extra={"mfa_bypassed": True})
         return {
             "access_token": access_token,
             "token_type": "bearer",
@@ -1017,12 +1215,13 @@ def login(body: LoginRequest):
         user["totp_secret"] = secret
 
     # Temporary token valid for 10 minutes
-    temp_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=600)
+    temp_token = create_jwt({"sub": str(user["id"]), "type": "mfa_temp"}, ttl_seconds=600)
 
     # Flag to indicate MFA setup required
     requires_setup = not user.get("mfa_enabled", False)
 
     _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    log_auth_event("login_success", user_id=str(user["id"]), email=email, ip=client_ip, extra={"requires_setup": bool(requires_setup), "temporary_token": True})
     return {
         "access_token": temp_token,
         "token_type": "temporary",
@@ -1034,7 +1233,9 @@ def login(body: LoginRequest):
             "full_name": (_profile or {}).get("full_name") or user["email"],
         },
     }
-def totp_setup_complete(user: Dict[str, Any] = Depends(get_current_user)):
+
+@api.post("/auth/totp-setup-complete")
+def totp_setup_complete(user: Dict[str, Any] = Depends(get_current_user), _csrf: None = Depends(require_csrf)):
     """
     Mark MFA as enabled after user has scanned QR and verified OTP.
     """
@@ -1046,31 +1247,37 @@ def totp_setup_complete(user: Dict[str, Any] = Depends(get_current_user)):
     return {"success": True}
 
 @api.post("/auth/totp-verify")
-def totp_verify(body: VerifyTOTPRequest):
+@rate_limit_auth()
+def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends(require_csrf)):
     """
     Verifies the OTP code from user.
     If correct, marks MFA as enabled (first-time setup) and returns a full JWT.
     """
     payload = verify_jwt(body.login_token)
+    client_ip = request.client.host if request and request.client else None
     user = fetch_one(
         "SELECT id, email, role, totp_secret, mfa_enabled FROM users WHERE id = %s",
         (payload.get("sub"),),
     )
 
     if not user or not user.get("totp_secret"):
+        log_auth_event("totp_failed", email=None if not user else user.get("email"), ip=client_ip, extra={"reason": "not_configured"})
         raise HTTPException(status_code=400, detail="TOTP not configured")
 
     totp = pyotp.TOTP(user["totp_secret"])
     if not totp.verify(body.otp_code, valid_window=1):
+        log_auth_event("totp_failed", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
         raise HTTPException(status_code=401, detail="Invalid OTP code")
 
     # Enable MFA if first-time verification
     if not user.get("mfa_enabled"):
         execute("UPDATE users SET mfa_enabled = TRUE WHERE id = %s", (user["id"],))
+        log_auth_event("mfa_setup_complete", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
 
     # Issue real JWT valid for standard TTL
     access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
     _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    log_auth_event("totp_success", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -1087,8 +1294,10 @@ def totp_verify(body: VerifyTOTPRequest):
 # Routes: Password Reset
 # =========================================================
 @api.post("/auth/forgot-password")
-def forgot_password(body: ForgotPasswordRequest):
-    email = body.email.strip().lower()
+@rate_limit_auth()
+def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None = Depends(require_csrf)):
+    email = sanitize_email(body.email)
+    client_ip = request.client.host if request and request.client else None
     user = fetch_one(
         "SELECT id FROM users WHERE email = %s AND is_active = TRUE",
         (email,),
@@ -1097,6 +1306,16 @@ def forgot_password(body: ForgotPasswordRequest):
     if user:
         raw_token = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        # Invalidate all previous unused reset tokens for this user before issuing a new one.
+        # This prevents token accumulation and limits the attack window.
+        execute(
+            """
+            UPDATE password_reset_tokens
+            SET used_at = NOW()
+            WHERE user_id = %s AND used_at IS NULL
+            """,
+            (user["id"],),
+        )
         execute(
             """
             INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
@@ -1104,22 +1323,29 @@ def forgot_password(body: ForgotPasswordRequest):
             """,
             (user["id"], token_hash),
         )
+        # DEV_LOG_RESET_TOKENS defaults to false; set to true only in local dev envs.
+        # Never enable in production — tokens grant full account takeover.
         if DEV_LOG_RESET_TOKENS:
             print(f"[DEV] Password reset token for {email}: {raw_token}")
+        log_auth_event("password_reset_requested", user_id=str(user["id"]), email=email, ip=client_ip)
+    else:
+        log_auth_event("password_reset_requested", email=email, ip=client_ip, extra={"user_exists": False})
 
+    # Always return the same generic response regardless of whether the email exists.
     return {"ok": True, "message": "If an account exists for that email, reset instructions were sent."}
 
 
 @api.post("/auth/reset-password")
-def reset_password(body: ResetPasswordRequest):
+@rate_limit_auth()
+def reset_password(request: Request, body: ResetPasswordRequest, user: Dict[str, Any] = Depends(get_current_user), _csrf: None = Depends(require_csrf)):
     raw_token = (body.token or "").strip()
     new_password = body.new_password or ""
-
+    
     if len(raw_token) < 10:
-        raise HTTPException(status_code=400, detail="Invalid token")
-    if len(new_password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    validate_password_complexity(body.new_password, field_name="New password", email=user["email"])
 
+    client_ip = request.client.host if request and request.client else None
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -1136,9 +1362,26 @@ def reset_password(body: ResetPasswordRequest):
                 raise HTTPException(status_code=400, detail="Invalid or expired token")
 
             new_hash = hash_password(new_password)
-            cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, row["user_id"]))
-            cur.execute("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = %s", (row["id"],))
+            # Update password and stamp password_changed_at so existing JWTs issued
+            # before this moment can be detected as stale on next verification.
+            # This is the safest session-invalidation measure available without a
+            # separate token revocation table (see ADDITIONAL FILES NEEDED below).
+            cur.execute(
+                """
+                UPDATE users
+                SET password_hash = %s,
+                    password_changed_at = NOW()
+                WHERE id = %s
+                """,
+                (new_hash, row["user_id"]),
+            )
+            # Mark token as used immediately — single-use enforcement.
+            cur.execute(
+                "UPDATE password_reset_tokens SET used_at = NOW() WHERE id = %s",
+                (row["id"],),
+            )
 
+    log_auth_event("password_reset_complete", user_id=str(row["user_id"]), ip=client_ip)
     return {"ok": True, "message": "Password updated successfully"}
 
 class ChangePasswordRequest(BaseModel):
@@ -1148,16 +1391,39 @@ class ChangePasswordRequest(BaseModel):
 @api.post("/auth/change-password")
 def change_password(
     body: ChangePasswordRequest,
+    request: Request,
     user: Dict[str, Any] = Depends(get_current_user),
+    _csrf: None = Depends(require_csrf),
 ):
-    if len(body.new_password) < 8:
-        raise HTTPException(status_code=422, detail="New password must be at least 8 characters.")
-    if len(body.new_password) > 128:
-        raise HTTPException(status_code=422, detail="Password too long.")
+    validate_password_complexity(body.new_password, field_name="New password", email=user["email"])
     row = fetch_one("SELECT password_hash FROM users WHERE id = %s", (user["id"],))
     if not row or not verify_password(body.current_password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Current password is incorrect.")
-    execute("UPDATE users SET password_hash = %s WHERE id = %s", (hash_password(body.new_password), user["id"]))
+    execute(
+        "UPDATE users SET password_hash = %s, password_changed_at = NOW() WHERE id = %s",
+        (hash_password(body.new_password), user["id"]),
+    )
+    client_ip = request.client.host if request and request.client else None
+    log_auth_event("password_changed", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
+    return {"ok": True}
+
+
+@api.post("/auth/logout")
+def auth_logout(
+    authorization: Optional[str] = Header(default=None),
+    request: Request = None,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    token = _get_bearer_token(authorization)
+    payload = verify_jwt(token)
+    client_ip = request.client.host if request and request.client else None
+    logout_user(
+        jti=str(payload.get("jti") or "") or None,
+        token_exp=float(payload.get("exp")) if payload.get("exp") is not None else None,
+        user_id=str(user["id"]),
+        db_execute=execute,
+        ip=client_ip,
+    )
     return {"ok": True}
 
 # =========================================================
@@ -1652,6 +1918,7 @@ def employee_resolve_ticket(
     ticket_code: str,
     body: EmployeeResolveRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     decision = (body.decision or "").strip().lower()
@@ -1663,10 +1930,15 @@ def employee_resolve_ticket(
             cur.execute(
                 """
                 SELECT
-                  id, ticket_code, status, suggested_resolution
+                  t.id,
+                  t.ticket_code,
+                  t.status,
+                  t.suggested_resolution,
+                  COALESCE(d.name, 'Unassigned') AS department_name
                 FROM tickets
-                WHERE ticket_code = %s
-                  AND assigned_to_user_id = %s
+                LEFT JOIN departments d ON d.id = t.department_id
+                WHERE t.ticket_code = %s
+                  AND t.assigned_to_user_id = %s
                 LIMIT 1;
                 """,
                 (ticket_code, user_id),
@@ -1732,23 +2004,27 @@ def employee_resolve_ticket(
 
             cur.execute(
                 """
-                INSERT INTO ticket_resolution_feedback (
+                INSERT INTO suggested_resolution_usage (
                   ticket_id,
                   employee_user_id,
                   decision,
-                  suggested_resolution,
-                  employee_resolution,
-                  final_resolution
+                  actor_role,
+                  department,
+                  suggested_text,
+                  final_text,
+                  used
                 )
-                VALUES (%s, %s, %s, %s, %s, %s);
+                VALUES (%s, %s, %s, %s, %s, %s, %s);
                 """,
                 (
                     row["id"],
                     user_id,
                     decision,
+                    "employee",
+                    str(existing.get("department_name") or "Unassigned").strip() or "Unassigned",
                     suggested_resolution or None,
-                    (body.final_resolution or "").strip() or None,
                     final_resolution,
+                    decision == "accepted",
                 ),
             )
 
@@ -1797,8 +2073,6 @@ def employee_resolve_ticket(
             "resolved_at": row["resolved_at"],
         },
     )
-    _trigger_resolution_retraining()
-
     return {
         "ok": True,
         "ticketId": row["ticket_code"],
@@ -1817,6 +2091,7 @@ async def employee_upload_attachment(
     ticket_code: str,
     file: UploadFile = File(...),
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     """
     Stores an uploaded file under <UPLOADS_DIR>/<ticket_code>/<filename>
@@ -1833,17 +2108,14 @@ async def employee_upload_attachment(
 
     ticket_id = row["id"]
 
-    safe_name = os.path.basename(file.filename or "attachment").replace(" ", "_")
+    safe_name = _sanitize_filename(file.filename or "attachment")
+    contents = await validate_upload_file(file)
 
     uploads_root = _ensure_uploads_root()
     upload_dir = os.path.join(uploads_root, ticket_code)
     os.makedirs(upload_dir, exist_ok=True)
 
     file_path = os.path.join(upload_dir, safe_name)
-
-    contents = await file.read()
-    if not contents:
-        raise HTTPException(status_code=400, detail="Empty upload")
 
     with open(file_path, "wb") as f_out:
         f_out.write(contents)
@@ -1889,6 +2161,7 @@ def employee_rescore_ticket(
     ticket_code: str,
     body: EmployeeRescoreRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     new_priority = (body.new_priority or "").strip()
@@ -1973,6 +2246,7 @@ def employee_reroute_ticket(
     ticket_code: str,
     body: EmployeeRerouteRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     new_dept_name = (body.new_department or "").strip()
@@ -2111,6 +2385,7 @@ def employee_post_ticket_message(
     ticket_code: str,
     body: TicketMessageRequest,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     text = (body.body or "").strip()
@@ -2231,6 +2506,7 @@ def customer_post_ticket_message(
     ticket_code: str,
     body: TicketMessageRequest,
     user: Dict[str, Any] = Depends(require_customer),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
     text = (body.body or "").strip()
@@ -3047,15 +3323,10 @@ def _dispatch_orchestrator_after_submit(
 
 
 @api.post("/internal/tickets/create")
-def create_internal_ticket_via_gate(
-    body: InternalCreateTicketRequest,
-    background_tasks: BackgroundTasks,
-):
+def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
     """
     Internal ticket creation endpoint for services (e.g., chatbot).
-    Flow: ticket_creation_gate insert -> orchestrator dispatched in background.
-    The orchestrator dispatch is fire-and-forget so this endpoint returns the
-    ticket_id immediately without blocking on the ML pipeline.
+    Flow: ticket_creation_gate insert -> orchestrator dispatch.
     """
     requester = fetch_one("SELECT id FROM users WHERE id = %s LIMIT 1;", (body.created_by_user_id,))
     if not requester:
@@ -3083,20 +3354,20 @@ def create_internal_ticket_via_gate(
             )
 
     ticket_code = created["ticket_code"]
-
-    # Dispatch orchestrator in the background — identical to /customer/tickets.
-    # The synchronous call was blocking for the full ML pipeline duration (60-180 s),
-    # causing the chatbot's TICKET_CREATE_TIMEOUT_SECONDS to fire and surfacing as
-    # a 500 from the chatbot → 503 to the user ("service unavailable").
-    background_tasks.add_task(
-        _dispatch_orchestrator_after_submit,
+    orchestrator_dispatched = dispatch_ticket_to_orchestrator(
         ticket_code=ticket_code,
         details=details,
+        orchestrator_url=ORCHESTRATOR_URL,
+        orchestrator_url_local=ORCHESTRATOR_URL_LOCAL,
         ticket_type=ticket_type,
         subject=subject,
         execution_id=created.get("execution_id"),
     )
-    logger.info("orchestrator_dispatch | queued for internal ticket=%s", ticket_code)
+    if not orchestrator_dispatched:
+        logger.warning(
+            "orchestrator_dispatch | failed for internal ticket=%s",
+            ticket_code,
+        )
 
     return {
         "ok": True,
@@ -3114,6 +3385,7 @@ def create_customer_ticket(
     body: CreateTicketRequest,
     background_tasks: BackgroundTasks,
     user: Dict[str, Any] = Depends(require_customer),
+    _csrf: None = Depends(require_csrf),
 ):
     is_recurring = predict_is_recurring(user_id=user["id"], subject=body.subject, details=body.details)
     model_suggestion = json.dumps({"is_recurring": is_recurring})
@@ -3461,6 +3733,7 @@ def assign_ticket(
     ticket_id: str,
     body: AssignTicketBody,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -3529,6 +3802,7 @@ def manager_resolve_ticket(
     ticket_id: str,
     body: ManagerResolveRequest,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -3629,6 +3903,7 @@ def manager_rescore_ticket(
     ticket_id: str,
     body: ManagerRescoreRequest,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -3726,6 +4001,7 @@ def route_ticket_department(
     ticket_id: str,
     body: RouteTicketBody,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
     user = get_current_user(authorization)
     if user.get("role") != "manager":
@@ -4375,7 +4651,7 @@ def get_manager_trends(
 
     employee_perf = fetch_all(f"SELECT up.full_name AS name, up.employee_code AS emp_id, up.job_title AS role, COUNT(t.id) AS total, COUNT(t.id) FILTER(WHERE t.status='Resolved') AS resolved, COUNT(t.id) FILTER(WHERE t.resolve_breached OR t.respond_breached) AS breached, ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve_mins, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond_mins FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where}{_emp_dept_clause} GROUP BY up.full_name,up.employee_code,up.job_title ORDER BY resolved DESC", _emp_params)
     company_avg = fetch_one(f"SELECT ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond, COUNT(*) FILTER(WHERE t.resolve_breached OR t.respond_breached)::float/NULLIF(COUNT(*),0)*100 AS breach_rate FROM tickets t {dept_join} WHERE {where}", params) or {}
-    acceptance_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) AS total, COUNT(*) FILTER(WHERE trf.decision='accepted') AS accepted, COUNT(*) FILTER(WHERE trf.decision='declined_custom') AS declined FROM ticket_resolution_feedback trf JOIN tickets t ON t.id=trf.ticket_id JOIN user_profiles up ON up.user_id=trf.employee_user_id WHERE t.created_at>=%s AND t.created_at<%s{_acc_dept_clause} GROUP BY up.full_name", _acc_params)
+    acceptance_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) AS total, COUNT(*) FILTER(WHERE sru.decision='accepted') AS accepted, COUNT(*) FILTER(WHERE sru.decision='declined_custom') AS declined FROM suggested_resolution_usage sru JOIN tickets t ON t.id=sru.ticket_id JOIN user_profiles up ON up.user_id=sru.employee_user_id WHERE sru.employee_user_id IS NOT NULL AND sru.decision IS NOT NULL AND t.created_at>=%s AND t.created_at<%s{_acc_dept_clause} GROUP BY up.full_name", _acc_params)
     acceptance_map = {r["name"]:{"total":r["total"],"accepted":r["accepted"],"declined":r["declined"],"rate":round(r["accepted"]/r["total"]*100,1) if r["total"] else 0} for r in acceptance_rows}
     rescore_rows = fetch_all(f"SELECT up.full_name AS name, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority) AS rescored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Low' AND t.priority IN('Medium','High','Critical'))OR(t.model_priority='Medium' AND t.priority IN('High','Critical'))OR(t.model_priority='High' AND t.priority='Critical'))) AS upscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL AND t.priority!=t.model_priority AND((t.model_priority='Critical' AND t.priority IN('Low','Medium','High'))OR(t.model_priority='High' AND t.priority IN('Low','Medium'))OR(t.model_priority='Medium' AND t.priority='Low'))) AS downscored, COUNT(*) FILTER(WHERE t.model_priority IS NOT NULL) AS total_with_model FROM tickets t JOIN user_profiles up ON up.user_id=t.assigned_to_user_id JOIN users u ON u.id=t.assigned_to_user_id LEFT JOIN departments d ON d.id=t.department_id WHERE u.role='employee' AND {where}{_emp_dept_clause} GROUP BY up.full_name", _emp_params)
     rescore_map = {r["name"]:{"rescored":r["rescored"],"upscored":r["upscored"],"downscored":r["downscored"],"totalWithModel":r["total_with_model"],"rescoreRate":round(r["rescored"]/r["total_with_model"]*100,1) if r["total_with_model"] else 0} for r in rescore_rows}
@@ -4790,20 +5066,28 @@ class ChatbotProxyRequest(BaseModel):
 def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
     """
     Internal endpoint called by the orchestrator service.
-    Creates a ticket using the system user account (no JWT required).
-    Relies on Docker-network isolation for security.
+    Creates a ticket on behalf of the submitting user (or any active customer
+    as fallback). No JWT required — relies on Docker-network isolation.
     """
-    system_email = os.getenv("SYSTEM_USER_EMAIL", "customer1@innova.cx")
-
-    row = fetch_one(
-        "SELECT id FROM users WHERE email = %s LIMIT 1",
-        (system_email,),
-    )
+    from api.ticket_creation_gate import create_ticket_via_gate
+    # Resolve the user who submitted the ticket
+    row = None
+    if body.created_by_user_id:
+        row = fetch_one(
+            "SELECT id FROM users WHERE id = %s::uuid LIMIT 1",
+            (body.created_by_user_id,),
+        )
+    if not row:
+        # Fallback: any active customer
+        row = fetch_one(
+            "SELECT id FROM users WHERE role = 'customer' AND is_active = TRUE ORDER BY created_at ASC LIMIT 1",
+            (),
+        )
     if not row:
         raise HTTPException(
             status_code=503,
-            detail=f"System user '{system_email}' not found. "
-                   "Set SYSTEM_USER_EMAIL to a valid user.",
+            detail="No usable customer account found to create ticket. "
+                   "Ensure at least one active customer user exists.",
         )
 
     incoming_ticket_code = (body.ticket_id or "").strip() or None
@@ -4837,6 +5121,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
         "Escalated",
         "Overdue",
         "Resolved",
+        "Review",
     }
     if normalized_status and normalized_status not in allowed_statuses:
         raise HTTPException(status_code=422, detail=f"Invalid status '{normalized_status}'")
@@ -4866,7 +5151,6 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
 
             if not incoming_ticket_code:
                 # ── No ticket_id supplied → create a new ticket ──
-                from api.ticket_creation_gate import create_ticket_via_gate
                 effective_department_id = department_id if (not has_routing_decision or routing_is_confident) else None
                 effective_status = normalized_status or "Open"
                 if has_routing_decision and routing_is_confident:
@@ -4876,7 +5160,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                 created = create_ticket_via_gate(
                     cur,
                     created_by_user_id=str(row["id"]),
-                    ticket_type=ticket_type or "Complaint",
+                    ticket_type=ticket_type,
                     subject=(body.transcript or "")[:120].strip() or "Customer submission",
                     details=body.transcript or "",
                     priority=priority_label,
@@ -4918,7 +5202,8 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         ),
                     )
                 return {
-                    "ticket_id":   created["ticket_code"],
+                    "ticket_id":   str(created["id"]),
+                    "ticket_code": created["ticket_code"],
                     "status":      created["status"],
                     "priority":    created["priority"],
                     "asset_type":  None,
@@ -5130,7 +5415,8 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                         )
 
                     return {
-                        "ticket_id":        updated[0],
+                        "ticket_id":        str(existing[0]),
+                        "ticket_code":      updated[0],
                         "status":           updated[1],
                         "priority":         updated[2],
                         "asset_type":       updated[3],
@@ -5154,7 +5440,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             ticket_source = str(body.ticket_source or "").strip() or (
                 "chatbot" if str(body.created_by_user_id or "").strip() else "orchestrator"
             )
-            normalized_type = ticket_type or "Complaint"
+            normalized_type = ticket_type or None
             initial_priority = priority_label
             initial_status = normalized_status or "Open"
             initial_department_id = department_id
@@ -5168,7 +5454,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
             subject_text = (
                 (body.subject or "").strip()
                 or (body.transcript or "").strip()[:120]
-                or f"Automated {normalized_type.lower()}"
+                or "Automated ticket"
             )
             details_text = (body.transcript or "").strip()
             created = create_ticket_via_gate(
@@ -5219,7 +5505,8 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     )
 
             return {
-                "ticket_id": created.get("ticket_code"),
+                "ticket_id": str(created["id"]) if created.get("id") else created.get("ticket_code"),
+                "ticket_code": created.get("ticket_code"),
                 "status": created.get("status"),
                 "priority": created.get("priority"),
                 "asset_type": requested_asset_type,
@@ -5290,7 +5577,7 @@ def internal_generate_suggested_resolution(ticket_code: str):
 
 
 @api.post("/chatbot/chat")
-async def proxy_chatbot_chat(body: ChatbotProxyRequest):
+async def proxy_chatbot_chat(body: ChatbotProxyRequest, _csrf: None = Depends(require_csrf)):
     """
     Frontend-facing chatbot proxy.
     Keeps chatbot service private behind backend API.
@@ -5309,34 +5596,22 @@ async def proxy_chatbot_chat(body: ChatbotProxyRequest):
         try:
             async with httpx.AsyncClient(timeout=CHATBOT_PROXY_TIMEOUT_SECONDS) as client:
                 response = await client.post(f"{base}/api/chat", json=payload)
-                if response.is_success:
-                    data = response.json()
-                    return {
-                        "session_id": data.get("session_id"),
-                        "response": data.get("response", ""),
-                        "response_type": data.get("response_type", "unknown"),
-                        "show_buttons": data.get("show_buttons", []),
-                        # Backward-compatible key for older UIs.
-                        "reply": data.get("response", ""),
-                    }
-                if 400 <= response.status_code < 500:
-                    # Chatbot returned a client error (4xx).  Forward it directly —
-                    # a different fallback URL won't fix a 4xx, and masking it as 503
-                    # shows "service unavailable" for what is actually a request error.
-                    try:
-                        detail = response.json().get("detail", "Chatbot request error")
-                    except Exception:
-                        detail = "Chatbot request error"
-                    raise HTTPException(status_code=response.status_code, detail=detail)
-                # 5xx from chatbot: service-level error, try the local fallback.
-                last_error = f"chatbot returned HTTP {response.status_code}"
-        except HTTPException:
-            raise  # propagate 4xx client errors directly, don't mask as 503
+                response.raise_for_status()
+                data = response.json()
+                return {
+                    "session_id": data.get("session_id"),
+                    "response": data.get("response", ""),
+                    "response_type": data.get("response_type", "unknown"),
+                    "show_buttons": data.get("show_buttons", []),
+                    # Backward-compatible key for older UIs.
+                    "reply": data.get("response", ""),
+                }
         except Exception as exc:
             last_error = exc
             continue
 
-    raise HTTPException(status_code=503, detail=f"Chatbot service unavailable: {last_error}")
+    logger.warning("chatbot_proxy | all endpoints failed: %s", last_error)
+    raise HTTPException(status_code=503, detail="Chat service is temporarily unavailable. Please try again later.")
 
 
 @api.post("/transcriber/transcribe")
@@ -5374,7 +5649,8 @@ async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
             last_error = exc
             continue
 
-    raise HTTPException(status_code=503, detail=f"Transcriber service unavailable: {last_error}")
+    logger.warning("transcriber_proxy | all endpoints failed: %s", last_error)
+    raise HTTPException(status_code=503, detail="Transcription service is temporarily unavailable. Please try again later.")
 
 
 @api.post("/orchestrator/process/text")
@@ -5426,7 +5702,8 @@ async def proxy_orchestrator_process_text(request: Request):
                 continue
         await asyncio.sleep(0.5 * attempt)
 
-    raise HTTPException(status_code=503, detail=f"Orchestrator service unavailable: {last_error}")
+    logger.warning("orchestrator_proxy | all endpoints failed: %s", last_error)
+    raise HTTPException(status_code=503, detail="Service is temporarily unavailable. Please try again later.")
 
 
 # =========================================================
@@ -5519,6 +5796,102 @@ def get_operator_qc_rerouting(
     except Exception as e:
         logger.error("get_operator_qc_rerouting failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+@api.get("/operator/learning/reroute")
+def get_learning_reroute(
+    department: Optional[str] = Query(None),
+    limit:      int           = Query(200),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Routing correction records from reroute_reference."""
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            sql = """
+                SELECT
+                    r.id, r.ticket_id, r.department,
+                    r.original_dept, r.corrected_dept,
+                    r.source_type, r.decided_by,
+                    r.created_at,
+                    t.ticket_code, t.subject,
+                    u.full_name AS decided_by_name
+                FROM reroute_reference r
+                LEFT JOIN tickets t ON t.id = r.ticket_id
+                LEFT JOIN user_profiles u ON u.user_id = r.decided_by
+            """
+            params: list = []
+            if department and department != "All Departments":
+                sql += " WHERE r.department = %s"
+                params.append(department)
+            sql += " ORDER BY r.created_at DESC LIMIT %s"
+            params.append(limit)
+            cur.execute(sql, params)
+            return [dict(row) for row in cur.fetchall()]
+
+
+@api.get("/operator/learning/rescore")
+def get_learning_rescore(
+    department: Optional[str] = Query(None),
+    limit:      int           = Query(200),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Priority correction records from rescore_reference."""
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            sql = """
+                SELECT
+                    r.id, r.ticket_id, r.department,
+                    r.original_priority, r.corrected_priority,
+                    r.source_type, r.decided_by,
+                    r.created_at,
+                    t.ticket_code, t.subject,
+                    u.full_name AS decided_by_name
+                FROM rescore_reference r
+                LEFT JOIN tickets t ON t.id = r.ticket_id
+                LEFT JOIN user_profiles u ON u.user_id = r.decided_by
+            """
+            params: list = []
+            if department and department != "All Departments":
+                sql += " WHERE r.department = %s"
+                params.append(department)
+            sql += " ORDER BY r.created_at DESC LIMIT %s"
+            params.append(limit)
+            cur.execute(sql, params)
+            return [dict(row) for row in cur.fetchall()]
+
+
+@api.get("/operator/learning/resolution")
+def get_learning_resolution(
+    department: Optional[str] = Query(None),
+    limit:      int           = Query(200),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """Suggested resolution usage records from suggested_resolution_usage."""
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            sql = """
+                SELECT
+                    s.id, s.ticket_id, s.employee_user_id,
+                    s.decision, s.used,
+                    s.suggested_text, s.final_text,
+                    s.created_at,
+                    t.ticket_code, t.subject,
+                    t.department_id,
+                    d.name AS department,
+                    u.full_name AS employee_name
+                FROM suggested_resolution_usage s
+                LEFT JOIN tickets t ON t.id = s.ticket_id
+                LEFT JOIN departments d ON d.id = t.department_id
+                LEFT JOIN user_profiles u ON u.user_id = s.employee_user_id
+            """
+            params: list = []
+            if department and department != "All Departments":
+                sql += " WHERE d.name = %s"
+                params.append(department)
+            sql += " ORDER BY s.created_at DESC LIMIT %s"
+            params.append(limit)
+            cur.execute(sql, params)
+            return [dict(row) for row in cur.fetchall()]
+
 
 @api.get("/operator/analytics/model-health/chatbot")
 def get_operator_chatbot(
@@ -5880,9 +6253,12 @@ def get_operator_complaint_detail(
     )
     feedback = fetch_one(
         """
-        SELECT decision AS feedback_decision, final_resolution
-        FROM ticket_resolution_feedback
-        WHERE ticket_id = %s
+        SELECT
+            CASE WHEN sru.used THEN 'accepted' ELSE 'declined_custom' END AS feedback_decision,
+            sru.final_text AS final_resolution
+        FROM suggested_resolution_usage sru
+        WHERE sru.ticket_id = %s
+        ORDER BY created_at DESC
         LIMIT 1
         """,
         (tid,),
@@ -6029,6 +6405,7 @@ class CreateUserRequest(BaseModel):
 def operator_create_user(
     body: CreateUserRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
+    _csrf: None = Depends(require_csrf),
 ):
     """
     Create a new user (operator-only).
@@ -6058,11 +6435,7 @@ def operator_create_user(
         raise HTTPException(status_code=422, detail=f"Invalid status '{body.status}'.")
 
     raw_password = body.password
-    if not raw_password or len(raw_password) < 8:
-        raise HTTPException(status_code=422, detail="Password must be at least 8 characters.")
-    if len(raw_password) > 128:
-        raise HTTPException(status_code=422, detail="Password too long (max 128 characters).")
-
+    validate_password_complexity(raw_password, field_name="Password", email=email)
     # Hash with bcrypt cost-12
     password_hash = bcrypt.hashpw(
         raw_password.encode("utf-8"), bcrypt.gensalt(rounds=12)
@@ -6253,10 +6626,11 @@ def operator_update_user(
     # Optional password update
     password_hash: Optional[str] = None
     if body.password is not None:
-        if not body.password or len(body.password) < 8:
-            raise HTTPException(status_code=422, detail="Password must be at least 8 characters.")
-        if len(body.password) > 128:
-            raise HTTPException(status_code=422, detail="Password too long (max 128 characters).")
+        validate_password_complexity(
+            body.password,
+            field_name="Password",
+            email=new_email,
+        )
         password_hash = bcrypt.hashpw(
             body.password.encode("utf-8"), bcrypt.gensalt(rounds=12)
         ).decode("utf-8")
@@ -6480,6 +6854,213 @@ async def tts_speak(body: TTSSpeakRequest):
             status_code=503,
             content={"detail": f"TTS unavailable: {exc}"},
         )
+
+
+# =========================================================
+# Internal — pipeline queue notifications
+# (called by orchestrator queue_manager, no user auth)
+# =========================================================
+
+class InternalNotifyOperatorsRequest(BaseModel):
+    ticket_id: Optional[str] = None
+    ticket_code: Optional[str] = None
+    notification_type: Optional[str] = None  # "pipeline_held" or "system"
+    title: str
+    message: str
+
+@api.post("/internal/notify-operators")
+def internal_notify_operators(body: InternalNotifyOperatorsRequest):
+    """Send a notification to all active operators (pipeline_held or system warning)."""
+    notif_type = body.notification_type or "pipeline_held"
+    priority = "Medium" if notif_type == "system" else "High"
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id FROM users WHERE role = 'operator' AND is_active = TRUE")
+                operator_ids = [r["id"] for r in cur.fetchall()]
+                for op_id in operator_ids:
+                    _insert_notification(
+                        cur,
+                        user_id=str(op_id),
+                        notif_type=notif_type,
+                        title=body.title,
+                        message=body.message,
+                        ticket_id=body.ticket_id,
+                        priority=priority,
+                    )
+    except Exception as exc:
+        logger.error("internal_notify_operators | failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"ok": True, "notified": len(operator_ids)}
+
+
+# =========================================================
+# Internal — Review Agent verdict
+# (called by orchestrator ReviewAgent after pipeline completes)
+# =========================================================
+
+class ReviewVerdictRequest(BaseModel):
+    ticket_id: str
+    ticket_code: Optional[str] = None
+    verdict: str  # approved | approved_operator_override | approved_routing_review | held_operator_review
+    priority_label: Optional[str] = None
+    department: Optional[str] = None
+    routing_overridden: bool = False
+    routing_sent_to_review: bool = False
+    review_decision_id: Optional[str] = None
+
+
+@api.post("/internal/review-verdict")
+def internal_review_verdict(body: ReviewVerdictRequest):
+    """
+    Apply the Review Agent's verdict to the ticket.
+
+    - approved:                 no status change needed (ticket already Assigned/Open)
+    - approved_operator_override:
+                                no status change needed; operators are notified separately
+    - approved_routing_review:  mark department_routing.is_confident=FALSE so the
+                                department manager sees it in their review queue
+    - held_operator_review:     set ticket.status='Review' so operators can inspect
+    """
+    ticket_uuid: str | None = None
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Resolve ticket UUID
+                cur.execute(
+                    "SELECT id, ticket_code, status FROM tickets WHERE id = %s::uuid",
+                    (body.ticket_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=404, detail="Ticket not found")
+                ticket_uuid = str(row["id"])
+
+                final_priority = str(body.priority_label or "").strip().lower() or None
+                valid_priority = final_priority in {"low", "medium", "high", "critical"}
+                cur.execute(
+                    "SELECT priority::text, department_id FROM tickets WHERE id = %s::uuid",
+                    (ticket_uuid,),
+                )
+                priority_row = cur.fetchone() or {}
+                previous_ticket_priority = str(priority_row.get("priority") or "")
+
+                if body.verdict == "held_operator_review":
+                    cur.execute(
+                        "UPDATE tickets SET status = 'Review' WHERE id = %s::uuid",
+                        (ticket_uuid,),
+                    )
+                    logger.info(
+                        "review_verdict | ticket=%s verdict=held_operator_review → status=Review",
+                        body.ticket_code or ticket_uuid,
+                    )
+
+                elif body.verdict == "approved_routing_review":
+                    # Mark department routing as low-confidence → manager review queue picks it up
+                    cur.execute(
+                        "UPDATE department_routing SET is_confident = FALSE WHERE ticket_id = %s::uuid",
+                        (ticket_uuid,),
+                    )
+                    # If routing was overridden by Review Agent, update final_department
+                    if body.routing_overridden and body.department:
+                        cur.execute(
+                            """
+                            UPDATE department_routing
+                               SET final_department = %s
+                             WHERE ticket_id = %s::uuid
+                            """,
+                            (body.department, ticket_uuid),
+                        )
+                        # Also update the ticket's department if it changed
+                        cur.execute(
+                            """
+                            UPDATE tickets t
+                               SET department_id = d.id
+                              FROM departments d
+                             WHERE d.name = %s
+                               AND t.id = %s::uuid
+                            """,
+                            (body.department, ticket_uuid),
+                        )
+                    logger.info(
+                        "review_verdict | ticket=%s verdict=approved_routing_review overridden=%s dept=%s",
+                        body.ticket_code or ticket_uuid,
+                        body.routing_overridden,
+                        body.department,
+                    )
+
+                elif body.verdict in {"approved", "approved_operator_override"}:
+                    cur.execute(
+                        """
+                        UPDATE tickets
+                           SET status = CASE
+                               WHEN department_id IS NOT NULL THEN 'Assigned'
+                               ELSE 'Open'
+                           END,
+                               updated_at = now()
+                         WHERE id = %s::uuid
+                        """,
+                        (ticket_uuid,),
+                    )
+
+                # Keep the final ticket row aligned with the last approved pipeline priority.
+                if body.verdict != "held_operator_review" and valid_priority:
+                    final_priority_title = final_priority.capitalize()
+                    cur.execute(
+                        """
+                        UPDATE tickets
+                        SET priority = %s::ticket_priority,
+                            model_priority = %s::ticket_priority,
+                            priority_assigned_at = COALESCE(priority_assigned_at, now()),
+                            updated_at = now()
+                        WHERE id = %s::uuid
+                        """,
+                        (final_priority_title, final_priority_title, ticket_uuid),
+                    )
+                    if previous_ticket_priority.lower() != final_priority:
+                        cur.execute(
+                            """
+                            INSERT INTO ticket_updates (
+                              ticket_id, update_type, message
+                            )
+                            VALUES (%s::uuid, 'priority_change', %s)
+                            """,
+                            (
+                                ticket_uuid,
+                                f"Review Agent finalized priority from {previous_ticket_priority or 'Unknown'} to {final_priority_title}.",
+                            ),
+                        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("review_verdict | failed ticket=%s: %s", body.ticket_id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {"ok": True, "ticket_id": ticket_uuid, "verdict": body.verdict}
+
+
+# =========================================================
+# Operator — delete ticket
+# =========================================================
+
+@api.delete("/operator/tickets/{ticket_id}")
+def operator_delete_ticket(
+    ticket_id: str,
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """
+    Hard-delete a ticket and all related rows (cascades via FK).
+    Also removes the ticket from pipeline_queue if present.
+    """
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT id, ticket_code FROM tickets WHERE id = %s::uuid", (ticket_id,))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Ticket not found")
+            cur.execute("DELETE FROM tickets WHERE id = %s::uuid", (ticket_id,))
+    return {"ok": True, "deleted_ticket_id": ticket_id}
 
 
 # =========================================================

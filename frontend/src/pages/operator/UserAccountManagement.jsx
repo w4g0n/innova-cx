@@ -7,6 +7,8 @@ import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { apiUrl } from "../../config/apiBase";
+import { sanitizeText } from "./Operatorsanitize";
+import { getCsrfToken } from "../../services/api";
 import "./UserAccountManagement.css";
 
 // ── API helpers (same pattern as QualityControl) ───────────────────────────────
@@ -27,12 +29,14 @@ function getStoredToken() {
 
 async function apiFetch(path, options = {}) {
   const token = getStoredToken();
+  const csrf = await getCsrfToken();
   const url = apiUrl(`/api${path}`);
   const res = await fetch(url, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
       ...(options.headers ?? {}),
     },
   });
@@ -152,13 +156,13 @@ export default function UserAccountManagement() {
     }
 
     const payload = {
-      fullName: form.fullName.trim(),
-      email: form.email.trim(),
+      fullName: sanitizeText(form.fullName, 100),
+      email: sanitizeText(form.email, 254),
       phone: form.phoneE164,
-      location: form.location.trim(),
+      location: sanitizeText(form.location, 200),
       password: form.password,
       role: form.role,
-      ...(form.role !== "customer" ? { department: form.department.trim() } : {}),
+      ...(form.role !== "customer" ? { department: sanitizeText(form.department, 100) } : {}),
     };
 
     try {
@@ -166,7 +170,7 @@ export default function UserAccountManagement() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      setToast({ type: "success", message: data?.message ?? "User created successfully." });
+      setToast({ type: "success", message: sanitizeText(data?.message ?? "User created successfully.", 200) });
       setForm({
         fullName: "",
         email: "",
@@ -178,8 +182,8 @@ export default function UserAccountManagement() {
         password: "",
         confirmPassword: "",
       });
-    } catch (err) {
-      setToast({ type: "error", message: err.message || "Failed to create user. Check the backend and network." });
+    } catch {
+      setToast({ type: "error", message: "Failed to create user. Please try again." });
     }
   };
 

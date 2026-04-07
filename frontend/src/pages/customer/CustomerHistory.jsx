@@ -5,30 +5,37 @@ import { getUser, getToken } from "../../utils/auth";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { apiUrl } from "../../config/apiBase";
 import novaLogo from "../../assets/nova-logo.png";
+import {
+  sanitizeText,
+  sanitizeId,
+  sanitizeSearchQuery,
+  formatTimeAgo,
+} from "./sanitize";
 import "./CustomerHistory.css";
 
 const STATUS_KEYS = ["all", "open", "inprogress", "assigned", "resolved", "overdue"];
 const STATUS_LABELS = {
-  all: "All",
-  open: "Open",
+  all:        "All",
+  open:       "Open",
   inprogress: "In Progress",
-  assigned: "Assigned",
-  resolved: "Resolved",
-  overdue: "Overdue",
+  assigned:   "Assigned",
+  resolved:   "Resolved",
+  overdue:    "Overdue",
 };
+
+// Allowlist for sort order values — never trust user-controlled state directly in sort logic
+const ALLOWED_SORT_ORDERS = ["newest", "oldest"];
 
 function normalizeStatus(s = "") {
   return s.toLowerCase().replace(/[\s_-]+/g, "");
 }
 
-function formatTimeAgo(isoString) {
-  if (!isoString) return "";
-  const diff = Math.floor((Date.now() - new Date(isoString)) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
-  return new Date(isoString).toLocaleDateString();
+/**
+ * Safely normalise a ticket field from the API for display.
+ * All ticket data comes from the server — sanitize before rendering.
+ */
+function safeTicketField(val, maxLen = 200) {
+  return sanitizeText(val, maxLen);
 }
 
 export default function CustomerMyTickets() {
@@ -36,48 +43,57 @@ export default function CustomerMyTickets() {
   const [theme, toggleTheme] = useTheme();
   const [user] = useState(() => getUser() || {});
   const profileRef = useRef(null);
-  const notifRef = useRef(null);
+  const notifRef   = useRef(null);
 
-  const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [tickets,      setTickets]      = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState(null);
 
   const [filterStatus, setFilterStatus] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortOrder, setSortOrder] = useState("newest"); // newest | oldest
+  const [searchQuery,  setSearchQuery]  = useState("");
+  const [sortOrder,    setSortOrder]    = useState("newest");
 
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [profileMenuOpen,    setProfileMenuOpen]    = useState(false);
+  const [notifOpen,          setNotifOpen]          = useState(false);
+  const [notifications,      setNotifications]      = useState([]);
+  const [showLogoutConfirm,  setShowLogoutConfirm]  = useState(false);
 
-  const initials = getInitialsFromEmail(user?.email, "U");
+  // Sanitize user-derived display values
+  const initials    = getInitialsFromEmail(user?.email, "U");
   const displayName = useMemo(() => {
-    const name = user?.name || user?.full_name || "";
+    const name  = sanitizeText(user?.name || user?.full_name || "", 100);
     if (name) return name.split(" ")[0];
-    const email = (user?.email || "")
+    const email = sanitizeText(user?.email || "", 254)
       .split("@")[0]
       .replace(/[._\-\d]+/g, " ")
       .trim();
     if (!email) return "User";
-    return email.split(" ")[0].charAt(0).toUpperCase() + email.split(" ")[0].slice(1);
+    return (
+      email.split(" ")[0].charAt(0).toUpperCase() + email.split(" ")[0].slice(1)
+    );
   }, [user]);
 
-  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
 
   // Fetch tickets
   useEffect(() => {
     async function load() {
       try {
         const token = getToken();
-        const res = await fetch(apiUrl("/api/customer/mytickets"), {
+        const res   = await fetch(apiUrl("/api/customer/mytickets"), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error("Failed to load tickets.");
         const data = await res.json();
-        setTickets(data.tickets || []);
+        setTickets(Array.isArray(data.tickets) ? data.tickets : []);
       } catch (e) {
-        setError(e.message);
+        console.error(e);
+        // Use a fixed message — never render raw error.message which can contain
+        // server-side stack traces or injection payloads
+        setError("Unable to load your tickets. Please try again later.");
       } finally {
         setLoading(false);
       }
@@ -90,10 +106,13 @@ export default function CustomerMyTickets() {
     async function loadNotifs() {
       try {
         const token = getToken();
-        const res = await fetch(apiUrl("/api/customer/notifications"), {
+        const res   = await fetch(apiUrl("/api/customer/notifications"), {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.ok) setNotifications((await res.json()).notifications || []);
+        if (res.ok) {
+          const data = await res.json();
+          setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
+        }
       } catch {
         // ignore notification fetch errors (non-critical)
       }
@@ -104,8 +123,10 @@ export default function CustomerMyTickets() {
   // Click-outside to close popovers
   useEffect(() => {
     const handler = (e) => {
-      if (profileRef.current && !profileRef.current.contains(e.target)) setProfileMenuOpen(false);
-      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
+      if (profileRef.current && !profileRef.current.contains(e.target))
+        setProfileMenuOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target))
+        setNotifOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -115,28 +136,28 @@ export default function CustomerMyTickets() {
   const displayedTickets = useMemo(() => {
     let list = [...tickets];
 
-    // Filter by status
     if (filterStatus !== "all") {
       list = list.filter((t) => normalizeStatus(t.status) === filterStatus);
     }
 
-    // Search
+    // sanitizeSearchQuery caps length at 200 and trims
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = sanitizeSearchQuery(searchQuery).toLowerCase();
       list = list.filter(
         (t) =>
-          (t.ticketId || "").toLowerCase().includes(q) ||
-          (t.subject || t.description?.subject || "").toLowerCase().includes(q) ||
-          (t.status || "").toLowerCase().includes(q) ||
-          (t.ticketType || t.type || "").toLowerCase().includes(q)
+          safeTicketField(t.ticketId).toLowerCase().includes(q) ||
+          safeTicketField(t.subject || t.description?.subject).toLowerCase().includes(q) ||
+          safeTicketField(t.status).toLowerCase().includes(q) ||
+          safeTicketField(t.ticketType || t.type).toLowerCase().includes(q)
       );
     }
 
-    // Sort by latest (updatedAt or issueDate), default newest first
+    // Validate sort order against allowlist before using it in comparator
+    const order = ALLOWED_SORT_ORDERS.includes(sortOrder) ? sortOrder : "newest";
     list.sort((a, b) => {
       const da = new Date(a.updatedAt || a.issueDate || 0);
       const db = new Date(b.updatedAt || b.issueDate || 0);
-      return sortOrder === "newest" ? db - da : da - db;
+      return order === "newest" ? db - da : da - db;
     });
 
     return list;
@@ -154,13 +175,28 @@ export default function CustomerMyTickets() {
     }
   };
 
+  const dismissNotification = async (notifId) => {
+    // Optimistically remove from list immediately
+    setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+    // Mark as read on the backend (best-effort)
+    try {
+      const token = getToken();
+      await fetch(
+        apiUrl("/api/customer/notifications?mark_read=true"),
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch { /* non-critical */ }
+  };
+
   const handleLogout = () => {
     setProfileMenuOpen(false);
     setShowLogoutConfirm(true);
   };
 
   const confirmLogout = () => {
-    ["user", "token", "temp_token", "access_token"].forEach((k) => localStorage.removeItem(k));
+    ["user", "token", "temp_token", "access_token"].forEach((k) =>
+      localStorage.removeItem(k)
+    );
     navigate("/");
   };
 
@@ -169,16 +205,37 @@ export default function CustomerMyTickets() {
       {/* TOPBAR */}
       <header className="cs-topbar">
         <div className="cs-topbar-left">
-          <img src={novaLogo} alt="InnovaAI" className="cs-topbar-logo cs-topbar-logo--clickable" onClick={() => navigate("/customer")} style={{cursor:"pointer"}} />
+          <img
+            src={novaLogo}
+            alt="InnovaAI"
+            className="cs-topbar-logo cs-topbar-logo--clickable"
+            onClick={() => navigate("/customer")}
+            style={{ cursor: "pointer" }}
+          />
           <div className="cs-topbar-divider" />
           <span className="cs-topbar-label">My Tickets</span>
-          <button type="button" className="cs-back-btn" onClick={() => navigate("/customer")}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <button
+            type="button"
+            className="cs-back-btn"
+            aria-label="Back to dashboard"
+            onClick={() => navigate("/customer")}
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M19 12H5M12 5l-7 7 7 7" />
             </svg>
             Dashboard
           </button>
         </div>
+
         <div className="cs-topbar-right">
           <ThemeToggleBtn theme={theme} onToggle={toggleTheme} />
 
@@ -187,6 +244,9 @@ export default function CustomerMyTickets() {
             <button
               type="button"
               className={`cl-icon-btn${notifOpen ? " is-active" : ""}`}
+              aria-label="Notifications"
+              aria-haspopup="true"
+              aria-expanded={notifOpen}
               onClick={() => {
                 setNotifOpen((p) => !p);
                 setProfileMenuOpen(false);
@@ -206,23 +266,56 @@ export default function CustomerMyTickets() {
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
-              {unreadCount > 0 && <span className="notifBadge">{unreadCount > 9 ? "9+" : unreadCount}</span>}
+              {unreadCount > 0 && (
+                <span className="notifBadge">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </button>
 
             {notifOpen && (
-              <div className="navPopover">
+              <div className="navPopover" role="menu" aria-label="Notifications">
                 <div className="navPopoverHeader">Notifications</div>
                 <div className="navPopoverList">
                   {notifications.length === 0 ? (
                     <div className="navPopoverEmpty">No notifications</div>
                   ) : (
                     notifications.map((n, i) => (
-                      <div key={i} className={`navPopoverItem${n.read ? "" : " unread"}`}>
+                      <div
+                        key={n.id || i}
+                        className={`navPopoverItem${n.read ? "" : " unread"}`}
+                      >
                         <div className="navPopoverItemHeader">
-                          <span className="navPopoverItemTitle">{n.title || "Update"}</span>
-                          <span className="navPopoverItemTime">{formatTimeAgo(n.createdAt)}</span>
+                          {/* Sanitize server-supplied notification fields before rendering */}
+                          <span className="navPopoverItemTitle">
+                            {sanitizeText(n.title || "Update", 100)}
+                          </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span className="navPopoverItemTime">
+                              {formatTimeAgo(n.timestamp || n.createdAt)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); dismissNotification(n.id); }}
+                              style={{
+                                background: "transparent", border: "none", cursor: "pointer",
+                                color: "var(--muted)", display: "flex", alignItems: "center",
+                                padding: "2px", borderRadius: 4, lineHeight: 1,
+                                transition: "color .15s",
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = "var(--text)"}
+                              onMouseLeave={(e) => e.currentTarget.style.color = "var(--muted)"}
+                              aria-label="Dismiss notification"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                                <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+                              </svg>
+                            </button>
+                          </div>
                         </div>
-                        <div className="navPopoverItemMeta">{n.message || n.body}</div>
+                        <div className="navPopoverItemMeta">
+                          {sanitizeText(n.message || n.body || "", 300)}
+                        </div>
                       </div>
                     ))
                   )}
@@ -236,6 +329,9 @@ export default function CustomerMyTickets() {
             <button
               type="button"
               className={`cl-avatar-btn${profileMenuOpen ? " is-active" : ""}`}
+              aria-label="Account menu"
+              aria-haspopup="true"
+              aria-expanded={profileMenuOpen}
               onClick={() => {
                 setProfileMenuOpen((p) => !p);
                 setNotifOpen(false);
@@ -259,18 +355,27 @@ export default function CustomerMyTickets() {
             </button>
 
             {profileMenuOpen && (
-              <div className="navDropdown">
-                <button type="button" className="navDropdownItem" onClick={() => navigate("/customer/settings")}>
+              <div className="navDropdown" role="menu">
+                <button
+                  type="button"
+                  className="navDropdownItem"
+                  role="menuitem"
+                  onClick={() => navigate("/customer/settings")}
+                >
                   Settings
                 </button>
                 <div className="navDropdownDivider" />
-                <button type="button" className="navDropdownItem danger" onClick={handleLogout}>
+                <button
+                  type="button"
+                  className="navDropdownItem danger"
+                  role="menuitem"
+                  onClick={handleLogout}
+                >
                   Log out
                 </button>
               </div>
             )}
           </div>
-
         </div>
       </header>
 
@@ -288,7 +393,9 @@ export default function CustomerMyTickets() {
           <h1 className="cs-page-title">
             My <span className="cs-grad-text">Tickets</span>
           </h1>
-          <p className="cs-page-sub">All your submitted requests, ordered by most recent activity.</p>
+          <p className="cs-page-sub">
+            All your submitted requests, ordered by most recent activity.
+          </p>
         </div>
       </section>
 
@@ -296,7 +403,6 @@ export default function CustomerMyTickets() {
       <main className="cs-main">
         {/* TOOLBAR */}
         <div className="cmyt-toolbar">
-          {/* Search */}
           <div className="cmyt-search-wrap">
             <svg
               className="cmyt-search-icon"
@@ -317,11 +423,21 @@ export default function CustomerMyTickets() {
               className="cmyt-search-input"
               placeholder="Search tickets…"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                // sanitizeSearchQuery enforced at filter time; cap input here too
+                const v = e.target.value;
+                if (v.length <= 200) setSearchQuery(v);
+              }}
+              maxLength={200}
             />
 
             {searchQuery && (
-              <button type="button" className="cmyt-search-clear" onClick={() => setSearchQuery("")}>
+              <button
+                type="button"
+                className="cmyt-search-clear"
+                aria-label="Clear search"
+                onClick={() => setSearchQuery("")}
+              >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                   <path
                     d="M18 6 6 18M6 6l12 12"
@@ -335,47 +451,26 @@ export default function CustomerMyTickets() {
           </div>
 
           <div className="cmyt-toolbar-right">
-            {/* Sort */}
             <div className="cmyt-sort-group">
-              <button
-                type="button"
-                className={`cmyt-sort-btn${sortOrder === "newest" ? " cmyt-sort-btn--active" : ""}`}
-                onClick={() => setSortOrder("newest")}
-              >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              {ALLOWED_SORT_ORDERS.map((order) => (
+                <button
+                  key={order}
+                  type="button"
+                  className={`cmyt-sort-btn${sortOrder === order ? " cmyt-sort-btn--active" : ""}`}
+                  onClick={() => setSortOrder(order)}
                 >
-                  <path d="M3 4h13M3 8h9M3 12h5M17 4v16M17 20l-4-4M17 20l4-4" />
-                </svg>
-                Newest
-              </button>
-
-              <button
-                type="button"
-                className={`cmyt-sort-btn${sortOrder === "oldest" ? " cmyt-sort-btn--active" : ""}`}
-                onClick={() => setSortOrder("oldest")}
-              >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M3 4h13M3 8h9M3 12h5M17 4v16M17 4l-4 4M17 4l4 4" />
-                </svg>
-                Oldest
-              </button>
+                  {order === "newest" ? (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 4h13M3 8h9M3 12h5M17 4v16M17 20l-4-4M17 20l4-4" />
+                    </svg>
+                  ) : (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 4h13M3 8h9M3 12h5M17 4v16M17 4l-4 4M17 4l4 4" />
+                    </svg>
+                  )}
+                  {order.charAt(0).toUpperCase() + order.slice(1)}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -383,7 +478,10 @@ export default function CustomerMyTickets() {
         {/* STATUS FILTER TABS */}
         <div className="cmyt-tabs">
           {STATUS_KEYS.map((k) => {
-            const count = k === "all" ? tickets.length : tickets.filter((t) => normalizeStatus(t.status) === k).length;
+            const count =
+              k === "all"
+                ? tickets.length
+                : tickets.filter((t) => normalizeStatus(t.status) === k).length;
             return (
               <button
                 key={k}
@@ -426,6 +524,7 @@ export default function CustomerMyTickets() {
               <path d="M12 8v4M12 16h.01" />
             </svg>
             <p className="cmyt-empty-title">Couldn&apos;t load tickets</p>
+            {/* error is set from a fixed internal string — never raw network error text */}
             <p className="cmyt-empty-sub">{error}</p>
           </div>
         ) : displayedTickets.length === 0 ? (
@@ -445,7 +544,9 @@ export default function CustomerMyTickets() {
               <path d="M9 12h6M9 15h4" />
             </svg>
             <p className="cmyt-empty-title">
-              {filterStatus === "all" && !searchQuery ? "No tickets yet" : "No tickets match"}
+              {filterStatus === "all" && !searchQuery
+                ? "No tickets yet"
+                : "No tickets match"}
             </p>
             <p className="cmyt-empty-sub">
               {filterStatus === "all" && !searchQuery
@@ -468,75 +569,95 @@ export default function CustomerMyTickets() {
           </div>
         ) : (
           <div className="cmyt-list">
-            {displayedTickets.map((t, idx) => (
-              <div
-                key={t.ticketId || idx}
-                className="cs-card cmyt-ticket-card"
-                role="button"
-                tabIndex={0}
-                onClick={() => navigate(`/customer/ticket/${t.ticketId}`)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") navigate(`/customer/ticket/${t.ticketId}`);
-                }}
-                style={{ animationDelay: `${idx * 0.04}s` }}
-              >
-                <div className="cmyt-ticket-toprow">
-                  <span className="cmyt-ticket-id">{t.ticketId}</span>
-                  <span className="cmyt-ticket-sep">·</span>
-                  <span className="cmyt-ticket-type">{t.ticketType || t.type}</span>
-                  <span style={{ flex: 1 }} />
-                  <span className={`cs-status cs-status--${normalizeStatus(t.status)}`}>
-                    <span className="cs-status-dot" />
-                    {t.status}
-                  </span>
-                  <span className="cs-priority">{t.priority}</span>
-                </div>
+            {displayedTickets.map((t, idx) => {
+              // Sanitize all ticket fields from the API before rendering
+              const ticketId  = sanitizeId(t.ticketId, 48);
+              const subject   = safeTicketField(t.subject || t.description?.subject || "Untitled Ticket", 200);
+              const status    = safeTicketField(t.status, 40);
+              const ticketType = safeTicketField(t.ticketType || t.type, 60);
+              const statusKey = normalizeStatus(status);
 
-                <h3 className="cmyt-ticket-subject">{t.subject || t.description?.subject || "Untitled Ticket"}</h3>
+              return (
+                <div
+                  key={ticketId || idx}
+                  className="cs-card cmyt-ticket-card"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View ticket ${ticketId}: ${subject}`}
+                  onClick={() => navigate(`/customer/ticket/${encodeURIComponent(ticketId)}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ")
+                      navigate(`/customer/ticket/${encodeURIComponent(ticketId)}`);
+                  }}
+                  style={{ animationDelay: `${idx * 0.04}s` }}
+                >
+                  <div className="cmyt-ticket-toprow">
+                    <span className="cmyt-ticket-id">{ticketId}</span>
+                    <span className="cmyt-ticket-sep">·</span>
+                    <span className="cmyt-ticket-type">{ticketType}</span>
+                    <span style={{ flex: 1 }} />
+                    <span className={`cs-status cs-status--${statusKey}`}>
+                      <span className="cs-status-dot" />
+                      {status}
+                    </span>
+                  </div>
 
-                <div className="cmyt-ticket-footer">
-                  <span className="cmyt-ticket-date">
-                    <svg
-                      width="11"
-                      height="11"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M12 6v6l4 2" />
-                    </svg>
-                    {formatTimeAgo(t.updatedAt || t.issueDate)}
-                  </span>
-                  <span className="cmyt-view-cta">
-                    View details
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M5 12h14M13 6l6 6-6 6" />
-                    </svg>
-                  </span>
+                  <h3 className="cmyt-ticket-subject">{subject}</h3>
+
+                  <div className="cmyt-ticket-footer">
+                    <span className="cmyt-ticket-date">
+                      <svg
+                        width="11"
+                        height="11"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 6v6l4 2" />
+                      </svg>
+                      {/* formatTimeAgo validates the date value before use */}
+                      {formatTimeAgo(t.updatedAt || t.issueDate)}
+                    </span>
+                    <span className="cmyt-view-cta">
+                      View details
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M5 12h14M13 6l6 6-6 6" />
+                      </svg>
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
 
       {/* LOGOUT MODAL */}
       {showLogoutConfirm && (
-        <div className="novaCloseModal" onClick={() => setShowLogoutConfirm(false)}>
-          <div className="novaCloseModalContent" onClick={e => e.stopPropagation()}>
+        <div
+          className="novaCloseModal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm logout"
+          onClick={() => setShowLogoutConfirm(false)}
+        >
+          <div
+            className="novaCloseModalContent"
+            onClick={(e) => e.stopPropagation()}
+          >
             <p>Are you sure you want to log out?</p>
             <div className="novaCloseModalBtns">
               <button onClick={confirmLogout}>Log out</button>

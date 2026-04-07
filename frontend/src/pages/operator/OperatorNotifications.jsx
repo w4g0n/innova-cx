@@ -5,6 +5,13 @@ import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import { apiUrl } from "../../config/apiBase";
+import {
+  sanitizeText,
+  sanitizeId,
+  sanitizeSearchQuery,
+  ALLOWED_NOTIF_FILTERS,
+  MAX_SEARCH_LEN,
+} from "./Operatorsanitize";
 import "./OperatorNotifications.css";
 
 function formatTime(isoString) {
@@ -90,9 +97,15 @@ export default function OperatorNotifications() {
       if (res.status === 401) { navigate("/login"); return; }
       if (!res.ok) throw new Error("Failed to load notifications");
       const data = await res.json();
-      setNotifications(data.notifications || []);
-    } catch (e) {
-      setError(e?.message || "Failed to load notifications.");
+      setNotifications((data.notifications || []).map((n) => ({
+        ...n,
+        title:    sanitizeText(n.title, 200),
+        message:  sanitizeText(n.message, 500),
+        userId:   sanitizeId(n.userId),
+        reportId: sanitizeId(n.reportId),
+      })));
+    } catch {
+      setError("Failed to load notifications. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -137,13 +150,12 @@ export default function OperatorNotifications() {
       });
       showToast("All notifications marked as read");
     } catch (e) {
-      console.error("Failed to mark all notifications as read:", e);
+  console.error("Failed to mark all notifications as read:", e);
     }
   };
 
   const onNotificationClick = async (n) => {
     if (n.read) {
-      // Already read — just navigate if applicable
       if (n.userId)   navigate(`/operator/users`);
       if (n.reportId) navigate(`/operator/model-analysis`);
       return;
@@ -153,7 +165,7 @@ export default function OperatorNotifications() {
       prev.map((x) => (x.id === n.id ? { ...x, read: true } : x))
     );
     try {
-      await fetch(apiUrl(`/api/operator/notifications/${n.id}/read`), {
+      await fetch(apiUrl(`/api/operator/notifications/${encodeURIComponent(sanitizeId(n.id))}/read`), {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -185,16 +197,18 @@ export default function OperatorNotifications() {
         <div className="empNotifs__controls">
           <PillSearch
             value={query}
-            onChange={(v) =>
-              typeof v === "string" ? setQuery(v) : setQuery(v?.target?.value ?? "")
-            }
+            onChange={(v) => {
+              const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
+              setQuery(sanitizeSearchQuery(raw));
+            }}
             placeholder="Search notifications..."
+            maxLength={MAX_SEARCH_LEN}
           />
 
           <div className="empNotifs__filtersRow">
             <PillSelect
               value={filter}
-              onChange={setFilter}
+              onChange={(v) => { if (ALLOWED_NOTIF_FILTERS.includes(v)) setFilter(v); }}
               ariaLabel="Filter notifications"
               options={[
                 { value: "All",        label: "All" },

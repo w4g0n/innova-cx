@@ -5,6 +5,11 @@ import PageHeader from "../../components/common/PageHeader";
 import { apiUrl } from "../../config/apiBase";
 import PillSearch from "../../components/common/PillSearch";
 import PriorityPill from "../../components/common/PriorityPill";
+import {
+  sanitizeId,
+  sanitizeSearchQuery,
+  MAX_SEARCH_LEN,
+} from "./Operatorsanitize";
 import "./AIExplainability.css";
 
 function getStoredToken() {
@@ -94,6 +99,33 @@ function renderFieldValue(value) {
   } catch {
     return String(value);
   }
+}
+
+function getRecurrenceDecision(branch, isRecurring) {
+  if (!isRecurring || !branch || branch === "none") return "Not recurring";
+  if (branch === "A" || branch === "B") return "Matched to an open ticket";
+  if (branch === "C") return "Matched to a recently resolved ticket";
+  if (branch === "D") return "Matched to an older resolved ticket";
+  return "Recurring match found";
+}
+
+function getRecurrenceActionTaken(branch, isRecurring) {
+  if (!isRecurring || !branch || branch === "none") {
+    return "Continued as a new ticket because no similar prior ticket from the same user was found.";
+  }
+  if (branch === "A") {
+    return "Sent a reminder on the existing open ticket and stopped this duplicate submission from continuing in the pipeline.";
+  }
+  if (branch === "B") {
+    return "Sent a reminder on the existing open ticket, increased its priority, and stopped this duplicate submission from continuing in the pipeline.";
+  }
+  if (branch === "C") {
+    return "Reopened the previous ticket with its existing context and resolution history, and stopped this duplicate submission from continuing in the pipeline.";
+  }
+  if (branch === "D") {
+    return "Allowed a new ticket to continue through the pipeline while carrying over context from the older resolved ticket.";
+  }
+  return "Recurring issue handling was applied.";
 }
 
 function KeyValueBlock({ data }) {
@@ -197,6 +229,8 @@ function normalizeStageIO(stage, ticket) {
   }
 
   if (stageName === "RecurrenceAgent") {
+    const isRecurring = asBool(overrides.is_recurring ?? outputState.is_recurring, false);
+    const branch = String(unwrapValue(outputState.recurrence_branch) || "").trim().toUpperCase() || "none";
     const linkedCode =
       unwrapValue(outputState.similar_ticket_code) ||
       unwrapValue(outputState.recurrence_similar_ticket_code) ||
@@ -217,16 +251,12 @@ function normalizeStageIO(stage, ticket) {
     return {
       input: ticketDetailsInput,
       output: {
-        is_recurring: asBool(overrides.is_recurring ?? outputState.is_recurring, false),
-        similar_ticket_code: asBool(overrides.is_recurring ?? outputState.is_recurring, false)
-          ? (overrides.similar_ticket_code || linkedCode)
-          : null,
-        similar_ticket_subject: asBool(overrides.is_recurring ?? outputState.is_recurring, false)
-          ? linkedSubject
-          : null,
-        similarity_score: asBool(overrides.is_recurring ?? outputState.is_recurring, false)
-          ? linkedScore
-          : null,
+        decision: getRecurrenceDecision(branch, isRecurring),
+        action_taken: getRecurrenceActionTaken(branch, isRecurring),
+        is_recurring: isRecurring,
+        similar_ticket_code: isRecurring ? (overrides.similar_ticket_code || linkedCode) : null,
+        similar_ticket_subject: isRecurring ? linkedSubject : null,
+        similarity_score: isRecurring ? linkedScore : null,
         recurrence_reason: unwrapValue(outputState.recurrence_reason) || "",
       },
     };
@@ -250,7 +280,7 @@ function normalizeStageIO(stage, ticket) {
       inputState.sentiment_score_numeric ??
       inputState.text_sentiment ??
       "neutral";
-    const sentimentNormalized = _normalizeSentimentLabel(sentimentRaw);
+    const sentimentNormalized = normalizeSentimentLabel(sentimentRaw);
     const effectiveInput = {
       Safety_Concern: asBool(overrides.safety_concern ?? inputState.safety_concern, false),
       Issue_Severity: asLevel(overrides.issue_severity ?? inputState.issue_severity, "medium"),
@@ -303,15 +333,18 @@ function normalizeStageIO(stage, ticket) {
   };
 }
 
-function _normalizeSentimentLabel(value) {
+const SENTIMENT_NEGATIVE_THRESHOLD = -0.25;
+const SENTIMENT_POSITIVE_THRESHOLD = 0.25;
+
+function normalizeSentimentLabel(value) {
   const s = String(value ?? "").trim().toLowerCase();
   if (s === "negative") return "Negative";
   if (s === "positive") return "Positive";
   if (s === "neutral") return "Neutral";
   const n = Number(value);
   if (!Number.isNaN(n)) {
-    if (n < -0.25) return "Negative";
-    if (n > 0.25) return "Positive";
+    if (n < SENTIMENT_NEGATIVE_THRESHOLD) return "Negative";
+    if (n > SENTIMENT_POSITIVE_THRESHOLD) return "Positive";
   }
   return "Neutral";
 }
@@ -477,6 +510,39 @@ function formatProcessingTimeSeconds(inferenceTimeMs) {
   return `${(value / 1000).toFixed(1)}s`;
 }
 
+function stageUsesFallback(stage) {
+  const out = stage?.outputState || {};
+  const values = Object.values(out).map((value) => String(unwrapValue(value) ?? "").toLowerCase());
+  return values.some(
+    (value) =>
+      value.includes("mock_fallback") ||
+      value.includes("timeout_background") ||
+      value.includes("heuristic_fallback"),
+  );
+}
+
+function getStageVisualStatus(stage) {
+  if (stageUsesFallback(stage)) return "failed";
+  const status = String(stage?.status || "").toLowerCase();
+  if (status) return status;
+  const eventType = String(stage?.eventType || "").toLowerCase();
+  return eventType || "success";
+}
+
+function getStageStatusLabel(stage) {
+  if (stageUsesFallback(stage)) return "Fallback Used";
+  return String(stage?.status || stage?.eventType || "Success");
+}
+
+function compareTicketsByDate(a, b) {
+  const leftTime = new Date(a?.pipelineCompletedAt || a?.createdAt || 0).getTime();
+  const rightTime = new Date(b?.pipelineCompletedAt || b?.createdAt || 0).getTime();
+  if (rightTime !== leftTime) return rightTime - leftTime;
+  const leftCode = String(a?.ticketCode || "");
+  const rightCode = String(b?.ticketCode || "");
+  return leftCode.localeCompare(rightCode, undefined, { numeric: true, sensitivity: "base" });
+}
+
 function stageHasAudio(stage) {
   const inputState = stage?.inputState || {};
   const outputState = stage?.outputState || {};
@@ -490,23 +556,28 @@ function stageHasAudio(stage) {
   return false;
 }
 
+// ── Module-level constants (never recreated on render) ──────────────────────
+
+const STATUS_CLASS = {
+  Open: "ev-status-open",
+  Assigned: "ev-status-assigned",
+  "In Progress": "ev-status-inprogress",
+  Escalated: "ev-status-escalated",
+  Overdue: "ev-status-overdue",
+  Resolved: "ev-status-resolved",
+  Completed: "ev-status-resolved",
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+
 export default function AIExplainability() {
   const navigate = useNavigate();
-  const { ticketCode } = useParams();
+  const { ticketCode: rawTicketCode } = useParams();
+  const ticketCode = sanitizeId(rawTicketCode);
   const detailMode = Boolean(ticketCode);
-  const STATUS_FILTERS = ["Open", "Assigned", "In Progress", "Resolved", "Escalated", "Overdue"];
-  const STATUS_CLASS = {
-    Open: "ev-status-open",
-    Assigned: "ev-status-assigned",
-    "In Progress": "ev-status-inprogress",
-    Escalated: "ev-status-escalated",
-    Overdue: "ev-status-overdue",
-    Resolved: "ev-status-resolved",
-  };
 
-  const [activeStatus, setActiveStatus] = useState("");
   const [ticketList, setTicketList] = useState([]);
-  const [statusCounts, setStatusCounts] = useState({});
+  const [, setStatusCounts] = useState({});
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState("");
   const [ticketSearch, setTicketSearch] = useState("");
@@ -514,7 +585,7 @@ export default function AIExplainability() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [data, setData] = useState(null);
-  const [selectedExecutionId, setSelectedExecutionId] = useState("");
+  const [, setSelectedExecutionId] = useState("");
   const [selectedStageKey, setSelectedStageKey] = useState("");
   const [overrideForm, setOverrideForm] = useState({
     ticketType: "complaint",
@@ -533,16 +604,15 @@ export default function AIExplainability() {
   const [recurrenceResults, setRecurrenceResults] = useState([]);
   const [recurrenceLoading, setRecurrenceLoading] = useState(false);
 
-  async function loadTicketList(statusValue = "") {
+  async function loadTicketList() {
     setListLoading(true);
     setListError("");
     try {
-      const qs = statusValue ? `?status=${encodeURIComponent(statusValue)}` : "";
-      const res = await apiFetch(`/operator/ai-explainability/tickets${qs}`);
+      const res = await apiFetch("/operator/ai-explainability/tickets");
       setTicketList(Array.isArray(res?.items) ? res.items : []);
       setStatusCounts(res?.statusCounts || {});
-    } catch (e) {
-      setListError(e?.message || "Failed to load tickets.");
+    } catch {
+      setListError("Failed to load tickets. Please try again.");
       setTicketList([]);
     } finally {
       setListLoading(false);
@@ -551,44 +621,34 @@ export default function AIExplainability() {
 
   useEffect(() => {
     if (detailMode) return;
-    loadTicketList(activeStatus);
-  }, [activeStatus, detailMode]);
-
-  const executionOptions = useMemo(() => {
-    const arr = Array.isArray(data?.pipelineExecutions) ? data.pipelineExecutions : [];
-    return [...arr].sort((a, b) => {
-      const ta = new Date(a?.startedAt || 0).getTime();
-      const tb = new Date(b?.startedAt || 0).getTime();
-      return tb - ta;
-    });
-  }, [data]);
+    loadTicketList();
+  }, [detailMode]);
 
   const stages = useMemo(() => {
     const arr = Array.isArray(data?.pipelineStages) ? data.pipelineStages : [];
     return [...arr]
-      .filter((s) => !selectedExecutionId || s?.executionId === selectedExecutionId)
       .filter((s) => String(s?.stageName || "") !== "TicketCreationGate")
       .sort((a, b) => {
-      const sa = Number(a?.stepOrder || 0);
-      const sb = Number(b?.stepOrder || 0);
-      if (sa !== sb) return sa - sb;
-      const ta = new Date(a?.createdAt || 0).getTime();
-      const tb = new Date(b?.createdAt || 0).getTime();
-      return ta - tb;
+        const sa = Number(a?.stepOrder || 0);
+        const sb = Number(b?.stepOrder || 0);
+        if (sa !== sb) return sa - sb;
+        const ta = new Date(a?.createdAt || 0).getTime();
+        const tb = new Date(b?.createdAt || 0).getTime();
+        return ta - tb;
       });
-  }, [data, selectedExecutionId]);
+  }, [data]);
 
   const stageMenu = useMemo(() => {
     const byStage = new Map();
     const weight = { output: 3, error: 2, start: 1 };
     const stageOrder = [
+      "RecurrenceAgent",
       "SubjectGenerationAgent",
       "SuggestedResolutionAgent",
       "ClassificationAgent",
       "SentimentAgent",
       "AudioAnalysisAgent",
       "SentimentCombinerAgent",
-      "RecurrenceAgent",
       "FeatureEngineeringAgent",
       "PrioritizationAgent",
       "DepartmentRoutingAgent",
@@ -634,23 +694,30 @@ export default function AIExplainability() {
     return idx >= 0 ? idx + 1 : null;
   }, [selectedStage, stageMenu]);
 
+  const selectedStageVisualStatus = useMemo(
+    () => getStageVisualStatus(selectedStage),
+    [selectedStage],
+  );
+  const selectedStageStatusLabel = useMemo(
+    () => getStageStatusLabel(selectedStage),
+    [selectedStage],
+  );
+
   useEffect(() => {
     if (!data) {
       setSelectedExecutionId("");
       setSelectedStageKey("");
       return;
     }
-    const preferredExecutionId =
-      executionOptions.find((e) => e.executionId === selectedExecutionId)?.executionId ||
-      executionOptions[0]?.executionId ||
-      "";
-    setSelectedExecutionId(preferredExecutionId);
     if (stageMenu.length > 0) {
-      setSelectedStageKey(`${stageMenu[0].stepOrder}-${stageMenu[0].stageName}`);
+      setSelectedStageKey((prev) => {
+        const exists = stageMenu.some((s) => `${s.stepOrder}-${s.stageName}` === prev);
+        return exists ? prev : `${stageMenu[0].stepOrder}-${stageMenu[0].stageName}`;
+      });
     } else {
       setSelectedStageKey("");
     }
-  }, [data, stageMenu, executionOptions, selectedExecutionId]);
+  }, [data, stageMenu]);
 
   async function rerunPipeline() {
     if (!detailTicket?.ticketId) return;
@@ -677,23 +744,23 @@ export default function AIExplainability() {
         setSelectedExecutionId(nextExecutionId);
       }
       setOverrideMsg("Pipeline rerun completed from the beginning.");
-    } catch (e) {
-      setOverrideErr(e?.message || "Failed to rerun pipeline.");
+    } catch {
+      setOverrideErr("Failed to rerun pipeline. Please try again.");
     } finally {
       setRerunBusy(false);
     }
   }
 
-  async function loadTicket(ticketId) {
-    const q = String(ticketId || "").trim();
+  async function loadTicket(code) {
+    const q = sanitizeId(String(code || "").trim());
     if (!q) return;
     setDetailLoading(true);
     setDetailError("");
     try {
       const res = await apiFetch(`/operator/ai-explainability/tickets/${encodeURIComponent(q)}`);
       setData(res);
-    } catch (e) {
-      setDetailError(e?.message || "Failed to load explainability data.");
+    } catch {
+      setDetailError("Failed to load explainability data. Please try again.");
       setData(null);
     } finally {
       setDetailLoading(false);
@@ -709,7 +776,7 @@ export default function AIExplainability() {
     loadTicket(ticketCode);
   }, [detailMode, ticketCode]);
 
-  const detailTicket = data?.ticket || {};
+  const detailTicket = useMemo(() => data?.ticket || {}, [data]);
   const selectedStageIO = useMemo(() => normalizeStageIO(selectedStage, detailTicket), [selectedStage, detailTicket]);
   const stageOutputMap = useMemo(() => {
     const map = {};
@@ -720,7 +787,7 @@ export default function AIExplainability() {
   }, [stageMenu]);
 
   useEffect(() => {
-    if (!data) return;
+    if (!detailTicket?.ticketId) return;
     const classificationOut = stageOutputMap.ClassificationAgent || {};
     const featureOut = stageOutputMap.FeatureEngineeringAgent || {};
     const recurrenceOut = stageOutputMap.RecurrenceAgent || {};
@@ -748,7 +815,7 @@ export default function AIExplainability() {
     });
     setRecurrenceQuery("");
     setRecurrenceResults([]);
-  }, [data, stageOutputMap]);
+  }, [detailTicket, stageOutputMap]);
 
   useEffect(() => {
     setOverrideMsg("");
@@ -821,18 +888,28 @@ export default function AIExplainability() {
           ? `Overrides applied. Priority changed: ${beforePriority} -> ${afterPriority}.`
           : `Overrides applied. Prioritization rerun completed (priority unchanged: ${afterPriority}).`,
       );
-      window.alert(
-        result?.priorityChanged
-          ? `Priority changed: ${beforePriority} -> ${afterPriority}`
-          : `Prioritization rerun completed (priority unchanged: ${afterPriority})`,
-      );
-    } catch (e) {
-      setOverrideErr(e?.message || "Failed to apply overrides.");
+    } catch {
+      setOverrideErr("Failed to apply overrides. Please try again.");
     } finally {
       setOverrideBusy(false);
     }
   }
 
+  async function deleteTicket(ticketId, e) {
+    e?.stopPropagation();
+    if (!window.confirm("Permanently delete this ticket and all its data? This cannot be undone.")) return;
+    try {
+      const token = getStoredToken();
+      const res = await fetch(apiUrl(`/api/operator/tickets/${ticketId}`), {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) { const d = await res.text().catch(() => "Failed"); throw new Error(d); }
+      await loadTicketList();
+    } catch (e) {
+      alert(`Failed to delete ticket: ${e?.message}`);
+    }
+  }
   const modelSelectedSummary = useMemo(() => {
     const classificationOut = stageOutputMap.ClassificationAgent || {};
     const featureOut = stageOutputMap.FeatureEngineeringAgent || {};
@@ -856,38 +933,29 @@ export default function AIExplainability() {
       issueUrgency: asLevel(overrides.issue_urgency ?? featureOut.issue_urgency, "medium"),
       safetyConcern: asBool(overrides.safety_concern ?? featureOut.safety_concern, false),
       isRecurring: asBool(overrides.is_recurring ?? recurrenceOut.is_recurring, false),
-      sentimentScore: _normalizeSentimentLabel(sentimentSource),
+      sentimentScore: normalizeSentimentLabel(sentimentSource),
     };
   }, [stageOutputMap, detailTicket]);
+
+  const visibleTicketList = useMemo(() => {
+    const search = ticketSearch.trim().toLowerCase();
+    return [...ticketList]
+      .sort(compareTicketsByDate)
+      .filter((t) => !search || String(t.ticketCode || "").toLowerCase().includes(search));
+  }, [ticketList, ticketSearch]);
+
 
   return (
     <Layout role="operator">
       <section className="aix-wrap">
-        {!detailMode ? (
+        {!detailMode && (
           <article className="aix-list">
             <PageHeader
               title="AI Explainability"
-              subtitle="Inspect the full ticket pipeline, step-by-step, with stage inputs and outputs."
+              subtitle="Completed tickets only. Inspect the full finished pipeline, step-by-step, with the same stage explanations used in Queue Management."
             />
-            <div className="aix-filters">
-              <button
-                type="button"
-                className={`aix-filter ${activeStatus === "" ? "aix-filter--active" : ""}`}
-                onClick={() => setActiveStatus("")}
-              >
-                All
-              </button>
-              {STATUS_FILTERS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className={`aix-filter ${activeStatus === s ? "aix-filter--active" : ""}`}
-                  onClick={() => setActiveStatus(s)}
-                >
-                  {s}
-                  <span>{statusCounts?.[s] ?? 0}</span>
-                </button>
-              ))}
+            <div className="aix-subtle aix-subtle--top">
+              Showing completed pipeline tickets only. In-flight tickets stay in Queue Management until the run is finished.
             </div>
 
             {listError ? <p className="aix-error">{listError}</p> : null}
@@ -895,8 +963,12 @@ export default function AIExplainability() {
             <section className="search-section-EV-VAC">
               <PillSearch
                 value={ticketSearch}
-                onChange={setTicketSearch}
+                onChange={(v) => {
+                  const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
+                  setTicketSearch(sanitizeSearchQuery(raw));
+                }}
                 placeholder="Search by ticket code..."
+                maxLength={MAX_SEARCH_LEN}
               />
             </section>
 
@@ -912,17 +984,16 @@ export default function AIExplainability() {
                     <th>Assignee</th>
                     <th>Created</th>
                     <th></th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {listLoading ? (
                     <tr><td colSpan={8}>Loading tickets...</td></tr>
-                  ) : ticketList.length === 0 ? (
-                    <tr><td colSpan={8}>No tickets for this filter.</td></tr>
+                  ) : visibleTicketList.length === 0 ? (
+                    <tr><td colSpan={8}>No completed pipeline tickets yet.</td></tr>
                   ) : (
-                    ticketList
-                      .filter((t) => !ticketSearch || String(t.ticketCode || "").toLowerCase().includes(ticketSearch.toLowerCase()))
-                      .map((t) => (
+                    visibleTicketList.map((t) => (
                         <tr key={t.ticketId}>
                           <td>
                             <button
@@ -935,14 +1006,14 @@ export default function AIExplainability() {
                           </td>
                           <td>{t.subject || "—"}</td>
                           <td>
-                            <span className={`ev-status-badge ${STATUS_CLASS[t.status] || "ev-status-assigned"}`}>
-                              {t.status}
+                            <span className={`ev-status-badge ${STATUS_CLASS.Completed || "ev-status-assigned"}`}>
+                              Completed
                             </span>
                           </td>
                           <td>{t.priority ? <PriorityPill priority={t.priority} /> : "—"}</td>
                           <td>{t.department}</td>
                           <td>{t.assignedTo}</td>
-                          <td>{t.createdAt ? new Date(t.createdAt).toLocaleString() : "—"}</td>
+                          <td>{t.pipelineCompletedAt ? new Date(t.pipelineCompletedAt).toLocaleString() : (t.createdAt ? new Date(t.createdAt).toLocaleString() : "—")}</td>
                           <td>
                             <button
                               type="button"
@@ -952,6 +1023,16 @@ export default function AIExplainability() {
                               View Pipeline
                             </button>
                           </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="aix-delete-btn"
+                              title="Delete ticket"
+                              onClick={e => deleteTicket(t.ticketId, e)}
+                            >
+                              Delete
+                            </button>
+                          </td>
                         </tr>
                       ))
                   )}
@@ -959,7 +1040,9 @@ export default function AIExplainability() {
               </table>
             </div>
           </article>
-        ) : (
+        )}
+
+        {detailMode && (
           <>
             <div className="aix-detail-actions">
               <button
@@ -1004,18 +1087,6 @@ export default function AIExplainability() {
                     <div><span className="aix-label">Department</span><div>{detailTicket.department || "Unassigned"}</div></div>
                     <div><span className="aix-label">Pipeline Runs</span><div>{data.pipelineExecutions?.length || 0}</div></div>
                   </div>
-                  {executionOptions.length > 0 ? (
-                    <label className="aix-field">
-                      <span>Selected Pipeline Run</span>
-                      <select value={selectedExecutionId} onChange={(e) => setSelectedExecutionId(e.target.value)}>
-                        {executionOptions.map((execution, index) => (
-                          <option key={execution.executionId} value={execution.executionId}>
-                            Run {executionOptions.length - index} · {execution.startedAt || execution.executionId}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
                   <div className="aix-summary-text">
                     <span className="aix-label">Ticket Subject</span>
                     <div>{detailTicket.description?.subject || data.subject || "—"}</div>
@@ -1127,8 +1198,9 @@ export default function AIExplainability() {
                         <input
                           type="text"
                           value={recurrenceQuery}
-                          onChange={(e) => setRecurrenceQuery(e.target.value)}
+                          onChange={(e) => setRecurrenceQuery(sanitizeSearchQuery(e.target.value))}
                           placeholder="Type ticket code or subject..."
+                          maxLength={MAX_SEARCH_LEN}
                         />
                       </label>
                       {recurrenceLoading ? <div className="aix-subtle">Searching tickets...</div> : null}
@@ -1190,13 +1262,13 @@ export default function AIExplainability() {
                 </article>
 
                 {selectedStage ? (
-                  <article className="aix-stage">
+                  <article className={`aix-stage ${selectedStageVisualStatus === "failed" ? "aix-stage--failed" : ""}`}>
                     <header className="aix-stage-head">
                       <h3>
                         Step {selectedStageDisplayOrder ?? selectedStage.stepOrder}: {selectedStage.stageName}
                       </h3>
-                      <div className={`aix-pill aix-pill--${String(selectedStage.status || "").toLowerCase()}`}>
-                        {selectedStage.eventType} · {selectedStage.status}
+                      <div className={`aix-pill aix-pill--${selectedStageVisualStatus}`}>
+                        {selectedStage.eventType} · {selectedStageStatusLabel}
                       </div>
                     </header>
                     <div className="aix-meta">
@@ -1209,6 +1281,16 @@ export default function AIExplainability() {
                         <span>Audio Provided: {stageHasAudio(selectedStage) ? "Yes" : "No"}</span>
                       ) : null}
                     </div>
+                    {selectedStage.description || selectedStage.explanation ? (
+                      <div className="aix-stage-explainer">
+                        {selectedStage.description ? (
+                          <div className="aix-stage-explainer__description">{selectedStage.description}</div>
+                        ) : null}
+                        {selectedStage.explanation ? (
+                          <div className="aix-stage-explainer__explanation">{selectedStage.explanation}</div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {selectedStage.errorMessage ? <p className="aix-error">Error: {selectedStage.errorMessage}</p> : null}
                     {selectedStage.stageName === "PrioritizationAgent" ? (
                       <div className="aix-formula">

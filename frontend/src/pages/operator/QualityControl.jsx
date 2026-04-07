@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -7,6 +8,11 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 import "./QualityControl.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 import { apiUrl } from "../../config/apiBase";
+import {
+  ALLOWED_TIME_FILTERS,
+  ALLOWED_DEPARTMENTS,
+  ALLOWED_QC_SECTIONS,
+} from "./Operatorsanitize";
 
 function getStoredToken() {
   const direct = localStorage.getItem("access_token") || localStorage.getItem("token") || localStorage.getItem("jwt") || localStorage.getItem("authToken");
@@ -59,15 +65,15 @@ function ProgressBar({ value, max = 100, warn, danger }) {
 }
 
 function EmptyState({ message = "No data for this period." }) {
-  return <div style={{ padding: "1.5rem", color: C.muted, textAlign: "center", fontSize: 14 }}>{message}</div>;
+  return <div className="ma-empty-state">{message}</div>;
 }
 
-function TabLoading() { return <div style={{ padding: "2rem", textAlign: "center", color: C.muted }}>Loading analytics…</div>; }
+function TabLoading() { return <div className="ma-tab-loading">Loading analytics…</div>; }
 function TabError({ message, onRetry }) {
   return (
-    <div style={{ padding: "2rem", textAlign: "center", color: C.red }}>
+    <div className="ma-tab-error">
       {message}<br />
-      <button type="button" style={{ marginTop: 12, cursor: "pointer" }} onClick={onRetry}>Retry</button>
+      <button type="button" className="ma-tab-error__retry" onClick={onRetry}>Retry</button>
     </div>
   );
 }
@@ -233,7 +239,7 @@ function ReroutingView({ data, loading, error, onRetry }) {
               <table className="ma-table">
                 <thead><tr><th>Ticket</th><th>Date</th><th>Department</th><th>Priority</th><th>Override</th><th></th></tr></thead>
                 <tbody>
-                  {reviewCases.slice(0, 20).map((c) => {
+                  {reviewCases.slice(0, REVIEW_CASES_PREVIEW_LIMIT).map((c) => {
                     const reason = c.humanOverridden && c.wasRescored ? "Override + Rescore" : c.humanOverridden ? "Override" : "Rescore";
                     return (
                       <tr key={c.ticketId}>
@@ -256,12 +262,345 @@ function ReroutingView({ data, loading, error, onRetry }) {
   );
 }
 
+const REVIEW_CASES_PREVIEW_LIMIT = 20;
+
 /* Each tab has its own dedicated endpoint */
 const QC_SECTIONS = [
   { id: "acceptance", label: "A — Acceptance", endpoint: "/operator/analytics/qc/acceptance" },
   { id: "rescoring",  label: "B — Rescoring",  endpoint: "/operator/analytics/qc/rescoring"  },
   { id: "rerouting",  label: "C — Rerouting",  endpoint: "/operator/analytics/qc/rerouting"  },
+  { id: "learning",   label: "D — Learning",   endpoint: null },
 ];
+
+const LEARNING_TABLES = [
+  { id: "reroute",    label: "Routing Corrections",  endpoint: "/operator/learning/reroute"     },
+  { id: "rescore",    label: "Priority Corrections",  endpoint: "/operator/learning/rescore"     },
+  { id: "resolution", label: "Suggested Resolution",  endpoint: "/operator/learning/resolution"  },
+];
+
+const SOURCE_LABEL = {
+  manager_review:         "Manager Review",
+  employee_request:       "Employee Request",
+  operator_override:      "Operator Override",
+  manager_routing_review: "Manager Review",
+  approval_rerouting:     "Employee Request",
+  approval_rescoring:     "Rescoring Request",
+  operator_correction:    "Operator Override",
+};
+
+const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
+
+/* ── Row renderers for each table type ─────────────────────── */
+function ExpandedDetail({ tableId, r }) {
+  return (
+    <div className="lrn-expand">
+      {tableId === "reroute" && (
+        <div className="lrn-io">
+          <div className="lrn-io__col">
+            <span className="lrn-io__label">Previous Department</span>
+            <span className="lrn-io__val">{r.original_dept || "—"}</span>
+          </div>
+          <div className="lrn-io__arrow">→</div>
+          <div className="lrn-io__col">
+            <span className="lrn-io__label">New Department</span>
+            <span className="lrn-io__val lrn-io__val--new">{r.corrected_dept || "—"}</span>
+          </div>
+          <div className="lrn-io__col lrn-io__col--right">
+            <span className="lrn-io__label">Source</span>
+            <span className="lrn-io__val">{SOURCE_LABEL[r.source_type] || r.source_type || "—"}</span>
+          </div>
+          {r.decided_by_name && (
+            <div className="lrn-io__col lrn-io__col--right">
+              <span className="lrn-io__label">Decided By</span>
+              <span className="lrn-io__val">{r.decided_by_name}</span>
+            </div>
+          )}
+        </div>
+      )}
+      {tableId === "rescore" && (
+        <div className="lrn-io">
+          <div className="lrn-io__col">
+            <span className="lrn-io__label">Previous Priority</span>
+            <span className="lrn-io__val">{r.original_priority || "—"}</span>
+          </div>
+          <div className="lrn-io__arrow">→</div>
+          <div className="lrn-io__col">
+            <span className="lrn-io__label">New Priority</span>
+            <span className="lrn-io__val lrn-io__val--new">{r.corrected_priority || "—"}</span>
+          </div>
+          <div className="lrn-io__col lrn-io__col--right">
+            <span className="lrn-io__label">Department</span>
+            <span className="lrn-io__val">{r.department || "—"}</span>
+          </div>
+          {r.decided_by_name && (
+            <div className="lrn-io__col lrn-io__col--right">
+              <span className="lrn-io__label">Decided By</span>
+              <span className="lrn-io__val">{r.decided_by_name}</span>
+            </div>
+          )}
+        </div>
+      )}
+      {tableId === "resolution" && (
+        <div className="lrn-res-io">
+          <div className="lrn-res-io__col">
+            <span className="lrn-io__label">Model Suggested</span>
+            <p className="lrn-res-io__text">{r.suggested_text || <em>Not recorded</em>}</p>
+          </div>
+          <div className="lrn-res-io__col">
+            <span className="lrn-io__label">Employee Final</span>
+            <p className="lrn-res-io__text lrn-res-io__text--final">{r.final_text || <em>Not recorded</em>}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RerouteRow({ r, expanded, onToggle }) {
+  return (
+    <div className={`lrn-row lrn-row--clickable${expanded ? " lrn-row--expanded" : ""}`} onClick={onToggle}>
+      <div className="lrn-row__main">
+        <span className="lrn-row__code lrn-row__code--static">{r.ticket_code || "—"}</span>
+        <span className="lrn-row__change">
+          {r.original_dept || "—"} <span className="lrn-arrow">→</span> {r.corrected_dept || "—"}
+        </span>
+        <span className="lrn-row__meta">{SOURCE_LABEL[r.source_type] || r.source_type || "—"} · {fmtDate(r.created_at)}</span>
+        <span className="lrn-row__chevron">{expanded ? "▲" : "▼"}</span>
+      </div>
+      {expanded && <ExpandedDetail tableId="reroute" r={r} />}
+    </div>
+  );
+}
+function RescoreRow({ r, expanded, onToggle }) {
+  return (
+    <div className={`lrn-row lrn-row--clickable${expanded ? " lrn-row--expanded" : ""}`} onClick={onToggle}>
+      <div className="lrn-row__main">
+        <span className="lrn-row__code lrn-row__code--static">{r.ticket_code || "—"}</span>
+        <span className="lrn-row__change">
+          {r.original_priority || "—"} <span className="lrn-arrow">→</span> {r.corrected_priority || "—"}
+        </span>
+        <span className="lrn-row__meta">{r.department || "—"} · {fmtDate(r.created_at)}</span>
+        <span className="lrn-row__chevron">{expanded ? "▲" : "▼"}</span>
+      </div>
+      {expanded && <ExpandedDetail tableId="rescore" r={r} />}
+    </div>
+  );
+}
+function ResolutionRow({ r, expanded, onToggle }) {
+  return (
+    <div className={`lrn-row lrn-row--clickable${expanded ? " lrn-row--expanded" : ""}`} onClick={onToggle}>
+      <div className="lrn-row__main">
+        <span className="lrn-row__code">{r.ticket_code || "—"}</span>
+        <span className={`lrn-decision lrn-decision--${r.decision === "accepted" ? "green" : "amber"}`}>
+          {r.decision || "—"}
+        </span>
+        <span className="lrn-row__meta">{r.department || "—"} · {fmtDate(r.created_at)}</span>
+        <span className="lrn-row__chevron">{expanded ? "▲" : "▼"}</span>
+      </div>
+      {expanded && <ExpandedDetail tableId="resolution" r={r} />}
+    </div>
+  );
+}
+
+/* ── Full table for modal ───────────────────────────────────── */
+function FullTable({ tableId, rows, search, onSearchChange }) {
+  const [expandedId, setExpandedId] = useState(null);
+  const q = search.trim().toLowerCase();
+  const filtered = rows.filter((r) =>
+    !q ||
+    (r.ticket_code || "").toLowerCase().includes(q) ||
+    (r.subject || "").toLowerCase().includes(q) ||
+    (r.department || "").toLowerCase().includes(q) ||
+    (r.decided_by_name || r.employee_name || "").toLowerCase().includes(q)
+  );
+
+  const colCount = tableId === "reroute" ? 7 : tableId === "rescore" ? 8 : 7;
+
+  return (
+    <>
+      <div className="ma-learning-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="search" className="ma-learning-search__input" placeholder="Search…" value={search} onChange={(e) => onSearchChange(e.target.value)} />
+      </div>
+      {filtered.length === 0 ? <EmptyState message="No records found." /> : (
+        <div className="ma-table-wrap">
+          <table className="ma-table">
+            <thead>
+              <tr>
+                <th>Ticket</th>
+                <th>Subject</th>
+                {tableId !== "reroute" && <th>Department</th>}
+                {tableId === "reroute"    && <><th>From</th><th>To</th><th>Source</th><th>By</th></>}
+                {tableId === "rescore"    && <><th>From</th><th>To</th><th>Source</th><th>By</th></>}
+                {tableId === "resolution" && <><th>Decision</th><th>Employee</th></>}
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => {
+                const isExp = expandedId === r.id;
+                return (
+                  <>
+                    <tr key={r.id} className={`ma-tr ma-tr--clickable${isExp ? " ma-tr--expanded" : ""}`}
+                        onClick={() => setExpandedId(isExp ? null : r.id)}>
+                      <td className={tableId === "resolution" ? "ma-td--code" : "ma-td--ticket-static"}>{r.ticket_code || "—"}</td>
+                      <td className="ma-td--subject">{r.subject || "—"}</td>
+                      {tableId === "reroute" && (
+                        <>
+                          <td>{r.original_dept || "—"}</td>
+                          <td><span className="ma-arrow-change">{r.corrected_dept || "—"}</span></td>
+                          <td><span className="ma-source-pill">{SOURCE_LABEL[r.source_type] || r.source_type || "—"}</span></td>
+                          <td>{r.decided_by_name || "—"}</td>
+                        </>
+                      )}
+                      {tableId === "rescore" && (
+                        <>
+                          <td>{r.department || "—"}</td>
+                          <td>{r.original_priority || "—"}</td>
+                          <td><span className="ma-arrow-change">{r.corrected_priority || "—"}</span></td>
+                          <td><span className="ma-source-pill">{SOURCE_LABEL[r.source_type] || r.source_type || "—"}</span></td>
+                          <td>{r.decided_by_name || "—"}</td>
+                        </>
+                      )}
+                      {tableId === "resolution" && (
+                        <>
+                          <td>{r.department || "—"}</td>
+                          <td><span className={`ma-decision-pill ma-decision-pill--${r.decision === "accepted" ? "green" : "amber"}`}>{r.decision || "—"}</span></td>
+                          <td>{r.employee_name || "—"}</td>
+                        </>
+                      )}
+                      <td className="ma-td--muted">{fmtDate(r.created_at)}</td>
+                    </tr>
+                    {isExp && (
+                      <tr key={`${r.id}-exp`} className="ma-tr-detail">
+                        <td colSpan={colCount} style={{ padding: 0 }}>
+                          <ExpandedDetail tableId={tableId} r={r} />
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ── Single learning box ────────────────────────────────────── */
+function LearningBox({ tbl, deptFilter }) {
+  const [rows,    setRows]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
+  const [modal,   setModal]   = useState(false);
+  const [search,  setSearch]  = useState("");
+
+  const [expandedId, setExpandedId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const params = {};
+      if (deptFilter && deptFilter !== "All Departments") params.department = deptFilter;
+      const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v))).toString();
+      const url = apiUrl(`/api${tbl.endpoint}${qs ? `?${qs}` : ""}`);
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${getStoredToken()}` } });
+      if (res.status === 401 || res.status === 403) { window.location.href = "/login"; return; }
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text().catch(() => res.statusText)}`);
+      setRows(await res.json());
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }, [tbl.endpoint, deptFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!modal) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setModal(false);
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [modal]);
+
+  const preview = rows.slice(0, 5);
+
+  return (
+    <>
+      <article className="lrn-box">
+        <div className="lrn-box__header">
+          <h3 className="lrn-box__title">{tbl.label}</h3>
+          {!loading && !error && <span className="lrn-box__count">{rows.length}</span>}
+        </div>
+
+        <div className="lrn-box__body">
+          {loading ? (
+            <div className="lrn-box__loading">Loading…</div>
+          ) : error ? (
+            <div className="lrn-box__error">{error} <button type="button" className="lrn-retry" onClick={load}>Retry</button></div>
+          ) : preview.length === 0 ? (
+            <div className="lrn-box__empty">No records yet</div>
+          ) : (
+            preview.map((r) => {
+              const isExp = expandedId === r.id;
+              const toggle = () => setExpandedId(isExp ? null : r.id);
+              return tbl.id === "reroute"    ? <RerouteRow    key={r.id} r={r} expanded={isExp} onToggle={toggle} /> :
+                     tbl.id === "rescore"    ? <RescoreRow    key={r.id} r={r} expanded={isExp} onToggle={toggle} /> :
+                                               <ResolutionRow key={r.id} r={r} expanded={isExp} onToggle={toggle} />;
+            })
+          )}
+        </div>
+
+        {!loading && !error && rows.length > 0 && (
+          <button type="button" className="lrn-box__all-btn" onClick={() => setModal(true)}>
+            View all {rows.length} records →
+          </button>
+        )}
+      </article>
+
+      {/* Full-table modal */}
+      {modal && createPortal(
+        <div className="lrn-modal-backdrop" onClick={() => setModal(false)}>
+          <div className="lrn-modal" role="dialog" aria-modal="true" aria-label={tbl.label} onClick={(e) => e.stopPropagation()}>
+            <div className="lrn-modal__header">
+              <h2 className="lrn-modal__title">{tbl.label}</h2>
+              <button type="button" className="lrn-modal__close" onClick={() => setModal(false)} aria-label="Close">✕</button>
+            </div>
+            <div className="lrn-modal__body">
+              <FullTable tableId={tbl.id} rows={rows} search={search} onSearchChange={setSearch} />
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+    </>
+  );
+}
+
+function LearningView({ deptFilter }) {
+  return (
+    <div className="ma-view">
+      <div className="lrn-grid">
+        {LEARNING_TABLES.map((tbl) => (
+          <LearningBox key={tbl.id} tbl={tbl} deptFilter={deptFilter} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function QualityControl() {
   const revealRef = useScrollReveal();
@@ -286,8 +625,8 @@ export default function QualityControl() {
     try {
       const data = await apiFetch(section.endpoint, buildParams());
       setTabData((p) => ({ ...p, [sectionId]: data }));
-    } catch (err) {
-      setTabError((p) => ({ ...p, [sectionId]: err.message }));
+    } catch {
+      setTabError((p) => ({ ...p, [sectionId]: "Failed to load data. Please try again." }));
     } finally {
       setTabLoading((p) => ({ ...p, [sectionId]: false }));
     }
@@ -310,9 +649,9 @@ export default function QualityControl() {
           subtitle="Acceptance, rescoring, and rerouting analytics for InnovaCX agents."
           actions={
             <div className="ma-top-actions">
-              <PillSelect value={timeFilter} onChange={handleFilterChange(setTimeFilter)} ariaLabel="Filter by time range"
+              <PillSelect value={timeFilter} onChange={handleFilterChange((v) => { if (ALLOWED_TIME_FILTERS.includes(v)) setTimeFilter(v); })} ariaLabel="Filter by time range"
                 options={[{ label: "Last 7 days", value: "last7days" }, { label: "Last 30 days", value: "last30days" }, { label: "This quarter", value: "quarter" }]} />
-              <PillSelect value={deptFilter} onChange={handleFilterChange(setDeptFilter)} ariaLabel="Filter by department"
+              <PillSelect value={deptFilter} onChange={handleFilterChange((v) => { if (ALLOWED_DEPARTMENTS.includes(v)) setDeptFilter(v); })} ariaLabel="Filter by department"
                 options={[{ label: "All Departments", value: "All Departments" }, { label: "Facilities Management", value: "Facilities Management" }, { label: "Legal & Compliance", value: "Legal & Compliance" }, { label: "Safety & Security", value: "Safety & Security" }, { label: "HR", value: "HR" }, { label: "Leasing", value: "Leasing" }, { label: "Maintenance", value: "Maintenance" }, { label: "IT", value: "IT" }]} />
               <DateRangePicker dateRange={dateRange} onChange={handleDateRangeChange} />
             </div>
@@ -320,7 +659,8 @@ export default function QualityControl() {
         />
         <div className="ma-nav">
           {QC_SECTIONS.map((s) => (
-            <button key={s.id} className={`ma-nav__btn ${activeSection === s.id ? "ma-nav__btn--active" : ""}`} onClick={() => setActiveSection(s.id)} type="button">
+            <button key={s.id} className={`ma-nav__btn ${activeSection === s.id ? "ma-nav__btn--active" : ""}`}
+              onClick={() => { if (ALLOWED_QC_SECTIONS.includes(s.id)) setActiveSection(s.id); }} type="button">
               {s.label}
             </button>
           ))}
@@ -328,6 +668,7 @@ export default function QualityControl() {
         {activeSection === "acceptance" && <AcceptanceView data={tabData.acceptance} loading={!!tabLoading.acceptance} error={tabError.acceptance} onRetry={() => loadTab("acceptance")} />}
         {activeSection === "rescoring"  && <RescoringView  data={tabData.rescoring}  loading={!!tabLoading.rescoring}  error={tabError.rescoring}  onRetry={() => loadTab("rescoring")}  />}
         {activeSection === "rerouting"  && <ReroutingView  data={tabData.rerouting}  loading={!!tabLoading.rerouting}  error={tabError.rerouting}  onRetry={() => loadTab("rerouting")}  />}
+        {activeSection === "learning"   && <LearningView   deptFilter={deptFilter} />}
       </div>
     </Layout>
   );

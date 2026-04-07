@@ -1,0 +1,3 @@
+ALTER TABLE tickets
+    ALTER COLUMN ticket_type DROP NOT NULL,
+    ALTER COLUMN ticket_type DROP DEFAULT;
