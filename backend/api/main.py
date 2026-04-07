@@ -6388,6 +6388,13 @@ def _sanitize_email(value: str) -> str:
         raise HTTPException(status_code=422, detail="Email address too long.")
     return v
 
+def _validate_type(value, expected_type, field: str):
+    if not isinstance(value, expected_type):
+        raise HTTPException(
+            status_code=422,
+            detail=f"{field} must be of type {expected_type.__name__}."
+        )
+    return value
 
 class CreateUserRequest(BaseModel):
     fullName:   str
@@ -6417,6 +6424,20 @@ def operator_create_user(
         raise HTTPException(status_code=403, detail="Only operators can create users.")
 
     # Sanitize & validate
+    # -------- TYPE VALIDATION (NEW - SAFE ADD) --------
+    _validate_type(body.fullName, str,"Full name")
+    _validate_type(body.email, str,"Email")
+    _validate_type(body.phone, str,"Phone")
+    _validate_type(body.location, str,"Location")
+    _validate_type(body.password, str,"Password")
+    _validate_type(body.role, str,"Role")
+
+    if body.department is not None:
+        _validate_type(body.department, str, "Department")
+
+    _validate_type(body.status, str, "Status")
+    # ------------------------------------------------
+
     full_name  = _sanitize_text(body.fullName,   "Full name")
     email      = _sanitize_email(body.email)
     phone      = _sanitize_text(body.phone,      "Phone",      max_len=30)
