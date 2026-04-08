@@ -45,6 +45,9 @@ services:
       # Runtime DB connection uses innovacx_app (least-privilege role),
       # NOT the superuser innovacx_admin.
       DATABASE_URL: postgresql://${APP_DB_USER:-innovacx_app}:${APP_DB_PASSWORD:?APP_DB_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-complaints_db}
+      # Admin URL used ONLY by entrypoint.sh for running schema migrations.
+      # Not used by the application at runtime.
+      DATABASE_ADMIN_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-complaints_db}
       SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-}"
       DISABLE_MFA: "${DISABLE_MFA:-false}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"

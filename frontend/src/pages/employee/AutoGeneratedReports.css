@@ -235,3 +235,13 @@
 @keyframes reportSpin {
   to { transform: rotate(360deg); }
 }
+/* ── Overall Rating KPI card — prevent value overflow ──────────────────
+   "50.0% · Needs Improvement" is longer than other KPI values.
+   clamp() scales font-size responsively so it always fits on one line.  */
+.kpiRow > *:first-child [class*="val"],
+.kpiRow > *:first-child [class*="value"] {
+  font-size: clamp(13px, 1.55vw, 19px) !important;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.25;
+}
