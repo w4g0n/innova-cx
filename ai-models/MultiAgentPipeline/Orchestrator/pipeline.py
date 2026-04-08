@@ -12,31 +12,31 @@ Flow:
             : similarity check; branches A/B/C cancel new ticket; branch D continues
         -> [2] SubjectGenerationAgent / subject_generation_step
             : generate subject when ticket subject is empty
-        -> [3] SuggestedResolutionAgent / suggested_resolution_step
-        -> [4] ClassificationAgent / classifier_step
+        -> [3] ClassificationAgent / classifier_step
             : in-process heuristic; skip if type provided
-        -> [5] SentimentAgent / sentiment_step
-        -> [6] AudioAnalysisAgent / audio_analysis_step
+        -> [4] SentimentAgent / sentiment_step
+        -> [5] AudioAnalysisAgent / audio_analysis_step
             : complaint + audio ticket path
-        -> [7] SentimentCombinerAgent / sentiment_combiner_step
-        -> [8] FeatureEngineeringAgent / feature_engineering_step
-        -> [9] PrioritizationAgent / priority_step (XGBoost/mock fallback)
-        -> [10] DepartmentRoutingAgent / router_step
-        -> [11] ReviewAgent / review_pipeline
+        -> [6] SentimentCombinerAgent / sentiment_combiner_step
+        -> [7] FeatureEngineeringAgent / feature_engineering_step
+        -> [8] PrioritizationAgent / priority_step (XGBoost/mock fallback)
+        -> [9] _mark_routing_pending
+            : signals ReviewAgent to perform department routing via Qwen
+        -> [10] ReviewAgent / review_pipeline
+            : quality gate — validates classification, features, priority,
+              and performs department routing (replaces DepartmentRoutingAgent)
 """
 
 from langchain_core.runnables import RunnableLambda, RunnableSequence
 
+from agents.step01_recurrence.step import check_recurrence
 from agents.step01_subjectgeneration.step import generate_subject
-from agents.step02_suggestedresolution.step import generate_suggested_resolution
 from agents.step03_classifier.step import classify
 from agents.step04_sentimentanalysis.step import analyze_sentiment
 from agents.step05_audioanalysis.step import analyze_audio
 from agents.step06_sentimentcombiner.step import combine_sentiment
-from agents.step01_recurrence.step import check_recurrence
 from agents.step08_featureengineering.step import engineer_features
 from agents.step09_priority.step import score_priority
-from agents.step10_router.step import route_and_store
 from agents.step11_reviewagent.step import review_pipeline
 
 try:
@@ -51,16 +51,29 @@ def _step(name: str, fn, order: int):
     return RunnableLambda(fn)
 
 
+async def _mark_routing_pending(state: dict) -> dict:
+    """
+    Injects department_routing_source = 'mock_fallback' so that ReviewAgent
+    knows no upstream routing step ran and it must perform routing via Qwen.
+    Only sets the flag if not already set by an upstream step.
+    """
+    if not state.get("department_routing_source"):
+        state["department_routing_source"] = "mock_fallback"
+        state["department_selected"] = state.get("department_selected") or "Unknown"
+        state["department"] = state.get("department") or "Unknown"
+        state["department_confidence"] = state.get("department_confidence") or 0.0
+    return state
+
+
 pipeline: RunnableSequence = (
     _step("RecurrenceAgent", check_recurrence, 1)
     | _step("SubjectGenerationAgent", generate_subject, 2)
-    | _step("SuggestedResolutionAgent", generate_suggested_resolution, 3)
-    | _step("ClassificationAgent", classify, 4)
-    | _step("SentimentAgent", analyze_sentiment, 5)
-    | _step("AudioAnalysisAgent", analyze_audio, 6)
-    | _step("SentimentCombinerAgent", combine_sentiment, 7)
-    | _step("FeatureEngineeringAgent", engineer_features, 8)
-    | _step("PrioritizationAgent", score_priority, 9)
-    | _step("DepartmentRoutingAgent", route_and_store, 10)
-    | _step("ReviewAgent", review_pipeline, 11)
+    | _step("ClassificationAgent", classify, 3)
+    | _step("SentimentAgent", analyze_sentiment, 4)
+    | _step("AudioAnalysisAgent", analyze_audio, 5)
+    | _step("SentimentCombinerAgent", combine_sentiment, 6)
+    | _step("FeatureEngineeringAgent", engineer_features, 7)
+    | _step("PrioritizationAgent", score_priority, 8)
+    | _step("RoutingPendingMarker", _mark_routing_pending, 9)
+    | _step("ReviewAgent", review_pipeline, 10)
 )

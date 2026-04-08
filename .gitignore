@@ -15,9 +15,7 @@ build/
 
 # Python
 __pycache__/
-**/__pycache__/
 *.py[cod]
-*.pyc
 *$py.class
 *.so
 .Python
@@ -36,6 +34,7 @@ htmlcov/
 .env.local
 .env.*.local
 *.env
+!backend/.env
 
 # Runtime / temp
 uploads/
@@ -64,6 +63,13 @@ data/synthesizerv7/models/classifier/deberta-v3-base-mnli-fever-anli/
 *.h5
 *.pkl
 *.joblib
+*.safetensors
+*.pt
+# Recurrence model weights (deployed to server, not tracked in git)
+ai-models/MultiAgentPipeline/Orchestrator/agents/step01_recurrence/model/*
+!ai-models/MultiAgentPipeline/Orchestrator/agents/step01_recurrence/model/.gitkeep
+ai-models/MultiAgentPipeline/Orchestrator/agents/step07_recurrence/model/*
+!ai-models/MultiAgentPipeline/Orchestrator/agents/step07_recurrence/model/.gitkeep
 !data/synthesizerv7/models/
 !data/synthesizerv7/models/**
 

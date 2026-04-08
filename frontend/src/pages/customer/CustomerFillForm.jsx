@@ -51,6 +51,9 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
   const [voiceStage,     setVoiceStage]     = useState("idle");
   const [draftTranscript,    setDraftTranscript]    = useState("");
   const [draftAudioFeatures, setDraftAudioFeatures] = useState(null);
+  const [typedTextSnapshot,  setTypedTextSnapshot]  = useState("");
+  const [committedTranscript, setCommittedTranscript] = useState("");
+  const [audioWasCommitted,  setAudioWasCommitted]  = useState(false);
 
   // Validation + submission state
   const [errors,      setErrors]      = useState({});
@@ -145,6 +148,9 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     setVoiceStage("idle");
     setDraftTranscript("");
     setDraftAudioFeatures(null);
+    setTypedTextSnapshot("");
+    setCommittedTranscript("");
+    setAudioWasCommitted(false);
     setErrors({});
     cleanupStream();
   };
@@ -176,7 +182,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
 
     // Final sanitize before sending — trim + hard cap
     const details  = sanitizeTextByWords(message);
-    const wasAudio = mode === "Audio";
+    const wasAudio = audioWasCommitted || mode === "Audio";
 
     try {
       const result = await submitCustomerTicket({
@@ -186,6 +192,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
         asset_type:     "General",
         has_audio:      wasAudio,
         audio_features: wasAudio ? draftAudioFeatures : null,
+        original_text:  audioWasCommitted && committedTranscript ? typedTextSnapshot : undefined,
+        transcript_text: audioWasCommitted && committedTranscript ? committedTranscript : undefined,
         // Sanitize file metadata before sending — never send raw File objects
         attachments: attachments.map((f) => ({
           name:         sanitizeFilename(f.name, 255),
@@ -330,6 +338,9 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
       setVoiceStage("idle");
       return;
     }
+    setTypedTextSnapshot(message);
+    setCommittedTranscript(t);
+    setAudioWasCommitted(true);
     setMessage((prev) => {
       const combined = prev ? `${prev}\n${t}` : t;
       // Enforce the max word cap when appending a transcript.
