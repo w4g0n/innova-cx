@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiUrl } from "../config/apiBase";
 import { getCsrfToken } from "../services/api";
 import "./ForgotPassword.css";
@@ -10,10 +10,6 @@ const validators = {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
     if (!re.test(val)) return "Enter a valid email address.";
     if (val.length > 254) return "Email address is too long.";
-    return null;
-  },
-  token: (val) => {
-    if (!val || !val.trim()) return "Please enter the reset token.";
     return null;
   },
   newPassword: (val, email = "") => {
@@ -56,8 +52,6 @@ const PW_RULES = [
       const local = email.toLowerCase().split("@")[0];
       const letters = local.replace(/[._+\-\d]+/g, "");
       if (letters.length < 4) return true;
-      // Slide a 4-char window across the letter string
-      // Any 4+ consecutive chars from the email found in the password = fail
       for (let i = 0; i <= letters.length - 4; i++) {
         const chunk = letters.slice(i, i + 4);
         if (pw.includes(chunk)) return false;
@@ -243,28 +237,38 @@ function Steps({ current }) {
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Read token from URL — if present, skip straight to step 2
+  const urlToken = searchParams.get("token") || "";
 
   // Step 1
   const [email, setEmail]               = useState("");
   const [sending, setSending]           = useState(false);
-  const [step1Done, setStep1Done]       = useState(false);
+  const [step1Done, setStep1Done]       = useState(!!urlToken); // skip if token in URL
   const [step1Error, setStep1Error]     = useState("");
   const [touchedEmail, setTouchedEmail] = useState(false);
 
   // Step 2
-  const [token, setToken]                     = useState("");
+  const [token]                               = useState(urlToken); // read-only, from URL
   const [newPassword, setNewPassword]         = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword]       = useState(false);
   const [resetting, setResetting]             = useState(false);
   const [resetError, setResetError]           = useState("");
   const [resetDone, setResetDone]             = useState(false);
-  const [touchedStep2, setTouchedStep2]       = useState({ token: false, newPassword: false, confirmPassword: false });
+  const [touchedStep2, setTouchedStep2]       = useState({ newPassword: false, confirmPassword: false });
+
+  // If URL has a token but it looks malformed/short, redirect to step 1
+  useEffect(() => {
+    if (urlToken && urlToken.trim().length < 10) {
+      navigate("/forgot-password", { replace: true });
+    }
+  }, [urlToken, navigate]);
 
   const currentStep = resetDone ? 3 : step1Done ? 2 : 1;
 
   const emailError           = validators.email(email);
-  const tokenError           = validators.token(token);
   const newPasswordError     = validators.newPassword(newPassword, email);
   const confirmPasswordError = validators.confirmPassword(confirmPassword, newPassword);
 
@@ -316,8 +320,8 @@ export default function ForgotPassword() {
 
   const handleReset = async (e) => {
     e.preventDefault();
-    setTouchedStep2({ token: true, newPassword: true, confirmPassword: true });
-    if (tokenError || newPasswordError || confirmPasswordError) return;
+    setTouchedStep2({ newPassword: true, confirmPassword: true });
+    if (newPasswordError || confirmPasswordError) return;
     setResetError("");
     setResetting(true);
     try {
@@ -328,6 +332,7 @@ export default function ForgotPassword() {
           "Content-Type": "application/json",
           ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
+        // token comes from URL state, never from user input
         body: JSON.stringify({ token: token.trim(), new_password: newPassword }),
       });
       const data = await res.json();
@@ -353,7 +358,7 @@ export default function ForgotPassword() {
             type="button"
             className="fpBack"
             aria-label="Back"
-            onClick={() => step1Done && !resetDone ? setStep1Done(false) : navigate(-1)}
+            onClick={() => step1Done && !resetDone && !urlToken ? setStep1Done(false) : navigate(-1)}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" className="fpBackIcon">
               <path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -379,7 +384,7 @@ export default function ForgotPassword() {
           ) : !step1Done ? (
             <>
               <h1 className="fpTitle">Reset Password</h1>
-              <p className="fpSubtitle">Enter your email and we'll send you a reset token.</p>
+              <p className="fpSubtitle">Enter your email and we'll send you a reset link.</p>
               <form onSubmit={handleSend} noValidate>
                 <div className={`fpFormGroup${touchedEmail && emailError ? " fp-field--error" : ""}`}>
                   <label className="fpLabel" htmlFor="fp-email">Email</label>
@@ -420,7 +425,7 @@ export default function ForgotPassword() {
                 )}
 
                 <button className="fpBtn" type="submit" disabled={sending}>
-                  {sending ? "Sending…" : "Verify Your Email"}
+                  {sending ? "Sending…" : "Send Reset Link"}
                 </button>
                 <p className="fpResend">
                   Didn't receive it?{" "}
@@ -432,37 +437,8 @@ export default function ForgotPassword() {
           ) : (
             <>
               <h1 className="fpTitle">New Password</h1>
-              <p className="fpSubtitle">Paste your reset token and choose a new password.</p>
+              <p className="fpSubtitle">Choose a new password for your account.</p>
               <form onSubmit={handleReset} noValidate>
-
-                {/* Token */}
-                <div className={`fpFormGroup${touchedStep2.token && tokenError ? " fp-field--error" : ""}`}>
-                  <label className="fpLabel" htmlFor="fp-token">Reset Token</label>
-                  <div className="fp-input-wrap">
-                    <input
-                      id="fp-token"
-                      name="resetToken"
-                      className="fpInput"
-                      type="text"
-                      placeholder="Paste token here"
-                      value={token}
-                      onChange={(e) => setToken(e.target.value)}
-                      onBlur={() => markStep2("token")}
-                      aria-invalid={touchedStep2.token && !!tokenError}
-                      aria-describedby="fp-token-msg"
-                    />
-                    {touchedStep2.token && tokenError && (
-                      <span className="fp-input-icon" aria-hidden="true">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-                        </svg>
-                      </span>
-                    )}
-                  </div>
-                  <div id="fp-token-msg">
-                    <FieldMessage error={tokenError} touched={touchedStep2.token} />
-                  </div>
-                </div>
 
                 {/* New Password */}
                 <div className={`fpFormGroup${touchedStep2.newPassword && newPasswordError ? " fp-field--error" : ""}`}>
