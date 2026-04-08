@@ -4,7 +4,6 @@ import { apiUrl } from "../config/apiBase";
 import { getCsrfToken } from "../services/api";
 import "./ForgotPassword.css";
 
-/* ── Validation helpers ── */
 const validators = {
   email: (val) => {
     if (!val) return "Please enter your email address.";
@@ -44,7 +43,6 @@ const validators = {
   },
 };
 
-/* ── Password rules (for checklist + strength) ── */
 const PW_RULES = [
   { key: "length",  label: "At least 12 characters",  test: (v)      => v.length >= 12 },
   { key: "upper",   label: "Uppercase letter (A–Z)",   test: (v)      => /[A-Z]/.test(v) },
@@ -89,7 +87,6 @@ function getStrength(val, email) {
   return 5;
 }
 
-/* ── Password strength bar ── */
 function PasswordStrength({ password, email }) {
   if (!password) return null;
   const score = getStrength(password, email);
@@ -113,7 +110,6 @@ function PasswordStrength({ password, email }) {
   );
 }
 
-/* ── Password requirements checklist ── */
 function PasswordRequirements({ password, email }) {
   if (!password) return null;
   return (
@@ -141,7 +137,6 @@ function PasswordRequirements({ password, email }) {
   );
 }
 
-/* ── Inline field message ── */
 function FieldMessage({ error, touched }) {
   if (!touched || !error) return <div className="fp-field-msg-placeholder" />;
   return (
@@ -154,7 +149,6 @@ function FieldMessage({ error, touched }) {
   );
 }
 
-/* ── Starfield ── */
 function Starfield() {
   const ref = useRef(null);
   useEffect(() => {
@@ -224,7 +218,6 @@ function Starfield() {
   return <canvas ref={ref} className="fp-starfield" />;
 }
 
-/* ── Step indicator ── */
 function Steps({ current }) {
   const steps = ["Enter Email", "New Password"];
   return (
@@ -248,7 +241,6 @@ function Steps({ current }) {
   );
 }
 
-/* ── Main component ── */
 export default function ForgotPassword() {
   const navigate = useNavigate();
 
@@ -370,7 +362,6 @@ export default function ForgotPassword() {
 
           <Steps current={currentStep} />
 
-          {/* ── SUCCESS ── */}
           {resetDone ? (
             <div className="fp-success">
               <div className="fp-success-icon">
@@ -386,7 +377,6 @@ export default function ForgotPassword() {
             </div>
 
           ) : !step1Done ? (
-            /* ── STEP 1 ── */
             <>
               <h1 className="fpTitle">Reset Password</h1>
               <p className="fpSubtitle">Enter your email and we'll send you a reset token.</p>
@@ -440,7 +430,6 @@ export default function ForgotPassword() {
             </>
 
           ) : (
-            /* ── STEP 2 ── */
             <>
               <h1 className="fpTitle">New Password</h1>
               <p className="fpSubtitle">Paste your reset token and choose a new password.</p>

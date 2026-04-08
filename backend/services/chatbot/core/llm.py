@@ -22,7 +22,8 @@ CHATBOT_MODEL_PATH = os.environ.get(
     "CHATBOT_MODEL_PATH", str(DEFAULT_CHATBOT_MODEL_PATH)
 ).strip()
 CHATBOT_MODEL_NAME = os.environ.get("CHATBOT_MODEL_NAME", "").strip()
-CHATBOT_AUTO_DOWNLOAD = False
+HF_TOKEN = os.environ.get("HF_TOKEN") or None
+CHATBOT_AUTO_DOWNLOAD = os.environ.get("CHATBOT_AUTO_DOWNLOAD", "false").lower() in {"1", "true", "yes"}
 
 
 _tokenizer = None
@@ -98,6 +99,18 @@ def _init_model_once() -> None:
         return
 
     model_path = Path(CHATBOT_MODEL_PATH)
+    if not (model_path / "config.json").exists() and CHATBOT_AUTO_DOWNLOAD and CHATBOT_MODEL_NAME:
+        try:
+            from huggingface_hub import snapshot_download
+            logger.info("chatbot_llm | downloading model=%s to %s", CHATBOT_MODEL_NAME, CHATBOT_MODEL_PATH)
+            snapshot_download(
+                repo_id=CHATBOT_MODEL_NAME,
+                local_dir=CHATBOT_MODEL_PATH,
+                token=HF_TOKEN,
+            )
+        except Exception as exc:
+            logger.warning("chatbot_llm | auto-download failed (%s), falling back to template mode", exc)
+
     if not (model_path / "config.json").exists():
         logger.warning(
             "chatbot_llm | no local model found at %s (missing config.json), falling back to template mode",
@@ -112,10 +125,11 @@ def _init_model_once() -> None:
         model_name = CHATBOT_MODEL_PATH
         logger.info("chatbot_llm | loading local model %s (quantization=%s)", model_name, QUANTIZATION)
 
-        _tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        _tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN, trust_remote_code=True)
 
         use_cuda = torch.cuda.is_available()
         model_kwargs: dict[str, Any] = {
+            "token": HF_TOKEN,
             "trust_remote_code": True,
             "torch_dtype": torch.bfloat16 if use_cuda else torch.float32,
         }

@@ -1,6 +1,4 @@
-/* =====================================================
-   empNotifs — shared by Employee, Manager, Operator
-   ===================================================== */
+/* empNotifs — shared by Employee, Manager, Operator */
 
 .empNotifs {
   display: flex;

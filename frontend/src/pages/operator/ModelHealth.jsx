@@ -59,7 +59,6 @@ const C = {
   text:   "#1a1a2e", muted: "rgba(26,26,46,0.55)", border: "rgba(64,28,81,0.12)",
 };
 
-// ── Date Range Picker (identical style to QualityControl) ──────────────────
 function DateRangePicker({ dateRange, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -125,7 +124,6 @@ function DateRangePicker({ dateRange, onChange }) {
   );
 }
 
-// ── Shared sub-components ──────────────────────────────────────────────────
 function KpiCard({ label, value, pill, sub, flag }) {
   return (
     <article className={`ma-kpi ${flag ? `ma-kpi--${flag}` : ""}`}>
@@ -179,7 +177,6 @@ function LoadingOrError({ loading, error, onRetry }) {
 
 const renderPctLabel = ({ percent }) => `${(percent * 100).toFixed(0)}%`;
 
-// ── Chatbot Agent View ─────────────────────────────────────────────────────
 function ChatbotAgentView({ data, loading, error, onRetry }) {
   if (loading || error) return <LoadingOrError loading={loading} error={error} onRetry={onRetry} />;
   if (!data) return null;
@@ -243,7 +240,6 @@ function ChatbotAgentView({ data, loading, error, onRetry }) {
   );
 }
 
-// ── Sentiment Agent View ───────────────────────────────────────────────────
 function SentimentAgentView({ data, loading, error, onRetry }) {
   if (loading || error) return <LoadingOrError loading={loading} error={error} onRetry={onRetry} />;
   if (!data) return null;
@@ -319,7 +315,6 @@ function SentimentAgentView({ data, loading, error, onRetry }) {
   );
 }
 
-// ── Feature Agent View ─────────────────────────────────────────────────────
 function FeatureAgentView({ data, loading, error, onRetry }) {
   if (loading || error) return <LoadingOrError loading={loading} error={error} onRetry={onRetry} />;
   if (!data) return null;
@@ -402,14 +397,12 @@ function FeatureAgentView({ data, loading, error, onRetry }) {
   );
 }
 
-// ── Agent tabs config ──────────────────────────────────────────────────────
 const AGENTS = [
   { id: "chatbot",   label: "Chatbot Agent",              endpoint: "/operator/analytics/model-health/chatbot"   },
   { id: "sentiment", label: "Sentiment Agent",            endpoint: "/operator/analytics/model-health/sentiment" },
   { id: "feature",   label: "Feature Engineering Agent",  endpoint: "/operator/analytics/model-health/feature"   },
 ];
 
-// ── Main component ─────────────────────────────────────────────────────────
 export default function ModelHealth() {
   const revealRef = useScrollReveal();
 

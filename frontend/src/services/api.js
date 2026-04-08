@@ -24,7 +24,6 @@ const API_CONFIG = {
     inferServiceBase(8004, "http://localhost:8004"),
 };
 
-// --- CSRF token (fetched once, cached for the page session) ---
 let _csrfToken = null;
 
 export async function getCsrfToken() {

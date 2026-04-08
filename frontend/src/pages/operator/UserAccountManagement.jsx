@@ -11,7 +11,6 @@ import { sanitizeText } from "./Operatorsanitize";
 import { getCsrfToken } from "../../services/api";
 import "./UserAccountManagement.css";
 
-// ── API helpers (same pattern as QualityControl) ───────────────────────────────
 function getStoredToken() {
   const direct =
     localStorage.getItem("access_token") ||
@@ -51,7 +50,6 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
-// ── Config ────────────────────────────────────────────────────────────────────
 const ROLE_OPTIONS = [
   { value: "customer", label: "Customer" },
   { value: "employee", label: "Employee" },
@@ -69,7 +67,6 @@ const DEPARTMENT_OPTIONS = [
   "IT",
 ];
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function isValidEmail(email) {
   return /^\S+@\S+\.\S+$/.test(email);
 }

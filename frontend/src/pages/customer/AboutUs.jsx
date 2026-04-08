@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import "./AboutUs.css";
 import novaLogo from "../../assets/nova-logo.png";
 
-/* ─── Icons ─── */
 const ICONS = {
   mail: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -18,9 +17,6 @@ const ICONS = {
   ),
 };
 
-/* ─────────────────────────────────────────────────
-   PIPELINE DATA
-───────────────────────────────────────────────── */
 const LAYERS = [
   {
     id: "entry", label: "User Entry", color: "#22d3ee", num: "01",
@@ -202,9 +198,6 @@ const ALL_AGENTS = LAYERS.flatMap(l =>
   l.agents.map(a => ({ ...a, layerId: l.id, layerLabel: l.label, layerColor: l.color }))
 );
 
-/* ─────────────────────────────────────────────────
-   FEATURES DATA
-───────────────────────────────────────────────── */
 const FEATURES = [
   {
     icon: (
@@ -274,9 +267,6 @@ const FEATURES = [
   },
 ];
 
-/* ─────────────────────────────────────────────────
-   TEAM
-───────────────────────────────────────────────── */
 const TEAM = [
   { name: "Majid Sharaf",   initials: "MS" },
   { name: "Hamad Subhi",    initials: "HS" },
@@ -287,9 +277,6 @@ const TEAM = [
   { name: "Rami Alassi",    initials: "RA" },
 ];
 
-/* ─────────────────────────────────────────────────
-   ORBIT CANVAS  — pure JS, no CSS positioning bugs
-───────────────────────────────────────────────── */
 function OrbitCanvas() {
   const canvasRef = useRef(null);
 
@@ -399,7 +386,6 @@ function OrbitCanvas() {
   );
 }
 
-/* ─── Privacy Modal ─── */
 function PrivacyModal({ onClose }) {
   return (
     <div className="au-modal-overlay" onClick={onClose}>
@@ -438,9 +424,6 @@ function PrivacyModal({ onClose }) {
   );
 }
 
-/* ─────────────────────────────────────────────────
-   STARFIELD CANVAS
-───────────────────────────────────────────────── */
 function Starfield() {
   const canvasRef = useRef(null);
   useEffect(() => {
@@ -529,9 +512,6 @@ function Starfield() {
   return <canvas ref={canvasRef} className="au-starfield" />;
 }
 
-/* ─────────────────────────────────────────────────
-   SCROLL REVEAL HOOK
-───────────────────────────────────────────────── */
 function useReveal() {
   useEffect(() => {
     const els = document.querySelectorAll(".au-reveal");
@@ -544,9 +524,6 @@ function useReveal() {
   }, []);
 }
 
-/* ─────────────────────────────────────────────────
-   COUNTER
-───────────────────────────────────────────────── */
 function Counter({ end, suffix = "", start }) {
   const [v, setV] = useState(0);
   useEffect(() => {
@@ -563,9 +540,6 @@ function Counter({ end, suffix = "", start }) {
   return <>{v.toLocaleString()}{suffix}</>;
 }
 
-/* ─────────────────────────────────────────────────
-   FEATURE CARD
-───────────────────────────────────────────────── */
 function FeatureCard({ icon, title, desc, detail, delay }) {
   const [open, setOpen] = useState(false);
   return (
@@ -585,9 +559,6 @@ function FeatureCard({ icon, title, desc, detail, delay }) {
   );
 }
 
-/* ─────────────────────────────────────────────────
-   PIPELINE SECTION
-───────────────────────────────────────────────── */
 function Pipeline() {
   const [activeLayer, setActiveLayer] = useState(LAYERS[0].id);
   const [activeAgent, setActiveAgent] = useState(ALL_AGENTS[0]);
@@ -779,9 +750,6 @@ function Pipeline() {
   );
 }
 
-/* ─────────────────────────────────────────────────
-   MAIN COMPONENT
-───────────────────────────────────────────────── */
 const HERO_WORDS = ["Intelligent", "Empathetic", "Precise", "Instant"];
 
 export default function AboutUs() {

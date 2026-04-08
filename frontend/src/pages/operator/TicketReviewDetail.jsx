@@ -63,7 +63,6 @@ const EXEC_COLOR      = { success: "green", failed: "red", running: "amber", ski
 const AGENT_ICONS     = { sentiment: "brain", feature: "settings", routing: "shuffle", priority: "sliders", resolution: "zap", sla: "clock" };
 const UPDATE_ICONS    = { status_change: "refresh-cw", assignment: "user", override: "edit", resolution: "check-circle", comment: "message-circle" };
 
-// ── Inline SVG icon component ─────────────────────────────────────────────────
 function Ico({ name, size = 14, style = {} }) {
   const p = {
     width: size, height: size, viewBox: "0 0 24 24",
@@ -338,7 +337,6 @@ export default function TicketReviewDetail() {
           ← Quality Control
         </button>
 
-        {/* ── HERO ── */}
         <div className="trd-hero">
           <div className="trd-hero__left">
             <div className="trd-hero__top-row">
@@ -391,7 +389,6 @@ export default function TicketReviewDetail() {
           </div>
         </div>
 
-        {/* ── TABS ── */}
         <div className="trd-tabs">
           {TABS.map((tb) => (
             <button
@@ -405,7 +402,6 @@ export default function TicketReviewDetail() {
           ))}
         </div>
 
-        {/* ── TAB: OVERVIEW ── */}
         <TabPanel id="overview" active={tab}>
           <div className="trd-overview">
             <div className="trd-card trd-card--full">
@@ -494,7 +490,6 @@ export default function TicketReviewDetail() {
           </div>
         </TabPanel>
 
-        {/* ── TAB: AI ANALYSIS ── */}
         <TabPanel id="ai" active={tab}>
           <div className="trd-ai">
             {t.humanOverridden && (
@@ -607,7 +602,6 @@ export default function TicketReviewDetail() {
           </div>
         </TabPanel>
 
-        {/* ── TAB: ACTIVITY ── */}
         <TabPanel id="activity" active={tab}>
           <div className="trd-activity">
             {t.ticketUpdates.length === 0 ? (
@@ -639,7 +633,6 @@ export default function TicketReviewDetail() {
           </div>
         </TabPanel>
 
-        {/* ── TAB: RESOLUTION ── */}
         <TabPanel id="resolution" active={tab}>
           <div className="trd-resolution">
             <div className="trd-card trd-card--full">

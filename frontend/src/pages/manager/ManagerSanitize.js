@@ -1,15 +1,12 @@
-// ─── Manager sanitize.js ──────────────────────────────────────────────────────
 // Shared input-sanitization helpers for all Manager pages.
 // Mirror of the employee-side utility, adapted to manager-specific constants.
 
-// ── Length constants ──────────────────────────────────────────────────────────
 export const MAX_SEARCH_LEN      = 200;   // PillSearch / search inputs
 export const MAX_REASON_LEN      = 2000;  // reroute / rescore / escalate reason
 export const MAX_RESOLUTION_LEN  = 5000;  // final resolution text
 export const MAX_NAME_LEN        = 100;   // display names
 export const MAX_EMAIL_LEN       = 254;   // RFC 5321
 
-// ── Allowed-value sets ────────────────────────────────────────────────────────
 export const ALLOWED_PRIORITIES = ["Low", "Medium", "High", "Critical"];
 
 // Status filters used across complaints list
@@ -34,8 +31,6 @@ export const ALLOWED_SORT_KEYS = [
   "ticket_code", "priority", "assignee", "issueDate",
   "respondTime", "resolveTime", "source",
 ];
-
-// ── Core helpers ──────────────────────────────────────────────────────────────
 
 /**
  * Trim and truncate a string. Strips leading/trailing whitespace.

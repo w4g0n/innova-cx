@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { sendChatMessage } from "../../services/api";
+import { limitWords, sanitizeTextByWords, MAX_TEXT_WORDS } from "./sanitize";
 
 const SESSION_KEY = "chatbot_session_id";
 
@@ -52,7 +53,7 @@ export default function useNovaChatbot({ onGoToForm, onTicketCreated } = {}) {
   const pushUser = (t) => {
     setMessages((prev) => [
       ...prev,
-      { id: `u-${Date.now()}`, from: "user", text: t },
+      { id: `u-${Date.now()}`, from: "user", text: sanitizeTextByWords(t) },
     ]);
   };
 
@@ -87,7 +88,7 @@ export default function useNovaChatbot({ onGoToForm, onTicketCreated } = {}) {
   };
 
   const handleSend = async (value) => {
-    const t = value.trim();
+    const t = limitWords(value, MAX_TEXT_WORDS).trim();
     if (!t) return;
 
     pushUser(t);
