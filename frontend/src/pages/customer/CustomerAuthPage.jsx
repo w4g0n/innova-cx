@@ -6,7 +6,7 @@ import { getCsrfToken } from "../../services/api";
 import "./CustomerAuthPage.css";
 
 // Allowed role values — anything else redirects to "/"
-const ALLOWED_ROLES = ["customer", "employee", "manager", "admin"];
+const ALLOWED_ROLES = ["customer", "employee", "manager", "operator"];
 
 export default function CustomerAuthPage() {
   const navigate = useNavigate();

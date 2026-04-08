@@ -14,6 +14,9 @@ import {
   sanitizeText,
   sanitizeId,
   formatTimeAgo,
+  limitWords,
+  sanitizeTextByWords,
+  MAX_TEXT_WORDS,
 } from "./sanitize";
 
 // Static lookup maps — never derived from server data
@@ -178,6 +181,17 @@ export default function CustomerLanding() {
       if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
     };
   }, [fetchRecentTicket]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const el  = document.documentElement;
+      const max = el.scrollHeight - el.clientHeight;
+      const pct = max > 0 ? (el.scrollTop / max) * 100 : 0;
+      document.documentElement.style.setProperty("--scroll-pct", `${pct.toFixed(1)}%`);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     if (!recentTicket || hasUsableSubject(recentTicket)) return undefined;
@@ -381,7 +395,7 @@ export default function CustomerLanding() {
         else interim += chunk;
       }
       // Sanitize SpeechRecognition output — browser APIs can return arbitrary text
-      const raw = sanitizeText((finalText || interim || "").trim(), 5000);
+      const raw = sanitizeTextByWords((finalText || interim || "").trim());
       setVoiceDraft(raw);
     };
     rec.onerror = () => { setVoiceActive(false); setVoiceBusy(false); };
@@ -401,7 +415,7 @@ export default function CustomerLanding() {
     const t = (voiceDraft || "").trim();
     if (!t) { cancelVoice(); return; }
     // voiceDraft is already sanitized in onresult
-    setText((prev) => (prev ? `${prev} ${t}` : t));
+    setText((prev) => limitWords(prev ? `${prev} ${t}` : t, MAX_TEXT_WORDS));
     cancelVoice();
   };
 
@@ -578,7 +592,7 @@ export default function CustomerLanding() {
               <span className="cl-greeting-name">{firstName}.</span>
             </h1>
             <p className="cl-greeting-sub">
-              Welcome back to your InnovaAI dashboard. How can we help you today?
+              Welcome back to your InnovaCX dashboard. How can we help you today?
             </p>
           </div>
 
@@ -1029,12 +1043,10 @@ export default function CustomerLanding() {
                     <input
                       value={text}
                       onChange={(e) => {
-                        // Cap input length client-side
                         const v = e.target.value;
-                        if (v.length <= 5000) setText(v);
+                        setText(limitWords(v, MAX_TEXT_WORDS));
                       }}
                       placeholder="Type a message…"
-                      maxLength={5000}
                     />
                     <button type="submit">Send</button>
                   </form>

@@ -29,7 +29,7 @@
 
 .kpiRow {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 22px;
 }
@@ -68,9 +68,9 @@
 .trendBars {
   display: flex;
   align-items: flex-end;
-  gap: 14px;
+  gap: 10px;
   height: 180px;
-  margin-top: 32px;
+  margin-top: 8px;
   margin-bottom: 0;
   padding: 0 4px;
 }
@@ -82,35 +82,67 @@
   align-items: center;
   justify-content: flex-end;
   height: 100%;
-  gap: 6px;
+  gap: 5px;
+}
+
+.trendBarWrapper--yearStart {
+  border-left: 1px dashed rgba(124, 58, 237, 0.25);
+  padding-left: 6px;
+  margin-left: 4px;
 }
 
 .trendBar {
   width: 100%;
   background: linear-gradient(180deg, var(--btn-primary), var(--sidebar-bg));
-  border-radius: 10px;
+  border-radius: 8px;
   transition: 0.25s ease-in-out;
   min-height: 4px;
 }
 
 .trendBar:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 22px rgba(64, 28, 81, 0.35);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(64, 28, 81, 0.3);
 }
 
 .trendValue {
-  font-size: 14px;
-  font-weight: 750;
-  color: rgba(17, 17, 17, 0.7);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(17, 17, 17, 0.65);
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .trendLabels {
   display: flex;
   justify-content: space-between;
-  margin-top: 12px;
-  font-size: 12px;
+  margin-top: 10px;
+  padding: 0 4px;
+}
+
+.trendLabelCol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.trendLabelMonth {
+  font-size: 11px;
   font-weight: 600;
   color: rgba(17, 17, 17, 0.60);
+  line-height: 1;
+}
+
+.trendLabelYear {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--btn-primary);
+  background: rgba(124, 58, 237, 0.08);
+  border-radius: 4px;
+  padding: 1px 4px;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .categoryList {
@@ -212,6 +244,9 @@
 
 @media (max-width: 1200px) {
   .kpiRow {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .kpiRow--6 {
     grid-template-columns: repeat(3, 1fr);
   }
 }

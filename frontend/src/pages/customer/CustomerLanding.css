@@ -316,3 +316,41 @@
   }
   .navPopoverList { max-height: 60vh; }
 }
+/* ── SCROLL PROGRESS ───────────────────────────────────────── */
+.cl-topbar::before {
+  content: "";
+  position: absolute;
+  bottom: -1px;          /* sits on top of the border-bottom */
+  left: 0;
+  height: 2px;
+  width: var(--scroll-pct, 0%);
+  background: linear-gradient(90deg, var(--orchid), var(--fuchsia), var(--pink));
+  transition: width .08s linear;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ── QUICK CARD — shimmer line + tightened arrow ───────────── */
+.cl-quick-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(192,132,252,.6), transparent);
+  opacity: 0;
+  transition: opacity .28s var(--ease);
+  pointer-events: none;
+}
+.cl-quick-card:hover::after {
+  opacity: 1;
+}
+
+/* Tighten the arrow slide */
+.cl-quick-arrow {
+  transition: transform .18s var(--ease), color .18s var(--ease);
+}
+.cl-quick-card:hover .cl-quick-arrow {
+  transform: translateX(6px);
+}

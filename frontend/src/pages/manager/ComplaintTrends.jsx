@@ -387,14 +387,6 @@ export default function ComplaintTrends() {
     return (apiData?.bars || []).map((b) => ({ ...b, pct: Math.round((b.value / max) * 100) }));
   }, [apiData]);
 
-  const maxEscalation = useMemo(
-    () => Math.max(...(B?.escalationByDept || []).map((d) => d.rate), 1),
-    [B]
-  );
-  const maxBreachDept = useMemo(
-    () => Math.max(...(B?.breachByDept || []).map((d) => d.breachRate), 1),
-    [B]
-  );
 
   if (loading) return <Layout role="manager"><div className="mgrTrends"><div className="ct-loading">Loading analytics…</div></div></Layout>;
   if (error)   return <Layout role="manager"><div className="mgrTrends"><div className="ct-error">{error}</div></div></Layout>;
@@ -464,77 +456,66 @@ export default function ComplaintTrends() {
               <KpiCard label="Avg Response" value={apiData.kpis.response} />
               <KpiCard label="Avg Resolve" value={apiData.kpis.resolve} />
               <KpiCard label="Top Department" value={apiData.kpis.topCategory} />
-              <KpiCard label="Repeat Rate" value={apiData.kpis.repeat} />
             </section>
 
-            <div className="ct-grid2">
-              {/* A1 — Complaint vs Inquiry */}
-              <div className="card">
-                <h2 className="cardTitle">Complaint vs Inquiry Volume</h2>
-                <p className="ct-cardDesc">Daily count of complaints (solid) vs inquiries (dashed). Spikes indicate systemic events worth investigating.</p>
-                <DualLineChart
-                  data={A?.complaintVsInquiry || []}
-                  h1Key="complaints" h2Key="inquiries"
-                  h1Label="Complaints" h2Label="Inquiries"
-                  h1Color="#7c3aed" h2Color="#06b6d4"
-                />
-              </div>
-
-              {/* A2 — Daily volume with rolling avg */}
-              <div className="card">
-                <h2 className="cardTitle">Daily Volume + 7-Day Rolling Average</h2>
-                <p className="ct-cardDesc">Bars represent daily total. The rolling line smooths noise so trend direction is clear.</p>
-                <div className="ct-volBars">
-                  {(A?.dailyVolume || []).map((d) => {
-                    const maxV = Math.max(...(A?.dailyVolume || []).map((x) => x.count), 1);
-                    return (
-                      <div key={d.day} className="ct-volBar" title={`${d.day}: ${d.count}`}>
-                        <div className="ct-volBar__fill" style={{ height: `${(d.count / maxV) * 100}%` }} />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* A3 — Complaint Category Breakdown */}
+            {/* A1 — Complaint vs Inquiry */}
             <div className="card">
-              <h2 className="cardTitle">Complaint Volume by Month</h2>
-              <div className="trendBars">
-                {legacyBars.map((b) => (
-                  <div key={b.label} className="trendBar" style={{ height: `${b.pct}%` }}>
-                    <span className="trendValue">{b.value}</span>
+              <h2 className="cardTitle">Complaint vs Inquiry Volume</h2>
+              <p className="ct-cardDesc">Daily count of complaints (solid) vs inquiries (dashed). Spikes indicate systemic events worth investigating.</p>
+              <DualLineChart
+                data={A?.complaintVsInquiry || []}
+                h1Key="complaints" h2Key="inquiries"
+                h1Label="Complaints" h2Label="Inquiries"
+                h1Color="#7c3aed" h2Color="#06b6d4"
+              />
+            </div>
+
+            {/* A3 — Complaint Volume by Month */}
+            {(() => {
+              // Derive year-aware labels: detect when year changes across the bar data
+              const bars = legacyBars;
+              const MONTH_ORDER = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+              const today = new Date();
+              const currentMonthIdx = today.getMonth();
+              const currentYear = today.getFullYear();
+              const labeledBars = bars.map((b, i) => {
+                const monthIdx = MONTH_ORDER.indexOf(b.label?.trim().slice(0, 3));
+                const offsetFromEnd = bars.length - 1 - i;
+                const yearOffset = Math.floor((offsetFromEnd - currentMonthIdx + 11) / 12);
+                const year = currentYear - yearOffset;
+                return { ...b, year, monthIdx };
+              });
+              // Find year-change positions to show year markers
+              return (
+                <div className="card">
+                  <h2 className="cardTitle">Complaint Volume by Month</h2>
+                  <div className="trendBars">
+                    {labeledBars.map((b, i) => {
+                      const prevYear = i > 0 ? labeledBars[i - 1].year : null;
+                      const isYearStart = prevYear !== null && b.year !== prevYear;
+                      return (
+                        <div key={b.label + b.year} className={`trendBarWrapper${isYearStart ? " trendBarWrapper--yearStart" : ""}`}>
+                          <span className="trendValue">{b.value}</span>
+                          <div className="trendBar" style={{ height: `${b.pct}%` }} />
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-              <div className="trendLabels">
-                {legacyBars.map((b) => <span key={b.label}>{b.label}</span>)}
-              </div>
-            </div>
-
-            {/* A4 — Category share + Recurring heatmap */}
-            <div className="ct-grid2">
-              <div className="card">
-                <h2 className="cardTitle">Top Complaint Categories</h2>
-                <div className="categoryList">
-                  {(apiData.categories || []).map((c) => (
-                    <div key={c.name} className="categoryRow">
-                      <span className="categoryName">{c.name}</span>
-                      <div className="categoryBar">
-                        <div className="categoryBarFill" style={{ width: `${c.pct}%` }} />
-                      </div>
-                      <span className="categoryValue">{Math.round(c.pct)}%</span>
-                    </div>
-                  ))}
+                  <div className="trendLabels">
+                    {labeledBars.map((b, i) => {
+                      const prevYear = i > 0 ? labeledBars[i - 1].year : null;
+                      const showYear = i === 0 || b.year !== prevYear;
+                      return (
+                        <div key={b.label + b.year} className="trendLabelCol">
+                          <span className="trendLabelMonth">{b.label?.trim().slice(0, 3)}</span>
+                          {showYear && <span className="trendLabelYear">{b.year}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-
-              <div className="card">
-                <h2 className="cardTitle">Recurring Issue Heatmap</h2>
-                <p className="ct-cardDesc">Departments × severity. High-intensity cells = unresolved root causes needing intervention.</p>
-                <Heatmap data={A?.recurringHeatmap || []} />
-              </div>
-            </div>
+              );
+            })()}
 
             {/* A5 — Monthly summary table */}
             <div className="card">
@@ -581,7 +562,7 @@ export default function ComplaintTrends() {
         {tab === 1 && B && (
           <div className="ct-section">
             {/* B1 — Headline KPIs */}
-            <section className="kpiRow">
+            <section className="kpiRow kpiRow--6">
               <KpiCard label="Total Tickets" value={B.kpis.totalTickets} />
               <KpiCard label="SLA Breach Rate" value={`${B.kpis.breachRate}%`}
                 caption={`${B.kpis.breachDelta >= 0 ? "+" : ""}${B.kpis.breachDelta}% vs prev period`} />
@@ -642,32 +623,6 @@ export default function ComplaintTrends() {
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-
-            <div className="ct-grid2">
-              {/* B4 — Breach rate by department */}
-              <div className="card">
-                <h2 className="cardTitle">SLA Breach Rate by Department</h2>
-                <p className="ct-cardDesc">Overall breach rate per department. Bars show Critical + High as priority tier focus.</p>
-                {(B.breachByDept || []).map((d) => (
-                  <MiniBar key={d.department} label={d.department}
-                    sub={`${d.breachRate}% breach · ${d.total} tickets`}
-                    value={d.breachRate} max={maxBreachDept}
-                    color={d.breachRate > 20 ? "#ef4444" : d.breachRate > 10 ? "#f97316" : "#7c3aed"} />
-                ))}
-              </div>
-
-              {/* B5 — Escalation rate by department */}
-              <div className="card">
-                <h2 className="cardTitle">Escalation Rate by Department</h2>
-                <p className="ct-cardDesc">Departments with high escalation rates need routing or staffing review.</p>
-                {(B.escalationByDept || []).map((d) => (
-                  <MiniBar key={d.department} label={d.department}
-                    sub={`${d.rate}% · ${d.escalated} of ${d.total} escalated`}
-                    value={d.rate} max={maxEscalation}
-                    color={d.rate > 20 ? "#ef4444" : d.rate > 10 ? "#f97316" : "#22c55e"} />
-                ))}
               </div>
             </div>
 

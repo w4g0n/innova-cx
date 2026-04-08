@@ -8,6 +8,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100%;
+  gap: 18px;
 }
 
 /* Always push the chat section to the bottom of the page */
@@ -21,7 +22,6 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 20px;
   gap: 16px;
   flex-wrap: wrap;
 }
@@ -150,7 +150,6 @@
   background: #fff;
   border-radius: 22px;
   padding: 22px;
-  margin-bottom: 18px;
   box-shadow: 0px 12px 30px rgba(0, 0, 0, 0.06);
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
@@ -196,6 +195,28 @@
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.previous-resolution-entry {
+  padding: 12px 0 0;
+}
+
+.previous-resolution-entry--spaced {
+  margin-bottom: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.previous-resolution-date {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.previous-resolution-text {
+  margin-bottom: 0;
+  opacity: 0.8;
 }
 
 .attachments {
@@ -291,7 +312,6 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
-  margin-bottom: 20px;
 }
 
 .details-grid .card-section {

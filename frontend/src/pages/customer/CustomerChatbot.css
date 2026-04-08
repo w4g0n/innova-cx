@@ -192,6 +192,14 @@
 }
 .custInput:disabled { opacity: .45; cursor: not-allowed; }
 
+.custChatWordCount {
+  align-self: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* shared buttons */
 .primaryPillBtn {
   display: inline-flex; align-items: center; justify-content: center;

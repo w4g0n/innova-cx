@@ -8,7 +8,11 @@ import {
   sanitizeFilename,
   sanitizeId,
   sanitizeTicketType,
+  countWords,
+  limitWords,
+  sanitizeTextByWords,
   MAX_DESCRIPTION_LEN,
+  MAX_TEXT_WORDS,
 } from "./sanitize";
 import "./CustomerFillForm.css";
 
@@ -153,8 +157,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
       newErrors.message = "Please describe your issue before submitting.";
     } else if (details.length < 10) {
       newErrors.message = "Please provide more detail (at least 10 characters).";
-    } else if (details.length > MAX_DESCRIPTION_LEN) {
-      newErrors.message = `Description must be ${MAX_DESCRIPTION_LEN.toLocaleString()} characters or fewer.`;
+    } else if (countWords(details) > MAX_TEXT_WORDS) {
+      newErrors.message = `Description must be ${MAX_TEXT_WORDS.toLocaleString()} words or fewer.`;
     }
 
     setErrors(newErrors);
@@ -171,7 +175,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     setShowConfirm(false);
 
     // Final sanitize before sending — trim + hard cap
-    const details  = sanitizeText(message, MAX_DESCRIPTION_LEN);
+    const details  = sanitizeTextByWords(message);
     const wasAudio = mode === "Audio";
 
     try {
@@ -263,7 +267,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
           const data      = await transcribeAudio(blob, filename);
 
           // Sanitize transcript text returned by the transcription service
-          const transcript = sanitizeText(data?.transcript || "", MAX_DESCRIPTION_LEN);
+          const transcript = sanitizeTextByWords(data?.transcript || "");
           setDraftTranscript(transcript);
           setDraftAudioFeatures(data?.audio_features || null);
           setVoiceStage("review");
@@ -328,8 +332,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     }
     setMessage((prev) => {
       const combined = prev ? `${prev}\n${t}` : t;
-      // Enforce the max description cap when appending a transcript
-      return combined.slice(0, MAX_DESCRIPTION_LEN);
+      // Enforce the max word cap when appending a transcript.
+      return limitWords(combined, MAX_TEXT_WORDS);
     });
     setDraftTranscript("");
     setVoiceStage("idle");
@@ -609,13 +613,12 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
                       className="custVoiceDraft"
                       value={draftTranscript}
                       onChange={(e) => {
-                        // Cap transcript edits at the same description limit
+                        // Cap transcript edits at the same description limit.
                         const v = e.target.value;
-                        if (v.length <= MAX_DESCRIPTION_LEN) setDraftTranscript(v);
+                        setDraftTranscript(limitWords(v, MAX_TEXT_WORDS));
                       }}
                       rows={3}
                       placeholder="Transcript will appear here..."
-                      maxLength={MAX_DESCRIPTION_LEN}
                     />
                   </div>
                 )}
@@ -631,14 +634,11 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
                 const v = e.target.value;
                 // Enforce hard cap client-side — server also validates but this prevents
                 // oversized payloads from being sent at all
-                if (v.length <= MAX_DESCRIPTION_LEN) {
-                  setMessage(v);
-                  if (errors.message) setErrors((prev) => ({ ...prev, message: undefined }));
-                }
+                setMessage(limitWords(v, MAX_TEXT_WORDS));
+                if (errors.message) setErrors((prev) => ({ ...prev, message: undefined }));
               }}
               placeholder="Describe what happened. Include time, location, or any relevant details."
               rows={embedded ? 6 : 8}
-              maxLength={MAX_DESCRIPTION_LEN}
               style={
                 errors.message
                   ? { borderColor: "rgba(239,68,68,.5)", boxShadow: "0 0 0 3px rgba(239,68,68,.1)" }
@@ -646,9 +646,9 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
               }
             />
 
-            {/* Character counter */}
+            {/* Word counter */}
             <div style={{ textAlign: "right", fontSize: "0.75rem", color: "var(--color-text-tertiary, #888)", marginTop: 2 }}>
-              {message.length} / {MAX_DESCRIPTION_LEN.toLocaleString()}
+              {countWords(message)} / {MAX_TEXT_WORDS.toLocaleString()} words
             </div>
 
             {errors.message && (

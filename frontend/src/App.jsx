@@ -137,11 +137,7 @@ export default function App() {
           />
           <Route
             path="/verify"
-            element={
-              <PublicOnly>
-                <CustomerAuthPage />
-              </PublicOnly>
-            }
+            element={<CustomerAuthPage />}
           />
 
           <Route path="/login" element={<Login />} />

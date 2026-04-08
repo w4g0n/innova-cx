@@ -18,6 +18,8 @@ function statusTone(s) {
   if (k === "resolved")                     return { color: "#15803d", bg: "rgba(21,128,61,.12)"   };
   if (k === "inprogress")                   return { color: "#b45309", bg: "rgba(180,83,9,.12)"    };
   if (k === "escalated" || k === "overdue") return { color: "#b91c1c", bg: "rgba(185,28,28,.12)"   };
+  if (k === "reopened")                     return { color: "#b45309", bg: "rgba(180,83,9,.12)"    };
+  if (k === "linked")                       return { color: "#6b7280", bg: "rgba(107,114,128,.12)" };
   return                                           { color: "#7c3aed", bg: "rgba(124,58,237,.12)"  };
 }
 
@@ -136,13 +138,14 @@ export default function CustomerTicketDetails() {
 
         setTicket({
           // Sanitize every field from the API before storing in state
-          id:          sanitizeId(t.ticketId, 48),
-          title:       sanitizeText(t.description?.subject, 200),
-          source:      formatTicketSource(t.ticketSource),
-          status:      sanitizeText(t.status, 40),
-          date:        sanitizeText(t.issueDate, 40),
-          priority:    sanitizeText(t.priority, 20),
-          description: sanitizeText(t.description?.details, 5000),
+          id:               sanitizeId(t.ticketId, 48),
+          title:            sanitizeText(t.description?.subject, 200),
+          source:           formatTicketSource(t.ticketSource),
+          status:           sanitizeText(t.status, 40),
+          date:             sanitizeText(t.issueDate, 40),
+          priority:         sanitizeText(t.priority, 20),
+          description:      sanitizeText(t.description?.details, 5000),
+          linkedTicketCode: sanitizeId(t.linkedTicketCode, 48) || null,
           updates: Array.isArray(t.updates)
             ? t.updates.map((u) => ({
                 _dateRaw: u.date ?? "",                  // kept for timeline sort
@@ -410,6 +413,22 @@ export default function CustomerTicketDetails() {
                   <p className="ctd-description">{ticket.description}</p>
                 </div>
               </section>
+
+              {/* Linked ticket notice */}
+              {ticket.linkedTicketCode && normalizeStatus(ticket.status) === "linked" && (
+                <section className="ctd-card" style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}>
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: "0.875rem" }}>Your submission was linked</p>
+                    <p style={{ margin: "4px 0 0", fontSize: "0.8125rem", color: "var(--text-muted, #9ca3af)" }}>
+                      This issue is already being addressed under ticket <strong>{ticket.linkedTicketCode}</strong>. The assigned team has been notified.
+                    </p>
+                  </div>
+                </section>
+              )}
 
               {/* Pipeline + activity card */}
               <section className="ctd-card">
