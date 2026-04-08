@@ -39,9 +39,8 @@ def create_ticket_via_gate(
     """
     Single DB gate for ticket creation writes.
     """
-    import secrets
 
-    ticket_code = "TKT-" + "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+    ticket_code = "CX-" + "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
     # App-level SLA rule: do not start SLA clocks until routed + assigned.
     effective_priority_assigned_at = None
     log_application_event(
