@@ -7,15 +7,13 @@ import fs from "fs";
 const app = express();
 app.use(cors());
 
-// ------------------------------------
+
 // Upload config
-// ------------------------------------
 const UPLOAD_DIR = "uploads";
 const upload = multer({ dest: UPLOAD_DIR });
 
-// ------------------------------------
+
 // Routes
-// ------------------------------------
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.post("/transcribe", upload.single("audio"), async (req, res) => {
@@ -78,9 +76,8 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
   });
 });
 
-// ------------------------------------
+
 // Server
-// ------------------------------------
 const PORT = 3001;
 app.listen(PORT, () => {
   console.log(`✅ Whisper service running on http://localhost:${PORT}`);

@@ -1,7 +1,7 @@
 # backend/services/analytics_service.py
-# =============================================================================
+
 # InnovaCX – Analytics Service
-# =============================================================================
+
 # All analytics queries go here. They read ONLY from the materialized views:
 #   mv_ticket_base, mv_daily_volume, mv_employee_daily, mv_acceptance_daily,
 #   mv_operator_qc_daily, mv_chatbot_daily
@@ -15,7 +15,7 @@
 # Imported by main.py:
 #   from services.analytics_service import get_trends_data, refresh_mvs
 #   analytics_service.init(fetch_one, fetch_all, db_connect)
-# =============================================================================
+
 
 from __future__ import annotations
 
@@ -43,16 +43,14 @@ def init(fetch_one_fn, fetch_all_fn, db_connect_fn):
     _db_connect = db_connect_fn
 
 
-# ─── SLA targets (single source of truth, mirrors DB trigger) ────────────────
+# SLA targets (single source of truth, mirrors DB trigger)
 SLA_TARGETS = {
     "respond": {"Critical": 30,  "High": 60,   "Medium": 180, "Low": 360},
     "resolve": {"Critical": 360, "High": 1080, "Medium": 2880, "Low": 4320},
 }
 
 
-# =============================================================================
 # REFRESH
-# =============================================================================
 
 # Full MV + refresh-function DDL — executed when MVs are missing on startup.
 _ANALYTICS_MVS_DDL = """
@@ -419,9 +417,7 @@ def refresh_mvs() -> Dict[str, Any]:
             raise
 
 
-# =============================================================================
 # HELPER: build WHERE clause + params from filter arguments
-# =============================================================================
 
 def _build_filters(
     period_start: datetime,
@@ -474,9 +470,7 @@ def _build_filters(
     return " AND ".join(filters), params
 
 
-# =============================================================================
 # SECTION A — COMPLAINT TRENDS
-# =============================================================================
 
 def get_section_a(
     period_start: datetime,
@@ -487,7 +481,7 @@ def get_section_a(
 
     where, params = _build_filters(period_start, period_end, department, priority, use_date_col=True)
 
-    # ── A1: Complaint vs Inquiry daily volumes ────────────────────────────
+    # A1: Complaint vs Inquiry daily volumes
     raw = _fetch_all(
         f"""
         SELECT created_day AS day, ticket_type, SUM(total) AS count
@@ -509,7 +503,7 @@ def get_section_a(
             cid_map[key]["inquiries"] = int(r["count"])
     complaint_vs_inquiry = sorted(cid_map.values(), key=lambda x: x["day"])
 
-    # ── A2: Daily volume with 7-day rolling average ───────────────────────
+    # A2: Daily volume with 7-day rolling average
     daily_raw = _fetch_all(
         f"""
         SELECT
@@ -536,7 +530,7 @@ def get_section_a(
         for r in daily_raw
     ]
 
-    # ── A3: Recurring heatmap (dept × priority) ───────────────────────────
+    # A3: Recurring heatmap (dept × priority)
     where_base, params_base = _build_filters(period_start, period_end, department, priority, use_date_col=False)
     recurring_heatmap = _fetch_all(
         f"""
@@ -563,9 +557,7 @@ def get_section_a(
     }
 
 
-# =============================================================================
 # SECTION B — SLA PERFORMANCE
-# =============================================================================
 
 def get_section_b(
     period_start: datetime,
@@ -578,7 +570,7 @@ def get_section_b(
     where, params           = _build_filters(period_start, period_end, department, priority, use_date_col=True)
     prev_where, prev_params = _build_filters(prev_start, period_start, department, priority, use_date_col=True)
 
-    # ── B1: Overall SLA KPIs ──────────────────────────────────────────────
+    # B1: Overall SLA KPIs
     sla_overall = _fetch_one(
         f"""
         SELECT
@@ -603,7 +595,7 @@ def get_section_b(
     avg_respond_mins = float(sla_overall.get("avg_respond_mins") or 0)
     avg_resolve_mins = float(sla_overall.get("avg_resolve_mins") or 0)
 
-    # ── B2: Previous period breach rate ───────────────────────────────────
+    # B2: Previous period breach rate
     prev_sla = _fetch_one(
         f"""
         SELECT SUM(total) AS total, SUM(breached) AS breached
@@ -616,7 +608,7 @@ def get_section_b(
     prev_breached = int(prev_sla.get("breached") or 0)
     prev_breach_rate = round(prev_breached / prev_total * 100, 1) if prev_total else 0
 
-    # ── B3: Breach by department + priority tier ──────────────────────────
+    # B3: Breach by department + priority tier
     breach_by_dept_raw = _fetch_all(
         f"""
         SELECT
@@ -660,7 +652,7 @@ def get_section_b(
         })
     breach_by_dept_out.sort(key=lambda x: -x["breachRate"])
 
-    # ── B4: Breach timeline — daily stacked by priority ───────────────────
+    # B4: Breach timeline — daily stacked by priority
     bt_raw = _fetch_all(
         f"""
         SELECT
@@ -686,7 +678,7 @@ def get_section_b(
             bt_map[key][p] += int(r["breached"])
     breach_timeline_out = sorted(bt_map.values(), key=lambda x: x["day"])
 
-    # ── B5: Escalation by department ──────────────────────────────────────
+    # B5: Escalation by department
     esc_raw = _fetch_all(
         f"""
         SELECT
@@ -710,7 +702,7 @@ def get_section_b(
         for r in esc_raw
     ]
 
-    # ── B6: Avg response/resolve time by priority vs targets ──────────────
+    # B6: Avg response/resolve time by priority vs targets
     time_raw = _fetch_all(
         f"""
         SELECT
@@ -762,9 +754,7 @@ def get_section_b(
     }
 
 
-# =============================================================================
 # SECTION C — EMPLOYEE PERFORMANCE
-# =============================================================================
 
 def get_section_c(
     period_start: datetime,
@@ -796,11 +786,11 @@ def get_section_c(
     Fallback (manager_dept_id is None): use department_name filter on tickets
     so unassigned managers still get a useful response.
     """
-    # ── Build time-range filter (no dept filter here; we handle dept below) ──
+    # Build time-range filter (no dept filter here; we handle dept below)
     time_where = "e.created_day >= %s::date AND e.created_day < %s::date"
     time_params: List[Any] = [period_start, period_end]
 
-    # ── C1: Per-employee summary from mv_employee_daily ───────────────────
+    # C1: Per-employee summary from mv_employee_daily
     # Scope by ownership (user_profiles.department_id) when possible;
     # fall back to ticket-department filter for unassigned managers.
     if manager_dept_id:
@@ -843,7 +833,7 @@ def get_section_c(
         emp_params,
     )
 
-    # ── Company averages ──────────────────────────────────────────────────
+    # Company averages
     where_base, params_base = _build_filters(period_start, period_end, department, priority, use_date_col=False)
     company_avg = _fetch_one(
         f"""
@@ -860,7 +850,7 @@ def get_section_c(
         params_base,
     ) or {}
 
-    # ── C2: Acceptance rates from mv_acceptance_daily ─────────────────────
+    # C2: Acceptance rates from mv_acceptance_daily
     # mv_acceptance_daily has no department_name column — must filter by
     # employee_id ownership just like emp_raw above.
     acc_month_start = date(period_start.year, period_start.month, 1)
@@ -957,9 +947,7 @@ def get_section_c(
     }
 
 
-# =============================================================================
 # LEGACY SHAPE — keeps ComplaintTrends.jsx working with no frontend changes
-# =============================================================================
 
 def get_legacy_kpis(
     period_start: datetime,
@@ -1074,9 +1062,7 @@ def get_legacy_kpis(
     }
 
 
-# =============================================================================
 # MAIN ENTRY POINT — called by the /manager/trends route handler
-# =============================================================================
 
 def get_trends_data(
     period_start: datetime,
@@ -1118,7 +1104,6 @@ def get_trends_data(
     }
 
 
-# =============================================================================
 # OPERATOR ANALYTICS — Quality Control
 # Powers: GET /operator/analytics/qc
 # Reads from: mv_operator_qc_daily, mv_acceptance_daily, mv_ticket_base
@@ -1129,7 +1114,6 @@ def get_trends_data(
 #   rerouting   (C) — rerouting requests per dept + review cases from mv_ticket_base
 #
 # All reads are MV-only. No base table queries.
-# =============================================================================
 
 def get_operator_qc_data(
     period_start: datetime,
@@ -1158,7 +1142,7 @@ def get_operator_qc_data(
       }
     }
     """
-    # ── Date boundaries ───────────────────────────────────────────────────────
+    # Date boundaries
     # mv_acceptance_daily uses created_day (DATE)
     # mv_operator_qc_daily uses created_day (DATE)
     # mv_ticket_base uses created_at (TIMESTAMPTZ)
@@ -1166,18 +1150,16 @@ def get_operator_qc_data(
     date_start = period_start.date() if hasattr(period_start, "date") else period_start
     date_end   = period_end.date()   if hasattr(period_end,   "date") else period_end
 
-    # ── Build dept filter fragments ───────────────────────────────────────────
+    # Build dept filter fragments
     qc_dept_filter = ""
     qc_dept_params: List[Any] = [date_start, date_end]
     if department and department != "All Departments":
         qc_dept_filter = "AND department_name = %s"
         qc_dept_params.append(department)
 
-    # ─────────────────────────────────────────────────────────────────────────
     # A: ACCEPTANCE — from mv_acceptance_daily
     # Note: mv_acceptance_daily has no department_name column (it's per-employee).
     # Dept filter is intentionally omitted for the acceptance section.
-    # ─────────────────────────────────────────────────────────────────────────
     acc_params: List[Any] = [date_start, date_end]
 
     acc_overall = _fetch_one(
@@ -1222,9 +1204,7 @@ def get_operator_qc_data(
         for r in acc_trend_raw
     ]
 
-    # ─────────────────────────────────────────────────────────────────────────
     # B: RESCORING — from mv_operator_qc_daily
-    # ─────────────────────────────────────────────────────────────────────────
     rescore_overall = _fetch_one(
         f"""
         SELECT
@@ -1272,9 +1252,7 @@ def get_operator_qc_data(
         for r in rescore_by_dept_raw
     ]
 
-    # ─────────────────────────────────────────────────────────────────────────
     # C: REROUTING — from mv_operator_qc_daily (aggregate) + mv_ticket_base (cases)
-    # ─────────────────────────────────────────────────────────────────────────
     reroute_raw = _fetch_all(
         f"""
         SELECT
@@ -1385,11 +1363,9 @@ def get_operator_qc_data(
     }
 
 
-# =============================================================================
 # OPERATOR ANALYTICS — Model Health (Chatbot Agent tab)
 # Powers: GET /operator/analytics/model-health/chatbot
 # Reads from: mv_chatbot_daily (MV-only)
-# =============================================================================
 
 def get_operator_chatbot_data(
     period_start: datetime,
@@ -1482,11 +1458,9 @@ def get_operator_chatbot_data(
     }
 
 
-# =============================================================================
 # OPERATOR ANALYTICS — Model Health: Sentiment Agent tab
 # Powers: GET /operator/analytics/model-health/sentiment
 # Reads from: mv_sentiment_daily (MV-only)
-# =============================================================================
 
 def get_operator_sentiment_data(
     period_start: datetime,
@@ -1502,7 +1476,7 @@ def get_operator_sentiment_data(
         dept_filter = "AND department_name = %s"
         params.append(department)
 
-    # ── Overall KPIs ─────────────────────────────────────────────────────
+    # Overall KPIs
     overall = _fetch_one(
         f"""
         SELECT
@@ -1535,7 +1509,7 @@ def get_operator_sentiment_data(
     negative_count   = int(overall.get("negative_count")   or 0)
     very_neg_count   = int(overall.get("very_negative_count") or 0)
 
-    # ── Score over time (daily) ──────────────────────────────────────────
+    # Score over time (daily)
     trend_raw = _fetch_all(
         f"""
         SELECT
@@ -1561,7 +1535,7 @@ def get_operator_sentiment_data(
         for r in trend_raw
     ]
 
-    # ── Sentiment by department ──────────────────────────────────────────
+    # Sentiment by department
     dept_raw = _fetch_all(
         f"""
         SELECT
@@ -1601,11 +1575,9 @@ def get_operator_sentiment_data(
     }
 
 
-# =============================================================================
 # OPERATOR ANALYTICS — Model Health: Feature Engineering Agent tab
 # Powers: GET /operator/analytics/model-health/feature
 # Reads from: mv_feature_daily (MV-only)
-# =============================================================================
 
 def get_operator_feature_data(
     period_start: datetime,
@@ -1621,7 +1593,7 @@ def get_operator_feature_data(
         dept_filter = "AND department_name = %s"
         params.append(department)
 
-    # ── Overall KPIs ─────────────────────────────────────────────────────
+    # Overall KPIs
     overall = _fetch_one(
         f"""
         SELECT
@@ -1655,7 +1627,7 @@ def get_operator_feature_data(
     safety_rate      = round(safety    / total * 100, 1) if total else 0
     mismatch_rate    = round(mismatch  / total * 100, 1) if total else 0
 
-    # ── Recurring rate daily trend ────────────────────────────────────────
+    # Recurring rate daily trend
     recurring_raw = _fetch_all(
         f"""
         SELECT
@@ -1681,7 +1653,7 @@ def get_operator_feature_data(
         for r in recurring_raw
     ]
 
-    # ── Business impact by department ─────────────────────────────────────
+    # Business impact by department
     dept_raw = _fetch_all(
         f"""
         SELECT
