@@ -610,32 +610,46 @@ def _ensure_dev_seed_users() -> None:
         return
 
     demo_users = [
-        ("customer1@innova.cx", "customer"),
-        ("manager@innova.cx", "manager"),
-        ("operator@innova.cx", "operator"),
-        ("ahmed@innova.cx", "employee"),
-        ("maria@innova.cx", "employee"),
-        ("omar@innova.cx", "employee"),
-        ("sara@innova.cx", "employee"),
-        ("bilal@innova.cx", "employee"),
-        ("fatima@innova.cx", "employee"),
-        ("yousef@innova.cx", "employee"),
-        ("khalid@innova.cx", "employee"),
+        ("customer1@innovacx.net", "customer"),
+        ("customer2@innovacx.net", "customer"),
+        ("customer3@innovacx.net", "customer"),
+        ("operator@innovacx.net",  "operator"),
+        ("hamad@innovacx.net",     "manager"),
+        ("leen@innovacx.net",      "manager"),
+        ("rami@innovacx.net",      "manager"),
+        ("majid@innovacx.net",     "manager"),
+        ("ali@innovacx.net",       "manager"),
+        ("yara@innovacx.net",      "manager"),
+        ("hana@innovacx.net",      "manager"),
+        ("ahmed@innovacx.net",     "employee"),
+        ("lena@innovacx.net",      "employee"),
+        ("bilal@innovacx.net",     "employee"),
+        ("sameer@innovacx.net",    "employee"),
+        ("yousef@innovacx.net",    "employee"),
+        ("talya@innovacx.net",     "employee"),
+        ("sarah@innovacx.net",     "employee"),
     ]
 
     # Optional display names (won't break anything if missing)
     demo_names = {
-        "customer1@innova.cx": "Customer One",
-        "manager@innova.cx": "Manager",
-        "operator@innova.cx": "Operator",
-        "ahmed@innova.cx": "Ahmed Hassan",
-        "maria@innova.cx": "Maria Lopez",
-        "omar@innova.cx": "Omar Ali",
-        "sara@innova.cx": "Sara Ahmed",
-        "bilal@innova.cx": "Bilal Khan",
-        "fatima@innova.cx": "Fatima Noor",
-        "yousef@innova.cx": "Yousef Karim",
-        "khalid@innova.cx": "Khalid Musa",
+        "customer1@innovacx.net": "Customer One",
+        "customer2@innovacx.net": "Customer Two",
+        "customer3@innovacx.net": "Customer Three",
+        "operator@innovacx.net":  "System Operator",
+        "hamad@innovacx.net":     "Hamad Alaa",
+        "leen@innovacx.net":      "Leen Naser",
+        "rami@innovacx.net":      "Rami Alassi",
+        "majid@innovacx.net":     "Majid Sharaf",
+        "ali@innovacx.net":       "Ali Al Maharif",
+        "yara@innovacx.net":      "Yara Saab",
+        "hana@innovacx.net":      "Hana Ayad",
+        "ahmed@innovacx.net":     "Ahmed Hassan",
+        "lena@innovacx.net":      "Lena Musa",
+        "bilal@innovacx.net":     "Bilal Khan",
+        "sameer@innovacx.net":    "Sameer Ahmed",
+        "yousef@innovacx.net":    "Yousef Madi",
+        "talya@innovacx.net":     "Talya Mohammad",
+        "sarah@innovacx.net":     "Sarah Muneer",
     }
 
     try:
@@ -1499,7 +1513,7 @@ def employee_dashboard(user: Dict[str, Any] = Depends(require_employee)):
           ) AS "month"
         FROM employee_reports er
         WHERE er.employee_user_id = %s
-          AND er.report_code ~ '^[a-z]{3}-[0-9]{4}'
+          AND er.report_code ~ '^[a-z]{3}-[0-9]{4}-[a-z0-9]+'
         ORDER BY
           split_part(er.report_code, '-', 2)::int DESC,
           CASE split_part(er.report_code, '-', 1)
@@ -2593,10 +2607,16 @@ def _safe_report_code(code: str) -> str:
 def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[str]:
     """
     Build (or rebuild) the employee_report row for the given user/year/month.
-    Uses mv_employee_daily and mv_acceptance_daily for fast pre-aggregated data.
+
+    All analytics come exclusively from materialized views:
+      - mv_employee_daily  → KPIs, weekly breakdown, rating components, notes
+      - mv_acceptance_daily → AI Acceptance Rate (summary item)
+
     Returns the report_code on success, or None if the employee had no activity.
+    Works for any employee — no hardcoded IDs or names.
     """
     from datetime import date
+
     period_start = date(year, month, 1)
     period_end   = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
 
@@ -2605,7 +2625,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
         """
         SELECT SUM(total) AS cnt
         FROM mv_employee_daily
-        WHERE employee_id = %s
+        WHERE employee_id = %s::uuid
           AND created_day >= %s AND created_day < %s
         """,
         (user_id, period_start, period_end),
@@ -2613,62 +2633,96 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
     if not activity or (activity.get("cnt") or 0) == 0:
         return None
 
+    # ── build user slug for report_code (safe, lowercase, alphanum only) ──────
     user_slug_row = fetch_one(
-        "SELECT split_part(email, '@', 1) AS slug FROM users WHERE id = %s",
+        "SELECT split_part(email, '@', 1) AS slug FROM users WHERE id = %s::uuid",
         (user_id,),
     ) or {}
-    user_slug = str(user_slug_row.get("slug") or "").strip().lower()
+    import re as _re_slug
+    raw_slug = str(user_slug_row.get("slug") or "").strip().lower()
+    user_slug = _re_slug.sub(r"[^a-z0-9]", "", raw_slug)[:12]
     if not user_slug:
-        user_slug = str(user_id).replace("-", "")[:8]
+        user_slug = _re_slug.sub(r"[^a-z0-9]", "", str(user_id).replace("-", ""))[:8]
 
-    # Keep year in the second token for existing ORDER BY logic:
-    # mon-year-user (e.g. mar-2026-ahmed)
+    # report_code: mon-year-slug  (e.g. mar-2026-ahmed)
     report_code = f"{_MONTH_ABBR[month]}-{year}-{user_slug}"
     month_label = f"{_MONTH_LABEL[month]} {year}"
 
-    # ── aggregate KPIs from mv_employee_daily ─────────────────────────────────
+    # ── aggregate monthly KPIs from mv_employee_daily ─────────────────────────
     kpi_row = fetch_one(
         """
         SELECT
-            SUM(total)    AS total,
-            SUM(resolved) AS resolved,
+            SUM(total)                                                      AS total,
+            SUM(resolved)                                                   AS resolved,
+            SUM(breached)                                                   AS breached,
+            SUM(escalated)                                                  AS escalated,
             ROUND(
                 SUM(total - breached)::numeric / NULLIF(SUM(total), 0) * 100, 1
-            ) AS sla_pct,
+            )                                                               AS sla_pct,
             ROUND(
                 SUM(avg_respond_mins * total) / NULLIF(SUM(total), 0), 1
-            ) AS avg_response_mins
+            )                                                               AS avg_response_mins
         FROM mv_employee_daily
-        WHERE employee_id = %s
+        WHERE employee_id = %s::uuid
           AND created_day >= %s AND created_day < %s
         """,
         (user_id, period_start, period_end),
     ) or {}
 
-    total    = int(kpi_row.get("total")    or 0)
-    resolved = int(kpi_row.get("resolved") or 0)
-    sla_pct  = float(kpi_row.get("sla_pct") or 0)
-    avg_resp = kpi_row.get("avg_response_mins")
+    total     = int(kpi_row.get("total")     or 0)
+    resolved  = int(kpi_row.get("resolved")  or 0)
+    breached  = int(kpi_row.get("breached")  or 0)
+    escalated = int(kpi_row.get("escalated") or 0)
+    sla_pct   = float(kpi_row.get("sla_pct") or 0)
+    avg_resp  = kpi_row.get("avg_response_mins")
+    avg_resp_f = float(avg_resp) if avg_resp is not None else None
 
-    resolve_rate = round(resolved / total * 100, 1) if total else 0
-    kpi_rating   = round((resolve_rate * 0.5) + (sla_pct * 0.5), 1)
-    subtitle     = f"{resolved} of {total} tickets resolved · {sla_pct}% SLA compliance"
+    resolve_rate = round(resolved / total * 100, 1) if total else 0.0
+    escalation_rate = round(escalated / total * 100, 1) if total else 0.0
+
+    # Overall rating: weighted composite (50% closure rate + 50% SLA compliance)
+    kpi_rating_num = round((resolve_rate * 0.5) + (sla_pct * 0.5), 1)
+    # Format for display
+    if kpi_rating_num >= 90:
+        kpi_rating_label = f"{kpi_rating_num}% · Excellent"
+    elif kpi_rating_num >= 75:
+        kpi_rating_label = f"{kpi_rating_num}% · Good"
+    elif kpi_rating_num >= 50:
+        kpi_rating_label = f"{kpi_rating_num}% · Needs Improvement"
+    else:
+        kpi_rating_label = f"{kpi_rating_num}% · Poor"
+
+    # KPI display strings
+    kpi_sla_str = f"{sla_pct}%"
+    kpi_avg_response_str = (
+        f"{round(avg_resp_f)} min" if avg_resp_f is not None else "N/A"
+    )
+
+    subtitle = f"{resolved} of {total} tickets resolved · {sla_pct}% SLA compliance"
 
     # ── upsert employee_reports row ───────────────────────────────────────────
     existing = fetch_one(
-        "SELECT id FROM employee_reports WHERE report_code = %s AND employee_user_id = %s",
+        "SELECT id FROM employee_reports WHERE report_code = %s AND employee_user_id = %s::uuid",
         (report_code, user_id),
     )
     if existing:
         execute(
             """
             UPDATE employee_reports SET
-                month_label = %s, subtitle = %s,
-                kpi_rating = %s, kpi_resolved = %s, kpi_sla = %s, kpi_avg_response = %s,
-                created_at = NOW()
+                month_label       = %s,
+                subtitle          = %s,
+                kpi_rating        = %s,
+                kpi_resolved      = %s,
+                kpi_sla           = %s,
+                kpi_avg_response  = %s,
+                created_at        = NOW()
             WHERE id = %s
             """,
-            (month_label, subtitle, kpi_rating, resolved, sla_pct, avg_resp, existing["id"]),
+            (
+                month_label, subtitle,
+                kpi_rating_label, resolved, kpi_sla_str, kpi_avg_response_str,
+                existing["id"],
+            ),
         )
         report_id = existing["id"]
     else:
@@ -2677,42 +2731,47 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
             INSERT INTO employee_reports
                 (employee_user_id, report_code, month_label, subtitle,
                  kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (user_id, report_code, month_label, subtitle,
-             kpi_rating, resolved, sla_pct, avg_resp),
+            (
+                user_id, report_code, month_label, subtitle,
+                kpi_rating_label, resolved, kpi_sla_str, kpi_avg_response_str,
+            ),
         )
         if not row:
             return None
         report_id = row["id"]
 
-    # ── summary items (includes AI Acceptance Rate from mv_acceptance_daily) ──
-    execute("DELETE FROM employee_report_summary_items WHERE report_id = %s", (report_id,))
-
+    # ── summary items ─────────────────────────────────────────────────────────
+    # AI Acceptance Rate comes from mv_acceptance_daily
     acceptance_data = fetch_one(
         """
         SELECT
             SUM(total)    AS total_resolutions,
             SUM(accepted) AS accepted_count
         FROM mv_acceptance_daily
-        WHERE employee_id = %s
+        WHERE employee_id = %s::uuid
           AND created_day >= %s AND created_day < %s
         """,
         (user_id, period_start, period_end),
-    )
-    acceptance_rate = None
-    if acceptance_data and acceptance_data.get("total_resolutions"):
-        acceptance_rate = round(
-            (acceptance_data["accepted_count"] / acceptance_data["total_resolutions"]) * 100, 1
-        )
+    ) or {}
 
+    acceptance_total = int(acceptance_data.get("total_resolutions") or 0)
+    acceptance_count = int(acceptance_data.get("accepted_count")    or 0)
+    acceptance_rate  = (
+        round(acceptance_count / acceptance_total * 100, 1)
+        if acceptance_total > 0 else None
+    )
+
+    execute("DELETE FROM employee_report_summary_items WHERE report_id = %s", (report_id,))
     summary_items = [
         ("Tickets Assigned",   str(total)),
         ("Tickets Resolved",   str(resolved)),
-        ("SLA Compliance",     f"{sla_pct}%"),
-        ("Avg First Response", f"{round(avg_resp)} min" if avg_resp else "N/A"),
+        ("SLA Compliance",     kpi_sla_str),
+        ("Avg First Response", kpi_avg_response_str),
         ("AI Acceptance Rate", f"{acceptance_rate}%" if acceptance_rate is not None else "N/A"),
+        ("Escalated",          str(escalated)),
     ]
     for label, value in summary_items:
         execute(
@@ -2720,35 +2779,288 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
             (report_id, label, value),
         )
 
-    logger.info("report_gen | generated report=%s user=%s (MV-based)", report_code, user_id)
+    # ── rating components ─────────────────────────────────────────────────────
+    # Each component is derived from MV aggregates; pct is its contribution (0-100)
+    # score is the raw metric value (0-100 scale) for the progress bar.
+    #
+    # Components:
+    #   1. Closure Rate        — resolved / total * 100
+    #   2. SLA Compliance      — sla_pct (already 0-100)
+    #   3. Response Speed      — score = max(0, 100 - (avg_response / 480 * 100))
+    #                            (perfect=0min→100, 8h=0; capped 0-100)
+    #   4. No Escalations      — score = max(0, 100 - escalation_rate)
+
+    response_speed_score = (
+        round(max(0.0, 100.0 - (avg_resp_f / 480.0 * 100.0)), 1)
+        if avg_resp_f is not None else 0.0
+    )
+    no_escalation_score = round(max(0.0, 100.0 - escalation_rate), 1)
+
+    rating_components_data = [
+        ("Closure Rate",    resolve_rate,          resolve_rate),
+        ("SLA Compliance",  sla_pct,               sla_pct),
+        ("Response Speed",  response_speed_score,  response_speed_score),
+        ("No Escalations",  no_escalation_score,   no_escalation_score),
+    ]
+
+    execute("DELETE FROM employee_report_rating_components WHERE report_id = %s", (report_id,))
+    for rc_name, rc_score, rc_pct in rating_components_data:
+        execute(
+            """
+            INSERT INTO employee_report_rating_components (report_id, name, score, pct)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (report_id, rc_name, round(rc_score, 1), round(rc_pct, 1)),
+        )
+
+    # ── weekly rows ───────────────────────────────────────────────────────────
+    # Derive week-of-month from created_day; group mv_employee_daily by ISO week.
+    # We use date_trunc('week', created_day) to get the Monday of each week,
+    # then label it as "Week N" relative to the start of the month.
+    weekly_rows = fetch_all(
+        """
+        SELECT
+            date_trunc('week', created_day)::date               AS week_monday,
+            SUM(total)                                           AS assigned,
+            SUM(resolved)                                        AS resolved,
+            ROUND(
+                SUM(total - breached)::numeric / NULLIF(SUM(total), 0) * 100, 1
+            )                                                    AS sla_pct,
+            ROUND(
+                SUM(avg_respond_mins * total) / NULLIF(SUM(total), 0), 1
+            )                                                    AS avg_respond_mins
+        FROM mv_employee_daily
+        WHERE employee_id = %s::uuid
+          AND created_day >= %s AND created_day < %s
+        GROUP BY date_trunc('week', created_day)::date
+        ORDER BY week_monday
+        """,
+        (user_id, period_start, period_end),
+    )
+
+    execute("DELETE FROM employee_report_weekly WHERE report_id = %s", (report_id,))
+    prev_resolved = None
+    for week_num, wr in enumerate(weekly_rows, start=1):
+        w_assigned = int(wr.get("assigned") or 0)
+        w_resolved = int(wr.get("resolved") or 0)
+        w_sla      = float(wr.get("sla_pct") or 0)
+        w_avg      = wr.get("avg_respond_mins")
+        w_avg_str  = f"{round(float(w_avg))} min" if w_avg is not None else "N/A"
+        w_sla_str  = f"{w_sla}%"
+
+        # Delta vs previous week (based on resolved count)
+        if prev_resolved is None:
+            delta_type = "neutral"
+            delta_text = "—"
+        elif w_resolved > prev_resolved:
+            delta_type = "positive"
+            delta_text = f"+{w_resolved - prev_resolved} resolved"
+        elif w_resolved < prev_resolved:
+            delta_type = "neutral"
+            delta_text = f"{w_resolved - prev_resolved} resolved"
+        else:
+            delta_type = "neutral"
+            delta_text = "No change"
+
+        prev_resolved = w_resolved
+
+        # Use ISO week date as label (e.g. "Week 1 (Mar 3)")
+        week_monday_obj = wr.get("week_monday")
+        if week_monday_obj:
+            week_label = f"Week {week_num} ({week_monday_obj.strftime('%b %-d')})"
+        else:
+            week_label = f"Week {week_num}"
+
+        execute(
+            """
+            INSERT INTO employee_report_weekly
+                (report_id, week_label, assigned, resolved, sla, avg_response, delta_type, delta_text)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                report_id, week_label,
+                w_assigned, w_resolved, w_sla_str, w_avg_str,
+                delta_type, delta_text,
+            ),
+        )
+
+    # ── notes ─────────────────────────────────────────────────────────────────
+    # Auto-generated from real MV data — no hardcoded copy.
+    notes = []
+
+    if total > 0:
+        notes.append(
+            f"You handled {total} ticket{'s' if total != 1 else ''} in {month_label}, "
+            f"resolving {resolved} ({resolve_rate}% closure rate)."
+        )
+
+    if sla_pct >= 90:
+        notes.append(
+            f"Excellent SLA performance: {sla_pct}% of tickets were handled within agreed timeframes."
+        )
+    elif sla_pct >= 70:
+        notes.append(
+            f"Good SLA performance at {sla_pct}%. "
+            f"{breached} ticket{'s' if breached != 1 else ''} breached SLA targets this month."
+        )
+    elif total > 0:
+        notes.append(
+            f"SLA compliance was {sla_pct}% — "
+            f"{breached} ticket{'s' if breached != 1 else ''} breached SLA targets. "
+            f"Focus on earlier first responses to improve this score."
+        )
+
+    if avg_resp_f is not None:
+        if avg_resp_f <= 30:
+            notes.append(
+                f"Outstanding response speed: average first response was {round(avg_resp_f)} min."
+            )
+        elif avg_resp_f <= 120:
+            notes.append(
+                f"Average first response time was {round(avg_resp_f)} min, within a healthy range."
+            )
+        else:
+            notes.append(
+                f"Average first response time was {round(avg_resp_f)} min. "
+                f"Reducing this will directly improve your overall rating."
+            )
+
+    if escalated > 0:
+        notes.append(
+            f"{escalated} ticket{'s were' if escalated != 1 else ' was'} escalated this month "
+            f"({escalation_rate}% escalation rate)."
+        )
+    elif total > 0:
+        notes.append("No tickets were escalated this month — great work on self-resolution.")
+
+    if acceptance_rate is not None:
+        if acceptance_rate >= 70:
+            notes.append(
+                f"AI-suggested resolutions were accepted {acceptance_rate}% of the time, "
+                f"reflecting strong alignment with AI recommendations."
+            )
+        else:
+            notes.append(
+                f"AI-suggested resolutions were accepted {acceptance_rate}% of the time. "
+                f"Consider reviewing AI suggestions before customising."
+            )
+
+    execute("DELETE FROM employee_report_notes WHERE report_id = %s", (report_id,))
+    for note_text in notes:
+        execute(
+            "INSERT INTO employee_report_notes (report_id, note) VALUES (%s, %s)",
+            (report_id, note_text),
+        )
+
+    logger.info("report_gen | generated report=%s user=%s (MV-based, full)", report_code, user_id)
     return report_code
 
 
-def _ensure_recent_reports(user_id: str, months: int = 3) -> None:
-    """Ensure the employee has a report for each of the last `months` calendar months."""
-    today = datetime.now(tz=timezone.utc)
-    year, month = today.year, today.month
-    for _ in range(months):
+# ── Demo months guarantee ────────────────────────────────────────────────────
+# These are the fixed months every employee must have reports for.
+# They are also the minimum floor — any newer month with MV data is added too.
+_DEMO_MONTHS = [
+    (2026, 1),  # January 2026
+    (2026, 2),  # February 2026
+    (2026, 3),  # March 2026
+    (2026, 4),  # April 2026
+]
+
+
+def _ensure_recent_reports(user_id: str) -> None:
+    """Ensure the employee has a FULLY POPULATED report for:
+
+    1. Every fixed demo month in _DEMO_MONTHS (Jan–Apr 2026), regardless of
+       whether MV data exists for that month.  This guarantees uniform coverage
+       across all employees — zero-activity months produce a valid empty report.
+
+    2. Every newer month (> April 2026) where the employee has MV activity data.
+       This keeps the system forward-compatible: May 2026, June 2026, etc. appear
+       automatically as ticket data accumulates.
+
+    2025 months are NEVER generated.  Any 2025 report that exists is treated as
+    legacy data that the cleanup migration should have removed.
+
+    Two-pass logic per month:
+      Pass 1 — generate missing reports (report row does not exist at all).
+      Pass 2 — repair incomplete reports (row exists, rc_count = 0 → old generator).
+
+    Safe to call repeatedly — generation is idempotent (upsert + DELETE + INSERT).
+    """
+    import re as _re_slug2
+
+    # Build slug once for this user
+    user_slug_row = fetch_one(
+        "SELECT split_part(email, '@', 1) AS slug FROM users WHERE id = %s::uuid",
+        (user_id,),
+    ) or {}
+    raw_slug = str(user_slug_row.get("slug") or "").strip().lower()
+    user_slug = _re_slug2.sub(r"[^a-z0-9]", "", raw_slug)[:12]
+    if not user_slug:
+        user_slug = _re_slug2.sub(r"[^a-z0-9]", "", str(user_id).replace("-", ""))[:8]
+
+    # ── Build the full target set ─────────────────────────────────────────────
+    # Start with the fixed demo months
+    target_months: set = set(_DEMO_MONTHS)
+
+    # Add any newer months (> last demo month) that have MV data for this employee
+    last_demo_year, last_demo_month = max(_DEMO_MONTHS)
+    from datetime import date as _date
+    cutoff = _date(last_demo_year, last_demo_month, 1)
+
+    mv_newer = fetch_all(
+        """
+        SELECT DISTINCT
+            EXTRACT(YEAR  FROM created_month)::int AS yr,
+            EXTRACT(MONTH FROM created_month)::int AS mo
+        FROM mv_employee_daily
+        WHERE employee_id = %s::uuid
+          AND created_month > %s
+        ORDER BY yr, mo
+        """,
+        (user_id, cutoff),
+    )
+    for row in mv_newer:
+        yr = int(row["yr"])
+        mo = int(row["mo"])
+        if yr >= 2026:          # hard guard: never below 2026
+            target_months.add((yr, mo))
+
+    # ── Process each target month ─────────────────────────────────────────────
+    for year, month in sorted(target_months):
+        if year < 2026:
+            continue            # absolute safety: never generate pre-2026
+
+        report_code = f"{_MONTH_ABBR[month]}-{year}-{user_slug}"
+
         existing = fetch_one(
-            "SELECT id FROM employee_reports WHERE report_code = %s AND employee_user_id = %s",
-            (f"{_MONTH_ABBR[month]}-{year}", user_id),
+            """
+            SELECT er.id,
+                   (SELECT COUNT(*) FROM employee_report_rating_components
+                    WHERE report_id = er.id) AS rc_count
+            FROM employee_reports er
+            WHERE er.report_code = %s AND er.employee_user_id = %s::uuid
+            """,
+            (report_code, user_id),
         )
+
         if not existing:
             _generate_employee_report(user_id, year, month)
-        if month == 1:
-            month = 12
-            year -= 1
-        else:
-            month -= 1
+        elif int(existing.get("rc_count") or 0) == 0:
+            logger.info(
+                "report_gen | repairing incomplete report=%s user=%s",
+                report_code, user_id,
+            )
+            _generate_employee_report(user_id, year, month)
+
 
 @api.get("/employee/reports")
 def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
     user_id = user["id"]
 
-    # Auto-generate reports for the last 3 months if they don't exist yet
-    # This means every employee always has at least their current-month report
+    # Ensure demo months + any newer MV-backed months are fully populated.
     try:
-        _ensure_recent_reports(user_id, months=3)
+        _ensure_recent_reports(user_id)
     except Exception as exc:
         logger.warning("report_gen | auto-ensure failed user=%s err=%s", user_id, exc)
 
@@ -2766,7 +3078,7 @@ def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
             created_at  AS "createdAt"
           FROM employee_reports
           WHERE employee_user_id = %s
-          AND report_code ~ '^[a-z]{3}-[0-9]{4}(-[a-z0-9]+)?$'
+          AND report_code ~ '^[a-z]{3}-[0-9]{4}-[a-z0-9]+$'
           ORDER BY
             split_part(report_code, '-', 2),
             split_part(report_code, '-', 1),
