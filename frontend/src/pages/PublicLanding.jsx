@@ -4,64 +4,78 @@ import novaLogo from "../assets/nova-logo.png";
 import "./PublicLanding.css";
 
 const AGENTS_DATA = [
-  { name: "Transcriber", role: "Audio → Text", model: "Whisper", color: "#818cf8", icon: "mic",
-    details: "Transcribes voice submissions into editable text before the ticket enters the pipeline." },
-  { name: "Chatbot", role: "Ticket Intake", model: "Qwen", color: "#c084fc", icon: "inbox",
-    details: "Nova - the front-line chatbot. Handles inquiries using a knowledge base and initiates formal ticketing when escalation is needed." },
-  { name: "Classifier", role: "Complaint vs Inquiry", model: "DeBERTa NLI", color: "#a78bfa", icon: "tag",
-    details: "Classifies the ticket as a Complaint or Inquiry, so the correct workflow can continue." },
-  { name: "Sentiment", role: "Emotion Detection", model: "RoBERTa + Librosa", color: "#e879f9", icon: "heart",
-    details: "RoBERTa reads the ticket text for tone and frustration; Librosa extracts emotional cues from the audio waveform." },
-  { name: "Features", role: "Urgency & Impact", model: "DeBERTa NLI", color: "#f0abfc", icon: "settings",
-    details: "Extracts safety concern, severity, urgency, business impact, and recurrence from ticket content and history." },
-  { name: "Prioritizer", role: "Priority Scoring", model: "XGBoost", color: "#c026d3", icon: "scale",
-    details: "Assigns Low, Medium, High, or Critical priority using engineered ticket signals and learned scoring patterns." },
-  { name: "Router", role: "Department Assignment", model: "DeBERTa", color: "#d946ef", icon: "building",
-    details: "Routes tickets to the best-fit department and sends low-confidence cases for manager approval." },
-  { name: "Resolver", role: "Suggested Resolution", model: "Qwen", color: "#a855f7", icon: "lightbulb",
-    details: "Generates a suggested resolution for the employee to approve, edit, or reject, and retrains on every correction." },
+  { name: "Recurrence",            role: "History Detection",       model: "DB Lookup",         color: "#f472b6", icon: "settings",
+    details: "Cross-references incoming tickets against historical records to detect repeated issues and flag recurring complaints." },
+  { name: "Subject Generation",    role: "Topic Extraction",        model: "DeBERTa NLI",       color: "#4fc3f7", icon: "tag",
+    details: "Determines the core subject of the ticket so the system can follow the correct downstream workflow." },
+  { name: "Suggested Resolution",  role: "Resolution Draft",        model: "Qwen",              color: "#a855f7", icon: "lightbulb",
+    details: "Generates a suggested resolution for the assigned employee to approve, edit, or reject — and retrains on every correction." },
+  { name: "Classification",        role: "Complaint / Inquiry",     model: "DeBERTa NLI",       color: "#fbbf24", icon: "tag",
+    details: "Classifies the ticket as a Complaint or Inquiry so the correct workflow path is followed. Bypassed when type is already known." },
+  { name: "Sentiment Analysis",    role: "Emotion Detection",       model: "RoBERTa",           color: "#e879f9", icon: "heart",
+    details: "Reads ticket text and produces a continuous sentiment score from −1 to +1, capturing tone, frustration, and urgency cues." },
+  { name: "Audio Analysis",        role: "Voice Sentiment",         model: "Librosa",           color: "#34d399", icon: "mic",
+    details: "Processes raw audio waveforms to extract emotional tone directly from speech — pitch, energy, and zero-crossing rate." },
+  { name: "Feature Engineering",   role: "Urgency & Impact",        model: "DeBERTa NLI",       color: "#e8b87a", icon: "settings",
+    details: "Infers five operational labels in parallel — safety concern, severity, urgency, business impact, and recurrence — from ticket text." },
+  { name: "Prioritization Engine", role: "Priority Scoring",        model: "XGBoost",           color: "#d4b96a", icon: "scale",
+    details: "Assigns Critical, High, Medium, or Low priority using engineered ticket signals. Relearns from every employee rescore." },
+  { name: "Department Routing",    role: "Department Assignment",   model: "DeBERTa NLI",       color: "#7de8e8", icon: "building",
+    details: "Assigns a confidence score across all departments. Above 0.7 the ticket is auto-routed; below that it goes for manager approval." },
+  { name: "Review",                role: "Quality Check",           model: "Qwen",              color: "#f87171", icon: "clock",
+    details: "Validates the completed ticket payload — checking SLA targets, routing decisions, and priority — before final handoff to the employee." },
+  { name: "Sentiment Combiner",    role: "Signal Fusion",           model: "Fusion module",     color: "#a3e635", icon: "heart",
+    details: "Fuses text and audio sentiment into a single score. With audio: (Audio × 0.5) + (Text × 0.5). Without audio: text sentiment is used directly." },
 ];
 
 
 const PIPELINE = [
-
-{ icon: "mic", label: "Transcribe", sub: "Whisper (if audio)", color: "#818cf8" },
-{ icon: "inbox", label: "Create Ticket", sub: "Qwen chatbot or form", color: "#c084fc" },
-{ icon: "tag", label: "Classify", sub: "Complaint / Inquiry", color: "#a78bfa" },
-{ icon: "heart", label: "Sentiment", sub: "RoBERTa + Librosa", color: "#e879f9" },
-{ icon: "settings", label: "Feature Eng.", sub: "Urgency · Impact · Risk", color: "#f0abfc" },
-{ icon: "scale", label: "Prioritise", sub: "XGBoost scoring", color: "#c026d3" },
-{ icon: "clock", label: "SLA", sub: "Auto-escalation", color: "#d946ef" },
-{ icon: "building", label: "Route", sub: "DeBERTa department routing",color: "#a855f7" },
-{ icon: "lightbulb", label: "Resolution", sub: "Qwen suggested resolution", color: "#c084fc" },
-
+{ icon: "inbox",    label: "Chatbot",           sub: "Qwen · Nova",                      color: "#c084fc" },
+{ icon: "tag",      label: "Create Ticket",     sub: "Qwen chatbot or form",             color: "#a78bfa" },
+{ icon: "question", label: "Recurrence Check",  sub: "Transformer · DB lookup",          color: "#f472b6" },
+{ icon: "tag",      label: "Classify",          sub: "Complaint / Inquiry",              color: "#fbbf24" },
+{ icon: "heart",    label: "Sentiment",         sub: "RoBERTa + Librosa",                color: "#e879f9" },
+{ icon: "settings", label: "Feature Eng.",      sub: "Urgency · Impact · Risk",          color: "#e8b87a" },
+{ icon: "scale",    label: "Prioritise",        sub: "XGBoost scoring",                  color: "#d4b96a" },
+{ icon: "clock",    label: "SLA",               sub: "Auto-escalation",                  color: "#d946ef" },
+{ icon: "building", label: "Route",             sub: "Qwen department routing",          color: "#7de8e8" },
+{ icon: "lightbulb",label: "Resolution",        sub: "Qwen suggested resolution",        color: "#a855f7" },
 ];
 
 const PLANET_3D = [
-  // 0: Transcriber — Mercury-like: small, grey, heavily cratered, close orbit
-  { color: "#818cf8", radius: 0.42, orbitR: 3.4,  speed: 0.011,  tiltX: 0.20,  tiltZ:  0.08, startAngle: 0.0,
-    personality: 'mercury' },
-  // 1: Chatbot — Venus-like: creamy orange-yellow, thick cloud swirls, bright
-  { color: "#f5c842", radius: 0.58, orbitR: 5.2,  speed: 0.008,  tiltX:-0.18,  tiltZ: -0.10, startAngle: 0.9,
-    personality: 'venus' },
-  // 2: Classifier — Earth-like: blue oceans, green/brown continents, white clouds, polar caps
-  { color: "#4fc3f7", radius: 0.60, orbitR: 7.1,  speed: 0.007,  tiltX: 0.28,  tiltZ:  0.12, startAngle: 1.8,
-    personality: 'earth' },
-  // 3: Sentiment — Mars-like: rust red, dark canyons, thin polar ice
-  { color: "#e85d26", radius: 0.50, orbitR: 9.1,  speed: 0.006,  tiltX:-0.12,  tiltZ: -0.07, startAngle: 2.7,
+  // 0: Recurrence — Mars-like: rust-pink, history scars
+  { color: "#f472b6", radius: 0.42, orbitR: 3.0,  speed: 0.011,  tiltX:-0.12,  tiltZ: -0.06, startAngle: 0.0,
     personality: 'mars' },
-  // 4: Features — Jupiter-like: large, amber/cream bands, great red storm
-  { color: "#e8b87a", radius: 0.95, orbitR: 11.4, speed: 0.005,  tiltX: 0.22,  tiltZ:  0.15, startAngle: 3.6,
-    personality: 'jupiter' },
-  // 5: Prioritizer — Saturn-like: pale gold, prominent rings
-  { color: "#d4b96a", radius: 0.80, orbitR: 13.8, speed: 0.004,  tiltX:-0.30,  tiltZ: -0.12, startAngle: 4.4,
-    personality: 'saturn' },
-  // 6: Router — Uranus-like: cyan-teal, smooth icy, subtle bands
-  { color: "#7de8e8", radius: 0.70, orbitR: 16.4, speed: 0.0034, tiltX: 0.17,  tiltZ:  0.09, startAngle: 5.2,
+  // 1: Subject Generation — Mercury-like: small, precise
+  { color: "#4fc3f7", radius: 0.46, orbitR: 4.4,  speed: 0.009,  tiltX: 0.20,  tiltZ:  0.08, startAngle: 1.1,
+    personality: 'mercury' },
+  // 2: Suggested Resolution — Venus-like: bright, warm
+  { color: "#a855f7", radius: 0.56, orbitR: 5.8,  speed: 0.008,  tiltX: 0.18,  tiltZ: -0.10, startAngle: 2.0,
+    personality: 'venus' },
+  // 3: Classification — Earth-like: structured, analytical
+  { color: "#fbbf24", radius: 0.54, orbitR: 7.2,  speed: 0.007,  tiltX: 0.28,  tiltZ:  0.12, startAngle: 2.9,
+    personality: 'earth' },
+  // 4: Sentiment Analysis — Uranus-like: smooth emotional cyan
+  { color: "#e879f9", radius: 0.58, orbitR: 8.6,  speed: 0.006,  tiltX:-0.30,  tiltZ: -0.11, startAngle: 3.8,
     personality: 'uranus' },
-  // 7: Resolver — Neptune-like: deep blue, violent storm swirls, white cloud streaks
-  { color: "#4169e1", radius: 0.68, orbitR: 19.0, speed: 0.0028, tiltX:-0.24,  tiltZ: -0.14, startAngle: 6.1,
+  // 5: Audio Analysis — Mercury-like: small, signal processing
+  { color: "#34d399", radius: 0.40, orbitR: 10.0, speed: 0.0055, tiltX: 0.16,  tiltZ:  0.09, startAngle: 4.6,
+    personality: 'mercury' },
+  // 6: Feature Engineering — Jupiter-like: large, complex, banded
+  { color: "#e8b87a", radius: 0.85, orbitR: 11.5, speed: 0.005,  tiltX: 0.22,  tiltZ:  0.15, startAngle: 5.3,
+    personality: 'jupiter' },
+  // 7: Prioritization Engine — Saturn-like: pale gold, prominent rings
+  { color: "#d4b96a", radius: 0.72, orbitR: 13.2, speed: 0.0042, tiltX:-0.30,  tiltZ: -0.12, startAngle: 0.5,
+    personality: 'saturn' },
+  // 8: Department Routing — Neptune-like: deep blue, directed
+  { color: "#7de8e8", radius: 0.62, orbitR: 14.8, speed: 0.0035, tiltX: 0.17,  tiltZ:  0.09, startAngle: 1.4,
     personality: 'neptune' },
+  // 9: Review — Mars-like: warm final check
+  { color: "#f87171", radius: 0.46, orbitR: 16.2, speed: 0.003,  tiltX:-0.18,  tiltZ: -0.08, startAngle: 2.3,
+    personality: 'mars' },
+  // 10: Sentiment Combiner — Earth-like: fusion of signals
+  { color: "#a3e635", radius: 0.52, orbitR: 17.5, speed: 0.0028, tiltX: 0.24,  tiltZ:  0.13, startAngle: 3.2,
+    personality: 'earth' },
 ];
 
 function Icon({ name, size = 20 }) {
@@ -77,6 +91,7 @@ function Icon({ name, size = 20 }) {
     clock:     <svg {...s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
     building:  <svg {...s} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h18M3 15h18M15 3v18"/></svg>,
     lightbulb: <svg {...s} viewBox="0 0 24 24" {...p}><path d="M9 21h6M12 3a6 6 0 016 6c0 2.22-1.21 4.16-3 5.2V17H9v-2.8A6.002 6.002 0 0112 3z"/></svg>,
+    question:  <svg {...s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   };
   return icons[name] || null;
 }
@@ -360,6 +375,21 @@ function SolarSystem({ onReady }) {
       );
       scene.add(sun);
 
+      // Orchestrator label — always centered on the sun
+      const sunLabelEl = document.createElement("div");
+      sunLabelEl.className = "pl-planet-label";
+      sunLabelEl.textContent = "Orchestrator";
+      sunLabelEl.style.fontSize = "11px";
+      sunLabelEl.style.padding = "3px 9px";
+      sunLabelEl.style.borderRadius = "5px";
+      sunLabelEl.style.background = "rgba(30, 10, 0, 0.90)";
+      sunLabelEl.style.border = "1px solid rgba(255, 180, 50, 0.70)";
+      sunLabelEl.style.boxShadow = "0 0 12px rgba(255, 160, 30, 0.40)";
+      sunLabelEl.style.color = "#ffd580";
+      sunLabelEl.style.fontWeight = "700";
+      sunLabelEl.style.letterSpacing = "0.05em";
+      labelDiv.appendChild(sunLabelEl);
+
       const coronaVS = `
         varying vec3 vPos;
         void main(){ vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }
@@ -639,8 +669,8 @@ function SolarSystem({ onReady }) {
         mesh.position.set(cfg.orbitR, 0, 0);
         innerPivot.add(mesh);
 
-        // Saturn-style rings on planet index 5 (saturn personality)
-        if (i === 5) {
+        // Saturn-style rings on planet index 7 (Prioritization Engine — saturn personality)
+        if (i === 7) {
           const ringMat = new THREE.MeshBasicMaterial({
             color: new THREE.Color(0.72, 0.60, 0.35),
             transparent: true, opacity: 0.55, side: THREE.DoubleSide,
@@ -727,8 +757,8 @@ function SolarSystem({ onReady }) {
       for (let ai = 0; ai < NUM_ASTEROIDS; ai++) {
         const rand = srand(ai * 7919 + 1337);
 
-        // Belt occupies the space around orbits 4–6 (roughly 10–15 units)
-        const beltR = 10.5 + rand() * 4.5;
+        // Belt occupies the space between orbits 6 and 7 (roughly 12.0–13.0 units)
+        const beltR = 12.0 + rand() * 1.0;
         const angle = rand() * Math.PI * 2;
         const yOff  = (rand() - 0.5) * 1.8;  // slight vertical spread
 
@@ -834,6 +864,10 @@ function SolarSystem({ onReady }) {
             el.style.transform = `translate(-50%,-100%) translate(${s.x.toFixed(1)}px,${s.y.toFixed(1)}px)`;
           }
         });
+
+        // Project Orchestrator (sun) label — sun is at scene origin
+        const sunS = toScreen(new THREE.Vector3(0, 2.6, 0), CW, CH);
+        sunLabelEl.style.transform = `translate(-50%,-100%) translate(${sunS.x.toFixed(1)}px,${sunS.y.toFixed(1)}px)`;
       }
       animate();
 
@@ -878,6 +912,7 @@ function SolarSystem({ onReady }) {
         cancelAnimationFrame(raf); renderer.dispose();
         if (renderer.domElement.parentNode===mount) mount.removeChild(renderer.domElement);
         labelEls.forEach(el => { if (el.parentNode) el.parentNode.removeChild(el); });
+        if (sunLabelEl && sunLabelEl.parentNode) sunLabelEl.parentNode.removeChild(sunLabelEl);
         mount.removeEventListener("mousemove", onMouseMove);
         mount.removeEventListener("mousedown", onMouseDown);
         mount.removeEventListener("touchstart",onTouchStart);
@@ -967,7 +1002,7 @@ function PipelineFlow() {
 
   useEffect(() => {
     if (!vis || paused) return;
-    const id = setInterval(() => setActive(a => (a + 1) % PIPELINE.length), 1100);
+    const id = setInterval(() => setActive(a => (a + 1) % PIPELINE.length), 3000);
     return () => clearInterval(id);
   }, [vis, paused]);
 
@@ -1206,14 +1241,6 @@ export default function PublicLanding() {
               Chat with Nova AI
               <span className="pl-nova-arrow">Try Now →</span>
             </button>
-            <div className="pl-hero-stats">
-              {[["98%","Triage Accuracy"],["40%","Faster Resolution"],["3×","Throughput"]].map(([v,l]) => (
-                <div key={l} className="pl-hstat">
-                  <span className="pl-hstat-v">{v}</span>
-                  <span className="pl-hstat-l">{l}</span>
-                </div>
-              ))}
-            </div>
           </div>
           <div className="pl-hero-right"><SolarSystem onReady={handleReady} /></div>
         </div>
@@ -1223,8 +1250,11 @@ export default function PublicLanding() {
       <div className="pl-marquee">
         <div className="pl-marquee-track">
           {[...Array(4)].map((_,r) =>
-            ["Whisper Transcription","Qwen Chatbot","RoBERTa Sentiment","DeBERTa Routing",
-              "XGBoost Priority","Qwen Suggested Resolution","SLA Automation"].map((x,i)=>(
+            ["Chatbot by Qwen","Transcriber by FasterWhisper","Orchestrator by LangChain",
+              "Recurrence by Transformer","Subject Generation by Qwen","Suggested Resolution by Qwen",
+              "Classification by DeBERTa","Sentiment Analysis by RoBERTa","Audio Analysis by Librosa",
+              "Feature Engineering by DeBERTa","Prioritization Engine by XGBoost",
+              "Department Routing by Qwen","Review by Qwen"].map((x,i)=>(
               <span key={`${r}-${i}`} className="pl-marquee-item">✦ {x}</span>
             ))
           )}
@@ -1260,11 +1290,7 @@ export default function PublicLanding() {
       {/* FOOTER */}
       <footer className="pl-footer">
         <img src={novaLogo} alt="InnovaCX" className="pl-footer-logo"/>
-        <div className="pl-footer-links">
-          <button className="pl-footer-link" onClick={() => navigate("/about")}>About</button>
-          <button className="pl-footer-link" onClick={() => navigate("/login")}>Log In</button>
-        </div>
-        <div className="pl-footer-socials">
+        <div className="pl-footer-socials" style={{display:"none"}}>
           <a href="https://www.instagram.com/innovacx.ai?igsh=bzVxOTNuMXUzODEz&utm_source=qr" target="_blank" rel="noopener noreferrer" className="pl-social-link" aria-label="Instagram">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <rect x="2" y="2" width="20" height="20" rx="5.5" ry="5.5" stroke="currentColor" strokeWidth="1.8" fill="none"/>
@@ -1284,8 +1310,7 @@ export default function PublicLanding() {
             </svg>
           </a>
         </div>
-        <p className="pl-footer-copy">© 2026 InnovaAI · All rights reserved.</p>
-        <p className="pl-footer-copy">Sponsored By Dubai CommerCity</p>
+        <p className="pl-footer-copy">© 2026 InnovaAI · All rights reserved. &nbsp;·&nbsp; Sponsored By Dubai CommerCity</p>
       </footer>
     </div>
 
