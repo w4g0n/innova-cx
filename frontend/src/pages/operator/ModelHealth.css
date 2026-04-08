@@ -10,7 +10,7 @@
   color: var(--text-dark);
 }
 
-/* ---- Top filter bar ---- */
+/* Top filter bar */
 .ma-top-actions {
   display: flex;
   gap: 12px;
@@ -18,7 +18,7 @@
   flex-wrap: wrap;
 }
 
-/* ---- Nav tabs (same as QualityControl) ---- */
+/* Nav tabs (same as QualityControl) */
 .ma-nav {
   display: flex;
   gap: 8px;
@@ -53,7 +53,7 @@
   background: rgba(89, 36, 180, 0.06);
 }
 
-/* ---- View container ---- */
+/* View container */
 .ma-view {
   margin-top: 24px;
   display: flex;
@@ -61,7 +61,7 @@
   gap: 20px;
 }
 
-/* ---- Section headings ---- */
+/* Section headings */
 .ma-section-heading {
   display: flex;
   align-items: center;
@@ -79,7 +79,7 @@
 .ma-section-heading__icon  { font-size: 18px; line-height: 1; display: flex; align-items: center; }
 .ma-section-heading__label { letter-spacing: -0.1px; }
 
-/* ---- KPI row ---- */
+/* KPI row */
 .ma-kpi-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -120,7 +120,7 @@
 .ma-kpi--neutral .ma-kpi__value { color: rgba(17,17,17,0.65); }
 .ma-kpi__sub { font-size: 11.5px; color: rgba(17,17,17,0.55); line-height: 1.4; margin-top: 4px; }
 
-/* ---- Cards row ---- */
+/* Cards row */
 .ma-cards-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .ma-card {
   background: #ffffff;
@@ -133,7 +133,7 @@
 .ma-card__title { margin: 0; font-size: 15px; font-weight: 800; color: var(--text-dark); font-family: var(--font-heading); }
 .ma-card__sub   { margin: 5px 0 0; font-size: 12px; color: rgba(17,17,17,0.60); line-height: 1.5; }
 
-/* ---- Chart box ---- */
+/* Chart box */
 .ma-chart-box {
   margin-top: 14px;
   padding: 14px;
@@ -143,7 +143,7 @@
 }
 .ma-chart-box * { user-select: none; outline: none !important; }
 
-/* ---- Info banner ---- */
+/* Info banner */
 .ma-info-banner {
   display: flex;
   gap: 12px;

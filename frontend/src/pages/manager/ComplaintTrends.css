@@ -1,6 +1,4 @@
-/* ─────────────────────────────────────────────────────────────────────────────
    Original styles — preserved exactly as provided
-───────────────────────────────────────────────────────────────────────────── */
 
 .mgrTrends {
   width: 100%;
@@ -256,11 +254,9 @@
 }
 
 
-/* ─────────────────────────────────────────────────────────────────────────────
    New analytics components — tabs, charts, gauges, employee panel
-───────────────────────────────────────────────────────────────────────────── */
 
-/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+/* Tabs */
 .ct-tabs {
   display: flex;
   gap: 4px;
@@ -295,7 +291,7 @@
   font-weight: 750;
 }
 
-/* ── Section wrapper ─────────────────────────────────────────────────────── */
+/* Section wrapper */
 .ct-section {
   display: flex;
   flex-direction: column;
@@ -303,7 +299,7 @@
   padding-top: 22px;
 }
 
-/* ── Card description line ────────────────────────────────────────────────── */
+/* Card description line */
 .ct-cardDesc {
   font-size: 15px;
   font-weight: 500;
@@ -312,14 +308,14 @@
   line-height: 1.5;
 }
 
-/* ── Two-column grid ──────────────────────────────────────────────────────── */
+/* Two-column grid */
 .ct-grid2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 22px;
 }
 
-/* ── Dual-line SVG chart ──────────────────────────────────────────────────── */
+/* Dual-line SVG chart */
 .ct-dualLine {
   display: flex;
   flex-direction: column;
@@ -347,7 +343,7 @@
   color: rgba(17, 17, 17, 0.4);
 }
 
-/* ── Stacked area chart ───────────────────────────────────────────────────── */
+/* Stacked area chart */
 .ct-stackedArea {
   display: flex;
   flex-direction: column;
@@ -359,7 +355,7 @@
   height: 140px;
 }
 
-/* ── Daily volume mini-bars ───────────────────────────────────────────────── */
+/* Daily volume mini-bars */
 .ct-volBars {
   display: flex;
   align-items: flex-end;
@@ -388,7 +384,7 @@
   opacity: 1;
 }
 
-/* ── Horizontal mini-bars (dept breach / escalation rates) ───────────────── */
+/* Horizontal mini-bars (dept breach / escalation rates) */
 .ct-miniBar {
   display: flex;
   flex-direction: column;
@@ -427,7 +423,7 @@
   transition: width 0.4s ease;
 }
 
-/* ── Recurring issue heatmap ──────────────────────────────────────────────── */
+/* Recurring issue heatmap */
 .ct-heatmap {
   overflow-x: auto;
 }
@@ -476,7 +472,7 @@
   transform: scale(1.1);
 }
 
-/* ── SLA Gauges ───────────────────────────────────────────────────────────── */
+/* SLA Gauges */
 .ct-gaugeRow {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -548,13 +544,13 @@
 .ct-gauge__delta.pos { color: #047857; }
 .ct-gauge__delta.neg { color: #b91c1c; }
 
-/* ── Semantic status colours ──────────────────────────────────────────────── */
+/* Semantic status colours */
 .ct-good { color: #047857; font-weight: 750; }
 .ct-warn { color: #b45309; font-weight: 750; }
 .ct-bad  { color: #b91c1c; font-weight: 750; }
 .ct-dimVal { font-size: 13px; color: rgba(17, 17, 17, 0.4); }
 
-/* ── Priority badge tags ──────────────────────────────────────────────────── */
+/* Priority badge tags */
 .ct-priTag {
   display: inline-block;
   font-size: 13px;
@@ -568,7 +564,7 @@
 .ct-pri--medium   { background: #fef3c7; color: #92400e; }
 .ct-pri--low      { background: #dcfce7; color: #166534; }
 
-/* ── Employee table ───────────────────────────────────────────────────────── */
+/* Employee table */
 .ct-empTable td {
   vertical-align: middle;
   cursor: pointer;
@@ -603,7 +599,7 @@
   padding: 0 8px;
 }
 
-/* ── Employee expandable detail panel ────────────────────────────────────── */
+/* Employee expandable detail panel */
 .ct-empDetail > td {
   background: rgba(89, 36, 180, 0.03);
   padding: 0 16px 16px;
@@ -664,13 +660,13 @@
   padding: 3px 0;
 }
 
-/* ── Alert reference table accent ────────────────────────────────────────── */
+/* Alert reference table accent */
 .ct-alertRef .trendsTable td:nth-child(2) {
   font-weight: 750;
   color: var(--btn-primary);
 }
 
-/* ── Loading / error / empty states ──────────────────────────────────────── */
+/* Loading / error / empty states */
 .ct-loading,
 .ct-error,
 .ct-empty {
@@ -683,7 +679,7 @@
 
 .ct-error { color: #b91c1c; }
 
-/* ── Responsive additions for new components ──────────────────────────────── */
+/* Responsive additions for new components */
 @media (max-width: 1200px) {
   .ct-grid2 { grid-template-columns: 1fr; }
 }
@@ -695,7 +691,7 @@
   .pillSelectHolder { flex-wrap: wrap; }
 }
 
-/* ── Section C only — 4 KPI cards fill full width ───────────────────────── */
+/* Section C only — 4 KPI cards fill full width */
 .ct-sectionC .kpiRow {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }

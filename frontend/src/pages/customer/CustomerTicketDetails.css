@@ -12,7 +12,7 @@
   font-family: "Outfit", sans-serif;
 }
 
-/* ── PAGE TITLE BLOCK ───────────────────────────────────────── */
+/* Page Title Block */
 .ctd-page-header {
   padding: clamp(20px,3vw,32px) clamp(16px,3vw,32px) 0;
   display: flex; align-items: flex-start; justify-content: space-between;
@@ -29,7 +29,7 @@
 }
 .ctd-page-sub { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
 
-/* ── LAYOUT ─────────────────────────────────────────────────── */
+/* Layout */
 .ctd-body {
   display: flex;
   flex-direction: column;
@@ -124,7 +124,7 @@
 }
 
 
-/* ── CARD ───────────────────────────────────────────────────── */
+/* Card */
 .ctd-card {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
@@ -134,7 +134,7 @@
 [data-theme="dark"]  .ctd-card { box-shadow: 0 8px 40px rgba(0,0,0,.25); }
 [data-theme="light"] .ctd-card { box-shadow: 0 4px 24px rgba(109,40,217,.1); }
 
-/* ── TICKET ID ROW ──────────────────────────────────────────── */
+/* Ticket Id Row */
 .ctd-id-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .ctd-mono   { font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .04em; }
 .ctd-dot    { color: var(--dim); font-size: 11px; }
@@ -146,19 +146,19 @@
 }
 .ctd-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
-/* ── TICKET TITLE ───────────────────────────────────────────── */
+/* Ticket Title */
 .ctd-ticket-title {
   font-size: 20px; font-weight: 800; color: var(--text);
   line-height: 1.3; margin: 0 0 18px;
 }
 
-/* ── META ───────────────────────────────────────────────────── */
+/* Meta */
 .ctd-meta-row { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 20px; }
 .ctd-meta-item { display: flex; flex-direction: column; gap: 4px; }
 .ctd-meta-label { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 .ctd-meta-value { font-size: 14px; font-weight: 600; color: var(--text); }
 
-/* ── DIVIDER / SECTION LABEL ────────────────────────────────── */
+/* Divider / Section Label */
 .ctd-divider { height: 1px; background: var(--card-border); margin: 0 0 18px; }
 .ctd-divider--gap { margin: 20px 0 18px; }
 .ctd-section-label { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); margin-bottom: 14px; }
@@ -192,7 +192,7 @@
   width: 100%;
 }
 
-/* ── PIPELINE ───────────────────────────────────────────────── */
+/* Pipeline */
 .ctd-pipeline {
   background: rgba(109,40,217,.06);
   border: 1px solid var(--card-border);
@@ -240,7 +240,7 @@
 .ctd-stage-label.active { color: var(--pink); }
 .ctd-dot-cond  { display: block; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--pink); margin-top: 2px; }
 
-/* ── ACTIVITY LOG ───────────────────────────────────────────── */
+/* Activity Log */
 .ctd-log-list { display: flex; flex-direction: column; }
 .ctd-log-row  { display: flex; gap: 12px; padding-bottom: 14px; }
 
@@ -262,7 +262,7 @@
   color: var(--muted); font-size: 14px;
 }
 
-/* ── LOADING / NOT FOUND ────────────────────────────────────── */
+/* Loading / Not Found */
 .ctd-loading {
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 14px; padding: 80px 24px;
@@ -284,7 +284,7 @@
 .ctd-not-found h3 { font-size: 20px; font-weight: 800; color: var(--text); margin: 0; }
 .ctd-not-found p  { font-size: 14px; color: var(--muted); margin: 0; }
 
-/* ── RESPONSIVE ─────────────────────────────────────────────── */
+/* Responsive */
 @media(max-width:900px) {
   .ctd-layout { grid-template-columns: 1fr; }
   .ctd-right-col .ctd-chat-card .tc-list { min-height: 300px; }

@@ -557,7 +557,6 @@ function stageHasAudio(stage) {
   return false;
 }
 
-// ── Module-level constants (never recreated on render) ──────────────────────
 
 const STATUS_CLASS = {
   Open: "ev-status-open",
@@ -568,8 +567,6 @@ const STATUS_CLASS = {
   Resolved: "ev-status-resolved",
   Completed: "ev-status-resolved",
 };
-
-// ────────────────────────────────────────────────────────────────────────────
 
 export default function AIExplainability() {
   const navigate = useNavigate();

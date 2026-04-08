@@ -18,7 +18,7 @@
   width: 100%;
 }
 
-/* ---- Page header row ---- */
+/* Page header row */
 .details-header {
   display: flex;
   justify-content: space-between;
@@ -96,7 +96,7 @@
   color: #b45309;
 }
 
-/* ---- Action buttons ---- */
+/* Action buttons */
 .header-actions {
   display: flex;
   align-items: center;
@@ -147,7 +147,7 @@
   filter: brightness(1.08);
 }
 
-/* ---- Card sections ---- */
+/* Card sections */
 .card-section {
   background: #fff;
   border-radius: 22px;
@@ -288,7 +288,7 @@
   line-height: 1.6;
 }
 
-/* ---- Layout grid ---- */
+/* Layout grid */
 .details-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -300,7 +300,7 @@
   margin-bottom: 0;
 }
 
-/* ---- Timeline ---- */
+/* Timeline */
 .timeline {
   display: flex;
   flex-direction: column;
@@ -547,7 +547,7 @@
   filter: brightness(1.08);
 }
 
-/* ---- Dropdown wrapper ---- */
+/* Dropdown wrapper */
 .modal-dropdown {
   background: #ffffff;
   border: 1.5px solid rgba(89, 36, 180, 0.22);
@@ -587,7 +587,7 @@
   pointer-events: none;
 }
 
-/* ---- Escalate modal variant ---- */
+/* Escalate modal variant */
 .modal-card.modal-red {
   border-top: 5px solid #c1121f;
 }
@@ -602,7 +602,7 @@
   filter: brightness(1.08);
 }
 
-/* ---- Attachment label optional tag ---- */
+/* Attachment label optional tag */
 .modal-label-optional {
   font-size: 10px;
   font-weight: 600;
@@ -613,7 +613,7 @@
   vertical-align: middle;
 }
 
-/* ---- File upload ---- */
+/* File upload */
 .modal-upload-box {
   margin-top: 6px;
   border: 1.5px dashed rgba(89, 36, 180, 0.28);

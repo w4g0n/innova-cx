@@ -12,7 +12,7 @@
   animation: fadeUp 0.4s var(--ease-out, ease-out) both;
 }
 
-/* ── Refresh button ──────────────────────────────────────────── */
+/* Refresh button */
 .pq-refresh-btn {
   display: inline-flex;
   align-items: center;
@@ -36,7 +36,7 @@
 }
 @keyframes pq-spin { to { transform: rotate(360deg); } }
 
-/* ── Pause / Play toggle ─────────────────────────────────────── */
+/* Pause / Play toggle */
 .pq-pipeline-toggle {
   border-color: rgba(239, 68, 68, 0.3);
   color: #b91c1c;
@@ -56,7 +56,7 @@
   border-color: rgba(22, 163, 74, 0.6);
 }
 
-/* ── Stats strip ─────────────────────────────────────────────── */
+/* Stats strip */
 .pq-stats {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -114,7 +114,7 @@
   margin-top: 3px;
 }
 
-/* ── Override Queue (action required) ────────────────────────── */
+/* Override Queue (action required) */
 .pq-actions {
   margin-bottom: 32px;
 }
@@ -179,7 +179,7 @@
   border-radius: 0 0 16px 16px;
 }
 
-/* ── Action card ─────────────────────────────────────────────── */
+/* Action card */
 .pq-action-card {
   background: #fff;
   border-radius: 14px;
@@ -321,13 +321,13 @@
   transform: translateY(-1px);
 }
 
-/* ── Header actions row ──────────────────────────────────────── */
+/* Header actions row */
 .pq-header-actions {
   display: flex;
   gap: 12px;
 }
 
-/* ── All-clear banner ────────────────────────────────────────── */
+/* All-clear banner */
 .pq-clear-banner {
   display: flex;
   align-items: center;
@@ -347,7 +347,7 @@
   color: #9a5b00;
 }
 
-/* ── Full queue section ──────────────────────────────────────── */
+/* Full queue section */
 .pq-queue {
   background: #fff;
   border-radius: 20px;
@@ -445,7 +445,7 @@
 }
 .pq-search__input::placeholder { color: rgba(26, 26, 46, 0.35); }
 
-/* ─── Section dividers in table ──────────────────────────────── */
+/* Section dividers in table */
 .pq-section-divider__cell {
   padding: 6px 14px 5px;
   font-size: 10.5px;
@@ -461,7 +461,7 @@
   border-top: none;
 }
 
-/* ── Table ───────────────────────────────────────────────────── */
+/* Table */
 .pq-table-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -502,7 +502,7 @@
 .pq-row--processing { background: rgba(245, 158, 11, 0.03); }
 .pq-row--processing:hover { background: rgba(245, 158, 11, 0.06); }
 
-/* ─── Stage progress bar ───────────────────────────────── */
+/* Stage progress bar */
 .pq-stage-bar {
   display: flex;
   align-items: center;
@@ -616,7 +616,7 @@
 .pq-row__link:hover:not(:disabled) { background: rgba(89, 36, 180, 0.08); }
 .pq-row__link:disabled { opacity: 0.45; cursor: default; }
 
-/* ── Pill badges ─────────────────────────────────────────────── */
+/* Pill badges */
 .pq-pill {
   display: inline-block;
   padding: 3px 10px;
@@ -632,7 +632,7 @@
 .pq-pill--blue   { background: rgba(59,  130, 246, 0.10); color: #1d4ed8; }
 .pq-pill--muted  { background: rgba(26,  26,  46,  0.07); color: rgba(26, 26, 46, 0.60); }
 
-/* ── Utility ─────────────────────────────────────────────────── */
+/* Utility */
 .pq-muted { color: rgba(26, 26, 46, 0.45); }
 .pq-btn-icon { display: inline-block; vertical-align: middle; flex-shrink: 0; }
 
@@ -658,7 +658,7 @@
 }
 .pq-retry-btn:hover { background: rgba(220, 38, 38, 0.06); }
 
-/* ── Responsive ──────────────────────────────────────────────── */
+/* Responsive */
 @media (max-width: 1200px) {
   .pq-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }

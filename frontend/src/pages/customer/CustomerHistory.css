@@ -4,7 +4,7 @@
 @import "./CustomerShared.css";
 
 
-/* ── TOOLBAR ────────────────────────────────────────────────── */
+/* Toolbar */
 .cmyt-toolbar {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
 }
@@ -55,7 +55,7 @@
   color: var(--pink);
 }
 
-/* ── STATUS FILTER TABS ─────────────────────────────────────── */
+/* Status Filter Tabs */
 .cmyt-tabs {
   display: flex; gap: 6px; flex-wrap: wrap;
 }
@@ -82,7 +82,7 @@
 }
 .cmyt-tab--active .cmyt-tab-count { background: rgba(109,40,217,.3); }
 
-/* ── TICKET LIST ────────────────────────────────────────────── */
+/* Ticket List */
 .cmyt-list { display: flex; flex-direction: column; gap: 12px; }
 
 .cmyt-ticket-card {
@@ -131,7 +131,7 @@
 }
 .cmyt-ticket-card:hover .cmyt-view-cta { gap: 8px; }
 
-/* ── EMPTY STATE ────────────────────────────────────────────── */
+/* Empty State */
 .cmyt-empty {
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; text-align: center;
@@ -146,7 +146,7 @@
 .cmyt-empty-title { font-size: 17px; font-weight: 800; color: var(--text); margin: 0 0 6px; }
 .cmyt-empty-sub { font-size: 13.5px; color: var(--muted); margin: 0; }
 
-/* ── MODAL ──────────────────────────────────────────────────── */
+/* Modal */
 .cmyt-modal-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,.55); 
@@ -175,7 +175,7 @@
 .cmyt-modal-btns { display: flex; justify-content: center; gap: 10px; }
 .cmyt-modal-btns .cs-btn { flex: 1; height: 42px; }
 
-/* ── GRADIENT TEXT ──────────────────────────────────────────── */
+/* Gradient Text */
 .cs-grad-text {
   background: linear-gradient(100deg, var(--pink), var(--orchid) 50%, var(--fuchsia));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;

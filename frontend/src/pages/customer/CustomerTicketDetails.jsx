@@ -9,7 +9,6 @@ import TicketChat from "../../components/common/TicketChat";
 import { sanitizeText, sanitizeId, formatTimeAgo } from "./sanitize";
 import "./CustomerTicketDetails.css";
 
-/* ── helpers ─────────────────────────────────────────────────── */
 function formatTicketSource(v) {
   return String(v || "user").toLowerCase() === "chatbot" ? "Chatbot" : "User";
 }
@@ -59,7 +58,6 @@ function normalizeStatus(s) {
   return sanitizeText(s, 40).toLowerCase().replace(/\s+/g, "");
 }
 
-/* ════════════════════════════════════════════════════════════════ */
 export default function CustomerTicketDetails() {
   const navigate           = useNavigate();
   const { id: rawId }      = useParams();
@@ -227,7 +225,6 @@ export default function CustomerTicketDetails() {
   return (
     <div className="ctd-page">
 
-      {/* ── TOPBAR ── */}
       <header className="cs-topbar">
         <div className="cs-topbar-left">
           <img
@@ -319,7 +316,6 @@ export default function CustomerTicketDetails() {
         </div>
       </header>
 
-      {/* ── PAGE TITLE ── */}
       <div className="ctd-page-header">
         <div>
           <h1 className="ctd-page-title">Ticket Details</h1>
@@ -329,7 +325,6 @@ export default function CustomerTicketDetails() {
         </div>
       </div>
 
-      {/* ── CONTENT ── */}
       {loading ? (
         <div className="ctd-loading">
           <div className="ctd-loading-spinner" />
@@ -482,7 +477,6 @@ export default function CustomerTicketDetails() {
                   </div>
                 </div>
 
-                {/* ── ACTIVITY LOG — ticket updates + notifications merged ── */}
                 <div className="ctd-divider ctd-divider--gap" />
                 <p className="ctd-section-label">Activity</p>
                 {timelineEntries.length === 0 ? (
@@ -582,13 +576,11 @@ export default function CustomerTicketDetails() {
         </div>
       )}
 
-      {/* ── FOOTER ── */}
       <footer className="cs-footer">
         <img src={novaLogo} alt="InnovaAI" className="cs-footer-logo" />
         <p className="cs-footer-copy">© 2026 InnovaAI</p>
       </footer>
 
-      {/* ── LOGOUT CONFIRM ── */}
       {showLogoutConfirm && (
         <div
           className="novaCloseModal"

@@ -15,7 +15,6 @@ export async function createUser(payload) {
     throw err;
   }
 
-  // Return mock created user
   return {
     id: crypto?.randomUUID?.() || String(Date.now()),
     ...payload,

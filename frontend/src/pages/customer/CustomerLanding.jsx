@@ -114,14 +114,12 @@ export default function CustomerLanding() {
   const notifRef          = useRef(null);
   const loadingTimeoutRef = useRef(null);
 
-  // ── Nova chat widget state ──────────────────────────────────────────────
   const [isOpen,             setIsOpen]             = useState(false);
   const [isExpanded,         setIsExpanded]          = useState(false);
   const [showCloseConfirm,   setShowCloseConfirm]   = useState(false);
   const [showResetConfirm,   setShowResetConfirm]   = useState(false);
   const [showLogoutConfirm,  setShowLogoutConfirm]  = useState(false);
 
-  // ── Fill-Form widget state ──────────────────────────────────────────────
   const [formOpen,             setFormOpen]             = useState(false);
   const [formExpanded,         setFormExpanded]         = useState(false);
   const [showFormCloseConfirm, setShowFormCloseConfirm] = useState(false);
@@ -272,7 +270,6 @@ export default function CustomerLanding() {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, isOpen, isExpanded, novaView, listRef]);
 
-  // ── Nova widget handlers ───────────────────────────────────────────────
   const handleClose  = () => setShowCloseConfirm(true);
   const confirmClose = () => {
     setShowCloseConfirm(false);
@@ -291,7 +288,6 @@ export default function CustomerLanding() {
   };
   const minimizeWidget = () => { setIsOpen(false); setIsExpanded(false); };
 
-  // ── Fill Form widget handlers ──────────────────────────────────────────
   const openFormWidget    = () => { closeAllPopovers(); setFormOpen(true); };
   const handleFormClose   = () => setShowFormCloseConfirm(true);
   const confirmFormClose  = () => {
@@ -353,7 +349,6 @@ export default function CustomerLanding() {
     else if (action === "form")    openFormWidget();
   };
 
-  // ── Voice input for Nova ───────────────────────────────────────────────
   const speechRef   = useRef(null);
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceDraft,  setVoiceDraft]  = useState("");
@@ -413,7 +408,6 @@ export default function CustomerLanding() {
   return (
     <div className="cl-dashboard pl-root">
 
-      {/* ─── TOPBAR ────────────────────────────────────────────── */}
       <header className="cl-topbar">
         <div className="cl-topbar-left">
           <img src={novaLogo} alt="InnovaAI" className="cl-topbar-logo" />
@@ -564,7 +558,6 @@ export default function CustomerLanding() {
         </div>
       </header>
 
-      {/* ─── MAIN ──────────────────────────────────────────────── */}
       <main className="cl-main">
 
         {/* GREETING HERO */}
@@ -850,7 +843,6 @@ export default function CustomerLanding() {
         </section>
       </main>
 
-      {/* ─── FOOTER ────────────────────────────────────────────── */}
       <footer className="cl-footer">
         <img src={novaLogo} alt="InnovaAI" className="cl-footer-logo" />
         <div className="cl-footer-links">
@@ -870,7 +862,6 @@ export default function CustomerLanding() {
         <p className="cl-footer-copy">© 2026 InnovaAI</p>
       </footer>
 
-      {/* ─── NOVA CHAT WIDGET ──────────────────────────────────── */}
       {isOpen && (
         <div className={`novaWidget ${isExpanded ? "expanded" : ""} open`}>
           <div className="novaWidgetHeader">
@@ -1078,7 +1069,6 @@ export default function CustomerLanding() {
         </div>
       )}
 
-      {/* ─── FILL FORM WIDGET ── */}
       {formOpen && (
         <div
           className={`novaWidget ${formExpanded ? "expanded" : ""} open`}
@@ -1142,7 +1132,6 @@ export default function CustomerLanding() {
         </div>
       )}
 
-      {/* ─── TICKET CONFIRM POPUP ────── */}
       {ticketPopup && (
         <TicketConfirmPopup
           open
@@ -1154,7 +1143,6 @@ export default function CustomerLanding() {
         />
       )}
 
-      {/* ─── LOGOUT CONFIRM ────────────────────────────────────── */}
       {showLogoutConfirm && (
         <div className="novaCloseModal" role="dialog" aria-modal="true" aria-label="Confirm logout">
           <div className="novaCloseModalContent">

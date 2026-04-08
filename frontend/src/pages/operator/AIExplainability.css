@@ -4,7 +4,7 @@
    System purple tokens · Clean cards · Consistent with operator pages
    ============================================================ */
 
-/* ── CSS tokens (mirror system palette used by ModelHealth) ── */
+/* CSS tokens (mirror system palette used by ModelHealth) */
 :root {
   --aix-accent:        #5924b4;
   --aix-accent-deep:   #401c51;
@@ -35,7 +35,7 @@
   --aix-mono:          ui-monospace, "JetBrains Mono", monospace;
 }
 
-/* ── Page shell ── */
+/* Page shell */
 .aix-wrap {
   width: 100%;
   max-width: none;
@@ -50,8 +50,6 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Strip card styling from the outer list that contains PageHeader
-   so the header looks like the rest of the operator pages (no white card box) ── */
 .aix-list:has(> .pageHeader) {
   background: transparent;
   border: none;
@@ -59,7 +57,7 @@
   padding: 0;
 }
 
-/* ── Shared card ── */
+/* Shared card */
 .aix-card,
 .aix-card-section,
 .aix-list,
@@ -74,7 +72,7 @@
   margin-bottom: 16px;
 }
 
-/* ── Section title ── */
+/* Section title */
 .aix-section-title {
   margin: 0 0 14px;
   font-size: 15px;
@@ -87,7 +85,7 @@
   border-radius: 12px;
 }
 
-/* ── Back button ── */
+/* Back button */
 .aix-detail-actions {
   margin-bottom: 10px;
 }
@@ -107,7 +105,7 @@
 .aix-back-btn::before { content: "←"; }
 .aix-back-btn:hover { text-decoration: underline; }
 
-/* ── Detail header ── */
+/* Detail header */
 .aix-detail-header {
   position: relative;
   overflow: hidden;
@@ -135,7 +133,7 @@
   align-items: center;
 }
 
-/* ── Filters ── */
+/* Filters */
 .aix-filters {
   display: flex;
   flex-wrap: wrap;
@@ -171,12 +169,12 @@
 }
 .aix-filter--active span { color: var(--aix-accent); }
 
-/* ── Search row ── */
+/* Search row */
 .search-section-EV-VAC {
   margin-bottom: 14px;
 }
 
-/* ── Table card wrapper ── */
+/* Table card wrapper */
 .table-wrapper-EV-VAC {
   background: #fff;
   border-radius: var(--aix-radius-lg);
@@ -185,7 +183,7 @@
   overflow-x: auto;
 }
 
-/* ── Table ── */
+/* Table */
 .complaints-table-EV-VAC {
   width: 100%;
   border-collapse: collapse;
@@ -233,7 +231,7 @@
 }
 .aix-row-ticket:hover { text-decoration: underline; }
 
-/* ── Primary action button ── */
+/* Primary action button */
 .aix-open-btn {
   background: linear-gradient(135deg, var(--aix-accent-deep), var(--aix-accent));
   color: #fff;
@@ -261,7 +259,7 @@
   cursor: not-allowed;
 }
 
-/* ── Summary grid ── */
+/* Summary grid */
 .aix-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -274,7 +272,7 @@
   color: var(--aix-text);
 }
 
-/* ── Label ── */
+/* Label */
 .aix-label {
   display: block;
   font-size: 10.5px;
@@ -285,7 +283,7 @@
   margin-bottom: 3px;
 }
 
-/* ── Description ── */
+/* Description */
 .aix-description {
   font-size: 13px;
   color: rgba(17,17,17,.65);
@@ -308,7 +306,7 @@
   background: var(--aix-bg);
 }
 
-/* ── Steps ── */
+/* Steps */
 .aix-details-grid {
   display: grid;
   gap: 16px;
@@ -332,7 +330,7 @@
   line-height: 1.6;
 }
 
-/* ── Pipeline Controls ── */
+/* Pipeline Controls */
 .aix-controls-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(150px, 1fr));
@@ -394,7 +392,7 @@
   cursor: pointer;
 }
 
-/* ── Recurrence box ── */
+/* Recurrence box */
 .aix-recurrence-box {
   margin-top: 14px;
   padding: 14px 16px;
@@ -437,7 +435,7 @@
   align-items: center;
 }
 
-/* ── Stage menu ── */
+/* Stage menu */
 .aix-stage-menu h3 {
   margin: 0 0 14px;
   font-size: 16px;
@@ -474,7 +472,7 @@
   box-shadow: 0 2px 8px rgba(109,40,217,.28);
 }
 
-/* ── Stage detail card ── */
+/* Stage detail card */
 .aix-stage {
   margin-bottom: 18px;
 }
@@ -497,7 +495,7 @@
   letter-spacing: -.01em;
 }
 
-/* ── Meta row ── */
+/* Meta row */
 .aix-meta {
   margin-top: 10px;
   display: flex;
@@ -533,7 +531,7 @@
   word-break: break-word;
 }
 
-/* ── Status pill ── */
+/* Status pill */
 .aix-pill {
   display: inline-flex;
   align-items: center;
@@ -565,7 +563,7 @@
   color: var(--aix-accent);
 }
 
-/* ── Status badges (match UM) ── */
+/* Status badges (match UM) */
 .ev-status-badge {
   display: inline-flex;
   align-items: center;
@@ -584,7 +582,7 @@
 .ev-status-overdue    { background: var(--aix-danger-bg);  border-color: var(--aix-danger-border);  color: #b91c1c; }
 .ev-status-resolved   { background: var(--aix-success-bg); border-color: var(--aix-success-border); color: var(--aix-success); }
 
-/* ── Formula block ── */
+/* Formula block */
 .aix-formula {
   margin-top: 12px;
   border: 1px solid var(--aix-accent-border);
@@ -607,7 +605,7 @@
   font-family: var(--aix-mono);
 }
 
-/* ── IO grid ── */
+/* IO grid */
 .aix-io-grid {
   margin-top: 14px;
   display: grid;
@@ -630,7 +628,7 @@
   min-height: 60px;
 }
 
-/* ── Key-value block ── */
+/* Key-value block */
 .aix-kv-list {
   display: grid;
   gap: 8px;
@@ -665,7 +663,7 @@
   color: var(--aix-muted);
 }
 
-/* ── Linked ticket ── */
+/* Linked ticket */
 .aix-linked-ticket {
   margin-top: 10px;
   display: flex;
@@ -679,7 +677,7 @@
   font-size: 13px;
 }
 
-/* ── Subtle / muted text ── */
+/* Subtle / muted text */
 .aix-subtle {
   margin-top: 8px;
   font-size: 12px;
@@ -687,7 +685,7 @@
   line-height: 1.5;
 }
 
-/* ── Error text ── */
+/* Error text */
 .aix-error {
   color: var(--aix-danger);
   font-weight: 600;
@@ -699,7 +697,7 @@
   border-radius: var(--aix-radius-sm);
 }
 
-/* ── Override success msg ── */
+/* Override success msg */
 p.aix-subtle {
   padding: 10px 14px;
   background: var(--aix-success-bg);
@@ -710,7 +708,7 @@ p.aix-subtle {
   font-size: 12.5px;
 }
 
-/* ── Responsive ── */
+/* Responsive */
 @media (max-width: 1100px) {
   .aix-controls-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
 }
@@ -1239,7 +1237,7 @@ p.aix-subtle {
   .pq-detail { flex: none; width: 100%; }
 }
 
-/* ── Queue row actions ── */
+/* Queue row actions */
 .pq-table thead th:last-child { width: 120px; }
 .pq-row-action {
   padding: 3px 8px;
@@ -1258,7 +1256,7 @@ p.aix-subtle {
 }
 .pq-row-action--del:hover { background: var(--aix-danger-border); }
 
-/* ── Failure banner improvements ── */
+/* Failure banner improvements */
 .pq-failure-top {
   display: flex;
   align-items: center;
@@ -1317,7 +1315,7 @@ p.aix-subtle {
 }
 .pq-failure-hist-ts { color: var(--aix-muted); font-size: 11px; flex-shrink: 0; }
 
-/* ── Action row (rerun + release) ── */
+/* Action row (rerun + release) */
 .pq-action-row {
   display: flex;
   gap: 8px;
@@ -1339,7 +1337,7 @@ p.aix-subtle {
 .pq-rerun-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .pq-release-btn { flex: 1; }
 
-/* ── Ticket list delete button ── */
+/* Ticket list delete button */
 .aix-delete-btn {
   padding: 5px 10px;
   border-radius: 6px;

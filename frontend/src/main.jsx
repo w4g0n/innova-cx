@@ -4,7 +4,6 @@ import './index.css'
 import App from './App.jsx'
 import { clearAllAuth } from './utils/auth'
 
-// ── Global error boundary (catches uncaught React render errors) ──────────────
 class GlobalErrorBoundary extends Component {
   state = { hasError: false };
 
@@ -46,7 +45,6 @@ class GlobalErrorBoundary extends Component {
   }
 }
 
-// ── Global 401 interceptor ────────────────────────────────────────────────────
 // Catches expired/invalid tokens mid-session so no page stays stuck showing empty data.
 // Only fires on 401 (token expired/missing) — NOT 403, which this backend uses for
 // "wrong role" (a normal, in-app condition that should never force a logout).

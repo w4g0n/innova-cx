@@ -61,7 +61,6 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
   const inputRef   = useRef(null);
   const pollRef    = useRef(null);
 
-  /* ── fetch messages ─────────────────────────────────────────── */
   const fetchMessages = useCallback(async (silent = false) => {
     if (!silent) setLoadingMsgs(true);
     try {
@@ -92,14 +91,12 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
     return () => clearInterval(pollRef.current);
   }, [fetchMessages, paused]);
 
-  /* ── scroll to bottom on new messages ─────────────────────── */
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages]);
 
-  /* ── send message ───────────────────────────────────────────── */
   const send = async (content = sanitizeText(text.trim(), 5000)) => {
     if (!content || sending || disabled) return;
     setError("");
@@ -147,7 +144,6 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
-  /* ── group messages by sender runs ─────────────────────────── */
   const grouped = messages.reduce((acc, msg, i) => {
     const prev = messages[i - 1];
     const sameRun = prev && prev.senderRole === msg.senderRole;
