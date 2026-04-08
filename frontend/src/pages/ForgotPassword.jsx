@@ -453,7 +453,7 @@ export default function ForgotPassword() {
                   </div>
                   <h1 className="fpTitle">Password Reset!</h1>
                   <p className="fpSubtitle">Your password has been updated successfully.</p>
-                  <button className="fpBtn" onClick={() => navigate("/")}>Back to Login</button>
+                  <button className="fpBtn" onClick={() => navigate("/login")}>Back to Login</button>
                 </div>
               ) : (
                 <>
@@ -570,7 +570,7 @@ export default function ForgotPassword() {
                     we've sent a reset link. It expires in{" "}
                     <strong style={{ color: "rgba(255,255,255,.75)" }}>30 minutes</strong>.
                   </p>
-                  <button className="fpBtn" onClick={() => navigate("/")}>Back to Login</button>
+                  <button className="fpBtn" onClick={() => navigate("/login")}>Back to Login</button>
 
                   {/* FIX 5: resend with 30-second cooldown + live countdown */}
                   <p className="fpResend" style={{ marginTop: 16 }}>
