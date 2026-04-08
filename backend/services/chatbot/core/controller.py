@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 MAX_INQUIRY_ATTEMPTS = 3
 
 
-# ── Main entry point ──────────────────────────────────────────────────────────
+# Main entry point
 
 def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
     session = load_session(session_id)
@@ -32,7 +32,7 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
 
     is_init = user_text == "__init__"
 
-    # ── Human escalation — always check, all states, no threshold ────────────
+    # Human escalation — always check, all states, no threshold
     if not is_init and is_human_escalation_request(user_text):
         response = (
             "I understand you'd like to speak with a human agent. "
@@ -52,7 +52,7 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
         return _result(response, "escalation", session_id,
                        buttons=["create_ticket", "track_ticket"])
 
-    # ── Cancellation — reset to start if mid-flow ────────────────────────────
+    # Cancellation — reset to start if mid-flow
     _mid_flow_states = {
         "await_secondary_intent", "inquiry", "inquiry_confirm",
         "complaint", "collecting_complaint", "await_ticket_id",
@@ -72,12 +72,12 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
         _log_and_save(session, response, "cancelled")
         return _result(response, "cancelled", session_id)
 
-    # ── Aggression check (skip on init and greeting — only used for __init__) ──
+    # Aggression check (skip on init and greeting — only used for __init__)
     is_aggressive, agg_score = False, 0.0
     if not is_init and state != "greeting":
         is_aggressive, agg_score = detect_aggression(user_text, history)
 
-    # ── Log and append user message ───────────────────────────────────────────
+    # Log and append user message
     if not is_init:
         log_user_message(
             session_id=session_id,
@@ -88,7 +88,7 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
         )
         append_history(session, "user", user_text)
 
-    # ── Escalation ────────────────────────────────────────────────────────────
+    # Escalation
     if is_aggressive:
         response = (
             "I completely understand your frustration and I sincerely apologise "
@@ -100,7 +100,7 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
         return _result(response, "escalation", session_id,
                        buttons=["create_ticket", "track_ticket"])
 
-    # ── State machine ─────────────────────────────────────────────────────────
+    # State machine
 
     # GREETING
     if state == "greeting":
@@ -248,7 +248,7 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
     return _result(response, "fallback", session_id)
 
 
-# ── Inquiry handler ───────────────────────────────────────────────────────────
+# Inquiry handler
 
 def _handle_inquiry(session: dict, user_text: str) -> dict:
     session_id = session["session_id"]
@@ -371,7 +371,7 @@ def _recover_original_question(history: list) -> str:
     return ""
 
 
-# ── Complaint handler ─────────────────────────────────────────────────────────
+# Complaint handler
 
 def _handle_complaint(session: dict, user_id: str, user_text: str) -> dict:
     session_id = session["session_id"]
@@ -405,7 +405,7 @@ def _handle_complaint(session: dict, user_id: str, user_text: str) -> dict:
     return _collect_ticket_fields(session, user_id, user_text)
 
 
-# ── Ticket field collection ───────────────────────────────────────────────────
+# Ticket field collection
 
 def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
     session_id = session["session_id"]
@@ -490,7 +490,7 @@ def _confirm_ticket_creation(session: dict, user_id: str, user_text: str) -> dic
     )
 
 
-# ── Utility helpers ───────────────────────────────────────────────────────────
+# Utility helpers
 
 def _extract_ticket_id(text: str) -> str | None:
     uuid_match = re.search(
@@ -549,7 +549,7 @@ def _result(
         "session_id":    session_id,
     }
 
-# ── Backward-compatible wrappers (used by local_model_test.py) ────────────────
+# Backward-compatible wrappers (used by local_model_test.py)
 
 def handle_inquiry(user_text: str, state: dict | None = None) -> str:
     del state

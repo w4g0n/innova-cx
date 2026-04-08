@@ -4,7 +4,7 @@ print("Chatbot ready.")
 print("Modes: inquiry | complaint")
 print("Type 'exit' to quit.\n")
 
-# ---- session state ----
+#session state
 mode = input("Select mode (inquiry / complaint): ").strip().lower()
 state = {"attempts": 0}
 

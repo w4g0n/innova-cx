@@ -9,9 +9,8 @@ import numpy as np
 from faster_whisper import WhisperModel
 
 
-# ===============================
 # Model (loaded once per container)
-# ===============================
+
 TRANSCRIBER_DIR = Path(__file__).resolve().parent
 DEFAULT_WHISPER_MODEL_NAME = "base"
 DEFAULT_WHISPER_MODEL_PATH = TRANSCRIBER_DIR / "model"
@@ -31,9 +30,8 @@ model = WhisperModel(
 )
 
 
-# ===============================
 # Audio analysis helpers
-# ===============================
+
 def compute_audio_score(audio: np.ndarray) -> float:
     """
     Very lightweight audio signal scoring.
@@ -55,9 +53,8 @@ def extract_audio_features(audio: np.ndarray, sr: int) -> dict:
         "mean_energy": float(np.mean(rms)),
     }
 
-# ===============================
 # Audio normalization
-# ===============================
+
 def normalize_to_wav(input_path: str) -> str:
     """
     Converts arbitrary audio input to
@@ -82,9 +79,8 @@ def normalize_to_wav(input_path: str) -> str:
     return wav_path
 
 
-# ===============================
 # Main entrypoint
-# ===============================
+
 def main() -> None:
     if len(sys.argv) < 2:
         raise RuntimeError("No audio file path provided")

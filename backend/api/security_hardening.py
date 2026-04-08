@@ -1,5 +1,4 @@
 # backend/api/security_hardening.py
-# ============================================================
 # Centralised security helpers imported by main.py
 #
 # Controls implemented here:
@@ -19,7 +18,6 @@
 #   [S12] Token revocation list        (revoke_token / is_token_revoked)
 #   [S13] Logout endpoint helper       (logout_user)
 #   [S14] Input sanitisation utilities (_sanitize_filename, _sanitize_text)
-# ============================================================
 
 from __future__ import annotations
 
@@ -41,9 +39,7 @@ from starlette.types import ASGIApp
 
 logger = logging.getLogger(__name__)
 
-# =========================================================
 # [S1] Password complexity
-# =========================================================
 _MIN_PASSWORD_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", "12"))
 _MAX_PASSWORD_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", "128"))
 
@@ -137,11 +133,9 @@ def validate_password_complexity(
         )
 
 
-# =========================================================
 # [S2] Account lockout (in-process store — fine for single-instance)
 #      For multi-instance deployments, replace _lockout_store with
 #      a shared Redis backend.
-# =========================================================
 _LOCKOUT_MAX_ATTEMPTS: int = int(os.getenv("LOCKOUT_MAX_ATTEMPTS", "5"))
 _LOCKOUT_WINDOW_SECONDS: int = int(os.getenv("LOCKOUT_WINDOW_SECONDS", "900"))  # 15 min
 
@@ -201,11 +195,9 @@ def clear_failed_logins(email: str) -> None:
     _lockout_store[key] = {"count": 0, "first_fail": 0.0, "locked_until": 0.0}
 
 
-# =========================================================
 # [S3] Rate limiting via slowapi
 #      slowapi is an optional dependency — all callers check
 #      SLOWAPI_AVAILABLE before using the limiter.
-# =========================================================
 SLOWAPI_AVAILABLE: bool = False
 _limiter_instance: Any = None
 
@@ -256,12 +248,10 @@ except ImportError:
         return decorator
 
 
-# =========================================================
 # [S4] Security headers middleware
 #      Adds OWASP-recommended response headers on every reply.
 #      Must be added BEFORE CORS middleware in main.py so headers
 #      are present on all responses including CORS preflight.
-# =========================================================
 _NONCE_LENGTH = 16  # bytes → 32 hex chars
 
 _CSP_DIRECTIVES_DEFAULT = (
@@ -341,9 +331,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-# =========================================================
 # [S5] File upload validation
-# =========================================================
 
 # Magic-byte signatures for allowed MIME types
 # Format: { mime_type: [(offset, bytes_to_match), ...] }
@@ -527,10 +515,8 @@ async def validate_upload_file(
     return contents
 
 
-# =========================================================
 # [S6] Auth event logging
 #      Structured, never logs passwords, tokens, or secrets.
-# =========================================================
 _auth_logger = logging.getLogger("auth_events")
 
 
@@ -582,7 +568,6 @@ def log_auth_event(
     _auth_logger.info("%s", record)
 
 
-# =========================================================
 # [S11] Refresh token helpers
 #       Requires a `refresh_tokens` table (see migration below).
 #
@@ -598,7 +583,6 @@ def log_auth_event(
 #       );
 #       CREATE INDEX ON refresh_tokens(token_hash) WHERE revoked_at IS NULL;
 #       CREATE INDEX ON refresh_tokens(user_id)    WHERE revoked_at IS NULL;
-# =========================================================
 _REFRESH_TTL_SECONDS: int = int(os.getenv("REFRESH_TOKEN_TTL_SECONDS", str(30 * 24 * 3600)))  # 30 days
 _REFRESH_TOKEN_BYTES: int = 32
 
@@ -714,7 +698,6 @@ def revoke_all_refresh_tokens(user_id: str, db_execute: Callable) -> int:
     return count
 
 
-# =========================================================
 # [S12] Short-term token revocation list
 #       For access tokens (JWTs), which cannot be made stateless-revokable
 #       without a server-side list. Stores jti (JWT ID) or token hash.
@@ -723,7 +706,6 @@ def revoke_all_refresh_tokens(user_id: str, db_execute: Callable) -> int:
 #
 #       Requires JWTs to include a "jti" claim (UUID). Add to create_jwt():
 #           payload["jti"] = str(uuid.uuid4())
-# =========================================================
 # { jti_or_token_hash: expires_at_unix_float }
 _revoked_tokens: Dict[str, float] = {}
 _REVOCATION_CLEANUP_INTERVAL: int = 3600  # prune expired entries every hour
@@ -760,10 +742,8 @@ def _prune_revoked_tokens() -> None:
     _last_cleanup = now
 
 
-# =========================================================
 # [S13] Logout helper
 #       Call from the /auth/logout endpoint.
-# =========================================================
 def logout_user(
     *,
     jti: Optional[str],
@@ -782,9 +762,7 @@ def logout_user(
     log_auth_event("logout", user_id=user_id, ip=ip)
 
 
-# =========================================================
 # Input sanitisation utilities (shared, also used by main.py)
-# =========================================================
 _SAFE_TEXT_RE = re.compile(r"^[\w\s\-.,\'+()\[\]@/]+$", re.UNICODE)
 
 
@@ -820,9 +798,7 @@ def sanitize_email(value: str) -> str:
     return v
 
 
-# =========================================================
 # [S15] CSRF helpers — stateless HMAC-signed token
-# =========================================================
 _CSRF_SECRET = os.getenv("CSRF_SECRET", os.getenv("JWT_SECRET", "dev-csrf-secret"))
 
 
@@ -842,9 +818,7 @@ def verify_csrf_token(token: str) -> bool:
     return hmac.compare_digest(sig, expected)
 
 
-# =========================================================
 # Exports — everything main.py imports from this module
-# =========================================================
 __all__ = [
     # S1
     "validate_password_complexity",

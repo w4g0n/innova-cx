@@ -3,7 +3,7 @@ import re
 from .llm import generate_response, llm_available
 
 
-# ── Parsing helpers ───────────────────────────────────────────────────────────
+# Parsing helpers
 
 def _extract_label(text: str, valid: set[str]) -> str:
     cleaned = text.strip().lower()
@@ -33,7 +33,7 @@ def _extract_aggression(text: str) -> tuple[bool, float]:
     return (label == "YES" and score >= 0.75), score
 
 
-# ── Keyword-based classifiers (fast, no LLM needed) ─────────────────────────
+# Keyword-based classifiers (fast, no LLM needed)
 
 _FOLLOW_UP_SIGNALS = [
     "follow up", "follow-up", "followup", "existing ticket", "ticket status",
@@ -167,7 +167,7 @@ def _keyword_aggression(user_text: str) -> tuple[bool, float]:
     return (score >= 0.75), round(score, 4)
 
 
-# ── LLM-based classifiers (used when LLM is available) ──────────────────────
+# LLM-based classifiers (used when LLM is available)
 
 def _llm_classify_primary(user_text: str, history: list) -> str:
     system = (
@@ -238,7 +238,7 @@ def _llm_detect_aggression(user_text: str, history: list) -> tuple[bool, float]:
     return _extract_aggression(raw)
 
 
-# ── Public API (auto-selects keyword or LLM) ─────────────────────────────────
+# Public API (auto-selects keyword or LLM)
 
 def classify_primary_intent(user_text: str, history: list) -> str:
     """
