@@ -34,8 +34,8 @@ import logging
 import os
 import re
 import sys
-from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from datetime import date
+from typing import List, Optional, Tuple
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import OperationalError
@@ -49,7 +49,8 @@ MIN_YEAR = 2026  # absolute floor — no reports below this year
 
 # ── DB helpers ──────────────────────────────────────────────────────────────
 def _get_dsn() -> str:
-    if os.getenv("DATABASE_URL"): return os.environ["DATABASE_URL"]
+    if os.getenv("DATABASE_URL"):
+        return os.environ["DATABASE_URL"]
     return (f"postgresql://{os.getenv('DB_USER','innovacx_app')}:"
             f"{os.getenv('DB_PASSWORD','changeme123')}@"
             f"{os.getenv('DB_HOST','localhost')}:"
@@ -57,15 +58,18 @@ def _get_dsn() -> str:
             f"{os.getenv('DB_NAME','complaints_db')}")
 
 def _conn():
-    try: return psycopg2.connect(_get_dsn())
+    try:
+        return psycopg2.connect(_get_dsn())
     except OperationalError as e:
-        logger.error("DB connection failed: %s", e); sys.exit(1)
+        logger.error("DB connection failed: %s", e)
+        sys.exit(1)
 
 def fetch_one(sql, params=None):
     with _conn() as c:
         with c.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(sql, params or ())
-            r = cur.fetchone(); return dict(r) if r else None
+            r = cur.fetchone()
+            return dict(r) if r else None
 
 def fetch_all(sql, params=None):
     with _conn() as c:
@@ -76,7 +80,8 @@ def fetch_all(sql, params=None):
 def execute(sql, params=None):
     with _conn() as c:
         with c.cursor() as cur:
-            cur.execute(sql, params or ()); return cur.rowcount
+            cur.execute(sql, params or ())
+            return cur.rowcount
 
 # ── Constants ───────────────────────────────────────────────────────────────
 _ML = {1:"January",2:"February",3:"March",4:"April",5:"May",6:"June",
@@ -86,7 +91,8 @@ _MA = {1:"jan",2:"feb",3:"mar",4:"apr",5:"may",6:"jun",
 
 # ── Core report generator (mirrors main.py _generate_employee_report) ────────
 def generate_report(user_id: str, year: int, month: int) -> Optional[str]:
-    if year < MIN_YEAR: return None
+    if year < MIN_YEAR:
+        return None
 
     period_start = date(year, month, 1)
     period_end   = date(year+1,1,1) if month==12 else date(year,month+1,1)
@@ -107,18 +113,26 @@ def generate_report(user_id: str, year: int, month: int) -> Optional[str]:
         WHERE employee_id=%s::uuid AND created_day>=%s AND created_day<%s""",
         (user_id, period_start, period_end)) or {}
 
-    total=int(k.get("total") or 0); resolved=int(k.get("resolved") or 0)
-    breached=int(k.get("breached") or 0); escalated=int(k.get("escalated") or 0)
-    sla=float(k.get("sla_pct") or 0); avg=k.get("avg_resp")
+    total=int(k.get("total") or 0)
+    resolved=int(k.get("resolved") or 0)
+    breached=int(k.get("breached") or 0)
+    escalated=int(k.get("escalated") or 0)
+    sla=float(k.get("sla_pct") or 0)
+    avg=k.get("avg_resp")
     avgf=float(avg) if avg is not None else None
     rrate=round(resolved/total*100,1) if total else 0.0
     erate=round(escalated/total*100,1) if total else 0.0
     rating_num=round((rrate*0.5)+(sla*0.5),1)
-    if rating_num>=90:   rlabel=f"{rating_num}% · Excellent"
-    elif rating_num>=75: rlabel=f"{rating_num}% · Good"
-    elif rating_num>=50: rlabel=f"{rating_num}% · Needs Improvement"
-    else:                rlabel=f"{rating_num}% · Poor"
-    sla_s=f"{sla}%"; avg_s=f"{round(avgf)} min" if avgf is not None else "N/A"
+    if rating_num>=90:
+        rlabel=f"{rating_num}% · Excellent"
+    elif rating_num>=75:
+        rlabel=f"{rating_num}% · Good"
+    elif rating_num>=50:
+        rlabel=f"{rating_num}% · Needs Improvement"
+    else:
+        rlabel=f"{rating_num}% · Poor"
+    sla_s=f"{sla}%"
+    avg_s=f"{round(avgf)} min" if avgf is not None else "N/A"
     subtitle=f"{resolved} of {total} tickets resolved · {sla}% SLA compliance"
 
     ex=fetch_one("SELECT id FROM employee_reports WHERE report_code=%s AND employee_user_id=%s::uuid",(code,user_id))
@@ -132,14 +146,16 @@ def generate_report(user_id: str, year: int, month: int) -> Optional[str]:
                          subtitle,kpi_rating,kpi_resolved,kpi_sla,kpi_avg_response)
                          VALUES(%s::uuid,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                       (user_id,code,label,subtitle,rlabel,resolved,sla_s,avg_s))
-        if not row: return None
+        if not row:
+            return None
         rid=row["id"]
 
     # summary
     acc=fetch_one("""SELECT SUM(total) AS t, SUM(accepted) AS a FROM mv_acceptance_daily
                      WHERE employee_id=%s::uuid AND created_day>=%s AND created_day<%s""",
                   (user_id,period_start,period_end)) or {}
-    at=int(acc.get("t") or 0); ac=int(acc.get("a") or 0)
+    at=int(acc.get("t") or 0)
+    ac=int(acc.get("a") or 0)
     ar=round(ac/at*100,1) if at>0 else None
 
     execute("DELETE FROM employee_report_summary_items WHERE report_id=%s",(rid,))
@@ -171,13 +187,19 @@ def generate_report(user_id: str, year: int, month: int) -> Optional[str]:
     execute("DELETE FROM employee_report_weekly WHERE report_id=%s",(rid,))
     prev=None
     for i,wr in enumerate(wrows,1):
-        wa=int(wr.get("a") or 0); wr2=int(wr.get("r") or 0)
-        ws=float(wr.get("sp") or 0); wa2=wr.get("ar")
+        wa=int(wr.get("a") or 0)
+        wr2=int(wr.get("r") or 0)
+        ws=float(wr.get("sp") or 0)
+        wa2=wr.get("ar")
         was=f"{round(float(wa2))} min" if wa2 is not None else "N/A"
-        if prev is None: dt,dx="neutral","—"
-        elif wr2>prev: dt,dx="positive",f"+{wr2-prev} resolved"
-        elif wr2<prev: dt,dx="neutral",f"{wr2-prev} resolved"
-        else: dt,dx="neutral","No change"
+        if prev is None:
+            dt,dx="neutral","—"
+        elif wr2>prev:
+            dt,dx="positive",f"+{wr2-prev} resolved"
+        elif wr2<prev:
+            dt,dx="neutral",f"{wr2-prev} resolved"
+        else:
+            dt,dx="neutral","No change"
         prev=wr2
         wm=wr.get("wm")
         wl=f"Week {i} ({wm.strftime('%b %-d')})" if wm else f"Week {i}"
@@ -193,19 +215,29 @@ def generate_report(user_id: str, year: int, month: int) -> Optional[str]:
     else:
         notes.append(f"No tickets were assigned in {label}.")
     if total>0:
-        if sla>=90: notes.append(f"Excellent SLA performance: {sla}% within agreed timeframes.")
-        elif sla>=70: notes.append(f"Good SLA performance at {sla}%. {breached} breach{'es' if breached!=1 else ''}.")
-        else: notes.append(f"SLA compliance was {sla}% — {breached} breach{'es' if breached!=1 else ''}. Focus on earlier responses.")
+        if sla>=90:
+            notes.append(f"Excellent SLA performance: {sla}% within agreed timeframes.")
+        elif sla>=70:
+            notes.append(f"Good SLA performance at {sla}%. {breached} breach{'es' if breached!=1 else ''}.")
+        else:
+            notes.append(f"SLA compliance was {sla}% — {breached} breach{'es' if breached!=1 else ''}. Focus on earlier responses.")
     if avgf is not None:
-        if avgf<=30: notes.append(f"Outstanding response speed: avg first response {round(avgf)} min.")
-        elif avgf<=120: notes.append(f"Average first response {round(avgf)} min — healthy range.")
-        else: notes.append(f"Average first response {round(avgf)} min. Reducing this improves your rating.")
+        if avgf<=30:
+            notes.append(f"Outstanding response speed: avg first response {round(avgf)} min.")
+        elif avgf<=120:
+            notes.append(f"Average first response {round(avgf)} min — healthy range.")
+        else:
+            notes.append(f"Average first response {round(avgf)} min. Reducing this improves your rating.")
     if total>0:
-        if escalated>0: notes.append(f"{escalated} ticket{'s' if escalated!=1 else ''} escalated ({erate}% rate).")
-        else: notes.append("No tickets escalated — great self-resolution.")
+        if escalated>0:
+            notes.append(f"{escalated} ticket{'s' if escalated!=1 else ''} escalated ({erate}% rate).")
+        else:
+            notes.append("No tickets escalated — great self-resolution.")
     if ar is not None:
-        if ar>=70: notes.append(f"AI resolutions accepted {ar}% — strong alignment.")
-        else: notes.append(f"AI resolutions accepted {ar}%.")
+        if ar>=70:
+            notes.append(f"AI resolutions accepted {ar}% — strong alignment.")
+        else:
+            notes.append(f"AI resolutions accepted {ar}%.")
 
     execute("DELETE FROM employee_report_notes WHERE report_id=%s",(rid,))
     for n in notes:
@@ -235,7 +267,9 @@ def main():
         FROM users u JOIN user_profiles up ON up.user_id=u.id
         WHERE u.role='employee' AND u.is_active=TRUE
         ORDER BY up.full_name""")
-    if not employees: logger.error("No active employees found."); sys.exit(1)
+    if not employees:
+        logger.error("No active employees found.")
+        sys.exit(1)
     logger.info("Active employees: %d", len(employees))
 
     # Step 2: build required month set
@@ -256,12 +290,14 @@ def main():
     gen=rep=skip=err=0
 
     for emp in employees:
-        uid=str(emp["user_id"]); name=str(emp.get("full_name") or emp.get("email") or uid)
+        uid=str(emp["user_id"])
+        name=str(emp.get("full_name") or emp.get("email") or uid)
         raw=str(emp.get("email","")).split("@")[0].strip().lower()
         slug=re.sub(r"[^a-z0-9]","",raw)[:12] or re.sub(r"[^a-z0-9]","",uid.replace("-",""))[:8]
 
         for year,month in all_req:
-            if year<MIN_YEAR: continue
+            if year<MIN_YEAR:
+                continue
             code=f"{_MA[month]}-{year}-{slug}"
             tag="[DEMO]" if (year,month) in demo_set else "[NEW] "
             ex=fetch_one("""SELECT er.id,
