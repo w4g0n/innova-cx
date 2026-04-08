@@ -1,6 +1,4 @@
-/* ================================================
-   TicketReviewDetail — clean tabbed redesign
-   ================================================ */
+/* TicketReviewDetail */
 
 .trd-page {
   width: 100%;
@@ -34,9 +32,7 @@
 }
 .trd-back-btn:hover { background: rgba(89,36,180,0.06); box-shadow: 0 4px 14px rgba(64,28,81,0.12); }
 
-/* ════════════════════════════════════════
-   HERO HEADER
-════════════════════════════════════════ */
+/* HERO HEADER */
 .trd-hero {
   display: flex;
   align-items: flex-start;
@@ -125,9 +121,7 @@
 .trd-hero__priority--green  .trd-hero__priority-val { color: #15803d; }
 .trd-hero__priority-model { font-size: 11px; color: rgba(17,17,17,0.40); }
 
-/* ════════════════════════════════════════
-   TABS
-════════════════════════════════════════ */
+/* TABS */
 .trd-tabs {
   display: flex;
   gap: 4px;
@@ -156,17 +150,13 @@
 .trd-tab:hover         { color: var(--btn-primary); background: rgba(89,36,180,0.04); }
 .trd-tab--active       { color: var(--btn-primary); border-bottom-color: var(--btn-primary); background: rgba(89,36,180,0.05); }
 
-/* ════════════════════════════════════════
-   TAB PANEL
-════════════════════════════════════════ */
+/* TAB PANEL */
 .trd-tab-panel {
   padding-top: 24px;
   animation: fadeUp 0.22s ease both;
 }
 
-/* ════════════════════════════════════════
-   SHARED CARD
-════════════════════════════════════════ */
+/* SHARED CARD */
 .trd-card {
   background: #ffffff;
   border-radius: 18px;
@@ -195,9 +185,7 @@
 .trd-card__body { font-size: 14px; line-height: 1.7; color: rgba(17,17,17,0.80); margin: 0; }
 .trd-card__hint { font-size: 12.5px; color: rgba(17,17,17,0.45); margin: -4px 0 12px; }
 
-/* ════════════════════════════════════════
-   BADGES
-════════════════════════════════════════ */
+/* BADGES */
 .trd-badge {
   display: inline-flex; align-items: center;
   padding: 4px 11px; border-radius: 999px;
@@ -210,17 +198,13 @@
 .trd-badge--danger { background: rgba(231,76,60,0.12);  color: #a7372b;             border: 1px solid rgba(231,76,60,0.22); }
 .trd-badge--muted  { background: rgba(0,0,0,0.05);      color: rgba(17,17,17,0.55); border: 1px solid rgba(0,0,0,0.09); }
 
-/* ════════════════════════════════════════
-   TAGS
-════════════════════════════════════════ */
+/* TAGS */
 .trd-tags     { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .trd-tags--sm .trd-tag { font-size: 11px; padding: 3px 9px; }
 .trd-tag      { padding: 4px 11px; border-radius: 999px; background: rgba(64,28,81,0.07); border: 1px solid rgba(64,28,81,0.13); font-size: 12px; font-weight: 700; color: var(--btn-primary); }
 .trd-tag--muted { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.09); color: rgba(17,17,17,0.55); }
 
-/* ════════════════════════════════════════
-   OVERVIEW TAB
-════════════════════════════════════════ */
+/* OVERVIEW TAB */
 .trd-overview {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -295,9 +279,7 @@
 .trd-sentiment-score { font-size: 13px; font-weight: 700; color: rgba(17,17,17,0.45); margin-left: auto; }
 .trd-chart-mini { margin-top: 4px; }
 
-/* ════════════════════════════════════════
-   AI ANALYSIS TAB
-════════════════════════════════════════ */
+/* AI ANALYSIS TAB */
 .trd-ai { display: flex; flex-direction: column; gap: 16px; }
 
 /* Override banner */
@@ -387,9 +369,7 @@
   height: 2px; background: rgba(64,28,81,0.12); pointer-events: none;
 }
 
-/* ════════════════════════════════════════
-   ACTIVITY TAB
-════════════════════════════════════════ */
+/* ACTIVITY TAB */
 .trd-activity {
   background: #ffffff;
   border-radius: 18px;
@@ -398,9 +378,7 @@
   box-shadow: 0 4px 16px rgba(0,0,0,0.05);
 }
 
-/* ════════════════════════════════════════
-   RESOLUTION TAB
-════════════════════════════════════════ */
+/* RESOLUTION TAB */
 .trd-resolution { display: flex; flex-direction: column; gap: 16px; }
 
 .trd-suggested {
@@ -459,9 +437,7 @@
 .trd-not-found h2 { font-size: 22px; font-weight: 800; margin: 0; }
 .trd-not-found p  { font-size: 14px; color: rgba(17,17,17,0.55); margin: 0; }
 
-/* ════════════════════════════════════════
-   RESPONSIVE
-════════════════════════════════════════ */
+/* RESPONSIVE */
 @media (max-width: 1000px) {
   .trd-overview { grid-template-columns: 1fr; }
   .trd-decisions-grid { grid-template-columns: 1fr; }

@@ -1,6 +1,4 @@
-/* ============================================================
-   CustomerTicketDetails.css — fully self-contained
-   ============================================================ */
+/* CustomerTicketDetails.css — fully self-contained */
 @import "./CustomerShared.css";
 @import "./CustomerSettings.css"; /* pulls in .cspw-* modal styles */
 

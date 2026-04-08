@@ -1,8 +1,5 @@
-/* ============================================================
-   AIExplainability — System Palette Theme
-   Matches ModelHealth design language exactly.
-   System purple tokens · Clean cards · Consistent with operator pages
-   ============================================================ */
+/* AIExplainability — System Palette Theme
+   Matches ModelHealth design language exactly */
 
 /* CSS tokens (mirror system palette used by ModelHealth) */
 :root {
@@ -725,9 +722,7 @@ p.aix-subtle {
   .complaints-table-EV-VAC thead th,
   .complaints-table-EV-VAC tbody td { padding: 10px 12px; }
 }
-/* ============================================================
-   Pipeline Queue Tab — appended to AIExplainability.css
-   ============================================================ */
+/* Pipeline Queue Tab — appended to AIExplainability.css */
 
 /* Tab bar — matches ModelHealth .ma-nav style */
 .aix-tab-bar {

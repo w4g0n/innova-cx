@@ -1,6 +1,4 @@
-/* ================================================
-   ModelHealth — Section 06
-   ================================================ */
+/* ModelHealth */
 
 .modelAnalysis {
   width: 100%;
@@ -18,7 +16,7 @@
   flex-wrap: wrap;
 }
 
-/* Nav tabs (same as QualityControl) */
+/* Nav tabs */
 .ma-nav {
   display: flex;
   gap: 8px;
@@ -160,9 +158,7 @@
 .ma-info-banner code  { background: rgba(64,28,81,0.08); padding: 1px 5px; border-radius: 4px; font-size: 12px; color: var(--btn-primary); }
 .ma-info-banner strong { color: #1a1a2e; }
 
-/* ================================================
-   Date Range Picker
-   ================================================ */
+/* Date Range Picker */
 .qc-datepicker { position: relative; }
 .qc-datepicker__btn {
   display: inline-flex;
@@ -228,9 +224,7 @@
 }
 .qc-datepicker__clear:hover { background: rgba(64,28,81,0.10); }
 
-/* ================================================
-   Responsive
-   ================================================ */
+/* Responsive */
 @media (max-width: 1200px) { .ma-kpi-row { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 900px)  { .ma-cards-row { grid-template-columns: 1fr; } .ma-nav { overflow-x: auto; } }
 @media (max-width: 680px)  { .ma-kpi-row { grid-template-columns: 1fr; } .ma-top-actions { flex-direction: column; align-items: stretch; } .qc-datepicker__dropdown { right: auto; left: 0; } }

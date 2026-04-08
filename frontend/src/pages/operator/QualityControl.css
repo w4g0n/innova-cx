@@ -1,6 +1,4 @@
-/* ================================================
-   QualityControl — Section 05
-   ================================================ */
+/* QualityControl */
 
 .modelAnalysis {
   width: 100%;
@@ -177,9 +175,7 @@
   transform: translate(1px, -1px);
 }
 
-/* ================================================
-   Date Range Picker
-   ================================================ */
+/* Date Range Picker */
 .qc-datepicker { position:relative; }
 .qc-datepicker__btn {
   display:inline-flex; align-items:center; gap:7px;
@@ -218,16 +214,12 @@
 }
 .qc-datepicker__clear:hover { background:rgba(64,28,81,0.10); }
 
-/* ================================================
-   Responsive
-   ================================================ */
+/* Responsive */
 @media (max-width:1200px) { .ma-kpi-row { grid-template-columns:repeat(2,1fr); } }
 @media (max-width:900px)  { .ma-cards-row { grid-template-columns:1fr; } .ma-nav { overflow-x:auto; } }
 @media (max-width:680px)  { .ma-kpi-row { grid-template-columns:1fr; } .ma-top-actions { flex-direction:column; align-items:stretch; } .qc-datepicker__dropdown { right:auto; left:0; } }
 
-/* ================================================
-   Learning Tab — 3-box layout + modal
-   ================================================ */
+/* Learning Tab — 3-box layout + modal */
 
 /* 3-column grid */
 .lrn-grid {

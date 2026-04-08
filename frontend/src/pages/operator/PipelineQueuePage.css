@@ -1,8 +1,6 @@
 @import "./AIExplainability.css";
 
-/* ============================================================
-   Pipeline Queue — List Page  (.pq-*)
-   ============================================================ */
+/* Pipeline Queue — List Page  (.pq-*) */
 
 .pq {
   width: 100%;
@@ -672,9 +670,7 @@
   .pq-action-grid { grid-template-columns: 1fr; }
 }
 
-/* ============================================================
-   Pipeline Queue — Detail Page  (.pq-detail-*)
-   ============================================================ */
+/* Pipeline Queue — Detail Page  (.pq-detail-*) */
 
 .pq-detail-page {
   width: 100%;
