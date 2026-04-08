@@ -64,14 +64,10 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 --   roles that legitimately need it (innovacx_app, innovacx_test only).
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC;
 
--- innovacx_app: USAGE only — no CREATE.
---   Both _ensure_runtime_schema_compatibility() (main.py) and
---   _ensure_analytics_mvs() (analytics_service.py) contain an ownership
---   guard: they check pg_get_userbyid(relowner) = current_user and skip
---   all DDL silently when running as a non-owner. On every fresh volume
---   innovacx_admin owns all tables, so these code paths are always skipped
---   at runtime. CREATE on the schema is not exercised and is not granted.
-GRANT USAGE ON SCHEMA public TO innovacx_app;
+-- innovacx_app: USAGE + CREATE.
+--   CREATE is required for the orchestrator queue_manager to create
+--   pipeline_runtime_control at startup.
+GRANT USAGE, CREATE ON SCHEMA public TO innovacx_app;
 
 -- innovacx_readonly: USAGE only — required to reference objects in the schema.
 GRANT USAGE ON SCHEMA public TO innovacx_readonly;
