@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5173,
     watch: {
       usePolling: true,
-      interval: 250,
+      interval: 3000,
     },
     allowedHosts: ['innovacx.net', 'www.innovacx.net', 'localhost', 'staff.innovacx.net'],
   },
