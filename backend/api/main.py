@@ -11,6 +11,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
 from starlette.middleware.base import BaseHTTPMiddleware
+import resend
 
 import bcrypt
 import psycopg2
@@ -135,6 +136,7 @@ _sla_heartbeat_task: Optional[asyncio.Task] = None
 _analytics_refresh_task: Optional[asyncio.Task] = None
 _has_sla_policy_fn = False
 
+resend.api_key = os.environ.get("RESEND_API_KEY")
 # App
 _EXPOSE_DOCS = os.getenv("EXPOSE_API_DOCS", "false").lower() == "true"
 app = FastAPI(
@@ -1304,8 +1306,6 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
 
 # Forgot Password and reset link api call
 # Routes: Password Reset
-from datetime import datetime
-
 RESET_EMAIL_HTML = """\
 <!DOCTYPE html>
 <html lang="en">
@@ -1620,6 +1620,8 @@ def reset_token_email(request: Request, body: ResetTokenEmailRequest, _csrf: Non
         raise HTTPException(status_code=400, detail="Invalid or expired token")
 
     return {"email": row["email"]}
+
+
 
 # Employee Dashboard (EmployeeDashboard.jsx)
 @api.get("/employee/dashboard")
