@@ -67,7 +67,6 @@ export default function CustomerChatbot() {
   const [sending, setSending] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  // ── Voice transcriber ────────────────────────────────────────────────────
   const mediaRecorderRef   = useRef(null);
   const streamRef          = useRef(null);
   const chunksRef          = useRef([]);
@@ -435,7 +434,6 @@ export default function CustomerChatbot() {
               </div>
             )}
 
-            {/* ── Voice panel ── */}
             {(voiceStage !== "idle" || isTranscribing || voiceError) && (
               <div className="chatVoicePanel">
                 {voiceError && <div className="chatVoiceError">{voiceError}</div>}

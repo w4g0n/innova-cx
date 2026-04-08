@@ -457,7 +457,7 @@
   background: rgba(220, 38, 38, 0.15);
 }
 
-/* ── Status pill colour variants ─────────────────────────────────────────── */
+/* Status pill colour variants */
 .mv-statusPill--submitted {
   background: rgba(107, 114, 128, 0.1);
   border-color: rgba(107, 114, 128, 0.25);
@@ -485,7 +485,7 @@
 }
 /* overdue already defined in base CSS */
 
-/* ── Critical + Overdue row highlight ────────────────────────────────────── */
+/* Critical + Overdue row highlight */
 .mv-row--criticalOverdue {
   background: rgba(220, 38, 38, 0.05) !important;
   border-left: 3px solid rgba(220, 38, 38, 0.55);
@@ -494,7 +494,7 @@
   background: rgba(220, 38, 38, 0.09) !important;
 }
 
-/* ── KPI card click-to-filter wrapper ────────────────────────────────────── */
+/* KPI card click-to-filter wrapper */
 .mv-kpiWrap {
   cursor: pointer;
   border-radius: 18px;
@@ -511,7 +511,7 @@
   transform: translateY(-1px);
 }
 
-/* ── Live result count ───────────────────────────────────────────────────── */
+/* Live result count */
 .mv-resultCount {
   margin-left: auto;
   font-size: 12px;
@@ -527,7 +527,7 @@
   color: #5924b4;
 }
 
-/* ── Toast notifications ─────────────────────────────────────────────────── */
+/* Toast notifications */
 .mv-toastStack {
   position: fixed;
   bottom: 28px;

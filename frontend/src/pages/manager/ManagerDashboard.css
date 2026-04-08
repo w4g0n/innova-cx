@@ -9,7 +9,7 @@
   max-width: none;
 }
 
-/* ---- KPI row — 5 cards, always one row ---- */
+/* KPI row — 5 cards, always one row */
 .managerKpiRow {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -25,7 +25,7 @@
   color: rgba(17, 17, 17, 0.60);
 }
 
-/* ---- Navigation bubble cards ---- */
+/* Navigation bubble cards */
 .managerBubbleGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -96,7 +96,7 @@
   gap: 4px;
 }
 
-/* ---- Responsive ---- */
+/* Responsive */
 @media (max-width: 1024px) {
   .managerKpiRow {
     grid-template-columns: repeat(3, minmax(0, 1fr));

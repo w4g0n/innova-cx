@@ -3,7 +3,7 @@
    Import this in every customer-facing page CSS file.
    ============================================================ */
 
-/* ── COLOR TOKENS — Dark mode default ─────────────────────── */
+/* COLOR TOKENS — Dark mode default */
 :root {
   --void: #06030f;
   --text: rgba(255,255,255,.92);
@@ -44,7 +44,7 @@
   --tag-border: rgba(147,51,234,.22);
 }
 
-/* ── LIGHT MODE — vivid purple palette ─────────────────────── */
+/* LIGHT MODE — vivid purple palette */
 [data-theme="light"] {
   --void: #ede8ff;
   --text: rgba(15,10,30,.92);
@@ -83,7 +83,7 @@
   --tag-border: rgba(109,40,217,.2);
 }
 
-/* ── PAGE SHELL ─────────────────────────────────────────────── */
+/* Page Shell */
 .cs-page {
   font-family: "Outfit", sans-serif;
   background: var(--void);
@@ -95,7 +95,7 @@
   transition: background .3s, color .3s;
 }
 
-/* ── TOPBAR ─────────────────────────────────────────────────── */
+/* Topbar */
 .cs-topbar {
   position: sticky;
   top: 0;
@@ -131,7 +131,7 @@
 }
 .cs-topbar-right { display:flex; align-items:center; gap:8px; }
 
-/* ── ICON BUTTONS (topbar) ──────────────────────────────────── */
+/* ICON BUTTONS (topbar) */
 .cl-icon-btn, .cl-theme-btn {
   position: relative;
   width: 38px; height: 38px;
@@ -275,7 +275,7 @@
 .navPopoverItemTime { font-size:11px; color:var(--muted); white-space:nowrap; }
 .navPopoverItemMeta { margin-top:4px; color:var(--muted); font-size:12px; line-height:1.4; }
 
-/* ── PAGE HERO / HEADER ─────────────────────────────────────── */
+/* Page Hero / Header */
 .cs-hero {
   position: relative; overflow: hidden;
   padding: clamp(36px,5vw,60px) clamp(20px,4vw,48px) clamp(28px,4vw,48px);
@@ -316,14 +316,14 @@
 
 @keyframes fadeUp { from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;} }
 
-/* ── MAIN CONTENT AREA ──────────────────────────────────────── */
+/* Main Content Area */
 .cs-main {
   flex: 1;
   padding: clamp(28px,4vw,48px) clamp(20px,4vw,48px);
   display: flex; flex-direction: column; gap: 28px;
 }
 
-/* ── CARDS ──────────────────────────────────────────────────── */
+/* Cards */
 .cs-card {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
@@ -355,10 +355,10 @@
 }
 [data-theme="light"] .cs-card-title-icon { background: rgba(109,40,217,.1); border-color: rgba(109,40,217,.2); }
 
-/* ── SECTION DIVIDER ────────────────────────────────────────── */
+/* Section Divider */
 .cs-divider { height: 1px; background: var(--border-subtle); margin: 20px 0; }
 
-/* ── FORM FIELDS ────────────────────────────────────────────── */
+/* Form Fields */
 .cs-field { display:flex; flex-direction:column; gap:7px; }
 .cs-label {
   font-size: 12px; font-weight: 800;
@@ -406,7 +406,7 @@
 .cs-grid .cs-span2 { grid-column: span 2; }
 @media(max-width:640px) { .cs-grid { grid-template-columns: 1fr; } .cs-grid .cs-span2 { grid-column: span 1; } }
 
-/* ── BUTTONS ────────────────────────────────────────────────── */
+/* Buttons */
 .cs-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   height: 44px; padding: 0 24px; border-radius: 12px;
@@ -431,7 +431,7 @@
 }
 .cs-btn-danger:hover { background:rgba(239,68,68,.22); border-color:rgba(239,68,68,.4); color:#fca5a5; }
 
-/* ── STATUS BADGES ──────────────────────────────────────────── */
+/* Status Badges */
 .cs-status {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 11.5px; font-weight: 700; padding: 3px 10px;
@@ -455,7 +455,7 @@
   background: var(--tag-bg); border: 1px solid var(--tag-border); color: var(--muted);
 }
 
-/* ── SKELETON ───────────────────────────────────────────────── */
+/* Skeleton */
 .cs-skeleton-line {
   height: 14px; border-radius: 8px;
   background: linear-gradient(90deg,var(--skeleton-from) 25%,var(--skeleton-to) 50%,var(--skeleton-from) 75%);
@@ -464,7 +464,7 @@
 }
 @keyframes clSkeleton { 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
 
-/* ── FOOTER ─────────────────────────────────────────────────── */
+/* Footer */
 .cs-footer {
   background: var(--footer-bg);
   border-top: 1px solid var(--footer-border);
@@ -477,7 +477,7 @@
 [data-theme="light"] .cs-footer-logo { filter:none; opacity:.6; }
 .cs-footer-copy { font-size:11px; color:var(--dim); margin:0; }
 
-/* ── SHARED LOGOUT CONFIRM MODAL (used by all customer pages) ── */
+/* SHARED LOGOUT CONFIRM MODAL (used by all customer pages) */
 .novaCloseModal {
   position: fixed; inset: 0; z-index: 9999;
   background: rgba(0,0,0,.55);
@@ -530,7 +530,7 @@
   background: rgba(147,51,234,.07);
   color: var(--text);
 }
-/* ── ACCESSIBILITY — Focus visible styles ────────────────────── */
+/* ACCESSIBILITY — Focus visible styles */
 /* Visible keyboard focus ring for all interactive elements */
 :focus-visible {
   outline: 2px solid var(--orchid);
@@ -577,7 +577,7 @@
   top: 0;
 }
 
-/* ── ACCESSIBILITY — Contrast improvements ───────────────────── */
+/* ACCESSIBILITY — Contrast improvements */
 /* Boost muted text contrast: dark mode rgba(255,255,255,.42) → .58 = ~4.5:1 on dark bg */
 /* Applied via class override to avoid breaking visual design */
 .cs-topbar-label,
@@ -605,7 +605,7 @@
   color: rgba(15, 10, 30, 0.55);
 }
 
-/* ── ACCESSIBILITY — Reduced motion ─────────────────────────── */
+/* ACCESSIBILITY — Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

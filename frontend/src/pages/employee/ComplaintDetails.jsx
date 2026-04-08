@@ -50,7 +50,6 @@ function formatTicketSource(value) {
   return sanitizeTicketSource(value);
 }
 
-// --- AttachmentThumb --------------------------------------------------------
 function AttachmentThumb({ url, fileName, token }) {
   const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(fileName || "");
   const [imgError,     setImgError]     = useState(false);
@@ -130,7 +129,6 @@ function AttachmentThumb({ url, fileName, token }) {
   );
 }
 
-// ─── Modal ──────────────────────────────────────────────────────────────────
 function TicketModal({
   type,
   ticket,
@@ -836,7 +834,6 @@ function statusPillClass(status) {
   }
 }
 
-// ─── Main Component ─────────────────────────────────────────────────────────
 export default function ComplaintDetails() {
   const { id: rawId } = useParams();
   const navigate      = useNavigate();

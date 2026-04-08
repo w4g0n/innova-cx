@@ -3,7 +3,7 @@
    Matches the InnovaAI / CustomerLanding design language
    ============================================================ */
 
-/* ── ROOT ─────────────────────────────────────────────────── */
+/* Root */
 .cls-root {
   position: fixed;
   inset: 0;
@@ -17,7 +17,7 @@
   overflow: hidden;
 }
 
-/* ── BACKGROUND ──────────────────────────────────────────── */
+/* Background */
 .cls-bg {
   position: absolute;
   inset: 0;
@@ -81,7 +81,7 @@
   mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 40%, transparent 100%);
 }
 
-/* ── CARD ────────────────────────────────────────────────── */
+/* Card */
 .cls-card {
   position: relative;
   z-index: 2;
@@ -135,7 +135,7 @@
   to { --cls-angle: 360deg; }
 }
 
-/* ── LOGO ────────────────────────────────────────────────── */
+/* Logo */
 .cls-logo-wrap {
   position: relative;
   width: 108px;
@@ -201,7 +201,7 @@
           drop-shadow(0 0 40px rgba(109, 40, 217, 0.4));
 }
 
-/* ── BRAND ───────────────────────────────────────────────── */
+/* Brand */
 .cls-brand {
   font-size: 22px;
   font-weight: 900;
@@ -231,7 +231,7 @@
   margin-bottom: 32px;
 }
 
-/* ── PHASE LABEL ─────────────────────────────────────────── */
+/* Phase Label */
 .cls-phase-wrap {
   position: relative;
   height: 20px;
@@ -262,7 +262,7 @@
   color: rgba(216, 180, 254, 0.85);
 }
 
-/* ── PROGRESS BAR ────────────────────────────────────────── */
+/* Progress Bar */
 .cls-bar-track {
   position: relative;
   width: 100%;
@@ -325,7 +325,7 @@
   align-self: flex-end;
 }
 
-/* ── GHOST ROWS (page preview) ───────────────────────────── */
+/* GHOST ROWS (page preview) */
 .cls-ghost-rows {
   width: 100%;
   display: flex;
@@ -352,7 +352,7 @@
   100% { background-position: -200% 0; }
 }
 
-/* ── CORNER LABEL ────────────────────────────────────────── */
+/* Corner Label */
 .cls-corner-label {
   position: fixed;
   bottom: 18px;

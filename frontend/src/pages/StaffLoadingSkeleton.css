@@ -1,10 +1,7 @@
-/* ============================================================
-   StaffLoadingSkeleton — Post-login splash for Employee,
-   Manager & Operator portals.
-   Light theme — matches the white-card / purple-accent system.
-   ============================================================ */
+/*
+   StaffLoadingSkeleton — Post-login splash for Employee */
 
-/* ── ROOT ─────────────────────────────────────────────────── */
+/* Root */
 .sls-root {
   position: fixed;
   inset: 0;
@@ -18,7 +15,7 @@
   overflow: hidden;
 }
 
-/* ── BACKGROUND ──────────────────────────────────────────── */
+/* Background */
 .sls-bg {
   position: absolute;
   inset: 0;
@@ -68,7 +65,7 @@
   mask-image: radial-gradient(ellipse 65% 65% at 50% 50%, black 40%, transparent 100%);
 }
 
-/* ── CARD ────────────────────────────────────────────────── */
+/* Card */
 .sls-card {
   position: relative;
   z-index: 2;
@@ -110,7 +107,7 @@
   100% { background-position: 300% center; }
 }
 
-/* ── LOGO ────────────────────────────────────────────────── */
+/* Logo */
 .sls-logo-wrap {
   position: relative;
   width: 96px;
@@ -161,7 +158,7 @@
   filter: drop-shadow(0 4px 16px rgba(109, 40, 217, 0.3));
 }
 
-/* ── BRAND ───────────────────────────────────────────────── */
+/* Brand */
 .sls-brand {
   font-size: 20px;
   font-weight: 900;
@@ -180,7 +177,7 @@
   margin-bottom: 28px;
 }
 
-/* ── PHASE LABEL ─────────────────────────────────────────── */
+/* Phase Label */
 .sls-phase-wrap {
   position: relative;
   height: 18px;
@@ -211,7 +208,7 @@
   color: rgba(109, 40, 217, 0.75);
 }
 
-/* ── PROGRESS BAR ────────────────────────────────────────── */
+/* Progress Bar */
 .sls-bar-track {
   position: relative;
   width: 100%;
@@ -272,7 +269,7 @@
   align-self: flex-end;
 }
 
-/* ── GHOST SKELETON ──────────────────────────────────────── */
+/* Ghost Skeleton */
 .sls-ghost {
   width: 100%;
   display: flex;
@@ -320,7 +317,7 @@
   100% { background-position: -200% 0; }
 }
 
-/* ── FOOTER ──────────────────────────────────────────────── */
+/* Footer */
 .sls-footer {
   position: fixed;
   bottom: 16px;

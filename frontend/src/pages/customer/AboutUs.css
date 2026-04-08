@@ -395,7 +395,7 @@ html { scroll-behavior:smooth; }
   gap: 20px; align-items: start;
 }
 
-/* ── Agent list panel ── */
+/* Agent list panel */
 .au-agent-list {
   background: rgba(255,255,255,.018);
   border: 1px solid var(--border);
@@ -499,7 +499,7 @@ html { scroll-behavior:smooth; }
   font-size:10px; color:var(--dim);
 }
 
-/* ── Agent detail card ── */
+/* Agent detail card */
 .au-agent-detail {
   position:sticky; top:88px;
   background: rgba(7,3,18,.97);

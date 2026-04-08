@@ -1,8 +1,6 @@
-// ─── OperatorSanitize.js ──────────────────────────────────────────────────────
 // Shared input-sanitization helpers for all Operator pages.
 // Follows the same pattern as customer/sanitize.js and employee/EmployeeSanitize.js.
 
-// ── Length constants ──────────────────────────────────────────────────────────
 export const MAX_SEARCH_LEN     = 200;   // PillSearch / search inputs
 export const MAX_NOTE_LEN       = 2000;  // Analyst note textarea (TicketReviewDetail)
 export const MAX_NAME_LEN       = 100;   // Full names
@@ -10,7 +8,6 @@ export const MAX_EMAIL_LEN      = 254;   // RFC 5321
 export const MAX_LOCATION_LEN   = 200;   // Location field
 export const MAX_TEXT_LEN       = 1000;  // Generic short text
 
-// ── Allowed-value sets ────────────────────────────────────────────────────────
 export const ALLOWED_ROLES = ["customer", "employee", "manager", "operator"];
 
 export const ALLOWED_STATUSES = ["all", "active", "inactive"];
@@ -35,8 +32,6 @@ export const ALLOWED_DEPARTMENTS = [
 export const ALLOWED_QC_SECTIONS = ["acceptance", "rescoring", "rerouting"];
 
 export const ALLOWED_MODEL_AGENTS = ["chatbot", "sentiment", "feature"];
-
-// ── Core helpers ──────────────────────────────────────────────────────────────
 
 /**
  * Allowlist for general text fields.

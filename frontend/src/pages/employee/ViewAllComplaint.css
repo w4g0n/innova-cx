@@ -89,7 +89,7 @@
   font-weight: 700;
 }
 
-/* ── Status colour pills in the table ───────────────────────────── */
+/* Status colour pills in the table */
 .ev-status-badge {
   display: inline-flex;
   align-items: center;
@@ -148,7 +148,7 @@
   animation: fadeUp 0.5s var(--ease-out) both;
 }
 
-/* ── Concentric pulsing rings ── */
+/* Concentric pulsing rings */
 .ev-all-resolved__rings {
   position: relative;
   width: 160px;
@@ -174,7 +174,7 @@
   50%       { transform: scale(1.07); opacity: 0.5; }
 }
 
-/* ── Icon circle ── */
+/* Icon circle */
 .ev-all-resolved__iconwrap {
   position: absolute;
   width: 80px;
@@ -200,7 +200,7 @@
   height: 44px;
 }
 
-/* ── Animated checkmark draw ── */
+/* Animated checkmark draw */
 .ev-all-resolved__checkpath {
   stroke-dasharray: 50;
   stroke-dashoffset: 50;
@@ -211,7 +211,7 @@
   to { stroke-dashoffset: 0; }
 }
 
-/* ── Text ── */
+/* Text */
 .ev-all-resolved__title {
   margin: 0 0 10px;
   font-size: 28px;
@@ -230,7 +230,7 @@
   animation: fadeUp 0.5s 0.4s both;
 }
 
-/* ── CTA button ── */
+/* CTA button */
 .ev-all-resolved__btn {
   padding: 10px 20px;
   border-radius: 999px;

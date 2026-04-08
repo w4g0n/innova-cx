@@ -13,7 +13,6 @@ import { sanitizeText } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
 import { getCsrfToken } from "../../services/api";
 
-// ─── Auth token helper (same pattern as all other manager pages) ──────────────
 function getAuthToken() {
   return (
     localStorage.getItem("access_token") ||
@@ -24,7 +23,6 @@ function getAuthToken() {
   );
 }
 
-// ─── Self-contained Change Password Modal ────────────────────────────────────
 // Calls POST /api/auth/change-password with { current_password, new_password }
 function ChangePasswordModal({ onClose }) {
   const [currentPw, setCurrentPw] = useState("");
@@ -168,7 +166,6 @@ function ChangePasswordModal({ onClose }) {
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
 export default function ManagerSettings() {
   const [showPwModal, setShowPwModal] = useState(false);
 

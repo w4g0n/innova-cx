@@ -57,7 +57,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
   const [submitted,   setSubmitted]   = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // ── File helpers ────────────────────────────────────────────────────────
   const BYTES_PER_KB = 1024;
   const BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB;
   const formatBytes = (bytes) => {
@@ -126,7 +125,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     setErrors((prev) => ({ ...prev, files: undefined }));
   };
 
-  // ── Stream cleanup ──────────────────────────────────────────────────────
   const cleanupStream = () => {
     try {
       if (streamRef.current) {
@@ -151,7 +149,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     cleanupStream();
   };
 
-  // ── Validation ──────────────────────────────────────────────────────────
   const validate = () => {
     const newErrors = {};
     const details = (message || "").trim();
@@ -168,7 +165,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     return Object.keys(newErrors).length === 0;
   };
 
-  // ── Submit ──────────────────────────────────────────────────────────────
   const handleSubmitClick = (e) => {
     e.preventDefault();
     if (!validate()) return;
@@ -229,7 +225,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     }
   };
 
-  // ── Voice recording ─────────────────────────────────────────────────────
   const [voiceError, setVoiceError] = useState("");
 
   const startRecording = async () => {
@@ -353,7 +348,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     window.history.back();
   };
 
-  // ── Success screen ──────────────────────────────────────────────────────
   if (submitted) {
     const successContent = (
       <div className="custFormPage">
@@ -397,7 +391,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     return <Layout role="customer">{successContent}</Layout>;
   }
 
-  // ── Form ────────────────────────────────────────────────────────────────
   const content = (
     <div className={`custFormPage ${embedded ? "custFormPage--embedded" : ""}`}>
       {!embedded && (
@@ -410,7 +403,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
       <form className="custFormCard" onSubmit={handleSubmitClick} noValidate>
         <div className="custFormGrid">
 
-          {/* ── Input Method ───────────────────────────────────── */}
           <div className="custField custField--span2">
             <label className="custLabel">Input Method</label>
             <div className="custModeRow">
@@ -459,7 +451,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
             </div>
           </div>
 
-          {/* ── Description ────────────────────────────────────── */}
           <div className="custField custField--span2">
             <label className="custLabel" htmlFor="cff-details">
               Description <span style={{ color: "#ef4444" }}>*</span>
@@ -675,7 +666,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
               </div>
             )}
 
-            {/* ── Attachments ────────────────────────────────── */}
             <div className="custAttachSection">
               <div className="custAttachHeader">
                 <div>
@@ -801,7 +791,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
         </div>
       </form>
 
-      {/* ── Confirmation modal ─────────────────────────────────────────── */}
       {showConfirm && (
         <div
           className="custConfirmOverlay"

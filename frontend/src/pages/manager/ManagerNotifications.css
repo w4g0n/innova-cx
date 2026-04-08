@@ -1,6 +1,4 @@
-/* =====================================================
-   empNotifs — shared by Employee, Manager, Operator
-   ===================================================== */
+/* empNotifs — shared by Employee, Manager, Operator */
 
 .empNotifs {
   display: flex;
@@ -115,13 +113,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 340px;   /* ← add this so title doesn't push pill off */
+  max-width: 340px; 
 }
 
 .empNotifs__message {
   font-size: 13px;
   color: rgba(17, 17, 17, 0.62);
-  margin-top: 2px;   /* ← was 4px */
+  margin-top: 2px;
   line-height: 1.5;
 }
 
