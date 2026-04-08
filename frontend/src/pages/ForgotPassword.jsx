@@ -370,7 +370,7 @@ export default function ForgotPassword() {
     e.preventDefault();
     if (resendCooldown > 0 || sending) return;
     setSending(true); setStep1Error("");
-    setResendCooldown(30); // lock for 30 seconds immediately
+    setResendCooldown(120); // lock for 2 minutes immediately
     try {
       const csrf = await getCsrfToken();
       await fetch(apiUrl("/api/auth/forgot-password"), {
