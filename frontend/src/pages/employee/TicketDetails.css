@@ -1,6 +1,4 @@
-/* ================================================
-   ComplaintDetails (Employee Ticket Detail view)
-   ================================================ */
+/* ComplaintDetails (Employee Ticket Detail view) */
 
 .empTicketDetail {
   width: 100%;
@@ -10,6 +8,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100%;
+  gap: 18px;
 }
 
 /* Always push the chat section to the bottom of the page */
@@ -18,12 +17,11 @@
   width: 100%;
 }
 
-/* ---- Page header row ---- */
+/* Page header row */
 .details-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 20px;
   gap: 16px;
   flex-wrap: wrap;
 }
@@ -96,7 +94,7 @@
   color: #b45309;
 }
 
-/* ---- Action buttons ---- */
+/* Action buttons */
 .header-actions {
   display: flex;
   align-items: center;
@@ -147,12 +145,11 @@
   filter: brightness(1.08);
 }
 
-/* ---- Card sections ---- */
+/* Card sections */
 .card-section {
   background: #fff;
   border-radius: 22px;
   padding: 22px;
-  margin-bottom: 18px;
   box-shadow: 0px 12px 30px rgba(0, 0, 0, 0.06);
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
@@ -198,6 +195,28 @@
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.previous-resolution-entry {
+  padding: 12px 0 0;
+}
+
+.previous-resolution-entry--spaced {
+  margin-bottom: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.previous-resolution-date {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.previous-resolution-text {
+  margin-bottom: 0;
+  opacity: 0.8;
 }
 
 .attachments {
@@ -288,19 +307,42 @@
   line-height: 1.6;
 }
 
-/* ---- Layout grid ---- */
+/* Layout grid */
 .details-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
-  margin-bottom: 20px;
 }
 
 .details-grid .card-section {
   margin-bottom: 0;
 }
 
-/* ---- Timeline ---- */
+.details-grid--single {
+  grid-template-columns: 1fr;
+}
+
+.ticket-details-card {
+  width: 100%;
+}
+
+.ticket-conversation-section {
+  margin-top: 0;
+}
+
+.ticket-conversation-section .tc-root {
+  margin-top: 0;
+}
+
+.final-resolution-section {
+  margin-top: 0;
+}
+
+.previous-resolutions-section {
+  margin-top: 0;
+}
+
+/* Timeline */
 .timeline {
   display: flex;
   flex-direction: column;
@@ -322,9 +364,7 @@
   margin-top: 4px;
 }
 
-/* ================================================
-   Modal
-   ================================================ */
+/* Modal */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -547,7 +587,7 @@
   filter: brightness(1.08);
 }
 
-/* ---- Dropdown wrapper ---- */
+/* Dropdown wrapper */
 .modal-dropdown {
   background: #ffffff;
   border: 1.5px solid rgba(89, 36, 180, 0.22);
@@ -587,7 +627,7 @@
   pointer-events: none;
 }
 
-/* ---- Escalate modal variant ---- */
+/* Escalate modal variant */
 .modal-card.modal-red {
   border-top: 5px solid #c1121f;
 }
@@ -602,7 +642,7 @@
   filter: brightness(1.08);
 }
 
-/* ---- Attachment label optional tag ---- */
+/* Attachment label optional tag */
 .modal-label-optional {
   font-size: 10px;
   font-weight: 600;
@@ -613,7 +653,7 @@
   vertical-align: middle;
 }
 
-/* ---- File upload ---- */
+/* File upload */
 .modal-upload-box {
   margin-top: 6px;
   border: 1.5px dashed rgba(89, 36, 180, 0.28);
@@ -757,9 +797,7 @@
   background: rgba(220, 38, 38, 0.08);
 }
 
-/* ================================================
-   Confirmation panel (reroute / rescore)
-   ================================================ */
+/* Confirmation panel (reroute / rescore) */
 .modal-confirm-body {
   display: flex;
   flex-direction: column;
@@ -837,17 +875,13 @@
   line-height: 1.5;
 }
 
-/* ================================================
-   Animations
-   ================================================ */
+/* Animations */
 @keyframes modalFade {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ================================================
-   Inline modal error
-   ================================================ */
+/* Inline modal error */
 .modal-inline-error {
   display: flex;
   align-items: center;
@@ -869,9 +903,7 @@
   flex-shrink: 0;
 }
 
-/* ================================================
-   Toast notification
-   ================================================ */
+/* Toast notification */
 .ticket-toast {
   position: fixed;
   bottom: 28px;
@@ -928,9 +960,7 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ================================================
-   Activity Log
-   ================================================ */
+/* Activity Log */
 .emp-activity-log .section-title {
   margin-bottom: 16px;
 }
@@ -1009,9 +1039,7 @@
   line-height: 1.55;
 }
 
-/* ================================================
-   Responsive
-   ================================================ */
+/* Responsive */
 @media (max-width: 900px) {
   .details-grid {
     grid-template-columns: 1fr;

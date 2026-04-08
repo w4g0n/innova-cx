@@ -21,7 +21,7 @@ import httpx
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 import pyotp  # for RFC 6238 TOTP
 import qrcode
@@ -100,7 +100,7 @@ except Exception:
         verify_csrf_token,
     )
 
-# ── Analytics service (reads from materialized views) ────────────────────────
+# Analytics service (reads from materialized views)
 try:
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -129,14 +129,13 @@ ROUTING_CONFIDENCE_THRESHOLD = float(
     )
 )
 CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "30"))
+MAX_CUSTOMER_TEXT_WORDS = 250
 ANALYTICS_REFRESH_INTERVAL_SECONDS = int(os.getenv("ANALYTICS_REFRESH_INTERVAL_HOURS", "12")) * 3600
 _sla_heartbeat_task: Optional[asyncio.Task] = None
 _analytics_refresh_task: Optional[asyncio.Task] = None
 _has_sla_policy_fn = False
 
-# =========================================================
 # App
-# =========================================================
 _EXPOSE_DOCS = os.getenv("EXPOSE_API_DOCS", "false").lower() == "true"
 app = FastAPI(
     title="InnovaCX API",
@@ -177,9 +176,7 @@ app.add_middleware(
 )
 
 
-# =========================================================
 # CSP Middleware
-# =========================================================
 
 class CSPMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -205,6 +202,20 @@ app.add_middleware(CSPMiddleware)
 
 
 api = APIRouter(prefix="/api")
+
+
+def _word_count(value: str) -> int:
+    return len(str(value or "").split())
+
+
+def _validate_customer_text_words(value: Optional[str], field_name: str) -> Optional[str]:
+    if value is None:
+        return value
+    if _word_count(value) > MAX_CUSTOMER_TEXT_WORDS:
+        raise ValueError(f"{field_name} must be {MAX_CUSTOMER_TEXT_WORDS} words or fewer.")
+    return value
+
+
 def _ensure_uploads_root() -> str:
     # Use env var if provided, otherwise default
     root = os.getenv("UPLOADS_DIR", "/app/uploads")
@@ -212,9 +223,7 @@ def _ensure_uploads_root() -> str:
     return root
 
 
-# =========================================================
 # Database helpers
-# =========================================================
 def build_default_dsn() -> str:
     host = os.getenv("DB_HOST", "localhost")
     port = os.getenv("DB_PORT", "5432")
@@ -503,11 +512,10 @@ def execute(sql: str, params: Optional[tuple] = None) -> int:
             return cur.rowcount
 
 
-# =========================================================
 # Auth helpers (bcrypt + JWT)
-# =========================================================
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
-JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "86400"))  # 24h
+JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "900"))  # 15 minutes
+MFA_TEMP_TTL_SECONDS = int(os.getenv("MFA_TEMP_TTL_SECONDS", "900"))  # 15 minutes
 DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "false").lower() == "true"
 DISABLE_MFA = os.getenv("DISABLE_MFA", "false").lower() == "true"
 
@@ -705,7 +713,7 @@ async def _start_sla_heartbeat() -> None:
             else:
                 logger.warning("db_compat | gave up after 15 attempts: %s", _e)
 
-    # ✅ permanent dev seed (works even with existing DB volume)
+    # permanent dev seed (works even with existing DB volume)
     for _seed_attempt in range(15):
         try:
             _ensure_dev_seed_users()
@@ -717,11 +725,11 @@ async def _start_sla_heartbeat() -> None:
             else:
                 logger.warning("dev_seed | gave up after 15 attempts: %s", _e)
 
-    # ── Wire analytics service to DB helpers and warm-up refresh ─────────────
+    # Wire analytics service to DB helpers and warm-up refresh
     if _ANALYTICS_READY:
         try:
             _analytics.init(fetch_one, fetch_all, db_connect)
-            # ── Self-healing: install MVs if zzz_analytics_mvs.sh was skipped ──
+            # Self-healing: install MVs if zzz_analytics_mvs.sh was skipped
             # Retry up to 10x (30s) in case DB is still finishing init.sql
             for _mv_attempt in range(10):
                 try:
@@ -760,7 +768,7 @@ async def _start_sla_heartbeat() -> None:
         _sla_heartbeat_task = asyncio.create_task(_sla_heartbeat_loop())
         logger.info("sla_heartbeat | started interval_s=%s", SLA_HEARTBEAT_SECONDS)
 
-    # ── Start background MV refresh loop ─────────────────────────────────────
+    # Start background MV refresh loop
     global _analytics_refresh_task
     if _ANALYTICS_READY and ANALYTICS_REFRESH_INTERVAL_SECONDS > 0 and (
         _analytics_refresh_task is None or _analytics_refresh_task.done()
@@ -792,9 +800,7 @@ async def _stop_sla_heartbeat() -> None:
     _analytics_refresh_task = None
 
 
-# =========================================================
 # Auth dependencies
-# =========================================================
 def _get_bearer_token(authorization: Optional[str]) -> str:
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
@@ -856,9 +862,7 @@ api.include_router(
     dependencies=[Depends(require_operator)],
 )
 
-# =========================================================
 # Recurring complaint prediction
-# =========================================================
 def predict_is_recurring(*, user_id: str, subject: str, details: str) -> bool:
     """
     Uses SQL function `compute_is_recurring_ticket(...)` when available.
@@ -1051,9 +1055,7 @@ def _apply_mock_pipeline_outcome(ticket_code: str, details: str) -> None:
                 department_id=dept_id,
                 priority="Medium",
             )
-# =========================================================
 # Helpers for response/resolution time
-# =========================================================
 def minutes_to_label(total_minutes: Optional[int]) -> str:
     if not total_minutes or total_minutes <= 0:
         return ""
@@ -1072,9 +1074,7 @@ def diff_minutes(later_dt, earlier_dt) -> Optional[int]:
     return max(0, int((later_dt - earlier_dt).total_seconds() // 60))
 
 
-# =========================================================
 # Models
-# =========================================================
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -1100,9 +1100,7 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
-# =========================================================
 # Routes: Health & Root
-# =========================================================
 @api.get("/health")
 def health():
     row = fetch_one("SELECT NOW() as db_time;")
@@ -1127,9 +1125,7 @@ async def require_csrf(x_csrf_token: str = Header(None, alias="X-CSRF-Token")):
         raise HTTPException(status_code=403, detail="Invalid or missing CSRF token.")
 
 
-# ----------------------------
 # MFA / TOTP Setup & Verification
-# ----------------------------
 @api.get("/auth/totp-status")
 def totp_status(user: Dict[str, Any] = Depends(get_current_user)):
     """
@@ -1228,8 +1224,10 @@ def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_cs
         execute("UPDATE users SET totp_secret = %s WHERE id = %s", (secret, user["id"]))
         user["totp_secret"] = secret
 
-    # Temporary token valid for 10 minutes
-    temp_token = create_jwt({"sub": str(user["id"]), "type": "mfa_temp"}, ttl_seconds=600)
+    # Temporary token for MFA setup/verification. Kept separate from the full
+    # dashboard session token so it can be longer than one OTP attempt but
+    # still scoped to the verification flow.
+    temp_token = create_jwt({"sub": str(user["id"]), "type": "mfa_temp"}, ttl_seconds=MFA_TEMP_TTL_SECONDS)
 
     # Flag to indicate MFA setup required
     requires_setup = not user.get("mfa_enabled", False)
@@ -1304,9 +1302,7 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     }
 
 
-# =========================================================
 # Routes: Password Reset
-# =========================================================
 @api.post("/auth/forgot-password")
 @rate_limit_auth()
 def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None = Depends(require_csrf)):
@@ -1440,9 +1436,7 @@ def auth_logout(
     )
     return {"ok": True}
 
-# =========================================================
 # Employee Dashboard (EmployeeDashboard.jsx)
-# =========================================================
 @api.get("/employee/dashboard")
 def employee_dashboard(user: Dict[str, Any] = Depends(require_employee)):
     user_id = user["id"]
@@ -1531,10 +1525,8 @@ def employee_dashboard(user: Dict[str, Any] = Depends(require_employee)):
     return {"employee": employee, "kpis": kpis, "tickets": tickets, "reports": reports}
 
 
-# =========================================================
 # Employee View All Complaints (EmployeeViewAllComplaints.jsx)
 # ONLY tickets assigned to this employee
-# =========================================================
 @api.get("/employee/tickets")
 def employee_tickets(user: Dict[str, Any] = Depends(require_employee)):
     user_id = user["id"]
@@ -1590,9 +1582,7 @@ def employee_tickets(user: Dict[str, Any] = Depends(require_employee)):
     return {"tickets": tickets}
 
 
-# =========================================================
 # SLA Summary
-# =========================================================
 @api.get("/employee/sla")
 def employee_sla(
     days: int = Query(default=30, ge=1, le=365),
@@ -1645,9 +1635,7 @@ def employee_sla(
         },
     }
 
-# =========================================================
 # Employee Notifications (EmployeeNotifications.jsx)
-# =========================================================
 
 @api.get("/employee/notifications")
 def employee_notifications(
@@ -1805,6 +1793,24 @@ def employee_resolution_suggestion(
     return {"ticketId": row["ticket_code"], "suggestedResolution": suggestion}
 
 
+def _extract_previous_resolutions(updates_rows: list) -> list:
+    """Extract archived previous resolutions stored by Branch C at reopen time."""
+    import json as _json
+    result = []
+    for u in updates_rows:
+        if u.get("update_type") != "previous_resolution":
+            continue
+        try:
+            data = _json.loads(u.get("message") or "{}")
+            result.append({
+                "resolution": str(data.get("resolution") or ""),
+                "resolvedAt": data.get("resolved_at"),
+            })
+        except Exception:
+            pass
+    return result
+
+
 @api.get("/employee/tickets/{ticket_code}")
 def employee_ticket_details(
     ticket_code: str,
@@ -1891,6 +1897,17 @@ def employee_ticket_details(
     response_time = minutes_to_label(diff_minutes(respond_due_at, resp_base))
     resolution_time = minutes_to_label(diff_minutes(resolve_due_at, priority_assigned_at or created_at))
 
+    # Ticket updates (for previous resolutions)
+    updates_rows = fetch_all(
+        """
+        SELECT update_type, message
+        FROM ticket_updates
+        WHERE ticket_id = %s
+        ORDER BY created_at ASC
+        """,
+        (row["id"],),
+    )
+
     ticket = {
         "ticketId": row.get("ticket_code"),
         "priority": row.get("priority"),
@@ -1899,6 +1916,7 @@ def employee_ticket_details(
         "suggestedResolution": row.get("suggested_resolution") or "",
         "modelSuggestion": row.get("suggested_resolution") or row.get("model_suggestion"),
         "finalResolution": row.get("final_resolution") or "",
+        "previousResolutions": _extract_previous_resolutions(updates_rows or []),
         "metrics": {
             "minTimeToRespond": response_time,
             "minTimeToResolve": resolution_time,
@@ -2059,7 +2077,7 @@ def employee_resolve_ticket(
                     (row["id"], row["id"], user_id, body.steps_taken.strip()),
                 )
 
-            # ── Notifications on employee resolve ──────────────────────────
+            # Notifications on employee resolve
             # Fetch related user IDs and priority for notifications.
             cur.execute(
                 """
@@ -2100,9 +2118,7 @@ def employee_resolve_ticket(
     }
 
 
-# =========================================================
 # Employee: Upload attachment for a ticket
-# =========================================================
 @api.post("/employee/tickets/{ticket_code}/attachments")
 async def employee_upload_attachment(
     ticket_code: str,
@@ -2152,9 +2168,55 @@ async def employee_upload_attachment(
     return {"ok": True, "fileName": safe_name, "fileUrl": file_url}
 
 
-# =========================================================
+# Customer: Upload attachment for a ticket
+@api.post("/customer/tickets/{ticket_code}/attachments")
+async def customer_upload_attachment(
+    ticket_code: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(require_customer),
+    _csrf: None = Depends(require_csrf),
+):
+    """
+    Stores an uploaded file under <UPLOADS_DIR>/<ticket_code>/<filename>
+    and records it in ticket_attachments. Only the ticket's creator may upload.
+    """
+    user_id = user["id"]
+
+    row = fetch_one(
+        "SELECT id FROM tickets WHERE ticket_code = %s AND created_by = %s",
+        (ticket_code, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    ticket_id = row["id"]
+
+    safe_name = _sanitize_filename(file.filename or "attachment")
+    contents = await validate_upload_file(file)
+
+    uploads_root = _ensure_uploads_root()
+    upload_dir = os.path.join(uploads_root, ticket_code)
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_path = os.path.join(upload_dir, safe_name)
+    with open(file_path, "wb") as fh:
+        fh.write(contents)
+
+    file_url = f"/uploads/{ticket_code}/{safe_name}"
+
+    execute(
+        """
+        INSERT INTO ticket_attachments (ticket_id, file_name, file_url, uploaded_by)
+        VALUES (%s, %s, %s, %s);
+        """,
+        (ticket_id, safe_name, file_url, user_id),
+    )
+
+    logger.info("customer_attachment_upload | ticket=%s file=%s", ticket_code, safe_name)
+    return {"ok": True, "fileName": safe_name, "fileUrl": file_url}
+
+
 # Employee Rescore + Reroute (ComplaintDetails.jsx)
-# =========================================================
 
 class EmployeeRescoreRequest(BaseModel):
     new_priority: str
@@ -2357,9 +2419,7 @@ def employee_reroute_ticket(
     return {"ok": True, "requestCode": result["request_code"], "status": "Pending"}
 
 
-# =========================================================
 # Ticket Messages — employee ↔ customer conversation
-# =========================================================
 
 class TicketMessageRequest(BaseModel):
     body: str
@@ -2593,9 +2653,7 @@ def customer_post_ticket_message(
     }
 
 
-# =========================================================
 # Employee Report Helpers
-# =========================================================
 
 _MONTH_LABEL = {
     1: "January", 2: "February", 3: "March", 4: "April",
@@ -2635,7 +2693,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
     period_start = date(year, month, 1)
     period_end   = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
 
-    # ── activity check via MV ─────────────────────────────────────────────────
+    # activity check via MV
     activity = fetch_one(
         """
         SELECT SUM(total) AS cnt
@@ -2648,7 +2706,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
     if not activity or (activity.get("cnt") or 0) == 0:
         return None
 
-    # ── build user slug for report_code (safe, lowercase, alphanum only) ──────
+    # build user slug for report_code (safe, lowercase, alphanum only)
     user_slug_row = fetch_one(
         "SELECT split_part(email, '@', 1) AS slug FROM users WHERE id = %s::uuid",
         (user_id,),
@@ -2663,7 +2721,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
     report_code = f"{_MONTH_ABBR[month]}-{year}-{user_slug}"
     month_label = f"{_MONTH_LABEL[month]} {year}"
 
-    # ── aggregate monthly KPIs from mv_employee_daily ─────────────────────────
+    # aggregate monthly KPIs from mv_employee_daily
     kpi_row = fetch_one(
         """
         SELECT
@@ -2715,7 +2773,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
 
     subtitle = f"{resolved} of {total} tickets resolved · {sla_pct}% SLA compliance"
 
-    # ── upsert employee_reports row ───────────────────────────────────────────
+    # upsert employee_reports row
     existing = fetch_one(
         "SELECT id FROM employee_reports WHERE report_code = %s AND employee_user_id = %s::uuid",
         (report_code, user_id),
@@ -2758,7 +2816,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
             return None
         report_id = row["id"]
 
-    # ── summary items ─────────────────────────────────────────────────────────
+    # summary items
     # AI Acceptance Rate comes from mv_acceptance_daily
     acceptance_data = fetch_one(
         """
@@ -2794,7 +2852,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
             (report_id, label, value),
         )
 
-    # ── rating components ─────────────────────────────────────────────────────
+    # rating components
     # Each component is derived from MV aggregates; pct is its contribution (0-100)
     # score is the raw metric value (0-100 scale) for the progress bar.
     #
@@ -2828,7 +2886,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
             (report_id, rc_name, round(rc_score, 1), round(rc_pct, 1)),
         )
 
-    # ── weekly rows ───────────────────────────────────────────────────────────
+    # weekly rows
     # Derive week-of-month from created_day; group mv_employee_daily by ISO week.
     # We use date_trunc('week', created_day) to get the Monday of each week,
     # then label it as "Week N" relative to the start of the month.
@@ -2899,7 +2957,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
             ),
         )
 
-    # ── notes ─────────────────────────────────────────────────────────────────
+    # notes
     # Auto-generated from real MV data — no hardcoded copy.
     notes = []
 
@@ -2971,7 +3029,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
     return report_code
 
 
-# ── Demo months guarantee ────────────────────────────────────────────────────
+# Demo months guarantee
 # These are the fixed months every employee must have reports for.
 # They are also the minimum floor — any newer month with MV data is added too.
 _DEMO_MONTHS = [
@@ -3014,7 +3072,7 @@ def _ensure_recent_reports(user_id: str) -> None:
     if not user_slug:
         user_slug = _re_slug2.sub(r"[^a-z0-9]", "", str(user_id).replace("-", ""))[:8]
 
-    # ── Build the full target set ─────────────────────────────────────────────
+    # Build the full target set
     # Start with the fixed demo months
     target_months: set = set(_DEMO_MONTHS)
 
@@ -3041,7 +3099,7 @@ def _ensure_recent_reports(user_id: str) -> None:
         if yr >= 2026:          # hard guard: never below 2026
             target_months.add((yr, mo))
 
-    # ── Process each target month ─────────────────────────────────────────────
+    # Process each target month
     for year, month in sorted(target_months):
         if year < 2026:
             continue            # absolute safety: never generate pre-2026
@@ -3130,8 +3188,8 @@ def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
     return {"reports": reports}
 
 
-# ── IMPORTANT: this route MUST come before /{report_code} so FastAPI
-# doesn't swallow "generate" as a report_code path param. ────────────────────
+# IMPORTANT: this route MUST come before /{report_code} so FastAPI
+# doesn't swallow "generate" as a report_code path param.
 @api.get("/employee/reports/generate")
 def employee_generate_report(
     year: int = Query(default=None),
@@ -3272,9 +3330,7 @@ def employee_report_detail(report_code: str, user: Dict[str, Any] = Depends(requ
     }
 
 
-# -----------------------------
 # Customer Dashboard
-# -----------------------------
 @api.get("/customer/dashboard")
 def customer_dashboard(user: Dict[str, Any] = Depends(require_customer)):
     user_id = user["id"]
@@ -3332,9 +3388,7 @@ def customer_dashboard(user: Dict[str, Any] = Depends(require_customer)):
     return {"customer": customer, "kpis": kpis, "recentTickets": tickets}
 
 
-# -----------------------------
 # Customer History (All Tickets)
-# -----------------------------
 @api.get("/customer/mytickets")
 def customer_mytickets(
     limit: int = Query(default=50, ge=1, le=500),
@@ -3356,7 +3410,8 @@ def customer_mytickets(
           respond_due_at,
           resolve_due_at,
           first_response_at,
-          resolved_at
+          resolved_at,
+          linked_ticket_code
         FROM tickets
         WHERE created_by_user_id = %s
         ORDER BY created_at DESC
@@ -3385,6 +3440,7 @@ def customer_mytickets(
                 "priority": r.get("priority"),
                 "ticketType": r.get("ticket_type"),
                 "status": r.get("status"),
+                "linkedTicketCode": r.get("linked_ticket_code") or None,
                 "issueDate": issue_date,
                 "minTimeToRespond": response_time,
                 "minTimeToResolve": resolution_time,
@@ -3394,9 +3450,7 @@ def customer_mytickets(
     return {"tickets": tickets}
 
 
-# -----------------------------
 # Customer Ticket Details
-# -----------------------------
 @api.get("/customer/tickets/{ticket_code}")
 def customer_ticket_details(
     ticket_code: str,
@@ -3414,6 +3468,7 @@ def customer_ticket_details(
           t.details,
           t.priority,
           t.status,
+          t.linked_ticket_code,
           t.created_at,
           t.priority_assigned_at,
           t.assigned_at,
@@ -3448,7 +3503,7 @@ def customer_ticket_details(
         (row["id"],),
     )
 
-    # ✅ Ticket Updates
+    # Ticket Updates
     updates_rows = fetch_all(
         """
         SELECT
@@ -3479,6 +3534,7 @@ def customer_ticket_details(
         "ticketId": row.get("ticket_code"),
         "priority": row.get("priority"),
         "status": row.get("status"),
+        "linkedTicketCode": row.get("linked_ticket_code") or None,
         "issueDate": issue_date,
         "modelSuggestion": row.get("model_suggestion"),
         "assignedEmployee": row.get("assigned_employee_name") or None,
@@ -3492,24 +3548,13 @@ def customer_ticket_details(
         },
         "attachments": [{"fileName": a["file_name"], "fileUrl": a["file_url"]} for a in atts] if atts else [],
 
-        # ✅ Added Updates Section
-        "updates": [
-            {
-                "message": u.get("message"),
-                "type": u.get("update_type"),
-                "author": u.get("author_name"),
-                "date": u.get("created_at").isoformat() if u.get("created_at") else None,
-            }
-            for u in updates_rows
-        ],
+        "previousResolutions": _extract_previous_resolutions(updates_rows),
     }
 
     return {"ticket": ticket}
 
 
-# -----------------------------
 # Customer Notifications Popup
-# -----------------------------
 @api.get("/customer/notifications")
 def customer_notifications_popup(
     limit: int = Query(default=10, ge=1, le=50),  # popup shows top N
@@ -3579,9 +3624,7 @@ def customer_notifications_popup(
 
     return {"unreadCount": int(unread_row.get("unread") or 0), "notifications": notifications}
 
-# -----------------------------
 # Customer Create Ticket
-# -----------------------------
 class TicketAttachment(BaseModel):
     name: str
     type: Optional[str]
@@ -3665,6 +3708,11 @@ class InternalCreateTicketRequest(BaseModel):
     details: str
     ticket_source: Optional[str] = "chatbot"
     asset_type: Optional[str] = "General"
+
+    @field_validator("details")
+    @classmethod
+    def details_within_word_limit(cls, value: str) -> str:
+        return _validate_customer_text_words(value, "details") or ""
 
 
 def _dispatch_orchestrator_after_submit(
@@ -3869,9 +3917,7 @@ def create_customer_ticket(
         },
     }
 
-# -----------------------------
 # Customer Settings - GET
-# -----------------------------
 @api.get("/customer/setting")
 def get_customer_settings(
     user: Dict[str, Any] = Depends(require_customer),
@@ -3919,9 +3965,7 @@ def get_customer_settings(
         },
     }
 
-# -----------------------------
 # Customer Settings - UPDATE
-# -----------------------------
 @api.put("/customer/setting")
 def update_customer_settings(
     payload: Dict[str, Any],
@@ -3964,9 +4008,7 @@ def update_customer_settings(
 
     return {"success": True}    
 
-# -----------------------------
 # Manager View
-# -----------------------------
 
 @api.get("/manager/employees")
 def get_employees(user: Dict[str, Any] = Depends(require_manager)):
@@ -4020,7 +4062,6 @@ def get_employees(user: Dict[str, Any] = Depends(require_manager)):
     return result
 
 
- #-------------------------------------------------------------
 
 @api.get("/manager/complaints")
 def get_complaints(user: Dict[str, Any] = Depends(require_manager)):
@@ -4407,7 +4448,7 @@ def route_ticket_department(
     if not dept:
         raise HTTPException(status_code=404, detail=f"Department '{dept_name}' not found")
 
-    # ✅ Fetch BEFORE updating so old_dept is still the current one
+    # Fetch BEFORE updating so old_dept is still the current one
     t_info = fetch_one(
         """
         SELECT t.ticket_code, t.assigned_to_user_id, t.priority,
@@ -4480,7 +4521,6 @@ def get_departments(authorization: Optional[str] = Header(default=None)):
             seen.add(canonical)
             result.append(canonical)
     return result
-#============================================
 
 @api.get("/manager")
 def get_manager_kpis(user: Dict[str, Any] = Depends(require_manager)):
@@ -4521,7 +4561,6 @@ def get_manager_kpis(user: Dict[str, Any] = Depends(require_manager)):
         "departmentName":   dept_name,
     }
 
-# ==========================
 
 @api.get("/manager/approvals")
 def get_approvals(user: Dict[str, Any] = Depends(require_manager)):
@@ -4600,9 +4639,7 @@ ORDER BY ar.submitted_at DESC;
     return result
 
 
-# =========================================================
 # Manager: Approve / Reject an approval request
-# =========================================================
 
 class ApprovalDecisionRequest(BaseModel):
     decision: str                      # "Approved" or "Rejected"
@@ -4763,11 +4800,8 @@ def decide_approval(
     return {"ok": True, "requestId": request_id, "decision": decision}
 
 
-# =========================================================
 # Manager: Notifications
-# =========================================================
 
-# =========================================================
 
 @app.get("/manager/complaints/{ticket_id}")
 @api.get("/manager/complaints/{ticket_id}")
@@ -4861,7 +4895,6 @@ def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends
         ],
     }
 
-#============================================
 
 @api.get("/manager/trends")
 def get_manager_trends(
@@ -4899,7 +4932,7 @@ def get_manager_trends(
         (period_start, window_secs),
     )["start"]
 
-    # ── Route through analytics_service (materialized views) ─────────────────
+    # Route through analytics_service (materialized views)
     # manager_dept_id scopes Section C (employee performance) to employees who
     # BELONG to this manager's department (user_profiles.department_id), which is
     # the only correct definition.  Without it, employees from other departments
@@ -4922,7 +4955,7 @@ def get_manager_trends(
             )
             # falls through to raw SQL below
 
-    # ── RAW SQL FALLBACK (used only if analytics_service is unavailable) ──────
+    # RAW SQL FALLBACK (used only if analytics_service is unavailable)
     # This is the original implementation kept as a safety net.
     # If you are seeing this path in production logs, the MVs may not be installed.
     # Run: docker exec -i innovacx-db psql -U $POSTGRES_USER -d $POSTGRES_DB < database/scripts/analytics_mvs.sql
@@ -5038,7 +5071,7 @@ def get_manager_trends(
     time_by_priority_raw = fetch_all(f"SELECT t.priority, ROUND(AVG(EXTRACT(EPOCH FROM(t.first_response_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.first_response_at IS NOT NULL),1) AS avg_respond, ROUND(AVG(EXTRACT(EPOCH FROM(t.resolved_at-COALESCE(t.priority_assigned_at,t.created_at)))/60.0) FILTER(WHERE t.resolved_at IS NOT NULL),1) AS avg_resolve, COUNT(*) AS total FROM tickets t {dept_join} WHERE {where} GROUP BY 1 ORDER BY CASE t.priority WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END", params)
     time_by_priority_out = [{"priority":r["priority"],"avgRespond":float(r["avg_respond"] or 0),"avgResolve":float(r["avg_resolve"] or 0),"targetRespond":sla_targets["respond"].get(r["priority"],360),"targetResolve":sla_targets["resolve"].get(r["priority"],4320),"total":r["total"]} for r in time_by_priority_raw]
 
-    # ── Section C: scope employee rows to THIS manager's department only ─────
+    # Section C: scope employee rows to THIS manager's department only
     # Use user_profiles.department_id (employee's HOME dept) not ticket's dept.
     # This matches the analytics_service.get_section_c() strategy.
     _fallback_dept_id = user.get("department_id")
@@ -5088,7 +5121,6 @@ def get_manager_trends(
         "sectionB":{"kpis":{"totalTickets":total_t,"breachRate":breach_rate,"prevBreachRate":prev_breach_rate,"breachDelta":round(breach_rate-prev_breach_rate,1),"escalationRate":escalation_rate,"avgRespondMins":round(avg_respond_mins,1),"avgResolveMins":round(avg_resolve_mins,1),"avgRespondHrs":round(avg_respond_mins/60,2),"avgResolveHrs":round(avg_resolve_mins/60,2)},"breachByDept":breach_by_dept_out,"breachTimeline":breach_timeline_out,"escalationByDept":escalation_by_dept_out,"timeByPriority":time_by_priority_out},
         "sectionC":{"employees":employee_out,"teamAcceptAvg":team_accept_avg,"companyBreachRate":round(co_breach,1)},
     }
-#--------------------------------------------
 @api.get("/manager/notifications")
 def manager_notifications(
     limit: int = Query(default=200, ge=1, le=500),
@@ -5353,9 +5385,7 @@ def decide_routing_review(
         logger=logger,
     )
 
-# =========================================================
 # Operator Notifications
-# =========================================================
 
 @api.get("/operator/notifications")
 def operator_notifications(
@@ -5440,9 +5470,7 @@ def operator_notifications_mark_all_read(
     )
     return {"ok": True}
 
-# =========================================================
 # Internal Orchestrator Endpoint (no JWT — Docker-network only)
-# =========================================================
 
 class OrchestratorComplaintRequest(BaseModel):
     ticket_id: Optional[str] = None
@@ -5582,7 +5610,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     department_id = cur.fetchone()[0]
 
             if not incoming_ticket_code:
-                # ── No ticket_id supplied → create a new ticket ──
+                # No ticket_id supplied → create a new ticket
                 effective_department_id = department_id if (not has_routing_decision or routing_is_confident) else None
                 effective_status = normalized_status or "Open"
                 if has_routing_decision and routing_is_confident:
@@ -5645,7 +5673,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
                     "resolve_due_at":       created["resolve_due_at"].isoformat() if created.get("resolve_due_at") else None,
                 }
 
-            # ── ticket_id supplied → update existing ticket ──
+            # ticket_id supplied → update existing ticket
             cur.execute(
                 "SELECT id, priority_assigned_at, department_id, status, priority FROM tickets WHERE ticket_code = %s LIMIT 1",
                 (incoming_ticket_code,),
@@ -6139,9 +6167,7 @@ async def proxy_orchestrator_process_text(request: Request):
     raise HTTPException(status_code=503, detail="Service is temporarily unavailable. Please try again later.")
 
 
-# =========================================================
 # OPERATOR ANALYTICS ENDPOINTS
-# =========================================================
 def _parse_time_range(
     timeRange: str,
     dateFrom: Optional[str] = None,
@@ -6406,9 +6432,7 @@ def get_operator_feature(
         status_code=503,
         detail="Analytics MVs not ready. Run database/scripts/analytics_mvs.sql first."
     )
-# =========================================================
 # OPERATOR DASHBOARD SUMMARY  
-# =========================================================
 
 @api.get("/operator/dashboard/summary")
 def operator_dashboard_summary(user: Dict[str, Any] = Depends(require_operator)):
@@ -6422,7 +6446,7 @@ def operator_dashboard_summary(user: Dict[str, Any] = Depends(require_operator))
     QC avg review time + flagged today : last 24 hours
     """
 
-    # ── Model Health ──────────────────────────────────────────────────────────
+    # Model Health
     try:
         mh_row = fetch_one(
             """
@@ -6467,7 +6491,7 @@ def operator_dashboard_summary(user: Dict[str, Any] = Depends(require_operator))
     else:
         status = "Healthy"
 
-    # ── Quality Control ───────────────────────────────────────────────────────
+    # Quality Control
     try:
         qc_row = fetch_one(
             """
@@ -6520,9 +6544,7 @@ def operator_dashboard_summary(user: Dict[str, Any] = Depends(require_operator))
         },
     }
 
-# =========================================================
 # Operator – Quality Control / Ticket Review Detail
-# =========================================================
 
 @api.get("/operator/complaints/{ticket_id}")
 def get_operator_complaint_detail(
@@ -6587,7 +6609,7 @@ def get_operator_complaint_detail(
 
     tid = ticket["ticket_id"]
 
-    # ── approval requests ─────────────────────────────────────────────────────
+    # approval requests
     approval_requests = fetch_all(
         """
         SELECT
@@ -6607,7 +6629,7 @@ def get_operator_complaint_detail(
         (tid,),
     ) or []
 
-    # ── model execution log ───────────────────────────────────────────────────
+    # model execution log
     execution_log = fetch_all(
         """
         SELECT
@@ -6626,7 +6648,7 @@ def get_operator_complaint_detail(
     ) or []
 
 
-    # ── ticket updates ────────────────────────────────────────────────────────
+    # ticket updates
     ticket_updates = fetch_all(
         """
         SELECT
@@ -6642,7 +6664,7 @@ def get_operator_complaint_detail(
         (tid,),
     ) or []
 
-    # ── current-run AI outputs ────────────────────────────────────────────────
+    # current-run AI outputs
     sentiment = fetch_one(
         """
         SELECT sentiment_label, sentiment_score,
@@ -6703,7 +6725,7 @@ def get_operator_complaint_detail(
         (tid,),
     )
 
-    # ── chat sentiment series (for escalated tickets) ─────────────────────────
+    # chat sentiment series (for escalated tickets)
     chat_sentiment = fetch_all(
         """
         SELECT sentiment_score, created_at
@@ -6714,7 +6736,7 @@ def get_operator_complaint_detail(
         (tid,),
     ) or []
 
-    # ── helpers ───────────────────────────────────────────────────────────────
+    # helpers
     def _iso(val):
         return val.isoformat() if val else None
 
@@ -6799,9 +6821,7 @@ def get_operator_complaint_detail(
     }
 
 
-# =========================================================
 # Operator – User Management
-# =========================================================
 _VALID_ROLES    = {"customer", "employee", "manager", "operator"}
 _VALID_STATUSES = {"active", "inactive"}
 _SAFE_TEXT_RE   = _re.compile(r'^[\w\s\-\.,\'\+\(\)@/]+$', _re.UNICODE)
@@ -6913,7 +6933,7 @@ def operator_create_user(
         raise HTTPException(status_code=403, detail="Only operators can create users.")
 
     # Sanitize & validate
-    # -------- TYPE VALIDATION (NEW - SAFE ADD) --------
+    # ----- TYPE VALIDATION (NEW - SAFE ADD)
     _validate_type(body.fullName, str,"Full name")
     _validate_type(body.email, str,"Email")
     _validate_type(body.phone, str,"Phone")
@@ -6925,7 +6945,6 @@ def operator_create_user(
         _validate_type(body.department, str, "Department")
 
     _validate_type(body.status, str, "Status")
-    # ------------------------------------------------
 
     full_name  = _sanitize_text(body.fullName,   "Full name")
     email      = _sanitize_email(body.email)
@@ -7282,9 +7301,7 @@ def operator_delete_user(
     return {"success": True, "message": "User deleted successfully."}
 
 
-# =========================================================
 # TTS — call-centre audio reply
-# =========================================================
 
 try:
     import edge_tts as _edge_tts
@@ -7369,10 +7386,8 @@ async def tts_speak(body: TTSSpeakRequest):
         )
 
 
-# =========================================================
 # Internal — pipeline queue notifications
 # (called by orchestrator queue_manager, no user auth)
-# =========================================================
 
 class InternalNotifyOperatorsRequest(BaseModel):
     ticket_id: Optional[str] = None
@@ -7407,10 +7422,8 @@ def internal_notify_operators(body: InternalNotifyOperatorsRequest):
     return {"ok": True, "notified": len(operator_ids)}
 
 
-# =========================================================
 # Internal — Review Agent verdict
 # (called by orchestrator ReviewAgent after pipeline completes)
-# =========================================================
 
 class ReviewVerdictRequest(BaseModel):
     ticket_id: str
@@ -7553,9 +7566,7 @@ def internal_review_verdict(body: ReviewVerdictRequest):
     return {"ok": True, "ticket_id": ticket_uuid, "verdict": body.verdict}
 
 
-# =========================================================
 # Operator — delete ticket
-# =========================================================
 
 @api.delete("/operator/tickets/{ticket_id}")
 def operator_delete_ticket(
@@ -7577,16 +7588,12 @@ def operator_delete_ticket(
     return {"ok": True, "deleted_ticket_id": ticket_id}
 
 
-# =========================================================
 # Attach router LAST
-# =========================================================
 app.include_router(api)
 
-# =========================================================
 # Serve uploaded files at GET /uploads/<path>
 # Using FileResponse instead of StaticFiles to avoid the
 # Starlette empty-directory 404 bug.
-# =========================================================
 _uploads_root = os.getenv("UPLOADS_DIR", "/app/uploads")
 os.makedirs(_uploads_root, exist_ok=True)
 

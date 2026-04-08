@@ -37,7 +37,6 @@ const PIPELINE = [
 
 ];
 
-/* ── Orbit config — each planet has a distinct visual personality ── */
 const PLANET_3D = [
   // 0: Transcriber — Mercury-like: small, grey, heavily cratered, close orbit
   { color: "#818cf8", radius: 0.42, orbitR: 3.4,  speed: 0.011,  tiltX: 0.20,  tiltZ:  0.08, startAngle: 0.0,
@@ -65,7 +64,6 @@ const PLANET_3D = [
     personality: 'neptune' },
 ];
 
-/* ── SVG Icons ── */
 function Icon({ name, size = 20 }) {
   const s = { width: size, height: size };
   const p = { fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" };
@@ -151,7 +149,7 @@ function Starfield() {
   return <canvas ref={ref} className="pl-starfield" />;
 }
 
-/* ══ SOLAR SYSTEM ══ */
+/*  SOLAR SYSTEM  */
 function SolarSystem({ onReady }) {
   const mountRef  = useRef(null);
   const labelsRef = useRef(null);
@@ -216,17 +214,16 @@ function SolarSystem({ onReady }) {
       raycaster = new THREE.Raycaster();
       mouse     = new THREE.Vector2(-9999, -9999);
 
-      /* ── Lighting — sun illuminates planets, does NOT shade itself ── */
       const sunLight = new THREE.PointLight(0xfff4d6, 6.5, 320);
       scene.add(sunLight);
       /* Raised ambient — deep space scatter, keeps dark sides visible */
       scene.add(new THREE.AmbientLight(0x8866aa, 0.45));
 
-      /* ══ SUN — self-luminous fire shader ══
+      /* SUN — self-luminous fire shader 
          Key principle: the sun emits light, it is NOT lit by anything.
          Uses ShaderMaterial with no lighting, pure emission.
          All detail sampled in 3-D sphere space — zero UV banding.
-      ══════════════════════════════════════ */
+       */
       const sunVS = `
         varying vec3 vPos;
         void main(){
@@ -238,7 +235,6 @@ function SolarSystem({ onReady }) {
         uniform float uTime;
         varying vec3 vPos;
 
-        /* ── Hash & noise ── */
         float hash(vec3 p){
           p = fract(p * vec3(443.897, 441.423, 437.195));
           p += dot(p, p.yzx + 19.19);
@@ -302,13 +298,11 @@ function SolarSystem({ onReady }) {
           float fire2 = fireFbm(fc2);
           float fire  = fire1*0.65 + fire2*0.35;
 
-          /* ── Granulation cells (convection) ── */
           vec3 gp = sp*5.5 + vec3(uTime*0.015, uTime*0.011, uTime*0.009);
           float gran = voronoi(gp);
           /* Cell borders bright (rising hot plasma), centres slightly darker */
           gran = 1.0 - smoothstep(0.04, 0.40, gran)*0.25;
 
-          /* ── Sunspots (3-D arc distance) — much smaller, subtle ── */
           vec3 sc1=normalize(vec3(sin(uTime*0.05),      sin(uTime*0.03)*0.55,  cos(uTime*0.05)));
           vec3 sc2=normalize(vec3(sin(uTime*0.04+2.09), sin(uTime*0.035)*0.50, cos(uTime*0.04+2.09)));
           float a1=acos(clamp(dot(sp,sc1),-1.0,1.0));
@@ -330,7 +324,6 @@ function SolarSystem({ onReady }) {
           vec3 col = mix(cOrange, cYellow, smoothstep(0.25, 0.60, f));
           col       = mix(col,    cWhite,  smoothstep(0.55, 0.90, f));
 
-          /* ── Compose ── */
           /* Gran as luminance-only — don't let it pull colours toward grey */
           float granLum = 0.82 + gran * 0.18;
           col *= granLum;
@@ -367,7 +360,6 @@ function SolarSystem({ onReady }) {
       );
       scene.add(sun);
 
-      /* ── Corona — single smooth radial glow shader, no harsh sphere layers ── */
       const coronaVS = `
         varying vec3 vPos;
         void main(){ vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }
@@ -399,11 +391,11 @@ function SolarSystem({ onReady }) {
       );
       scene.add(coronaMesh);
 
-      /* ══ PLANET TEXTURE ENGINE ══
+      /*  PLANET TEXTURE ENGINE 
          Each planet has a handcrafted personality matching a real solar system body.
          Uses 3D sphere-mapped FBM noise — no axis-aligned banding ever.
          Contrast is kept subtle so surfaces look painterly, not noisy.
-      ══════════════════════════════ */
+       */
 
       function h21(x, y, s) {
         // deterministic hash → [0,1]
@@ -448,7 +440,6 @@ function SolarSystem({ onReady }) {
           let r,g,b;
 
           if(personality==='mercury') {
-            // ── Mercury: grey-tan, heavy cratering, no atmosphere ──
             const terrain = fbm(lat,lon,5,3.0,seed);
             const detail  = fbm(lat,lon,3,7.0,seed+50);
             const h = terrain*0.6+detail*0.4;
@@ -463,7 +454,6 @@ function SolarSystem({ onReady }) {
             if(ray>0.80) { const e=(ray-0.80)/0.20; r=sm(r,0.85,e*0.5); g=sm(g,0.80,e*0.5); b=sm(b,0.72,e*0.5); }
 
           } else if(personality==='venus') {
-            // ── Venus: thick creamy sulfuric clouds, yellow-orange swirls ──
             const c1 = fbm(lat,lon*0.9+lat*0.3,5,2.0,seed);
             const c2 = fbm(lat+c1*0.5,lon,4,4.0,seed+80);
             const cloud = c1*0.55+c2*0.45;
@@ -475,7 +465,6 @@ function SolarSystem({ onReady }) {
             if(absLat>0.72) { const p=(absLat-0.72)/0.28; r=sm(r,0.95,p); g=sm(g,0.88,p); b=sm(b,0.55,p); }
 
           } else if(personality==='earth') {
-            // ── Earth: blue oceans, green/brown land, white clouds, polar ice ──
             const cont = fbm(lat,lon,6,2.2,seed);      // continent mask
             const cld  = fbm(lat,lon,4,3.5,seed+400);  // cloud layer
             const isLand = cont > 0.52;
@@ -494,7 +483,6 @@ function SolarSystem({ onReady }) {
             if(absLat>0.76) { const ic=fbm(lat,lon,3,4,seed+600); const p=(absLat-0.76)/0.24*(0.7+ic*0.3); r=sm(r,0.92,p); g=sm(g,0.95,p); b=sm(b,1.0,p); }
 
           } else if(personality==='mars') {
-            // ── Mars: rusty red-orange, dark basalt lowlands, dust-covered highlands ──
             const terrain = fbm(lat,lon,5,2.5,seed);
             const detail  = fbm(lat,lon,4,6.0,seed+60);
             const h = terrain*0.65+detail*0.35;
@@ -512,7 +500,6 @@ function SolarSystem({ onReady }) {
             if(absLat>0.82) { const p=(absLat-0.82)/0.18; r=sm(r,0.88,p); g=sm(g,0.82,p); b=sm(b,0.78,p); }
 
           } else if(personality==='jupiter') {
-            // ── Jupiter: amber/cream/brown bands, organic warping, great red storm ──
             // Warp latitude with FBM for organic band edges
             const warp = fbm(lat,lon,3,1.5,seed+10)*1.2-0.6;
             const wlat = lat+warp*0.55;
@@ -532,7 +519,6 @@ function SolarSystem({ onReady }) {
             if(grs<0.20) { const gi=(0.20-grs)/0.20; r=sm(r,0.82,gi*0.9); g=sm(g,0.28,gi*0.7); b=sm(b,0.18,gi*0.5); }
 
           } else if(personality==='saturn') {
-            // ── Saturn: pale gold/beige, softer bands than Jupiter ──
             const warp = fbm(lat,lon,3,1.2,seed+15)*0.8-0.4;
             const wlat = lat+warp*0.4;
             const band = Math.sin(wlat*3.5)*0.5+0.5;
@@ -546,7 +532,6 @@ function SolarSystem({ onReady }) {
             if(absLat>0.85) { const p=(absLat-0.85)/0.15; r*=1-p*0.15; g*=1-p*0.18; }
 
           } else if(personality==='uranus') {
-            // ── Uranus: smooth pale cyan-teal, almost featureless, faint banding ──
             const smooth = fbm(lat,lon,3,1.5,seed)*0.18; // very low contrast
             const faint  = Math.sin(lat*3.0)*0.08;       // barely visible bands
             const h = 0.50+smooth+faint;
@@ -558,7 +543,6 @@ function SolarSystem({ onReady }) {
             if(absLat>0.70) { const p=(absLat-0.70)/0.30; r=sm(r,0.72,p*0.4); g=sm(g,0.95,p*0.3); b=sm(b,1.0,p*0.3); }
 
           } else { // neptune
-            // ── Neptune: deep royal blue, violent white cloud streaks, dark storm ──
             const turb = fbm(lat,lon,5,2.8,seed);
             const streak = fbm(lat,lon*1.4,3,5.0,seed+200);
             // Deep blue base
@@ -598,7 +582,7 @@ function SolarSystem({ onReady }) {
         return {tex,bump};
       }
 
-      /* ══ PLANETS ══ */
+      /*  PLANETS  */
       PLANET_3D.forEach((cfg, i) => {
         const hex = cfg.color;
         const r   = parseInt(hex.slice(1,3),16)/255;
@@ -699,10 +683,10 @@ function SolarSystem({ onReady }) {
         planetObjects.push({ mesh, labelAnchor, orbitPivot, innerPivot, cfg, idx: i, mat, r, g, b });
       });
 
-      /* ══ REALISTIC ASTEROIDS ══
+      /* REALISTIC ASTEROIDS
          Uses deformed geometry (perturbed vertices) + a rocky material.
          Each asteroid is a unique irregular chunk, not a smooth sphere.
-      ══════════════════════════════ */
+       */
 
       // Seeded pseudo-random
       function srand(seed) {
@@ -784,7 +768,6 @@ function SolarSystem({ onReady }) {
         });
       }
 
-      /* ── Animation ── */
       let last = performance.now();
       let readyCalled = false;
       function animate() {
@@ -854,7 +837,6 @@ function SolarSystem({ onReady }) {
       }
       animate();
 
-      /* ── Input ── */
       const onMouseMove = (e) => {
         const rect = mount.getBoundingClientRect();
         mouse.x =  ((e.clientX-rect.left)/rect.width)*2-1;
@@ -975,7 +957,7 @@ function useReveal(threshold = 0.1) {
   return [ref, vis];
 }
 
-/* ══ PIPELINE ══ */
+/* PIPELINE */
 function PipelineFlow() {
   const [ref, vis] = useReveal(0.05);
   const [active, setActive] = useState(0);
@@ -1037,7 +1019,7 @@ function PipelineFlow() {
   );
 }
 
-/* ══ MAIN ══ */
+/* MAIN */
 export default function PublicLanding() {
   const navigate = useNavigate();
   const [scrollY, setScrollY] = useState(0);
@@ -1067,10 +1049,10 @@ export default function PublicLanding() {
 
   return (
     <>
-      {/* ══ WELCOME SPLASH ══
+      {/* WELCOME SPLASH 
           Sequence: black → text fades in (0.9s) → holds → fades out with page (0.8s)
           The landing beneath fades in simultaneously as splash fades out.
-      ══════════════════════ */}
+       */}
       <div style={{
         position: "fixed", inset: 0, zIndex: 9999,
         background: "#06010f",
@@ -1186,7 +1168,6 @@ export default function PublicLanding() {
         `}</style>
       </div>
 
-      {/* ── Main page ── */}
       <div className="pl-root" style={{
         opacity: ready ? 1 : 0,
         transition: ready ? "opacity 1.0s cubic-bezier(0.4,0,0.2,1) 0.3s" : "none",
@@ -1308,7 +1289,6 @@ export default function PublicLanding() {
       </footer>
     </div>
 
-    {/* ── Fixed social dock — stays on screen while scrolling ── */}
     <div className="pl-social-dock" aria-label="Follow us on social media">
       <a href="https://www.instagram.com/innovacx.ai?igsh=bzVxOTNuMXUzODEz&utm_source=qr" target="_blank" rel="noopener noreferrer" className="pl-social-link" aria-label="Instagram">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">

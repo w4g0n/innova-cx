@@ -2,7 +2,6 @@ import { Navigate } from "react-router-dom";
 import { clearAllAuth } from "../utils/auth";
 
 export default function ProtectedRoute({ role, children }) {
-  // ── Layer 1: Check if the stored JWT is expired ──────────────────────────
   // Decode the exp claim with proper base64url→base64 conversion before atob().
   // If expired: clear all auth keys and redirect to login with the return path.
   const token = localStorage.getItem("access_token");
@@ -23,7 +22,6 @@ export default function ProtectedRoute({ role, children }) {
     }
   }
 
-  // ── Layer 2: Check that the user object exists in localStorage ───────────
   let user = null;
   try {
     user = JSON.parse(localStorage.getItem("user") || "null");

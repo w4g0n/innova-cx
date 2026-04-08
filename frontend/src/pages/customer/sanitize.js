@@ -23,6 +23,23 @@ export function sanitizeText(val, maxLen = 1000) {
   return String(val).replace(_ALLOWED_TEXT_RE, "").trim().slice(0, maxLen);
 }
 
+export function countWords(val) {
+  if (val === null || val === undefined) return 0;
+  const matches = String(val).trim().match(/\S+/g);
+  return matches ? matches.length : 0;
+}
+
+export function limitWords(val, maxWords = MAX_TEXT_WORDS) {
+  if (val === null || val === undefined) return "";
+  const words = String(val).trim().match(/\S+/g);
+  if (!words || words.length <= maxWords) return String(val);
+  return words.slice(0, maxWords).join(" ");
+}
+
+export function sanitizeTextByWords(val, maxWords = MAX_TEXT_WORDS, maxLen = MAX_DESCRIPTION_LEN) {
+  return limitWords(sanitizeText(val, maxLen), maxWords);
+}
+
 /**
  * Sanitize an ID-like value: keep only alphanumerics, hyphens, underscores.
  * Safe for use in URLs, CSS class suffixes, and aria labels.
@@ -115,8 +132,11 @@ export function formatTimeAgo(isoString) {
   return d.toLocaleDateString();
 }
 
-/** Maximum characters allowed in a ticket description / message body. */
-export const MAX_DESCRIPTION_LEN = 5000;
+/** Maximum words allowed in customer free-text inputs. */
+export const MAX_TEXT_WORDS = 250;
+
+/** Safety character cap for sanitized ticket description / message bodies. */
+export const MAX_DESCRIPTION_LEN = 20000;
 
 /** Maximum characters allowed in a ticket subject / title. */
 export const MAX_SUBJECT_LEN = 200;

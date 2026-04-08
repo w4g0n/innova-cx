@@ -1,10 +1,8 @@
-/* ============================================================
-   CustomerLanding — Personal Dashboard
-   ============================================================ */
+/* CustomerLanding — Personal Dashboard */
 
 @import "./CustomerShared.css";
 
-/* ── ROOT ──────────────────────────────────────────────────── */
+/* Root */
 .cl-dashboard {
   font-family: "Outfit", sans-serif;
   background: var(--void);
@@ -16,7 +14,7 @@
   transition: background .3s, color .3s;
 }
 
-/* ── TOPBAR ────────────────────────────────────────────────── */
+/* Topbar */
 .cl-topbar {
   position: sticky; top: 0; z-index: 100;
   display: flex; align-items: center; justify-content: space-between;
@@ -77,10 +75,10 @@
 .navDropdownItem.danger { color:rgba(252,165,165,.8); }
 .navDropdownItem.danger:hover { background:rgba(239,68,68,.09); color:#fca5a5; }
 
-/* ── MAIN ──────────────────────────────────────────────────── */
+/* Main */
 .cl-main { flex:1; display:flex; flex-direction:column; gap:0; padding-bottom:clamp(40px,6vw,80px); }
 
-/* ── GREETING ──────────────────────────────────────────────── */
+/* Greeting */
 .cl-greeting-section {
   position:relative; overflow:hidden;
   padding:clamp(40px,6vw,72px) clamp(20px,4vw,48px) clamp(36px,5vw,60px);
@@ -114,7 +112,7 @@
 .cl-greeting-badge-icon { font-size:13px; animation:badgeSpin 6s linear infinite; }
 @keyframes badgeSpin{0%,100%{transform:rotate(0deg) scale(1);}25%{transform:rotate(90deg) scale(1.1);}75%{transform:rotate(270deg) scale(0.9);}}
 
-/* ── SECTIONS ──────────────────────────────────────────────── */
+/* Sections */
 .cl-section { padding:clamp(32px,4vw,52px) clamp(20px,4vw,48px) 0; }
 .cl-section--ticket { padding-bottom:clamp(32px,4vw,52px); }
 .cl-section-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:20px; }
@@ -123,7 +121,7 @@
 .cl-view-all-btn { display:inline-flex; align-items:center; gap:6px; background:transparent; border:1px solid var(--border-subtle); border-radius:9px; color:var(--muted); font-family:"Outfit",sans-serif; font-size:12.5px; font-weight:600; padding:7px 14px; cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all .2s; }
 .cl-view-all-btn:hover { background:rgba(147,51,234,.1); border-color:rgba(147,51,234,.4); color:var(--pink); }
 
-/* ── QUICK ACTIONS ─────────────────────────────────────────── */
+/* Quick Actions */
 .cl-quick-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
 .cl-quick-card { position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:14px; padding:26px 24px 22px; border-radius:18px; border:1px solid var(--glass-border); background:var(--quick-card-bg); cursor:pointer; text-align:left; overflow:hidden; transition:border-color .22s,transform .22s,box-shadow .22s,background .22s; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); min-height:160px; }
 [data-theme="light"] .cl-quick-card { box-shadow:0 2px 16px rgba(109,40,217,.1); }
@@ -139,7 +137,7 @@
 .cl-quick-footer { display:flex; align-items:center; justify-content:flex-end; width:100%; margin-top:auto; }
 .cl-quick-arrow { color:var(--dim); flex-shrink:0; transition:transform .22s,color .22s; }
 
-/* ── TICKET CARD ───────────────────────────────────────────── */
+/* Ticket Card */
 .cl-ticket-card { background:var(--ticket-bg); border:1px solid var(--ticket-border); border-radius:20px; padding:26px 28px 22px; cursor:pointer; transition:border-color .22s,transform .22s,box-shadow .22s; -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); position:relative; overflow:hidden; }
 [data-theme="light"] .cl-ticket-card { box-shadow:0 2px 20px rgba(109,40,217,.1); }
 .cl-ticket-card::before { content:""; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,rgba(147,51,234,.35),transparent); }
@@ -188,11 +186,11 @@
 .cl-ticket-empty-title { font-size:17px; font-weight:800; color:var(--text); margin:0 0 6px; }
 .cl-ticket-empty-sub   { font-size:13.5px; color:var(--muted); margin:0; }
 
-/* ── BUTTONS ───────────────────────────────────────────────── */
+/* Buttons */
 .cl-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:44px; padding:0 24px; border-radius:12px; border:none; background:linear-gradient(135deg,#6d28d9,#9333ea,#a855f7); background-size:200% auto; color:#fff; font-family:"Outfit",sans-serif; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; transition:background-position .4s,transform .2s,box-shadow .3s; box-shadow:0 4px 20px rgba(147,51,234,.4); }
 .cl-btn-primary:hover { background-position:right center; transform:translateY(-2px); box-shadow:0 8px 32px rgba(147,51,234,.6); }
 
-/* ── FOOTER ─────────────────────────────────────────────────── */
+/* Footer */
 .cl-footer { background:var(--footer-bg); border-top:1px solid var(--footer-border); padding:20px clamp(20px,4vw,48px); display:flex; align-items:center; gap:16px; flex-wrap:wrap; justify-content:space-between; transition:background .3s; }
 .cl-footer-logo { height:24px; opacity:.45; filter:brightness(0) invert(1); transition:opacity .2s; }
 .cl-footer-logo:hover { opacity:.8; }
@@ -202,7 +200,7 @@
 .cl-footer-link:hover { color:var(--orchid); background:rgba(147,51,234,.07); }
 .cl-footer-copy { font-size:11px; color:var(--dim); margin:0; }
 
-/* ── NOVA WIDGET ───────────────────────────────────────────── */
+/* Nova Widget */
 .novaWidget { position:fixed; bottom:22px; right:22px; width:520px; height:640px; background:var(--popover-bg); border-radius:20px; border:1px solid var(--popover-border); box-shadow:0 32px 80px rgba(0,0,0,.45); display:flex; flex-direction:column; overflow:hidden; transition:all .35s cubic-bezier(.25,1,.5,1); z-index:1001; animation:clWidgetIn .35s var(--ease) both; color:var(--text); }
 @keyframes clWidgetIn{from{opacity:0;transform:translateY(18px) scale(.96);}to{opacity:1;transform:none;}}
 @media(max-width:600px){.novaWidget{right:10px;left:10px;width:auto;height:78vh;bottom:10px;}}
@@ -291,7 +289,7 @@
 .novaCloseModalBtns button:last-child{background:transparent;border-color:var(--border-subtle);color:var(--muted);}
 .novaCloseModalBtns button:last-child:hover{background:rgba(147,51,234,.07);color:var(--text);}
 
-/* ── RESPONSIVE ─────────────────────────────────────────────── */
+/* Responsive */
 @media(max-width:1024px){.cl-quick-grid{grid-template-columns:repeat(3,1fr);}}
 @media(max-width:640px){
   .cl-quick-grid{grid-template-columns:1fr;}
@@ -317,4 +315,42 @@
     border-radius: 14px;
   }
   .navPopoverList { max-height: 60vh; }
+}
+/* ── SCROLL PROGRESS ───────────────────────────────────────── */
+.cl-topbar::before {
+  content: "";
+  position: absolute;
+  bottom: -1px;          /* sits on top of the border-bottom */
+  left: 0;
+  height: 2px;
+  width: var(--scroll-pct, 0%);
+  background: linear-gradient(90deg, var(--orchid), var(--fuchsia), var(--pink));
+  transition: width .08s linear;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ── QUICK CARD — shimmer line + tightened arrow ───────────── */
+.cl-quick-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(192,132,252,.6), transparent);
+  opacity: 0;
+  transition: opacity .28s var(--ease);
+  pointer-events: none;
+}
+.cl-quick-card:hover::after {
+  opacity: 1;
+}
+
+/* Tighten the arrow slide */
+.cl-quick-arrow {
+  transition: transform .18s var(--ease), color .18s var(--ease);
+}
+.cl-quick-card:hover .cl-quick-arrow {
+  transform: translateX(6px);
 }

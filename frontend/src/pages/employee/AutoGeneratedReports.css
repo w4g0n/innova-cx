@@ -26,7 +26,7 @@
   box-shadow: 0 6px 22px rgba(64, 28, 81, 0.09);
 }
 
-/* ── Purple section heading — matches ModelHealth ma-section-heading--purple ── */
+/* Purple section heading — matches ModelHealth ma-section-heading--purple */
 .repCardTitle {
   font-size: 14px;
   font-weight: 800;
@@ -195,7 +195,7 @@
   }
 }
 
-/* ── Refresh Report button ── */
+/* Refresh Report button */
 .refreshReportBtn {
   display: inline-flex;
   align-items: center;
@@ -235,7 +235,6 @@
 @keyframes reportSpin {
   to { transform: rotate(360deg); }
 }
-/* ── Overall Rating KPI card — prevent value overflow ──────────────────
    "50.0% · Needs Improvement" is longer than other KPI values.
    clamp() scales font-size responsively so it always fits on one line.  */
 .kpiRow > *:first-child [class*="val"],

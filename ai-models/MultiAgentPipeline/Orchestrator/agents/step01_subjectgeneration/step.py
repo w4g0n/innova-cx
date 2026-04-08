@@ -18,6 +18,18 @@ from langchain_core.runnables import RunnableLambda
 
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
 logger = logging.getLogger(__name__)
+SUBJECT_GENERATION_TIMEOUT_SECONDS = max(
+    1.0,
+    float(os.getenv("SUBJECT_GENERATION_TIMEOUT_SECONDS", "25")),
+)
+SUBJECT_GENERATION_MAX_PROMPT_TOKENS = max(
+    64,
+    int(os.getenv("SUBJECT_GENERATION_MAX_PROMPT_TOKENS", "192")),
+)
+SUBJECT_GENERATION_MAX_NEW_TOKENS = max(
+    4,
+    int(os.getenv("SUBJECT_GENERATION_MAX_NEW_TOKENS", "8")),
+)
 
 _SUBJECT_SYSTEM = (
     "You generate short ticket subjects for a facilities management support system. "
@@ -132,13 +144,23 @@ def _generate_subject_via_qwen(details: str) -> str:
         ]
         if hasattr(tokenizer, "apply_chat_template"):
             rendered = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            inputs = tokenizer([rendered], return_tensors="pt", truncation=True).to(device)
+            inputs = tokenizer(
+                [rendered],
+                return_tensors="pt",
+                truncation=True,
+                max_length=SUBJECT_GENERATION_MAX_PROMPT_TOKENS,
+            ).to(device)
         else:
-            inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(device)
+            inputs = tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=SUBJECT_GENERATION_MAX_PROMPT_TOKENS,
+            ).to(device)
         with torch.no_grad():
             output_ids = model.generate(
                 **inputs,
-                max_new_tokens=20,
+                max_new_tokens=SUBJECT_GENERATION_MAX_NEW_TOKENS,
                 do_sample=False,
                 no_repeat_ngram_size=3,
                 use_cache=torch.cuda.is_available(),
@@ -157,7 +179,17 @@ def _generate_subject_via_qwen(details: str) -> str:
 
 
 async def _generate_subject(details: str) -> str:
-    subject = await asyncio.to_thread(_generate_subject_via_qwen, details)
+    try:
+        subject = await asyncio.wait_for(
+            asyncio.to_thread(_generate_subject_via_qwen, details),
+            timeout=SUBJECT_GENERATION_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "subject_generation | qwen timed out after %.1fs; using heuristic fallback",
+            SUBJECT_GENERATION_TIMEOUT_SECONDS,
+        )
+        subject = ""
     subject = _sanitize_subject(subject)
     if subject and not _is_low_quality_subject(subject):
         return subject

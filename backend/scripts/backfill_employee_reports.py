@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
 backfill_employee_reports.py
-============================
 Generates and repairs employee monthly performance reports for ALL employees.
 
 DESIGN PRINCIPLES
------------------
+
 1. DEMO MONTHS GUARANTEED — Every active employee always gets reports for:
      January 2026, February 2026, March 2026, April 2026
    Enforced regardless of whether MV data exists for that employee/month.
@@ -29,6 +28,7 @@ RUN:
     docker exec -it innovacx-backend \
         python /tmp/backfill_employee_reports.py
 """
+
 from __future__ import annotations
 import logging
 import os
@@ -47,7 +47,7 @@ logger = logging.getLogger("backfill")
 DEMO_MONTHS: List[Tuple[int,int]] = [(2026,1),(2026,2),(2026,3),(2026,4)]
 MIN_YEAR = 2026  # absolute floor — no reports below this year
 
-# ── DB helpers ──────────────────────────────────────────────────────────────
+# DB helpers
 def _get_dsn() -> str:
     if os.getenv("DATABASE_URL"):
         return os.environ["DATABASE_URL"]
@@ -83,13 +83,13 @@ def execute(sql, params=None):
             cur.execute(sql, params or ())
             return cur.rowcount
 
-# ── Constants ───────────────────────────────────────────────────────────────
+# Constants
 _ML = {1:"January",2:"February",3:"March",4:"April",5:"May",6:"June",
        7:"July",8:"August",9:"September",10:"October",11:"November",12:"December"}
 _MA = {1:"jan",2:"feb",3:"mar",4:"apr",5:"may",6:"jun",
        7:"jul",8:"aug",9:"sep",10:"oct",11:"nov",12:"dec"}
 
-# ── Core report generator (mirrors main.py _generate_employee_report) ────────
+# Core report generator (mirrors main.py _generate_employee_report)
 def generate_report(user_id: str, year: int, month: int) -> Optional[str]:
     if year < MIN_YEAR:
         return None
@@ -246,7 +246,7 @@ def generate_report(user_id: str, year: int, month: int) -> Optional[str]:
     return code
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+# Main
 def main():
     logger.info("=== backfill_employee_reports starting ===")
     logger.info("Demo months: %s", [f"{_ML[m]} {y}" for y,m in DEMO_MONTHS])

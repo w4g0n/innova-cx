@@ -4,7 +4,7 @@
    ============================================================ */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
-/* ── Page shell ── */
+/* Page shell */
 .umPage {
   width: 100%;
   max-width: none;
@@ -16,7 +16,7 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Toast ── */
+/* Toast */
 .umToast {
   display: flex;
   align-items: center;
@@ -45,7 +45,7 @@
 .umToast.success::before { content: "✓"; }
 .umToast.error::before   { content: "!"; }
 
-/* ── KPI grid ── */
+/* KPI grid */
 .umKpis {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -54,10 +54,10 @@
   margin-bottom: 26px;
 }
 
-/* ── Search row ── */
+/* Search row */
 .umSearchRow { margin-bottom: 12px; }
 
-/* ── KPI card (legacy classes kept, override via specificity) ── */
+/* KPI card (legacy classes kept, override via specificity) */
 .umKpi {
   background: #fff;
   border-radius: 12px;
@@ -97,7 +97,7 @@
   line-height: 1;
 }
 
-/* ── Filters row ── */
+/* Filters row */
 .umFilters {
   display: flex;
   gap: 8px;
@@ -107,7 +107,7 @@
   flex-wrap: wrap;
 }
 
-/* ── Table card ── */
+/* Table card */
 .umTableCard {
   border-radius: 14px;
   border: 1px solid #e8e8ed;
@@ -175,7 +175,7 @@
   font-size: 14px;
 }
 
-/* ── Role & Status pills ── */
+/* Role & Status pills */
 .umPill {
   display: inline-flex;
   align-items: center;
@@ -195,7 +195,7 @@
 .status-active   { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
 .status-inactive { background: #fff1f2; border: 1px solid #fecdd3; color: #be123c; }
 
-/* ── 3-dot menu ── */
+/* 3-dot menu */
 .umMenuWrap {
   position: relative;
   display: inline-flex;
@@ -274,7 +274,7 @@
 .umMenuItem.danger         { color: #be123c; }
 .umMenuItem.danger:hover   { background: #fff1f2; }
 
-/* ── Buttons (shared) ── */
+/* Buttons (shared) */
 .umBtnPrimary {
   background: linear-gradient(135deg, #6d28d9, #7c3aed);
   color: #fff;
@@ -314,7 +314,7 @@
   border-color: #d1d5db;
 }
 
-/* ── Modal overlay & card ── */
+/* Modal overlay & card */
 .umModalOverlay {
   position: fixed;
   inset: 0;
@@ -451,7 +451,7 @@
   border-top: 1px solid #f3f4f6;
 }
 
-/* ── Password toggle ── */
+/* Password toggle */
 .umPwdWrap {
   position: relative;
   display: flex;
@@ -475,7 +475,7 @@
 }
 .umEyeBtn:hover { color: #7c3aed; }
 
-/* ── Phone input overrides ── */
+/* Phone input overrides */
 .umPhoneWrap .react-tel-input { width: 100%; }
 
 .umPhoneWrap .react-tel-input .form-control {
@@ -514,7 +514,7 @@
   font-family: "DM Sans", sans-serif !important;
 }
 
-/* ── Responsive ── */
+/* Responsive */
 @media (max-width: 1100px) {
   .umKpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

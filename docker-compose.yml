@@ -50,8 +50,12 @@ services:
       DATABASE_ADMIN_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-complaints_db}
       SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-}"
       DISABLE_MFA: "${DISABLE_MFA:-false}"
+      JWT_TTL_SECONDS: "${JWT_TTL_SECONDS:-900}"
+      MFA_TEMP_TTL_SECONDS: "${MFA_TEMP_TTL_SECONDS:-900}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
       CHATBOT_PROXY_TIMEOUT_SECONDS: "${CHATBOT_PROXY_TIMEOUT_SECONDS:-30}"
+      TRANSCRIBER_URL: "${TRANSCRIBER_URL:-http://transcriber:3001}"
+      TRANSCRIBER_URL_LOCAL: "${TRANSCRIBER_URL_LOCAL:-http://localhost:3001}"
       SUGGESTED_RESOLUTION_MODEL_NAME: "${SUGGESTED_RESOLUTION_MODEL_NAME:-google/flan-t5-small}"
       SUGGESTED_RESOLUTION_MODEL_PATH: "${SUGGESTED_RESOLUTION_MODEL_PATH:-}"
       SUGGESTED_RESOLUTION_AUTO_DOWNLOAD: "${SUGGESTED_RESOLUTION_AUTO_DOWNLOAD:-false}"
@@ -77,6 +81,9 @@ services:
     pull_policy: never
     container_name: innovacx-chatbot
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       # Runtime DB connection uses innovacx_app (least-privilege role),
       # NOT the superuser innovacx_admin.
@@ -84,7 +91,8 @@ services:
       CHATBOT_LLM_PROVIDER: "${CHATBOT_LLM_PROVIDER:-template}"
       CHATBOT_MODEL_PATH: "${CHATBOT_MODEL_PATH:-}"
       CHATBOT_MODEL_NAME: "${CHATBOT_MODEL_NAME:-}"
-      CHATBOT_AUTO_DOWNLOAD: "false"
+      CHATBOT_AUTO_DOWNLOAD: "${CHATBOT_AUTO_DOWNLOAD:-false}"
+      HF_TOKEN: "${HF_TOKEN:-}"
       CHATBOT_USE_MOCK: "${CHATBOT_USE_MOCK:-false}"
       CHATBOT_MAX_NEW_TOKENS: "${CHATBOT_MAX_NEW_TOKENS:-128}"
       CHATBOT_QUANTIZATION: "${CHATBOT_QUANTIZATION:-4bit}"
@@ -114,6 +122,18 @@ services:
     build: ./backend/services/transcriber
     container_name: innovacx-transcriber
     restart: unless-stopped
+    environment:
+      WHISPER_MODEL_PATH: "${WHISPER_MODEL_PATH:-/app/model}"
+      WHISPER_MODEL_NAME: "${WHISPER_MODEL_NAME:-base}"
+      HF_TOKEN: "${HF_TOKEN:-}"
+    volumes:
+      - transcriber_model:/app/model
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
+      interval: 20s
+      timeout: 7s
+      retries: 5
+      start_period: 30s
     ports:
       - "3001:3001"
     networks:
@@ -157,6 +177,8 @@ services:
       SUBJECT_GENERATOR_MODEL_PATH: "${SUBJECT_GENERATOR_MODEL_PATH:-/app/agents/step01_subjectgeneration/model}"
       SUBJECT_GENERATOR_MODEL_NAME: "${SUBJECT_GENERATOR_MODEL_NAME:-google/flan-t5-small}"
       SUBJECT_GENERATOR_AUTO_DOWNLOAD: "${SUBJECT_GENERATOR_AUTO_DOWNLOAD:-false}"
+      RECURRENCE_ENCODER_MODEL: "${RECURRENCE_ENCODER_MODEL:-/app/agents/step01_recurrence/model}"
+      RECURRENCE_SIMILARITY_THRESHOLD: "${RECURRENCE_SIMILARITY_THRESHOLD:-0.75}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -232,6 +254,7 @@ volumes:
   postgres_data:
   hf_cache:
   chatbot_models:
+  transcriber_model:
   uploads_data:
   backup_data:
 

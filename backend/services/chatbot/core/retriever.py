@@ -3,7 +3,7 @@ from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# ---- config ----
+# config
 DATA_PATH = Path(__file__).parent / "data" / "knowledge_base.csv"
 TEXT_COL = "transcript"
 CATEGORY_COL = "call_category"
@@ -11,7 +11,7 @@ CATEGORY_COL = "call_category"
 INQUIRY_LABEL = "leasing inquiry"
 COMPLAINT_LABEL = "support"
 
-# ---- load once ----
+# load once
 _df = pd.read_csv(DATA_PATH)
 
 # basic cleanup

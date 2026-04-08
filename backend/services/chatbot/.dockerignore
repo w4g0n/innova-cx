@@ -12,8 +12,10 @@ __pycache__/
 .venv/
 venv/
 
-# Runtime/model caches are volume-backed
+# Local venv and model weights (mounted or baked per deployment)
+hf-env/
 hf_cache/
 models/
+model/
 .env
 .env.*

@@ -20,7 +20,6 @@ function getAuthToken() {
   );
 }
 
-// ─── Tiny chart primitives ────────────────────────────────────────────────────
 function MiniBar({ value, max, color = "#7c3aed", label, sub }) {
   const pct = max > 0 ? Math.max((value / max) * 100, 2) : 0;
   return (
@@ -302,7 +301,6 @@ function EmployeeRow({ emp, teamAcceptAvg }) {
   );
 }
 
-// ─── Tabs ─────────────────────────────────────────────────────────────────────
 const TABS = ["Section A — Complaint Trends", "Section B — SLA Performance", "Section C — Employee Reports"];
 
 export default function ComplaintTrends() {
@@ -402,7 +400,6 @@ export default function ComplaintTrends() {
           subtitle="Complaint trends, SLA accountability, and employee performance."
         />
 
-        {/* ── Global Filters ── */}
         {(() => {
           const ALLOWED_TIME_RANGES = ["Last 7 Days", "Last 30 Days", "This Month", "Last 3 Months", "Last 6 Months", "Last 12 Months"];
           const ALLOWED_PRIORITIES_TREND = ["All Priorities", "Critical", "High", "Medium", "Low"];
@@ -439,7 +436,6 @@ export default function ComplaintTrends() {
           );
         })()}
 
-        {/* ── Tabs ── */}
         <div className="ct-tabs">
           {TABS.map((t, i) => (
             <button key={t} className={`ct-tab ${tab === i ? "ct-tab--active" : ""}`} onClick={() => setTab(i)}>

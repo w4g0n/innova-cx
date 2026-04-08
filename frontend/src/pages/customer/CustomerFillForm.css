@@ -71,7 +71,7 @@
   opacity: .65;
 }
 
-/* ── Mode buttons ────────────────────────────────────────── */
+/* Mode buttons */
 .custModeRow {
   display: flex;
   gap: 8px;
@@ -104,7 +104,7 @@
   color: var(--btn-primary, #6d28d9);
 }
 
-/* ── Inputs ──────────────────────────────────────────────── */
+/* Inputs */
 .custInput {
   border-radius: 12px;
   padding: 11px 14px;
@@ -149,7 +149,7 @@
   color: var(--muted);
 }
 
-/* ── Validation Errors ───────────────────────────────────── */
+/* Validation Errors */
 .custFieldError {
   display: flex;
   align-items: center;
@@ -176,7 +176,7 @@
   75%      { transform: translateX(4px); }
 }
 
-/* ── Voice input ─────────────────────────────────────────── */
+/* Voice input */
 .custVoiceWrap {
   display: flex;
   flex-direction: column;
@@ -252,7 +252,7 @@
 
 .custHint { font-size:12px; color:var(--muted); }
 
-/* ── Attachments ─────────────────────────────────────────── */
+/* Attachments */
 .custAttachSection { margin-top:14px; display:flex; flex-direction:column; gap:10px; }
 .custAttachHeader { display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
 .custAttachLabel { font-size:13px; font-weight:700; color:var(--text); }
@@ -288,7 +288,7 @@
 }
 .custFileRemove:hover { background:rgba(0,0,0,.12); color:var(--text); }
 
-/* ── Actions ─────────────────────────────────────────────── */
+/* Actions */
 .custFormActions {
   display:flex; justify-content:flex-end; gap:10px;
   margin-top:14px; flex-wrap:wrap;
@@ -313,7 +313,7 @@
 .primaryPillBtn:hover:not(:disabled) { filter:brightness(1.07); transform:translateY(-1px); box-shadow:0 6px 20px rgba(109,40,217,.4); }
 .primaryPillBtn:disabled { opacity:.55; cursor:not-allowed; }
 
-/* ── Success screen ──────────────────────────────────────── */
+/* Success screen */
 .custSuccessCard {
   background:var(--glass-bg); backdrop-filter:blur(12px);
   -webkit-backdrop-filter:blur(12px); border-radius:18px;
@@ -328,7 +328,7 @@
 .custSuccessTicketId strong { color:var(--btn-primary,#6d28d9); font-weight:800; }
 .custSuccessText { font-size:14px; line-height:1.55; color:var(--muted); max-width:480px; }
 
-/* ── Submit Confirmation Modal ─────────────────────────────────────────────── */
+/* Submit Confirmation Modal */
 .custConfirmOverlay {
   position: fixed;
   inset: 0;

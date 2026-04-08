@@ -22,7 +22,6 @@ import {
 } from "./Operatorsanitize";
 import "./UsersManagement.css";
 
-// ── API helpers ────────────────────────────────────────────────────────────────
 function getStoredToken() {
   const direct =
     localStorage.getItem("access_token") ||
@@ -68,7 +67,6 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
-// ── Config ────────────────────────────────────────────────────────────────────
 const ROLE_OPTIONS = ["Customer", "Employee", "Manager", "Operator"];
 
 const DEPARTMENT_OPTIONS = [
@@ -81,7 +79,6 @@ const DEPARTMENT_OPTIONS = [
   "IT",
 ];
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function matchesQuery(user, q) {
   const s = q.trim().toLowerCase();
   if (!s) return true;
@@ -122,7 +119,6 @@ function validateE164Phone(e164) {
   return "";
 }
 
-// ── Password policy helpers ───────────────────────────────────────────────────
 const PASSWORD_RULES = [
   {
     key: "length",
@@ -342,9 +338,6 @@ export default function UsersManagement() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // -------------------------
-  // API: LOAD USERS
-  // -------------------------
   const fetchUsers = async () => {
     setLoadingUsers(true);
     setUsersError("");
@@ -378,9 +371,6 @@ export default function UsersManagement() {
     fetchUsers();
   }, []);
 
-  // -------------------------
-  // DERIVED DATA
-  // -------------------------
   const filtered = useMemo(() => {
     return users.filter((u) => {
       if (!matchesQuery(u, query)) return false;
@@ -405,9 +395,6 @@ export default function UsersManagement() {
     setStatusFilter("all");
   };
 
-  // -------------------------
-  // MANAGE USER
-  // -------------------------
   const openManage = (user) => {
     setToast({ type: "", message: "" });
     setErrors({});
@@ -515,9 +502,6 @@ export default function UsersManagement() {
     }
   };
 
-  // -------------------------
-  // CREATE USER
-  // -------------------------
   const openCreate = () => {
     setToast({ type: "", message: "" });
     setErrors({});
@@ -621,9 +605,6 @@ export default function UsersManagement() {
     }
   };
 
-  // -------------------------
-  // ACTIVATE / DEACTIVATE
-  // -------------------------
   const toggleActive = (id) => {
     const user = users.find((u) => u.id === id);
     const isActive = user?.status === "active";
@@ -658,9 +639,6 @@ export default function UsersManagement() {
     });
   };
 
-  // -------------------------
-  // DELETE
-  // -------------------------
   const deleteUser = (id) => {
     const user = users.find((u) => u.id === id);
 
@@ -684,9 +662,6 @@ export default function UsersManagement() {
     });
   };
 
-  // -------------------------
-  // RENDER
-  // -------------------------
   return (
     <Layout role="operator">
       <div className="umPage">

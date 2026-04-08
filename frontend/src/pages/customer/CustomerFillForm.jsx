@@ -2,13 +2,17 @@ import { useState, useRef } from "react";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import AudioReplyPlayer from "../../components/common/AudioReplyPlayer";
-import { submitCustomerTicket, transcribeAudio } from "../../services/api";
+import { submitCustomerTicket, transcribeAudio, uploadCustomerAttachments } from "../../services/api";
 import {
   sanitizeText,
   sanitizeFilename,
   sanitizeId,
   sanitizeTicketType,
+  countWords,
+  limitWords,
+  sanitizeTextByWords,
   MAX_DESCRIPTION_LEN,
+  MAX_TEXT_WORDS,
 } from "./sanitize";
 import "./CustomerFillForm.css";
 
@@ -53,7 +57,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
   const [submitted,   setSubmitted]   = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // ── File helpers ────────────────────────────────────────────────────────
   const BYTES_PER_KB = 1024;
   const BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB;
   const formatBytes = (bytes) => {
@@ -122,7 +125,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     setErrors((prev) => ({ ...prev, files: undefined }));
   };
 
-  // ── Stream cleanup ──────────────────────────────────────────────────────
   const cleanupStream = () => {
     try {
       if (streamRef.current) {
@@ -147,7 +149,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     cleanupStream();
   };
 
-  // ── Validation ──────────────────────────────────────────────────────────
   const validate = () => {
     const newErrors = {};
     const details = (message || "").trim();
@@ -156,15 +157,14 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
       newErrors.message = "Please describe your issue before submitting.";
     } else if (details.length < 10) {
       newErrors.message = "Please provide more detail (at least 10 characters).";
-    } else if (details.length > MAX_DESCRIPTION_LEN) {
-      newErrors.message = `Description must be ${MAX_DESCRIPTION_LEN.toLocaleString()} characters or fewer.`;
+    } else if (countWords(details) > MAX_TEXT_WORDS) {
+      newErrors.message = `Description must be ${MAX_TEXT_WORDS.toLocaleString()} words or fewer.`;
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // ── Submit ──────────────────────────────────────────────────────────────
   const handleSubmitClick = (e) => {
     e.preventDefault();
     if (!validate()) return;
@@ -175,7 +175,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     setShowConfirm(false);
 
     // Final sanitize before sending — trim + hard cap
-    const details  = sanitizeText(message, MAX_DESCRIPTION_LEN);
+    const details  = sanitizeTextByWords(message);
     const wasAudio = mode === "Audio";
 
     try {
@@ -198,6 +198,17 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
       const ticketId  = result?.ticket?.ticketId
         ? sanitizeId(String(result.ticket.ticketId), 48)
         : null;
+
+      // Upload actual file bytes now that we have the ticket code.
+      // Non-fatal: a failed upload won't block the success screen.
+      if (ticketId && attachments.length > 0) {
+        try {
+          await uploadCustomerAttachments(ticketId, attachments);
+        } catch (uploadErr) {
+          console.warn("Attachment upload failed:", uploadErr);
+        }
+      }
+
       const replyText = `Your request has been successfully submitted. Ticket ID: ${ticketId ?? "N/A"}. Our team will review and respond as soon as possible.`;
 
       resetForm();
@@ -214,7 +225,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     }
   };
 
-  // ── Voice recording ─────────────────────────────────────────────────────
   const [voiceError, setVoiceError] = useState("");
 
   const startRecording = async () => {
@@ -257,7 +267,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
           const data      = await transcribeAudio(blob, filename);
 
           // Sanitize transcript text returned by the transcription service
-          const transcript = sanitizeText(data?.transcript || "", MAX_DESCRIPTION_LEN);
+          const transcript = sanitizeTextByWords(data?.transcript || "");
           setDraftTranscript(transcript);
           setDraftAudioFeatures(data?.audio_features || null);
           setVoiceStage("review");
@@ -322,8 +332,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     }
     setMessage((prev) => {
       const combined = prev ? `${prev}\n${t}` : t;
-      // Enforce the max description cap when appending a transcript
-      return combined.slice(0, MAX_DESCRIPTION_LEN);
+      // Enforce the max word cap when appending a transcript.
+      return limitWords(combined, MAX_TEXT_WORDS);
     });
     setDraftTranscript("");
     setVoiceStage("idle");
@@ -338,7 +348,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     window.history.back();
   };
 
-  // ── Success screen ──────────────────────────────────────────────────────
   if (submitted) {
     const successContent = (
       <div className="custFormPage">
@@ -382,7 +391,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     return <Layout role="customer">{successContent}</Layout>;
   }
 
-  // ── Form ────────────────────────────────────────────────────────────────
   const content = (
     <div className={`custFormPage ${embedded ? "custFormPage--embedded" : ""}`}>
       {!embedded && (
@@ -395,7 +403,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
       <form className="custFormCard" onSubmit={handleSubmitClick} noValidate>
         <div className="custFormGrid">
 
-          {/* ── Input Method ───────────────────────────────────── */}
           <div className="custField custField--span2">
             <label className="custLabel">Input Method</label>
             <div className="custModeRow">
@@ -444,7 +451,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
             </div>
           </div>
 
-          {/* ── Description ────────────────────────────────────── */}
           <div className="custField custField--span2">
             <label className="custLabel" htmlFor="cff-details">
               Description <span style={{ color: "#ef4444" }}>*</span>
@@ -607,13 +613,12 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
                       className="custVoiceDraft"
                       value={draftTranscript}
                       onChange={(e) => {
-                        // Cap transcript edits at the same description limit
+                        // Cap transcript edits at the same description limit.
                         const v = e.target.value;
-                        if (v.length <= MAX_DESCRIPTION_LEN) setDraftTranscript(v);
+                        setDraftTranscript(limitWords(v, MAX_TEXT_WORDS));
                       }}
                       rows={3}
                       placeholder="Transcript will appear here..."
-                      maxLength={MAX_DESCRIPTION_LEN}
                     />
                   </div>
                 )}
@@ -629,14 +634,11 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
                 const v = e.target.value;
                 // Enforce hard cap client-side — server also validates but this prevents
                 // oversized payloads from being sent at all
-                if (v.length <= MAX_DESCRIPTION_LEN) {
-                  setMessage(v);
-                  if (errors.message) setErrors((prev) => ({ ...prev, message: undefined }));
-                }
+                setMessage(limitWords(v, MAX_TEXT_WORDS));
+                if (errors.message) setErrors((prev) => ({ ...prev, message: undefined }));
               }}
               placeholder="Describe what happened. Include time, location, or any relevant details."
               rows={embedded ? 6 : 8}
-              maxLength={MAX_DESCRIPTION_LEN}
               style={
                 errors.message
                   ? { borderColor: "rgba(239,68,68,.5)", boxShadow: "0 0 0 3px rgba(239,68,68,.1)" }
@@ -644,9 +646,9 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
               }
             />
 
-            {/* Character counter */}
+            {/* Word counter */}
             <div style={{ textAlign: "right", fontSize: "0.75rem", color: "var(--color-text-tertiary, #888)", marginTop: 2 }}>
-              {message.length} / {MAX_DESCRIPTION_LEN.toLocaleString()}
+              {countWords(message)} / {MAX_TEXT_WORDS.toLocaleString()} words
             </div>
 
             {errors.message && (
@@ -664,7 +666,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
               </div>
             )}
 
-            {/* ── Attachments ────────────────────────────────── */}
             <div className="custAttachSection">
               <div className="custAttachHeader">
                 <div>
@@ -790,7 +791,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
         </div>
       </form>
 
-      {/* ── Confirmation modal ─────────────────────────────────────────── */}
       {showConfirm && (
         <div
           className="custConfirmOverlay"

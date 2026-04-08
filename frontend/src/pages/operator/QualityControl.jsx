@@ -121,7 +121,6 @@ function DateRangePicker({ dateRange, onChange }) {
   );
 }
 
-/* ── Tab views ── */
 function AcceptanceView({ data, loading, error, onRetry }) {
   if (loading) return <TabLoading />;
   if (error) return <TabError message={error} onRetry={onRetry} />;
@@ -290,7 +289,6 @@ const SOURCE_LABEL = {
 
 const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
-/* ── Row renderers for each table type ─────────────────────── */
 function ExpandedDetail({ tableId, r }) {
   return (
     <div className="lrn-expand">
@@ -402,7 +400,6 @@ function ResolutionRow({ r, expanded, onToggle }) {
   );
 }
 
-/* ── Full table for modal ───────────────────────────────────── */
 function FullTable({ tableId, rows, search, onSearchChange }) {
   const [expandedId, setExpandedId] = useState(null);
   const q = search.trim().toLowerCase();
@@ -489,7 +486,6 @@ function FullTable({ tableId, rows, search, onSearchChange }) {
   );
 }
 
-/* ── Single learning box ────────────────────────────────────── */
 function LearningBox({ tbl, deptFilter }) {
   const [rows,    setRows]    = useState([]);
   const [loading, setLoading] = useState(true);
