@@ -71,16 +71,6 @@ async def score_priority(state: dict) -> dict:
     is_recurring = bool(state.get("is_recurring", False))
     ticket_type = str(state.get("label", "complaint")).strip().lower()
 
-    # Branch D recurrence: inherit the prior ticket's priority directly.
-    # This bypasses the model so the new ticket matches the old one's severity.
-    priority_override = str(state.get("priority_override") or "").strip().lower()
-    if priority_override and priority_override in PRIORITY_TO_SCORE:
-        state["priority_label"] = priority_override
-        state["priority_score"] = PRIORITY_TO_SCORE[priority_override]
-        state["priority_mode"] = "recurrence_override"
-        logger.info("priority | override from prior ticket priority=%s", priority_override)
-        return state
-
     try:
         if not _PRIORITY_MODEL_AVAILABLE or model_prioritize is None:
             raise RuntimeError("priority runtime unavailable")

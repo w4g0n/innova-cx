@@ -14,6 +14,9 @@ import {
   sanitizeText,
   sanitizeId,
   formatTimeAgo,
+  limitWords,
+  sanitizeTextByWords,
+  MAX_TEXT_WORDS,
 } from "./sanitize";
 
 // Static lookup maps — never derived from server data
@@ -386,7 +389,7 @@ export default function CustomerLanding() {
         else interim += chunk;
       }
       // Sanitize SpeechRecognition output — browser APIs can return arbitrary text
-      const raw = sanitizeText((finalText || interim || "").trim(), 5000);
+      const raw = sanitizeTextByWords((finalText || interim || "").trim());
       setVoiceDraft(raw);
     };
     rec.onerror = () => { setVoiceActive(false); setVoiceBusy(false); };
@@ -406,7 +409,7 @@ export default function CustomerLanding() {
     const t = (voiceDraft || "").trim();
     if (!t) { cancelVoice(); return; }
     // voiceDraft is already sanitized in onresult
-    setText((prev) => (prev ? `${prev} ${t}` : t));
+    setText((prev) => limitWords(prev ? `${prev} ${t}` : t, MAX_TEXT_WORDS));
     cancelVoice();
   };
 
@@ -1038,12 +1041,10 @@ export default function CustomerLanding() {
                     <input
                       value={text}
                       onChange={(e) => {
-                        // Cap input length client-side
                         const v = e.target.value;
-                        if (v.length <= 5000) setText(v);
+                        setText(limitWords(v, MAX_TEXT_WORDS));
                       }}
                       placeholder="Type a message…"
-                      maxLength={5000}
                     />
                     <button type="submit">Send</button>
                   </form>

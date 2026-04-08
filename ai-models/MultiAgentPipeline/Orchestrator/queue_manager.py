@@ -1333,8 +1333,19 @@ async def _process_queue_item(item: dict) -> None:
     )
 
     # Build initial state
-    if checkpoint_state and failed_at_step is not None and (
-        operator_corrections or failure_category in {"manual_pause", "recovered_restart"}
+    if failure_category == "recovered_restart":
+        # Restart recovery must re-run the recurrence gate. A queued duplicate
+        # may have passed stage 1 before an earlier matching ticket became
+        # eligible (assigned/priority set). Resuming after the checkpoint would
+        # permanently miss that recurrence.
+        state = _build_initial_state(ticket_id, ticket_code, ticket_input, execution_id)
+        start_step = 1
+        logger.info(
+            "queue_worker | restarting recovered item from step 1 reason=recovered_restart stage=%s",
+            failed_stage,
+        )
+    elif checkpoint_state and failed_at_step is not None and (
+        operator_corrections or failure_category == "manual_pause"
     ):
         # Resuming after operator correction:
         # merge corrections into checkpoint (which is state BEFORE failed stage)

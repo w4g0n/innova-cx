@@ -419,17 +419,23 @@ export default function Login() {
         }
       }
 
+      const userPayload = {
+        id: data.user?.id,
+        email: data.user?.email,
+        role: data.user?.role,
+        full_name: data.user?.full_name,
+        token_type: data.token_type,
+      };
+
+      if (data.token_type === "temporary") {
+        sessionStorage.setItem("mfa_token", data.access_token);
+        sessionStorage.setItem("mfa_user", JSON.stringify(userPayload));
+        navigate("/verify", { replace: true });
+        return;
+      }
+
       localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          id: data.user?.id,
-          email: data.user?.email,
-          role: data.user?.role,
-          full_name: data.user?.full_name,
-          token_type: data.token_type,
-        })
-      );
+      localStorage.setItem("user", JSON.stringify(userPayload));
 
       const rawNext = searchParams.get("next");
       const nextPath =

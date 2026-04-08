@@ -4,7 +4,15 @@ import PageHeader from "../../components/common/PageHeader";
 import TicketConfirmPopup from "../../components/common/TicketConfirmPopup";
 import { useNavigate } from "react-router-dom";
 import { sendChatMessage, transcribeAudio } from "../../services/api";
-import { safeParseUser, sanitizeText, sanitizeId } from "./sanitize";
+import {
+  safeParseUser,
+  sanitizeText,
+  sanitizeId,
+  countWords,
+  limitWords,
+  sanitizeTextByWords,
+  MAX_TEXT_WORDS,
+} from "./sanitize";
 import "./CustomerChatbot.css";
 
 // "Complaint" renamed to "Agent Pipeline"
@@ -107,7 +115,7 @@ export default function CustomerChatbot() {
           const blob     = new Blob(chunksRef.current, { type: mimeType });
           const filename = mimeType.includes("mp4") ? "mic.mp4" : "mic.webm";
           const data     = await transcribeAudio(blob, filename);
-          const transcript = sanitizeText(data?.transcript || "", 5000);
+          const transcript = sanitizeTextByWords(data?.transcript || "");
           setDraftTranscript(transcript);
           setVoiceStage("review");
         } catch {
@@ -146,7 +154,7 @@ export default function CustomerChatbot() {
   const approveTranscript = () => {
     const t = (draftTranscript || "").trim();
     if (!t) { setVoiceStage("idle"); return; }
-    setText(t);
+    setText(limitWords(t, MAX_TEXT_WORDS));
     setDraftTranscript("");
     setVoiceStage("idle");
   };
@@ -191,7 +199,7 @@ export default function CustomerChatbot() {
   const pushUser = (t) => {
     setMessages((prev) => [
       ...prev,
-      { id: `u-${Date.now()}`, from: "user", text: sanitizeText(t, 5000) },
+      { id: `u-${Date.now()}`, from: "user", text: sanitizeTextByWords(t) },
     ]);
   };
 
@@ -464,10 +472,9 @@ export default function CustomerChatbot() {
                     <textarea
                       className="chatVoiceDraft"
                       value={draftTranscript}
-                      onChange={(e) => { if (e.target.value.length <= 5000) setDraftTranscript(e.target.value); }}
+                      onChange={(e) => setDraftTranscript(limitWords(e.target.value, MAX_TEXT_WORDS))}
                       rows={3}
                       placeholder="Transcript will appear here…"
-                      maxLength={5000}
                     />
                   </div>
                 )}
@@ -499,7 +506,7 @@ export default function CustomerChatbot() {
                 placeholder="Type your message…"
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (val.length <= 5000) setText(val);
+                  setText(limitWords(val, MAX_TEXT_WORDS));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -508,8 +515,10 @@ export default function CustomerChatbot() {
                   }
                 }}
                 disabled={sending}
-                maxLength={5000}
               />
+              <span className="custChatWordCount" aria-live="polite">
+                {countWords(text)} / {MAX_TEXT_WORDS} words
+              </span>
               <button type="submit" className="primaryPillBtn" disabled={sending}>
                 Send
               </button>
