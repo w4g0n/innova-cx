@@ -24,9 +24,9 @@ const LAYERS = [
     agents: [
       {
         id: "chatbot",
-        name: "Chatbot Agent - Nova",
+        name: "Chatbot Agent — Nova",
         model: "Qwen",
-        desc: "Nova - The first touchpoint for every user. Handles inquiries using the knowledge base and seamlessly starts formal ticketing when an issue needs escalation beyond a quick answer.",
+        desc: "Nova is the first touchpoint for every user. It handles inquiries using a knowledge base and seamlessly escalates to formal ticketing when a question becomes a complaint that needs tracking and resolution.",
         inputs: ["User message", "Knowledge base context"],
         outputs: ["Direct answer or ticket handoff"],
         cond: null,
@@ -34,8 +34,8 @@ const LAYERS = [
       {
         id: "transcriber",
         name: "Transcriber Agent",
-        model: "Whisper",
-        desc: "Converts audio complaint recordings into clean text via live transcription. The user confirms the transcript on-screen before it proceeds, ensuring accuracy before anything is analysed downstream.",
+        model: "FasterWhisper",
+        desc: "Converts audio complaint recordings into clean, editable text using FasterWhisper. The user confirms the transcript on-screen before it proceeds downstream, ensuring nothing is misread before any analysis begins.",
         inputs: ["Audio recording"],
         outputs: ["Transcribed ticket text"],
         cond: "AUDIO-ONLY",
@@ -43,8 +43,8 @@ const LAYERS = [
       {
         id: "ticket-gate",
         name: "Ticket Creation Gate",
-        model: "Rule-based",
-        desc: "The single entry point for all ticket creation, whether from Nova or the form. Structures the incoming data into a standardised ticket payload, sets Ticket_Status = Open, and fires the orchestration pipeline for AI processing.",
+        model: null,
+        desc: "The single entry point for all ticket creation, whether arriving from Nova or the submission form. Structures the incoming data into a standardised ticket payload, sets Ticket_Status = Open, and fires the Orchestrator to begin AI processing.",
         inputs: ["User data + ticket details", "Optional attachment"],
         outputs: ["Ticket payload", "Ticket_Status = Open"],
         cond: null,
@@ -57,9 +57,9 @@ const LAYERS = [
     agents: [
       {
         id: "orchestrator",
-        name: "Controller / Orchestrator",
+        name: "Orchestrator",
         model: "LangChain",
-        desc: "The central nervous system of InnovaCX. Coordinates all downstream agents in the correct sequence using LangChain, passes outputs between them, and returns the completed ticket - with Priority, SLA, department, and assigned employee - to the Ticket Creation Gate.",
+        desc: "The central nervous system of InnovaCX. Once a ticket is created, the Orchestrator fires all downstream agents in the correct sequence using LangChain, passes outputs between them, and returns a fully enriched ticket — with priority, SLA, department, and assigned employee — back to the system.",
         inputs: ["Ticket payload"],
         outputs: ["Fully enriched execution state"],
         cond: null,
@@ -68,32 +68,41 @@ const LAYERS = [
   },
   {
     id: "signal", label: "Signal Extraction", color: "#fbbf24", num: "03",
-    tagline: "Understanding the complaint content",
+    tagline: "Reading every signal in the complaint",
     agents: [
+      {
+        id: "recurrence",
+        name: "Recurrence Agent",
+        model: "Sentence Transformer",
+        desc: "Compares the incoming ticket against the same customer's resolved tickets using semantic embeddings and cosine similarity (threshold 0.75). On a match, it routes to one of four branches — A: send reminder only; B: escalate priority and notify; C: reopen the old ticket; D: let the new ticket continue the full pipeline with the prior resolution attached. Falls back to heuristic token similarity if the model is unavailable.",
+        inputs: ["Ticket subject + details", "Customer's resolved ticket history"],
+        outputs: ["recurrence_branch (A / B / C / D / none)", "similar_ticket_code", "similarity_score", "recurrence_reason"],
+        cond: null,
+      },
       {
         id: "subject-gen",
         name: "Subject Generation Agent",
-        model: "DeBERTa NLI",
-        desc: "Determines whether the ticket is a complaint or an inquiry so the system can follow the correct workflow.",
+        model: "Qwen",
+        desc: "Generates a concise, structured subject line for the ticket from the raw complaint text. This subject is used across the UI, notifications, and downstream agents to keep context clear throughout the pipeline.",
         inputs: ["Ticket details"],
-        outputs: ["Subject"],
+        outputs: ["Ticket subject"],
         cond: null,
       },
       {
         id: "classification",
         name: "Classification Agent",
         model: "DeBERTa NLI",
-        desc: "Determines whether the ticket is a Complaint or an Inquiry if the type wasn't already specified at submission. Bypassed entirely when the type is already known.",
+        desc: "Classifies the ticket as a Complaint or an Inquiry so the correct downstream workflow is triggered.",
         inputs: ["Ticket details"],
-        outputs: ["Ticket_Type (complaint / inquiry)"],
+        outputs: ["Ticket_Type (Complaint / Inquiry)"],
         cond: "SKIPPED-IF-SET",
       },
       {
         id: "sentiment",
         name: "Sentiment Analysis Agent",
         model: "RoBERTa",
-        desc: "Reads the ticket text and produces a continuous sentiment score from −1 to +1, capturing tone, frustration, and urgency cues embedded in the language.",
-        inputs: ["Ticket details"],
+        desc: "Reads the ticket text and produces a continuous sentiment score from −1 to +1, capturing tone, frustration level, and urgency cues embedded in the language. This score feeds directly into prioritisation.",
+        inputs: ["Ticket text"],
         outputs: ["Text_Sentiment (−1 to 1)"],
         cond: null,
       },
@@ -101,8 +110,8 @@ const LAYERS = [
         id: "audio-analysis",
         name: "Audio Analysis Agent",
         model: "Librosa",
-        desc: "Processes the raw audio waveform of voice submissions to extract emotional tone directly from speech - pitch, energy, and zero-crossing rate - producing a sentiment score that text alone cannot capture.",
-        inputs: ["Audio features (energy, pitch, zero-crossing rate)"],
+        desc: "Processes the raw audio waveform of voice submissions to extract emotional tone directly from speech — analysing pitch, energy, and zero-crossing rate to produce a sentiment score that written text alone cannot capture.",
+        inputs: ["Audio waveform (energy, pitch, zero-crossing rate)"],
         outputs: ["Audio_Sentiment (−1 to 1)"],
         cond: "AUDIO-ONLY",
       },
@@ -110,18 +119,18 @@ const LAYERS = [
         id: "combiner",
         name: "Sentiment Combiner",
         model: "Fusion module",
-        desc: "Fuses text and audio sentiment into a single unified score. With audio: (Audio × 0.5) + (Text × 0.5). Without audio: Text_Sentiment is used directly. Output is classified as Negative (< −0.25), Neutral, or Positive (> 0.25).",
+        desc: "Merges text and audio sentiment into one unified score. For voice tickets: (Audio × 0.5) + (Text × 0.5). For text-only tickets: Text_Sentiment is used directly. The result is classified as Negative (< −0.25), Neutral, or Positive (> 0.25).",
         inputs: ["Text_Sentiment", "Audio_Sentiment (if available)"],
         outputs: ["Sentiment_Score (Negative / Neutral / Positive)"],
-        cond: "AUDIO-ONLY",
+        cond: null,
       },
       {
         id: "feature",
         name: "Feature Engineering Agent",
-        model: "DeBERTa NLI + DB lookup",
-        desc: "The most signal-dense step in the pipeline. Uses a multi-head NLI model to infer five operational labels in parallel from the ticket text, cross-referenced against historical database records for recurrence detection.",
-        inputs: ["Ticket details", "Historical ticket records"],
-        outputs: ["safety_concern", "issue_severity", "issue_urgency", "business_impact", "is_recurring"],
+        model: "DeBERTa NLI",
+        desc: "The most signal-dense step in the pipeline. Uses a multi-head NLI model to infer four operational labels in parallel directly from the ticket text — no raw text ever reaches the decision layer, only clean structured signals.",
+        inputs: ["Ticket text", "Recurrence flag"],
+        outputs: ["safety_concern", "issue_severity", "issue_urgency", "business_impact"],
         cond: null,
       },
     ],
@@ -134,34 +143,43 @@ const LAYERS = [
         id: "priority",
         name: "Prioritization Engine",
         model: "XGBoost",
-        desc: "An XGBoost model trained on hard-set priority rules assigns a final Priority level - Critical, High, Medium, or Low - the moment a ticket is created. It never sees raw ticket text; it works entirely from the labels produced upstream. Crucially, it relearns from every employee rescore, so its judgements continuously align with team expectations.",
+        desc: "An XGBoost classifier assigns a final Priority level — Critical, High, Medium, or Low — the moment a ticket is created. It works entirely from the engineered signals produced upstream, never from raw text.",
         inputs: ["safety_concern", "issue_severity", "issue_urgency", "business_impact", "is_recurring", "Sentiment_Score", "Ticket_Type"],
         outputs: ["Priority (Critical / High / Medium / Low)"],
         cond: null,
       },
       {
-        id: "sla",
-        name: "SLA Automation",
-        model: "Policy engine",
-        desc: "Maps Priority to concrete SLA deadlines. A heartbeat checks SLA status every 5 minutes - at 90% breach, the ticket auto-escalates, status changes to Escalated, and both the manager and employee are notified.",
-        inputs: ["Priority"],
-        outputs: ["SLA targets", "Escalation rules", "Ticket_Status = Escalated (if triggered)"],
+        id: "routing",
+        name: "Department Routing Agent",
+        model: "Qwen",
+        desc: "Reads the ticket and assigns a confidence score across all available departments. Above 0.7 confidence, the ticket is auto-routed. Below that threshold, it is sent to the manager approval screen.",
+        inputs: ["Ticket text", "Priority", "Ticket_Type"],
+        outputs: ["Department assignment", "Routing confidence score"],
         cond: null,
       },
       {
-        id: "routing",
-        name: "Department Routing Agent",
-        model: "DeBERTa NLI",
-        desc: "A DeBERTa NLI model trained on synthetic tickets assigns a confidence score across all departments. Above 0.7, the ticket is auto-routed. Below that threshold, it goes to the manager approval screen. The model relearns from every manager decision.",
-        inputs: ["Ticket signals"],
-        outputs: ["Department assignment", "Auto-routed or manager-reviewed"],
+        id: "review",
+        name: "Review Agent",
+        model: "Qwen",
+        desc: "Performs a final validation pass on the enriched ticket before it reaches the employee. Checks that the priority and department are consistent with the ticket signals, and scans for pipeline errors or anomalies. Any errors are reported to the operator. Mismatches in the ticket data are flagged for correction before handoff.",
+        inputs: ["Enriched ticket payload", "Priority", "Department"],
+        outputs: ["Review status (approved / flagged)", "Error report (if any)", "Flag reasons (if any)"],
+        cond: null,
+      },
+      {
+        id: "sla",
+        name: "SLA Automation",
+        model: null,
+        desc: "Maps the assigned Priority to concrete SLA deadlines. A background heartbeat checks SLA status every 5 minutes — at 90% of the deadline, the ticket auto-escalates, Ticket_Status changes to Escalated, and both the manager and assigned employee are notified immediately.",
+        inputs: ["Priority"],
+        outputs: ["SLA deadline", "Escalation trigger", "Ticket_Status = Escalated (if breached)"],
         cond: null,
       },
       {
         id: "assignment",
         name: "Employee Auto-Assignment",
-        model: "Weighted algorithm",
-        desc: "Once a department is confirmed, a workload-balancing algorithm assigns the ticket to the best available employee. It weights active tickets by priority (Critical = 8, High = 5, Medium = 3, Low = 1) and breaks ties by same-priority count, total tickets, last assignment time, then user ID. SLA tracking starts the moment assignment is complete.",
+        model: null,
+        desc: "Once a department is confirmed, a workload-balancing algorithm assigns the ticket to the best available employee. Active tickets are weighted by priority (Critical = 8, High = 5, Medium = 3, Low = 1). Ties are broken by same-priority count, total ticket load, last assignment time, then user ID. SLA tracking begins the moment assignment is complete.",
         inputs: ["Department", "Employee workload data"],
         outputs: ["Assigned employee", "SLA tracking begins"],
         cond: null,
@@ -176,19 +194,28 @@ const LAYERS = [
         id: "resolution",
         name: "Suggested Resolution Agent",
         model: "Qwen",
-        desc: "Generates a suggested resolution for the assigned employee at the moment of ticket creation. The employee can approve, edit, or reject it. The model learns from every one of those decisions, improving its suggestions over time.",
+        desc: "Generates a suggested resolution for the assigned employee the moment the ticket is created, drawing on ticket details, priority, and past resolutions. The employee can approve, edit, or reject it — every decision is a training signal that sharpens future suggestions.",
         inputs: ["Ticket details", "Priority", "Past resolutions"],
         outputs: ["Suggested resolution steps"],
         cond: null,
       },
       {
-        id: "feedback",
-        name: "Employee Feedback Loop",
-        model: "Continual learning",
-        desc: "Closes the loop across the entire pipeline. Employee rescores feed back into the Prioritization Engine. Department corrections retrain the Routing Agent. Resolution edits improve the Suggested Resolution Agent. Every action makes the system sharper.",
-        inputs: ["Rescore changes", "Routing corrections", "Resolution edits"],
-        outputs: ["Retraining signals for Prioritizer, Router, and Resolver"],
-        cond: "OPTIONAL",
+        id: "rescore-track",
+        name: "Rescore Tracking",
+        model: null,
+        desc: "Every time an employee or operator changes a ticket's priority, that correction is recorded in a rolling 3-month reference table. The Review Agent queries this table during each pipeline run — if recent corrections consistently disagree with the model's output, the Review Agent flags it and sends the operator a notification. The ticket is not held; the operator is alerted to verify.",
+        inputs: ["Employee / operator priority corrections"],
+        outputs: ["rescore_reference record", "Advisory context for Review Agent"],
+        cond: null,
+      },
+      {
+        id: "reroute-track",
+        name: "Reroute Tracking",
+        model: null,
+        desc: "Every time a manager or operator overrides a department assignment, that correction is stored in a rolling 3-month reference table. The Review Agent injects this correction history directly into its Qwen prompt as natural-language context, allowing it to validate routing decisions against real patterns of what the team has corrected before.",
+        inputs: ["Manager / operator department corrections"],
+        outputs: ["reroute_reference record", "Routing hint context for Review Agent"],
+        cond: null,
       },
     ],
   },
@@ -208,7 +235,7 @@ const FEATURES = [
     ),
     title: "AI-Powered Prioritization",
     desc: "Our system analyzes every ticket using natural language processing and sentiment detection to identify urgent cases and bring the most critical issues to the top automatically.",
-    detail: "An XGBoost Prioritization Engine assigns Critical, High, Medium, or Low priority the moment a ticket is created, working entirely from labels produced by a DeBERTa Feature Engineering Agent (urgency, severity, business impact, safety concern, recurrence) and a RoBERTa Sentiment Analysis Agent. The model relearns from every employee rescore.",
+    detail: "An XGBoost Prioritization Engine assigns Critical, High, Medium, or Low priority the moment a ticket is created, working entirely from labels produced by a DeBERTa Feature Engineering Agent (urgency, severity, business impact, safety concern, recurrence) and a RoBERTa Sentiment Analysis Agent.",
   },
   {
     icon: (
@@ -582,11 +609,11 @@ function Pipeline() {
     <section className="au-section" id="pipeline">
       <div className="au-reveal">
         <div className="au-label">How It Works</div>
-        <h2 className="au-h2">InnovaCX <em>Agent Pipeline</em></h2>
+        <h2 className="au-h2">InnovaCX <em>MultiAgent Pipeline</em></h2>
         <p className="au-pipeline-intro-text">
-          InnovaCX runs a 14-agent pipeline across five phases, from the moment a customer
-          submits a request to a resolved, learned-from outcome. Select a phase and explore
-          each agent&apos;s role, model, inputs, and outputs.
+          Every ticket passes through 14 AI agents across five phases — from the moment a
+          customer submits a request to a prioritised, routed, and resolved outcome. Select
+          a phase to explore each agent&apos;s model, inputs, and outputs.
         </p>
       </div>
 
@@ -651,12 +678,7 @@ function Pipeline() {
                       onClick={() => selectAgent(agent)}
                     >
                       <div className="au-agent-btn-name">{agent.name}</div>
-                      <div className="au-agent-btn-model">{agent.model}</div>
-                      {agent.cond && (
-                        <span className={`au-agent-cond au-cond-${agent.cond.toLowerCase().replace(/-/g, "")}`}>
-                          {agent.cond}
-                        </span>
-                      )}
+                      {agent.model && <div className="au-agent-btn-model">{agent.model}</div>}
                     </button>
                   </div>
                   {!isLast && (
@@ -706,12 +728,11 @@ function Pipeline() {
               {activeAgent.layerLabel}
             </div>
             <h3 className="au-detail-name">{activeAgent.name}</h3>
-            <div className="au-detail-model-chip">
-              <span className="au-detail-model-lbl">MODEL</span>
-              {activeAgent.model}
-            </div>
-            {activeAgent.cond && (
-              <div className="au-detail-cond">{activeAgent.cond}</div>
+            {activeAgent.model && (
+              <div className="au-detail-model-chip">
+                <span className="au-detail-model-lbl">MODEL</span>
+                {activeAgent.model}
+              </div>
             )}
           </div>
           <div className="au-detail-body">
@@ -734,18 +755,6 @@ function Pipeline() {
         </div>
       </div>
 
-      <div className="au-pipe-legend au-reveal" style={{ "--rd": "0.22s" }}>
-        {[
-          { dot: "#fbbf24", text: "AUDIO-ONLY — runs for voice submissions only" },
-          { dot: "#fbbf24", text: "SKIPPED-IF-SET — bypassed if already provided" },
-          { dot: "#a3e635", text: "OPTIONAL — feedback-loop dependent" },
-        ].map(({ dot, text }) => (
-          <div key={text} className="au-pipe-leg-chip">
-            <div className="au-pipe-leg-dot" style={{ background: dot }} />
-            {text}
-          </div>
-        ))}
-      </div>
     </section>
   );
 }

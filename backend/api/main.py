@@ -11,6 +11,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
 from starlette.middleware.base import BaseHTTPMiddleware
+import resend
 
 import bcrypt
 import psycopg2
@@ -136,6 +137,7 @@ _sla_heartbeat_task: Optional[asyncio.Task] = None
 _analytics_refresh_task: Optional[asyncio.Task] = None
 _has_sla_policy_fn = False
 
+resend.api_key = os.environ.get("RESEND_API_KEY")
 # App
 _EXPOSE_DOCS = os.getenv("EXPOSE_API_DOCS", "false").lower() == "true"
 app = FastAPI(
@@ -1303,7 +1305,121 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     }
 
 
+# Forgot Password and reset link api call
 # Routes: Password Reset
+RESET_EMAIL_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Reset Your Password</title>
+  <style>
+    body,table,td,a{{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}}
+    table,td{{mso-table-lspace:0pt;mso-table-rspace:0pt}}
+    img{{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none}}
+    body{{margin:0;padding:0;background-color:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}}
+    .ew{{width:100%;background-color:#f4f4f7;padding:40px 0}}
+    .ec{{max-width:560px;margin:0 auto;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08)}}
+    .hd{{background:linear-gradient(135deg,#6d28d9 0%,#9333ea 100%);padding:36px 40px;text-align:center}}
+    .hl{{font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;margin:0}}
+    .hl span{{opacity:.75;font-weight:400}}
+    .bd{{padding:40px 40px 32px}}
+    .gr{{font-size:15px;color:#374151;margin:0 0 16px;line-height:1.6}}
+    .ti{{font-size:22px;font-weight:700;color:#111827;margin:0 0 12px;letter-spacing:-0.3px}}
+    .de{{font-size:15px;color:#6b7280;line-height:1.65;margin:0 0 32px}}
+    .bw{{text-align:center;margin:0 0 32px}}
+    .btn{{display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#6d28d9,#9333ea);color:#ffffff!important;text-decoration:none;border-radius:6px;font-size:15px;font-weight:600;letter-spacing:.1px}}
+    .dv{{border:none;border-top:1px solid #e5e7eb;margin:0 0 24px}}
+    .fl{{font-size:12px;color:#9ca3af;margin:0 0 8px;text-transform:uppercase;letter-spacing:.6px;font-weight:600}}
+    .fk{{font-size:13px;color:#6d28d9;word-break:break-all;line-height:1.5;margin:0 0 32px}}
+    .wb{{background-color:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:14px 16px;margin:0 0 32px}}
+    .wt{{font-size:13px;color:#92400e;margin:0;line-height:1.55}}
+    .wt strong{{color:#78350f}}
+    .ft{{background-color:#f9fafb;border-top:1px solid #e5e7eb;padding:24px 40px;text-align:center}}
+    .fx{{font-size:12px;color:#9ca3af;line-height:1.6;margin:0 0 4px}}
+    .fx a{{color:#9ca3af;text-decoration:underline}}
+    @media only screen and (max-width:600px){{
+      .ec{{border-radius:0}}
+      .hd{{padding:28px 24px}}
+      .bd{{padding:28px 24px 24px}}
+      .ft{{padding:20px 24px}}
+    }}
+  </style>
+</head>
+<body>
+  <div class="ew">
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+      <tr><td align="center">
+        <div class="ec">
+
+          <!-- Header -->
+          <div class="hd">
+            <p class="hl">Innova<span>CX</span></p>
+          </div>
+
+          <!-- Body -->
+          <div class="bd">
+            <p class="gr">Hi,</p>
+            <p class="ti">Reset your password</p>
+            <p class="de">
+              We received a request to reset the password for the account associated with
+              <strong>{email}</strong>. Click the button below to choose a new password.
+              This link will expire in <strong>30 minutes</strong>.
+            </p>
+
+            <div class="bw">
+              <!--[if mso]>
+              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml"
+                xmlns:w="urn:schemas-microsoft-com:office:word"
+                href="{reset_link}"
+                style="height:48px;v-text-anchor:middle;width:200px;"
+                arcsize="12%" fillcolor="#9333ea" strokecolor="#9333ea">
+                <w:anchorlock/>
+                <center style="color:#fff;font-family:sans-serif;font-size:15px;font-weight:600;">
+                  Reset Password
+                </center>
+              </v:roundrect>
+              <![endif]-->
+              <!--[if !mso]><!-->
+              <a href="{reset_link}" class="btn" target="_blank">Reset Password</a>
+              <!--<![endif]-->
+            </div>
+
+            <hr class="dv" />
+
+            <p class="fl">Or copy this link</p>
+            <p class="fk">{reset_link}</p>
+
+            <div class="wb">
+              <p class="wt">
+                <strong>Didn't request this?</strong> Your password will not change unless
+                you click the button above. If you're concerned about your account security,
+                please contact support.
+              </p>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="ft">
+            <p class="fx">
+              This email was sent by InnovaCX &mdash; innovacx.net<br />
+              This is an automated message, please do not reply to this email.
+            </p>
+            <p class="fx" style="margin-top:8px;">
+              &copy; {year} InnovaCX. All rights reserved.
+            </p>
+          </div>
+
+        </div>
+      </td></tr>
+    </table>
+  </div>
+</body>
+</html>"""
+
+
 @api.post("/auth/forgot-password")
 @rate_limit_auth()
 def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None = Depends(require_csrf)):
@@ -1334,10 +1450,29 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
             """,
             (user["id"], token_hash),
         )
+
+        # FIX: Token is placed in the URL fragment (#) instead of a query parameter (?).
+        # Fragments are never sent to the server, never appear in nginx/CDN/proxy access
+        # logs, and are not stored in browser history on the server side. This prevents
+        # a valid 30-minute account-takeover credential from leaking into log files.
+        reset_link = f"https://innovacx.net/forgot-password#token={raw_token}"
+
+        resend.Emails.send({
+            "from": "no-reply@innovacx.net",
+            "to": "innovacx.reset@gmail.com",   # hardcoded until domain email is set up
+            "subject": "Reset your InnovaCX password",
+            "html": RESET_EMAIL_HTML.format(
+                email=email,
+                reset_link=reset_link,
+                year=datetime.utcnow().year,
+            ),
+        })
+
         # DEV_LOG_RESET_TOKENS defaults to false; set to true only in local dev envs.
         # Never enable in production — tokens grant full account takeover.
         if DEV_LOG_RESET_TOKENS:
             print(f"[DEV] Password reset token for {email}: {raw_token}")
+            print(f"[DEV] Reset link: {reset_link}")
         log_auth_event("password_reset_requested", user_id=str(user["id"]), email=email, ip=client_ip)
     else:
         log_auth_event("password_reset_requested", email=email, ip=client_ip, extra={"user_exists": False})
@@ -1347,24 +1482,32 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
 
 
 @api.post("/auth/reset-password")
-@rate_limit_auth()
-def reset_password(request: Request, body: ResetPasswordRequest, user: Dict[str, Any] = Depends(get_current_user), _csrf: None = Depends(require_csrf)):
+@rate_limit_auth()  # FIX: added — prevents hammering a token even at low guess probability
+def reset_password(request: Request, body: ResetPasswordRequest, _csrf: None = Depends(require_csrf)):
+    # get_current_user removed — user is not logged in during a password reset
     raw_token = (body.token or "").strip()
     new_password = body.new_password or ""
-    
-    if len(raw_token) < 10:
+
+    # FIX: tightened from < 10 to < 40. A real token is always 43 chars
+    # (base64url of 32 random bytes, no padding). Anything shorter is
+    # definitively malformed and not worth a DB round-trip.
+    if len(raw_token) < 40:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
-    validate_password_complexity(body.new_password, field_name="New password", email=user["email"])
 
     client_ip = request.client.host if request and request.client else None
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Join users to get email for password complexity validation
             cur.execute(
                 """
-                SELECT id, user_id
-                FROM password_reset_tokens
-                WHERE token_hash = %s AND used_at IS NULL AND expires_at > NOW()
+                SELECT prt.id, prt.user_id, u.email
+                FROM password_reset_tokens prt
+                JOIN users u ON u.id = prt.user_id
+                WHERE prt.token_hash = %s
+                  AND prt.used_at IS NULL
+                  AND prt.expires_at > NOW()
                 """,
                 (token_hash,),
             )
@@ -1372,11 +1515,12 @@ def reset_password(request: Request, body: ResetPasswordRequest, user: Dict[str,
             if not row:
                 raise HTTPException(status_code=400, detail="Invalid or expired token")
 
+            # Email comes from DB via token, not from a logged-in session
+            validate_password_complexity(new_password, field_name="New password", email=row["email"])
+
             new_hash = hash_password(new_password)
             # Update password and stamp password_changed_at so existing JWTs issued
             # before this moment can be detected as stale on next verification.
-            # This is the safest session-invalidation measure available without a
-            # separate token revocation table (see ADDITIONAL FILES NEEDED below).
             cur.execute(
                 """
                 UPDATE users
@@ -1394,6 +1538,7 @@ def reset_password(request: Request, body: ResetPasswordRequest, user: Dict[str,
 
     log_auth_event("password_reset_complete", user_id=str(row["user_id"]), ip=client_ip)
     return {"ok": True, "message": "Password updated successfully"}
+
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
@@ -1436,6 +1581,48 @@ def auth_logout(
         ip=client_ip,
     )
     return {"ok": True}
+
+class ResetTokenEmailRequest(BaseModel):
+    token: str
+
+@api.post("/auth/reset-token-email")
+@rate_limit_auth()
+def reset_token_email(request: Request, body: ResetTokenEmailRequest, _csrf: None = Depends(require_csrf)):
+    """
+    Given a raw reset token, return the associated email address if the token
+    is valid and unexpired. Used by the frontend to enable the "password too
+    similar to email" client-side check on the reset form.
+
+    This endpoint reveals nothing an attacker doesn't already have — the token
+    itself is the credential. It does NOT mark the token as used. It is
+    rate-limited identically to the other auth endpoints.
+    """
+    raw_token = (body.token or "").strip()
+
+    # Same length guard as reset-password — reject garbage before DB round-trip
+    if len(raw_token) < 40:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
+    row = fetch_one(
+        """
+        SELECT u.email
+        FROM password_reset_tokens prt
+        JOIN users u ON u.id = prt.user_id
+        WHERE prt.token_hash = %s
+          AND prt.used_at IS NULL
+          AND prt.expires_at > NOW()
+        """,
+        (token_hash,),
+    )
+
+    if not row:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    return {"email": row["email"]}
+
+
 
 # Employee Dashboard (EmployeeDashboard.jsx)
 @api.get("/employee/dashboard")
@@ -3643,8 +3830,6 @@ class CreateTicketRequest(BaseModel):
     audio_features: Optional[dict] = None
     attachments: Optional[List[TicketAttachment]] = []
     sentiment: Optional[dict] = None
-    original_text: Optional[str] = None
-    transcript_text: Optional[str] = None
 
     from pydantic import validator
 
@@ -3885,15 +4070,10 @@ def create_customer_ticket(
 
             # Suggested resolution is generated by orchestrator flow.
 
-    # Build orchestrator text — merge typed details with voice transcript when present
-    orchestrator_text = body.details
-    if body.has_audio and body.transcript_text and body.transcript_text.strip():
-        orchestrator_text = f"{body.details}\n[Voice transcription]: {body.transcript_text.strip()}"
-
     background_tasks.add_task(
         _dispatch_orchestrator_after_submit,
         ticket_code=ticket_code,
-        details=orchestrator_text,
+        details=body.details,
         ticket_type=body.type,
         subject=body.subject,
         execution_id=execution_id,
