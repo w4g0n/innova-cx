@@ -2,6 +2,10 @@ import json
 import sys
 from pathlib import Path
 
+# Must be imported before joblib unpickles the Pipeline so the class is
+# resolvable in this module's namespace.
+from feature_extractor import LinguisticFeatureExtractor  # noqa: F401
+
 
 def main() -> int:
     if len(sys.argv) < 2:

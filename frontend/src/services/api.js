@@ -232,6 +232,8 @@ export async function submitCustomerTicket(payload = {}) {
     details,
     has_audio: Boolean(payload.has_audio),
     audio_features: payload.audio_features || null,
+    original_text: payload.original_text || null,
+    transcript_text: payload.transcript_text || null,
     attachments: Array.isArray(payload.attachments) ? payload.attachments : [],
   };
 
