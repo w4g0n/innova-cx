@@ -10,6 +10,7 @@ import logging
 import os
 import subprocess
 import sys
+import asyncio
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -30,11 +31,8 @@ SENTIMENT_SUBPROCESS_TIMEOUT_SECONDS = float(
     os.getenv("SENTIMENT_SUBPROCESS_TIMEOUT_SECONDS", "45")
 )
 SENTIMENT_HELPER_PATH = Path(__file__).with_name("sentiment_runtime_worker.py")
-SENTIMENT_RUNTIME_MODE = os.getenv("SENTIMENT_RUNTIME_MODE", "inprocess").strip().lower()
-# Temperature scaling: divides raw model score to reduce overconfidence.
-# Values > 1.0 spread scores toward neutral. Only applied to real model output, not fallback.
-# Tune via SENTIMENT_TEMPERATURE env var (default 1.5).
-SENTIMENT_TEMPERATURE = float(os.getenv("SENTIMENT_TEMPERATURE", "1.5"))
+# Default to subprocess so model load/prediction cannot wedge the main event loop.
+SENTIMENT_RUNTIME_MODE = os.getenv("SENTIMENT_RUNTIME_MODE", "subprocess").strip().lower()
 
 
 class _FallbackPredictor:
@@ -153,20 +151,16 @@ async def analyze_sentiment(state: dict) -> dict:
     predictor = _FallbackPredictor()
     model_data = None
     if SENTIMENT_RUNTIME_MODE == "subprocess":
-        model_data = _predict_via_subprocess(state["text"])
+        model_data = await asyncio.to_thread(_predict_via_subprocess, state["text"])
     else:
-        model_data = _predict_inprocess(state["text"])
+        model_data = await asyncio.to_thread(_predict_inprocess, state["text"])
         if model_data is None and SENTIMENT_RUNTIME_MODE == "hybrid":
-            model_data = _predict_via_subprocess(state["text"])
+            model_data = await asyncio.to_thread(_predict_via_subprocess, state["text"])
 
     data = model_data or predictor.predict(state["text"])
 
-    is_model_output = "processing_time_ms" in data
-    state["sentiment_mode"] = "model" if is_model_output else "mock"
-    raw_score = float(data.get("text_sentiment", 0.0) or 0.0)
-    if is_model_output and SENTIMENT_TEMPERATURE > 1.0:
-        raw_score = raw_score / SENTIMENT_TEMPERATURE
-    state["text_sentiment"] = max(-1.0, min(1.0, raw_score))
+    state["sentiment_mode"] = "model" if "processing_time_ms" in data else "mock"
+    state["text_sentiment"] = float(data.get("text_sentiment", 0.0) or 0.0)
     state.pop("sentiment_category", None)
     state.pop("urgency", None)
     state.pop("keywords", None)

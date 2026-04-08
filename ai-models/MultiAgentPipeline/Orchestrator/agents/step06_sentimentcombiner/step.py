@@ -3,26 +3,12 @@ Sentiment Combiner Agent
 ========================
 Combines text/audio sentiment while preserving the native [-1, 1] polarity
 range used by the sentiment agent.
-
-Calibration knobs (env vars):
-  SENTIMENT_BUCKET_NEG_THRESHOLD  default -0.15  (below → negative)
-  SENTIMENT_BUCKET_POS_THRESHOLD  default  0.15  (above → positive)
-  Tighter than the old ±0.25 to reduce false neutral classifications.
-
-Audio blending:
-  When audio_score (0–1 quality metric from transcriber) is present,
-  audio weight scales up to 0.5 proportionally with quality.
-  Without audio_score the blend defaults to 70/30 text-dominant.
 """
 
 import logging
-import os
 from langchain_core.runnables import RunnableLambda
 
 logger = logging.getLogger(__name__)
-
-_NEG_THRESHOLD = float(os.getenv("SENTIMENT_BUCKET_NEG_THRESHOLD", "-0.15"))
-_POS_THRESHOLD = float(os.getenv("SENTIMENT_BUCKET_POS_THRESHOLD", "0.15"))
 
 
 def _normalize_unit(value: float | None) -> float:
@@ -31,9 +17,9 @@ def _normalize_unit(value: float | None) -> float:
 
 
 def _bucket(score: float) -> str:
-    if score < _NEG_THRESHOLD:
+    if score < -0.25:
         return "negative"
-    if score > _POS_THRESHOLD:
+    if score > 0.25:
         return "positive"
     return "neutral"
 
@@ -61,19 +47,9 @@ async def combine_sentiment(state: dict) -> dict:
     mode = "text_only"
     if has_audio and audio_sentiment is not None:
         audio_norm = _normalize_unit(audio_sentiment)
-        audio_score = state.get("audio_score")
-        if audio_score is not None:
-            # Scale audio weight by quality: 0 quality → 0 weight, perfect quality → 0.5 weight
-            audio_weight = max(0.0, min(0.5, float(audio_score) * 0.5))
-            text_weight = 1.0 - audio_weight
-            mode = "text_audio_quality_weighted"
-        else:
-            # No quality metric — default to text-dominant 70/30
-            audio_weight = 0.3
-            text_weight = 0.7
-            mode = "text_audio_default_weighted"
-        combined = (text_weight * text) + (audio_weight * audio_norm)
+        combined = (0.5 * audio_norm) + (0.5 * text)
         audio_sentiment = audio_norm
+        mode = "text_audio_equal_weight"
 
     state["text_sentiment"] = text
     state["audio_sentiment"] = float(audio_sentiment) if audio_sentiment is not None else None
