@@ -1450,7 +1450,11 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
             (user["id"], token_hash),
         )
 
-        reset_link = f"https://innovacx.net/forgot-password?token={raw_token}"
+        # FIX: Token is placed in the URL fragment (#) instead of a query parameter (?).
+        # Fragments are never sent to the server, never appear in nginx/CDN/proxy access
+        # logs, and are not stored in browser history on the server side. This prevents
+        # a valid 30-minute account-takeover credential from leaking into log files.
+        reset_link = f"https://innovacx.net/forgot-password#token={raw_token}"
 
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
@@ -1477,13 +1481,16 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
 
 
 @api.post("/auth/reset-password")
-@rate_limit_auth()
+@rate_limit_auth()  # FIX: added — prevents hammering a token even at low guess probability
 def reset_password(request: Request, body: ResetPasswordRequest, _csrf: None = Depends(require_csrf)):
     # get_current_user removed — user is not logged in during a password reset
     raw_token = (body.token or "").strip()
     new_password = body.new_password or ""
 
-    if len(raw_token) < 10:
+    # FIX: tightened from < 10 to < 40. A real token is always 43 chars
+    # (base64url of 32 random bytes, no padding). Anything shorter is
+    # definitively malformed and not worth a DB round-trip.
+    if len(raw_token) < 40:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
 
     client_ip = request.client.host if request and request.client else None
@@ -1513,8 +1520,6 @@ def reset_password(request: Request, body: ResetPasswordRequest, _csrf: None = D
             new_hash = hash_password(new_password)
             # Update password and stamp password_changed_at so existing JWTs issued
             # before this moment can be detected as stale on next verification.
-            # This is the safest session-invalidation measure available without a
-            # separate token revocation table (see ADDITIONAL FILES NEEDED below).
             cur.execute(
                 """
                 UPDATE users
@@ -1556,31 +1561,65 @@ def change_password(
     client_ip = request.client.host if request and request.client else None
     log_auth_event("password_changed", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
     return {"ok": True}
- 
- 
-class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
- 
-@api.post("/auth/change-password")
-def change_password(
-    body: ChangePasswordRequest,
-    request: Request,
+
+
+@api.post("/auth/logout")
+def auth_logout(
+    authorization: Optional[str] = Header(default=None),
+    request: Request = None,
     user: Dict[str, Any] = Depends(get_current_user),
-    _csrf: None = Depends(require_csrf),
 ):
-    validate_password_complexity(body.new_password, field_name="New password", email=user["email"])
-    row = fetch_one("SELECT password_hash FROM users WHERE id = %s", (user["id"],))
-    if not row or not verify_password(body.current_password, row["password_hash"]):
-        raise HTTPException(status_code=401, detail="Current password is incorrect.")
-    execute(
-        "UPDATE users SET password_hash = %s, password_changed_at = NOW() WHERE id = %s",
-        (hash_password(body.new_password), user["id"]),
-    )
+    token = _get_bearer_token(authorization)
+    payload = verify_jwt(token)
     client_ip = request.client.host if request and request.client else None
-    log_auth_event("password_changed", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
+    logout_user(
+        jti=str(payload.get("jti") or "") or None,
+        token_exp=float(payload.get("exp")) if payload.get("exp") is not None else None,
+        user_id=str(user["id"]),
+        db_execute=execute,
+        ip=client_ip,
+    )
     return {"ok": True}
 
+class ResetTokenEmailRequest(BaseModel):
+    token: str
+
+@api.post("/auth/reset-token-email")
+@rate_limit_auth()
+def reset_token_email(request: Request, body: ResetTokenEmailRequest, _csrf: None = Depends(require_csrf)):
+    """
+    Given a raw reset token, return the associated email address if the token
+    is valid and unexpired. Used by the frontend to enable the "password too
+    similar to email" client-side check on the reset form.
+
+    This endpoint reveals nothing an attacker doesn't already have — the token
+    itself is the credential. It does NOT mark the token as used. It is
+    rate-limited identically to the other auth endpoints.
+    """
+    raw_token = (body.token or "").strip()
+
+    # Same length guard as reset-password — reject garbage before DB round-trip
+    if len(raw_token) < 40:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
+    row = fetch_one(
+        """
+        SELECT u.email
+        FROM password_reset_tokens prt
+        JOIN users u ON u.id = prt.user_id
+        WHERE prt.token_hash = %s
+          AND prt.used_at IS NULL
+          AND prt.expires_at > NOW()
+        """,
+        (token_hash,),
+    )
+
+    if not row:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    return {"email": row["email"]}
 
 @api.post("/auth/logout")
 def auth_logout(
