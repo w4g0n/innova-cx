@@ -2615,8 +2615,7 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
     Returns the report_code on success, or None if the employee had no activity.
     Works for any employee — no hardcoded IDs or names.
     """
-    from datetime import date, timedelta
-    import math
+    from datetime import date
 
     period_start = date(year, month, 1)
     period_end   = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
@@ -2989,8 +2988,6 @@ def _ensure_recent_reports(user_id: str) -> None:
     Safe to call repeatedly — generation is idempotent (upsert + DELETE + INSERT).
     """
     import re as _re_slug2
-
-    today = datetime.now(tz=timezone.utc)
 
     # Build slug once for this user
     user_slug_row = fetch_one(

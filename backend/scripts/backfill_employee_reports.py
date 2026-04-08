@@ -30,7 +30,10 @@ RUN:
         python /tmp/backfill_employee_reports.py
 """
 from __future__ import annotations
-import logging, os, re, sys
+import logging
+import os
+import re
+import sys
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 import psycopg2
@@ -268,21 +271,32 @@ def main():
             try:
                 if not ex:
                     r=generate_report(uid,year,month)
-                    if r: logger.info("  GENERATED %s %-24s %s (%s %d)",tag,code,name,_ML[month],year); gen+=1
-                    else: logger.warning("  FAILED    %-24s %s",code,name); err+=1
+                    if r:
+                        logger.info("  GENERATED %s %-24s %s (%s %d)",tag,code,name,_ML[month],year)
+                        gen+=1
+                    else:
+                        logger.warning("  FAILED    %-24s %s",code,name)
+                        err+=1
                 elif int(ex.get("rc") or 0)==0:
                     r=generate_report(uid,year,month)
-                    if r: logger.info("  REPAIRED  %-24s %s (%s %d)",code,name,_ML[month],year); rep+=1
-                    else: logger.warning("  REPAIR FAILED %-24s %s",code,name); err+=1
+                    if r:
+                        logger.info("  REPAIRED  %-24s %s (%s %d)",code,name,_ML[month],year)
+                        rep+=1
+                    else:
+                        logger.warning("  REPAIR FAILED %-24s %s",code,name)
+                        err+=1
                 else:
-                    logger.info("  OK        %-24s %s (%s %d)",code,name,_ML[month],year); skip+=1
+                    logger.info("  OK        %-24s %s (%s %d)",code,name,_ML[month],year)
+                    skip+=1
             except Exception as exc:
-                logger.error("  ERROR     %-24s %s: %s",code,name,exc); err+=1
+                logger.error("  ERROR     %-24s %s: %s",code,name,exc)
+                err+=1
 
     # Step 4: verification
     missing=False
     for emp in employees:
-        uid=str(emp["user_id"]); name=str(emp.get("full_name") or emp.get("email") or uid)
+        uid=str(emp["user_id"])
+        name=str(emp.get("full_name") or emp.get("email") or uid)
         raw=str(emp.get("email","")).split("@")[0].strip().lower()
         slug=re.sub(r"[^a-z0-9]","",raw)[:12] or re.sub(r"[^a-z0-9]","",uid.replace("-",""))[:8]
         for year,month in DEMO_MONTHS:
