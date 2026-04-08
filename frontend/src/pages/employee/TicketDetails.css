@@ -298,6 +298,30 @@
   margin-bottom: 0;
 }
 
+.details-grid--single {
+  grid-template-columns: 1fr;
+}
+
+.ticket-details-card {
+  width: 100%;
+}
+
+.ticket-conversation-section {
+  margin-top: 0;
+}
+
+.ticket-conversation-section .tc-root {
+  margin-top: 0;
+}
+
+.final-resolution-section {
+  margin-top: 0;
+}
+
+.previous-resolutions-section {
+  margin-top: 0;
+}
+
 /* Timeline */
 .timeline {
   display: flex;
