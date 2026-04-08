@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, Navigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -115,6 +115,14 @@ export default function EmployeeDashboard() {
     return () => { cancelled = true; };
   }, [token]);
 
+  // Hooks must be called before any early returns — Rules of Hooks.
+  const displayName = sanitizeText(employee?.name || "Employee", 100);
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    const tod = h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening";
+    return `${tod}, ${displayName}`;
+  }, [displayName]);
+
   if (!token && mfaToken)  return <Navigate to="/verify" replace />;
   if (!token && !mfaToken) return <Navigate to="/"       replace />;
 
@@ -150,14 +158,11 @@ export default function EmployeeDashboard() {
       </Layout>
     );
 
-  // Sanitize employee name from API before rendering
-  const displayName = sanitizeText(employee?.name || "Employee", 100);
-
   return (
     <Layout role="employee">
       <div className="empDash" ref={revealRef}>
         <PageHeader
-          title={`Good Morning, ${displayName}`}
+          title={greeting}
           subtitle="Here's your activity and assigned workload."
         />
 

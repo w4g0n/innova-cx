@@ -2149,6 +2149,56 @@ async def employee_upload_attachment(
 
 
 # =========================================================
+# Customer: Upload attachment for a ticket
+# =========================================================
+@api.post("/customer/tickets/{ticket_code}/attachments")
+async def customer_upload_attachment(
+    ticket_code: str,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(require_customer),
+    _csrf: None = Depends(require_csrf),
+):
+    """
+    Stores an uploaded file under <UPLOADS_DIR>/<ticket_code>/<filename>
+    and records it in ticket_attachments. Only the ticket's creator may upload.
+    """
+    user_id = user["id"]
+
+    row = fetch_one(
+        "SELECT id FROM tickets WHERE ticket_code = %s AND created_by = %s",
+        (ticket_code, user_id),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    ticket_id = row["id"]
+
+    safe_name = _sanitize_filename(file.filename or "attachment")
+    contents = await validate_upload_file(file)
+
+    uploads_root = _ensure_uploads_root()
+    upload_dir = os.path.join(uploads_root, ticket_code)
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_path = os.path.join(upload_dir, safe_name)
+    with open(file_path, "wb") as fh:
+        fh.write(contents)
+
+    file_url = f"/uploads/{ticket_code}/{safe_name}"
+
+    execute(
+        """
+        INSERT INTO ticket_attachments (ticket_id, file_name, file_url, uploaded_by)
+        VALUES (%s, %s, %s, %s);
+        """,
+        (ticket_id, safe_name, file_url, user_id),
+    )
+
+    logger.info("customer_attachment_upload | ticket=%s file=%s", ticket_code, safe_name)
+    return {"ok": True, "fileName": safe_name, "fileUrl": file_url}
+
+
+# =========================================================
 # Employee Rescore + Reroute (ComplaintDetails.jsx)
 # =========================================================
 

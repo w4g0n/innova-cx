@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import AudioReplyPlayer from "../../components/common/AudioReplyPlayer";
-import { submitCustomerTicket, transcribeAudio } from "../../services/api";
+import { submitCustomerTicket, transcribeAudio, uploadCustomerAttachments } from "../../services/api";
 import {
   sanitizeText,
   sanitizeFilename,
@@ -198,6 +198,17 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
       const ticketId  = result?.ticket?.ticketId
         ? sanitizeId(String(result.ticket.ticketId), 48)
         : null;
+
+      // Upload actual file bytes now that we have the ticket code.
+      // Non-fatal: a failed upload won't block the success screen.
+      if (ticketId && attachments.length > 0) {
+        try {
+          await uploadCustomerAttachments(ticketId, attachments);
+        } catch (uploadErr) {
+          console.warn("Attachment upload failed:", uploadErr);
+        }
+      }
+
       const replyText = `Your request has been successfully submitted. Ticket ID: ${ticketId ?? "N/A"}. Our team will review and respond as soon as possible.`;
 
       resetForm();

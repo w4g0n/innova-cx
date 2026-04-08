@@ -257,6 +257,33 @@ export async function submitCustomerTicket(payload = {}) {
 }
 
 /**
+ * Upload attachment files for a customer ticket after it has been created.
+ * @param {string} ticketCode
+ * @param {File[]} files
+ */
+export async function uploadCustomerAttachments(ticketCode, files) {
+  if (!files || files.length === 0) return;
+  const token = localStorage.getItem("access_token");
+  for (const file of files) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const csrf = await getCsrfToken();
+    const res = await fetch(
+      apiUrl(`/api/customer/tickets/${encodeURIComponent(ticketCode)}/attachments`),
+      {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
+        body: fd,
+      }
+    );
+    if (!res.ok) throw new Error(`Attachment upload failed (${res.status})`);
+  }
+}
+
+/**
  * Submit an audio complaint via the orchestrator.
  * The orchestrator transcribes, classifies, analyzes sentiment, scores priority,
  * and creates a ticket.
