@@ -389,14 +389,6 @@ export default function ComplaintTrends() {
     return (apiData?.bars || []).map((b) => ({ ...b, pct: Math.round((b.value / max) * 100) }));
   }, [apiData]);
 
-  const maxEscalation = useMemo(
-    () => Math.max(...(B?.escalationByDept || []).map((d) => d.rate), 1),
-    [B]
-  );
-  const maxBreachDept = useMemo(
-    () => Math.max(...(B?.breachByDept || []).map((d) => d.breachRate), 1),
-    [B]
-  );
 
   if (loading) return <Layout role="manager"><div className="mgrTrends"><div className="ct-loading">Loading analytics…</div></div></Layout>;
   if (error)   return <Layout role="manager"><div className="mgrTrends"><div className="ct-error">{error}</div></div></Layout>;
@@ -487,17 +479,12 @@ export default function ComplaintTrends() {
               // Derive year-aware labels: detect when year changes across the bar data
               const bars = legacyBars;
               const MONTH_ORDER = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-              let inferredYear = new Date().getFullYear();
-              // Walk backwards from current month to assign years to each label
               const today = new Date();
-              const currentMonthIdx = today.getMonth(); // 0-based
+              const currentMonthIdx = today.getMonth();
               const currentYear = today.getFullYear();
               const labeledBars = bars.map((b, i) => {
-                // Try to infer year by position relative to current month
                 const monthIdx = MONTH_ORDER.indexOf(b.label?.trim().slice(0, 3));
-                // Offset from end: bars[last] = most recent
                 const offsetFromEnd = bars.length - 1 - i;
-                const targetMonth = ((currentMonthIdx - offsetFromEnd) % 12 + 12) % 12;
                 const yearOffset = Math.floor((offsetFromEnd - currentMonthIdx + 11) / 12);
                 const year = currentYear - yearOffset;
                 return { ...b, year, monthIdx };
