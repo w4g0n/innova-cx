@@ -182,6 +182,17 @@ export default function CustomerLanding() {
   }, [fetchRecentTicket]);
 
   useEffect(() => {
+    const onScroll = () => {
+      const el  = document.documentElement;
+      const max = el.scrollHeight - el.clientHeight;
+      const pct = max > 0 ? (el.scrollTop / max) * 100 : 0;
+      document.documentElement.style.setProperty("--scroll-pct", `${pct.toFixed(1)}%`);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
     if (!recentTicket || hasUsableSubject(recentTicket)) return undefined;
     const timer = setTimeout(() => { fetchRecentTicket(); }, 1200);
     return () => clearTimeout(timer);
@@ -585,7 +596,7 @@ export default function CustomerLanding() {
               <span className="cl-greeting-name">{firstName}.</span>
             </h1>
             <p className="cl-greeting-sub">
-              Welcome back to your InnovaAI dashboard. How can we help you today?
+              Welcome back to your InnovaCX dashboard. How can we help you today?
             </p>
           </div>
 
