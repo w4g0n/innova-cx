@@ -27,6 +27,7 @@ import pyotp  # for RFC 6238 TOTP
 import qrcode
 import io
 import re as _re
+import uuid as _uuid_mod
 try:
     from api.ticket_creation_gate import create_ticket_via_gate, dispatch_ticket_to_orchestrator
 except Exception:
@@ -1751,6 +1752,7 @@ def employee_resolution_suggestion(
     ticket_code: str,
     user: Dict[str, Any] = Depends(require_employee),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     row = fetch_one(
         """
@@ -1815,6 +1817,7 @@ def employee_ticket_details(
     ticket_code: str,
     user: Dict[str, Any] = Depends(require_employee),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
 
     # Ticket must belong to this employee
@@ -1952,6 +1955,7 @@ def employee_resolve_ticket(
     user: Dict[str, Any] = Depends(require_employee),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     decision = (body.decision or "").strip().lower()
     if decision not in {"accepted", "declined_custom"}:
@@ -2127,6 +2131,7 @@ async def employee_upload_attachment(
     Stores an uploaded file under <UPLOADS_DIR>/<ticket_code>/<filename>
     and records it in ticket_attachments.
     """
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
 
     row = fetch_one(
@@ -2239,6 +2244,7 @@ def employee_rescore_ticket(
     user: Dict[str, Any] = Depends(require_employee),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     new_priority = (body.new_priority or "").strip()
     reason = (body.reason or "").strip()
@@ -2324,6 +2330,7 @@ def employee_reroute_ticket(
     user: Dict[str, Any] = Depends(require_employee),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     new_dept_name = (body.new_department or "").strip()
     reason = (body.reason or "").strip()
@@ -2418,11 +2425,21 @@ def employee_reroute_ticket(
 class TicketMessageRequest(BaseModel):
     body: str
 
+    @property
+    def sanitized_body(self) -> str:
+        v = (self.body or "").strip()
+        if not v:
+            raise HTTPException(status_code=422, detail="Message body cannot be empty.")
+        if len(v) > 4000:
+            raise HTTPException(status_code=422, detail="Message body exceeds maximum length of 4000 characters.")
+        return v
+
 @api.get("/employee/tickets/{ticket_code}/messages")
 def employee_get_ticket_messages(
     ticket_code: str,
     user: Dict[str, Any] = Depends(require_employee),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     ticket = fetch_one(
         "SELECT id FROM tickets WHERE ticket_code = %s AND assigned_to_user_id = %s LIMIT 1;",
@@ -2461,10 +2478,9 @@ def employee_post_ticket_message(
     user: Dict[str, Any] = Depends(require_employee),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
-    text = (body.body or "").strip()
-    if not text:
-        raise HTTPException(status_code=422, detail="Message body cannot be empty")
+    text = body.sanitized_body
 
     ticket = fetch_one(
         """
@@ -2544,6 +2560,7 @@ def customer_get_ticket_messages(
     ticket_code: str,
     user: Dict[str, Any] = Depends(require_customer),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     ticket = fetch_one(
         "SELECT id FROM tickets WHERE ticket_code = %s AND created_by_user_id = %s LIMIT 1;",
@@ -2582,10 +2599,9 @@ def customer_post_ticket_message(
     user: Dict[str, Any] = Depends(require_customer),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
-    text = (body.body or "").strip()
-    if not text:
-        raise HTTPException(status_code=422, detail="Message body cannot be empty")
+    text = body.sanitized_body
 
     ticket = fetch_one(
         """
@@ -3441,6 +3457,7 @@ def customer_ticket_details(
     ticket_code: str,
     user: Dict[str, Any] = Depends(require_customer),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
 
     row = fetch_one(
@@ -3627,10 +3644,62 @@ class CreateTicketRequest(BaseModel):
     attachments: Optional[List[TicketAttachment]] = []
     sentiment: Optional[dict] = None
 
-    @field_validator("details")
-    @classmethod
-    def details_within_word_limit(cls, value: str) -> str:
-        return _validate_customer_text_words(value, "details") or ""
+    from pydantic import validator
+
+    @validator("name")
+    def name_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("name must not be empty.")
+        if len(v) > 120:
+            raise ValueError("name exceeds maximum length of 120 characters.")
+        return v
+
+    @validator("email")
+    def email_format(cls, v):
+        import re as _r
+        v = (v or "").strip().lower()
+        if not _r.match(r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-.]+$', v):
+            raise ValueError("Invalid email address.")
+        if len(v) > 254:
+            raise ValueError("Email address too long.")
+        return v
+
+    @validator("type")
+    def type_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("type must not be empty.")
+        if len(v) > 60:
+            raise ValueError("type exceeds maximum length of 60 characters.")
+        return v
+
+    @validator("asset_type")
+    def asset_type_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("asset_type must not be empty.")
+        if len(v) > 120:
+            raise ValueError("asset_type exceeds maximum length of 120 characters.")
+        return v
+
+    @validator("subject")
+    def subject_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("subject must not be empty.")
+        if len(v) > 300:
+            raise ValueError("subject exceeds maximum length of 300 characters.")
+        return v
+
+    @validator("details")
+    def details_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("details must not be empty.")
+        if len(v) > 10000:
+            raise ValueError("details exceeds maximum length of 10000 characters.")
+        return v
 
 
 class InternalCreateTicketRequest(BaseModel):
@@ -4093,6 +4162,7 @@ def assign_ticket(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_id = _sanitize_uuid(ticket_id, "ticket_id")
     user = get_current_user(authorization)
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4162,6 +4232,7 @@ def manager_resolve_ticket(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_id = _sanitize_uuid(ticket_id, "ticket_id")
     user = get_current_user(authorization)
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4263,6 +4334,7 @@ def manager_rescore_ticket(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_id = _sanitize_uuid(ticket_id, "ticket_id")
     user = get_current_user(authorization)
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4361,6 +4433,7 @@ def route_ticket_department(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_id = _sanitize_uuid(ticket_id, "ticket_id")
     user = get_current_user(authorization)
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4580,6 +4653,7 @@ def decide_approval(
     body: ApprovalDecisionRequest,
     authorization: Optional[str] = Header(default=None),
 ):
+    request_id = _sanitize_uuid(request_id, "request_id")
     user = get_current_user(authorization)
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4733,6 +4807,12 @@ def decide_approval(
 @app.get("/manager/complaints/{ticket_id}")
 @api.get("/manager/complaints/{ticket_id}")
 def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends(require_manager)):
+    # Accepts both ticket_code (CX-…) and UUID
+    _stripped = ticket_id.strip()
+    if _TICKET_CODE_RE.match(_stripped.upper()):
+        ticket_id = _stripped.upper()
+    else:
+        ticket_id = _sanitize_uuid(_stripped, "ticket_id")
     ticket = fetch_one("""
         SELECT
             t.id AS ticket_id,
@@ -4824,7 +4904,15 @@ def get_manager_trends(
     priority: str = Query("All Priorities"),
     user: Dict[str, Any] = Depends(require_manager),
 ):
-    # Resolve time window
+    # Validate timeRange against known allowlist
+    timeRange = _sanitize_time_range(timeRange)
+    # Clamp department and priority to safe lengths (they are used in SQL via
+    # parameterised queries, but we still reject absurdly long values early)
+    if len(department) > 120:
+        raise HTTPException(status_code=400, detail="Invalid department value.")
+    if len(priority) > 40:
+        raise HTTPException(status_code=400, detail="Invalid priority value.")
+    # ── Resolve time window ───────────────────────────────────────────────────
     range_sql = {
         "7d":             "now() - interval '7 days'",
         "Last 7 Days":    "now() - interval '7 days'",
@@ -5170,6 +5258,7 @@ def get_routing_review_queue(
     status_filter: str = Query(default="Pending"),
     user: Dict[str, Any] = Depends(require_manager),
 ):
+    status_filter = _sanitize_status_filter(status_filter)
     manager_dept_row = fetch_one(
         """
         SELECT d.name AS department_name
@@ -5199,6 +5288,7 @@ def get_routing_review_item(
     user: Dict[str, Any] = Depends(require_manager),
 ):
     """Fetch a single routing review item by its UUID."""
+    review_id = _sanitize_uuid(review_id, "review_id")
     manager_dept_row = fetch_one(
         """
         SELECT d.name AS department_name
@@ -5272,6 +5362,7 @@ def decide_routing_review(
     body: RoutingReviewDecisionRequest,
     user: Dict[str, Any] = Depends(require_manager),
 ):
+    review_id = _sanitize_uuid(review_id, "review_id")
     manager_dept_row = fetch_one(
         """
         SELECT d.name AS department_name
@@ -5406,10 +5497,30 @@ class ChatbotProxyRequest(BaseModel):
     user_id: str
     session_id: Optional[str] = None
 
-    @field_validator("message")
-    @classmethod
-    def message_within_word_limit(cls, value: str) -> str:
-        return _validate_customer_text_words(value, "message") or ""
+    from pydantic import validator
+
+    @validator("message")
+    def message_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("message must not be empty.")
+        if len(v) > 4000:
+            raise ValueError("message exceeds maximum length of 4000 characters.")
+        return v
+
+    @validator("user_id")
+    def user_id_format(cls, v):
+        import uuid as _u
+        try:
+            return str(_u.UUID(str(v).strip()))
+        except (ValueError, AttributeError):
+            raise ValueError("user_id must be a valid UUID.")
+
+    @validator("session_id", pre=True, always=True)
+    def session_id_length(cls, v):
+        if v is not None and len(str(v)) > 128:
+            raise ValueError("session_id exceeds maximum length of 128 characters.")
+        return v
 
 
 @api.post("/complaints")
@@ -5880,6 +5991,7 @@ def internal_generate_suggested_resolution(ticket_code: str):
     Return the latest stored suggestion for a ticket code.
     Suggested resolution generation is owned by the orchestrator pipeline.
     """
+    ticket_code = _sanitize_ticket_code(ticket_code)
     row = fetch_one(
         """
         SELECT
@@ -6444,6 +6556,12 @@ def get_operator_complaint_detail(
     Full ticket detail for the QC TicketReviewDetail page.
     Accepts either a ticket_code (e.g. CX-0042) or a raw UUID.
     """
+    # Accept both ticket_code (CX-…) and UUID — validate accordingly
+    _stripped = ticket_id.strip()
+    if _TICKET_CODE_RE.match(_stripped.upper()):
+        ticket_id = _stripped.upper()
+    else:
+        ticket_id = _sanitize_uuid(_stripped, "ticket_id")
     ticket = fetch_one(
         """
         SELECT
@@ -6738,6 +6856,54 @@ def _validate_type(value, expected_type, field: str):
         )
     return value
 
+
+# ── Path-parameter sanitisation helpers ──────────────────────────────────────
+
+def _sanitize_uuid(value: str, field: str = "ID") -> str:
+    """Validate that a path parameter is a well-formed UUID.
+    Returns the lower-cased canonical string form.
+    Raises HTTP 400 on failure so callers never reach the DB with garbage.
+    """
+    try:
+        return str(_uuid_mod.UUID(str(value).strip()))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail=f"Invalid {field}: must be a valid UUID.")
+
+
+_TICKET_CODE_RE = _re.compile(r'^CX-\d{1,10}$', _re.IGNORECASE)
+
+def _sanitize_ticket_code(value: str, field: str = "ticket code") -> str:
+    """Validate a ticket_code path parameter (format: CX-<digits>).
+    Returns the upper-cased canonical form.
+    Raises HTTP 400 on failure.
+    """
+    v = (value or "").strip().upper()
+    if not _TICKET_CODE_RE.match(v):
+        raise HTTPException(status_code=400, detail=f"Invalid {field}: expected format CX-<number>.")
+    return v
+
+
+_ALLOWED_TIME_RANGES = frozenset({
+    "7d", "Last 7 Days", "30d", "Last 30 Days",
+    "This Month", "Last 3 Months", "Last 6 Months",
+    "Last 12 Months", "90d", "last30days",
+})
+
+def _sanitize_time_range(value: str) -> str:
+    """Reject timeRange query params not in the known allowlist."""
+    if value not in _ALLOWED_TIME_RANGES:
+        raise HTTPException(status_code=400, detail=f"Invalid timeRange value: '{value}'.")
+    return value
+
+
+_ALLOWED_ROUTING_STATUSES = frozenset({"Pending", "Approved", "Overridden", "Denied", "All"})
+
+def _sanitize_status_filter(value: str) -> str:
+    """Reject status_filter values not in the known allowlist."""
+    if value not in _ALLOWED_ROUTING_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status_filter value: '{value}'.")
+    return value
+
 class CreateUserRequest(BaseModel):
     fullName:   str
     email:      str
@@ -6932,6 +7098,7 @@ def operator_update_user(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """Update user + profile (operator-only)."""
+    user_id = _sanitize_uuid(user_id, "user_id")
     if current_user.get("role") != "operator":
         raise HTTPException(status_code=403, detail="Only operators can update users.")
 
@@ -7082,6 +7249,7 @@ def operator_update_user_status(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """Activate/Deactivate user (operator-only)."""
+    user_id = _sanitize_uuid(user_id, "user_id")
     if current_user.get("role") != "operator":
         raise HTTPException(status_code=403, detail="Only operators can update users.")
 
@@ -7112,6 +7280,7 @@ def operator_delete_user(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """Delete a user (operator-only)."""
+    user_id = _sanitize_uuid(user_id, "user_id")
     if current_user.get("role") != "operator":
         raise HTTPException(status_code=403, detail="Only operators can delete users.")
 
@@ -7407,6 +7576,7 @@ def operator_delete_ticket(
     Hard-delete a ticket and all related rows (cascades via FK).
     Also removes the ticket from pipeline_queue if present.
     """
+    ticket_id = _sanitize_uuid(ticket_id, "ticket_id")
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT id, ticket_code FROM tickets WHERE id = %s::uuid", (ticket_id,))
