@@ -1621,24 +1621,6 @@ def reset_token_email(request: Request, body: ResetTokenEmailRequest, _csrf: Non
 
     return {"email": row["email"]}
 
-@api.post("/auth/logout")
-def auth_logout(
-    authorization: Optional[str] = Header(default=None),
-    request: Request = None,
-    user: Dict[str, Any] = Depends(get_current_user),
-):
-    token = _get_bearer_token(authorization)
-    payload = verify_jwt(token)
-    client_ip = request.client.host if request and request.client else None
-    logout_user(
-        jti=str(payload.get("jti") or "") or None,
-        token_exp=float(payload.get("exp")) if payload.get("exp") is not None else None,
-        user_id=str(user["id"]),
-        db_execute=execute,
-        ip=client_ip,
-    )
-    return {"ok": True}
-
 # Employee Dashboard (EmployeeDashboard.jsx)
 @api.get("/employee/dashboard")
 def employee_dashboard(user: Dict[str, Any] = Depends(require_employee)):
