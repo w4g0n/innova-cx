@@ -4,9 +4,8 @@ import os
 from pathlib import Path
 from faster_whisper import WhisperModel
 
-# -----------------------------------
+
 # Model initialization (once per run)
-# -----------------------------------
 TRANSCRIBER_DIR = Path(__file__).resolve().parent
 DEFAULT_WHISPER_MODEL_NAME = "base"
 DEFAULT_WHISPER_MODEL_PATH = TRANSCRIBER_DIR / "model"

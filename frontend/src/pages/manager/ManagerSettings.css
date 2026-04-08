@@ -125,10 +125,8 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ─── Change Password Modal ──────────────────────────────────────────────────
    Self-contained modal styles — no dependency on SettingsLayout's cpw classes.
    These are scoped with the cpw- prefix to avoid collisions.
-   ─────────────────────────────────────────────────────────────────────────── */
 .cpw-overlay {
   position: fixed;
   inset: 0;

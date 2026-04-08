@@ -6,7 +6,7 @@ import { getCsrfToken } from "../../services/api";
 import "./CustomerAuthPage.css";
 
 // Allowed role values — anything else redirects to "/"
-const ALLOWED_ROLES = ["customer", "employee", "manager", "admin"];
+const ALLOWED_ROLES = ["customer", "employee", "manager", "operator"];
 
 export default function CustomerAuthPage() {
   const navigate = useNavigate();
@@ -32,9 +32,6 @@ export default function CustomerAuthPage() {
 
   const inputsRef = useRef([]);
 
-  // ===============================
-  // Check TOTP status on mount
-  // ===============================
   useEffect(() => {
     // Redirect immediately if token or valid role is missing
     if (!loginToken || !role) {
@@ -85,9 +82,6 @@ export default function CustomerAuthPage() {
     checkTOTPStatus();
   }, [loginToken, role, navigate]);
 
-  // ===============================
-  // OTP Input Handling
-  // ===============================
   const handleChange = (value, index) => {
     // Strictly enforce single-digit numeric input — reject anything else
     if (!/^\d?$/.test(value)) return;
@@ -108,9 +102,6 @@ export default function CustomerAuthPage() {
     }
   };
 
-  // ===============================
-  // Verify OTP
-  // ===============================
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (otp.some((d) => d === "")) return;
@@ -203,9 +194,6 @@ export default function CustomerAuthPage() {
     }
   };
 
-  // ===============================
-  // Loading State
-  // ===============================
   if (loading) {
     return (
       <div className="auth-page">
@@ -216,9 +204,6 @@ export default function CustomerAuthPage() {
     );
   }
 
-  // ===============================
-  // UI
-  // ===============================
   return (
     <div className="auth-page">
       <div className="auth-card">

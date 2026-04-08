@@ -1,12 +1,12 @@
 import os
-import time
 import uuid
 import urllib.parse
 import logging
 import json
 from datetime import datetime
 from typing import Any, Dict, Optional
-
+import string
+import secrets
 import httpx
 try:
     from api.event_logger import log_application_event
@@ -38,7 +38,8 @@ def create_ticket_via_gate(
     """
     Single DB gate for ticket creation writes.
     """
-    ticket_code = f"CX-{int(time.time() * 1000)}-{os.urandom(2).hex().upper()}"
+
+    ticket_code = "CX-" + "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
     # App-level SLA rule: do not start SLA clocks until routed + assigned.
     effective_priority_assigned_at = None
     log_application_event(

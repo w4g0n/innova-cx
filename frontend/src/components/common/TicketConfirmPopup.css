@@ -1,7 +1,5 @@
-/* ================================================
-   TicketConfirmPopup — call-centre confirmation overlay
-   Dark theme matching Nova chatbot / app palette
-   ================================================ */
+/* TicketConfirmPopup — call-centre confirmation overlay
+   Dark theme matching Nova chatbot / app palette */
 
 .tcp__overlay {
   position: fixed;

@@ -1,6 +1,6 @@
 """
 Pipeline Queue API — Operator Endpoints
-========================================
+
 Provides the operator with full visibility and control over the pipeline queue.
 
 Endpoints:
@@ -38,9 +38,7 @@ _ORCHESTRATOR_RELEASE_TIMEOUT = 10.0
 _REDISPATCH_HTTP_TIMEOUT = 10
 
 
-# ---------------------------------------------------------------------------
 # DB helpers
-# ---------------------------------------------------------------------------
 
 def _get_dsn() -> str:
     dsn = os.getenv("DATABASE_URL")
@@ -102,9 +100,7 @@ def _execute(sql: str, params: Optional[tuple] = None) -> None:
             cur.execute(sql, params or ())
 
 
-# ---------------------------------------------------------------------------
 # Pydantic models
-# ---------------------------------------------------------------------------
 
 class CorrectStageRequest(BaseModel):
     corrections: Dict[str, Any]
@@ -122,9 +118,7 @@ class RerunQueueRequest(BaseModel):
     pass  # no body needed — resets and reruns the ticket from the top
 
 
-# ---------------------------------------------------------------------------
 # AI Explainability helpers
-# ---------------------------------------------------------------------------
 
 _SENTIMENT_NEGATIVE_THRESHOLD = -0.25
 _SENTIMENT_POSITIVE_THRESHOLD = 0.25
@@ -268,9 +262,7 @@ def _explain_stage(stage_name: str, output_state: Dict, error_message: Optional[
     return "Stage completed."
 
 
-# ---------------------------------------------------------------------------
 # Route: GET /stats
-# ---------------------------------------------------------------------------
 
 @router.get("/stats")
 def get_queue_stats():
@@ -309,9 +301,7 @@ def get_pipeline_control():
     }
 
 
-# ---------------------------------------------------------------------------
 # Route: GET / (list)
-# ---------------------------------------------------------------------------
 
 @router.get("")
 def list_queue():
@@ -395,9 +385,7 @@ def list_queue():
     )
 
 
-# ---------------------------------------------------------------------------
 # Route: GET /{queue_id}
-# ---------------------------------------------------------------------------
 
 @router.get("/{queue_id}")
 def get_queue_item(queue_id: str):
@@ -563,9 +551,7 @@ def get_queue_item(queue_id: str):
     return item
 
 
-# ---------------------------------------------------------------------------
 # Route: PATCH /{queue_id}/correct
-# ---------------------------------------------------------------------------
 
 @router.patch("/{queue_id}/correct")
 def correct_stage(queue_id: str, body: CorrectStageRequest):
@@ -668,9 +654,7 @@ def _record_operator_corrections(
         logger.warning("pipeline_queue | training reference insert failed: %s", exc)
 
 
-# ---------------------------------------------------------------------------
 # Route: POST /{queue_id}/release
-# ---------------------------------------------------------------------------
 
 @router.post("/{queue_id}/release")
 def release_ticket(queue_id: str, body: ReleaseRequest):
@@ -697,9 +681,7 @@ def release_ticket(queue_id: str, body: ReleaseRequest):
     return {"ok": True, "queue_id": queue_id, "ticket_code": row.get("ticket_code")}
 
 
-# ---------------------------------------------------------------------------
 # Route: POST /control/pause
-# ---------------------------------------------------------------------------
 
 @router.post("/control/pause")
 def pause_pipeline():
@@ -714,9 +696,7 @@ def pause_pipeline():
         raise HTTPException(status_code=503, detail=f"Pipeline pause failed: {exc}")
 
 
-# ---------------------------------------------------------------------------
 # Route: POST /control/resume
-# ---------------------------------------------------------------------------
 
 @router.post("/control/resume")
 def resume_pipeline():
@@ -731,9 +711,7 @@ def resume_pipeline():
         raise HTTPException(status_code=503, detail=f"Pipeline resume failed: {exc}")
 
 
-# ---------------------------------------------------------------------------
 # Route: POST /{queue_id}/rerun-stage
-# ---------------------------------------------------------------------------
 
 @router.post("/{queue_id}/rerun-stage")
 def rerun_stage(queue_id: str):
@@ -760,9 +738,7 @@ def rerun_stage(queue_id: str):
     return {"ok": True, "queue_id": queue_id, "stage": row.get("failed_stage")}
 
 
-# ---------------------------------------------------------------------------
 # Route: POST /{queue_id}/rerun
-# ---------------------------------------------------------------------------
 
 @router.post("/{queue_id}/rerun")
 def rerun_queue(queue_id: str):
@@ -789,9 +765,7 @@ def rerun_queue(queue_id: str):
     return {"ok": True, "queue_id": queue_id, "ticket_code": row.get("ticket_code")}
 
 
-# ---------------------------------------------------------------------------
 # Route: DELETE /{queue_id}
-# ---------------------------------------------------------------------------
 
 @router.post("/redispatch-unprocessed")
 def redispatch_unprocessed():

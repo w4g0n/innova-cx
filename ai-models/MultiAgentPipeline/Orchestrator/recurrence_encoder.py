@@ -7,14 +7,14 @@ Loads a sentence embedding model (default: sentence-transformers/all-MiniLM-L6-v
 via HuggingFace transformers + torch. Mean-pools the last hidden state to produce
 fixed-size embeddings, then scores candidates via cosine similarity.
 
-Falls back to the heuristic _find_similar_ticket() from step07 if the model
+Falls back to the heuristic _find_similar_ticket() from step01_recurrence if the model
 cannot be loaded (no GPU required; model runs on CPU fine).
 
 Environment variables:
   RECURRENCE_ENCODER_MODEL       HuggingFace model id or local path
                                  Default: sentence-transformers/all-MiniLM-L6-v2
   RECURRENCE_SIMILARITY_THRESHOLD Cosine threshold for a match (0-1)
-                                 Default: 0.82
+                                 Default: 0.75
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ RECURRENCE_ENCODER_MODEL: str = os.getenv(
     _LOCAL_MODEL_PATH,
 )
 RECURRENCE_SIMILARITY_THRESHOLD: float = float(
-    os.getenv("RECURRENCE_SIMILARITY_THRESHOLD", "0.82")
+    os.getenv("RECURRENCE_SIMILARITY_THRESHOLD", "0.75")
 )
 
 # Max candidates to pull from DB for comparison
@@ -142,8 +142,17 @@ def _fetch_candidates(
                     FROM tickets
                     WHERE (%s IS NULL OR ticket_code <> %s)
                       AND (%s IS NULL OR created_by_user_id = %s::uuid)
-                      AND status <> 'Open'::ticket_status
+                      AND status NOT IN ('Open'::ticket_status, 'Linked'::ticket_status)
                       AND priority_assigned_at IS NOT NULL
+                      AND EXISTS (
+                          SELECT 1
+                          FROM pipeline_stage_events pse
+                          WHERE pse.ticket_code = tickets.ticket_code
+                            AND pse.stage_name = 'ReviewAgent'
+                            AND pse.step_order = 11
+                            AND pse.event_type = 'output'
+                            AND pse.status = 'success'
+                      )
                     ORDER BY created_at DESC
                     LIMIT %s
                     """,
@@ -202,10 +211,7 @@ def find_similar_ticket(
 
         all_texts = [query_text] + candidate_texts
         embeddings = embed(all_texts)
-        if embeddings is None:
-            # embed failed mid-way — fall through to heuristic
-            pass
-        else:
+        if embeddings is not None:
             query_vec = embeddings[0]
             best_code: Optional[str] = None
             best_subject: Optional[str] = None
@@ -228,12 +234,13 @@ def find_similar_ticket(
                     best_code, best_score,
                 )
                 return best_code, best_subject, best_score
-            else:
-                logger.info(
-                    "recurrence_encoder | no match above threshold (best=%.3f threshold=%.2f)",
-                    best_score, RECURRENCE_SIMILARITY_THRESHOLD,
-                )
-                return None, None, best_score
+
+            logger.info(
+                "recurrence_encoder | no match above threshold (best=%.3f threshold=%.2f)",
+                best_score, RECURRENCE_SIMILARITY_THRESHOLD,
+            )
+            return None, None, best_score
+        # embed failed mid-way — fall through to heuristic
 
     # --- Heuristic fallback ---
     logger.info("recurrence_encoder | using heuristic fallback (encoder not loaded)")

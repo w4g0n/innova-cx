@@ -40,7 +40,8 @@ DO $$ BEGIN
     'Escalated',
     'Overdue',
     'Resolved',
-    'Reopened'
+    'Reopened',
+    'Linked'
   );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
@@ -384,6 +385,10 @@ EXCEPTION WHEN others THEN NULL; END $$;
 
 DO $$ BEGIN
   ALTER TYPE ticket_status ADD VALUE IF NOT EXISTS 'Reopened';
+EXCEPTION WHEN others THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TYPE ticket_status ADD VALUE IF NOT EXISTS 'Linked';
 EXCEPTION WHEN others THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);

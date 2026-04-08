@@ -49,16 +49,16 @@ class AudioAnalysisPipeline:
         )
         self._log("✓ Whisper model loaded")
 
-    # -------------------------------
+
     # Logging helper
-    # -------------------------------
+
     def _log(self, message: str):
         if self.verbose:
             print(message)
 
-    # -------------------------------
+
     # Audio loading
-    # -------------------------------
+
     def load_audio(self, audio_path: str) -> Tuple[np.ndarray, int]:
         self._log(f"\nLoading audio from: {audio_path}")
 
@@ -71,9 +71,9 @@ class AudioAnalysisPipeline:
         self._log(f"✓ Audio loaded: {duration:.2f}s @ {sr}Hz")
         return audio, sr
 
-    # -------------------------------
+
     # Voice Activity Detection
-    # -------------------------------
+
     def apply_vad(self, audio: np.ndarray, sr: int) -> List[bytes]:
         self._log("\nApplying Voice Activity Detection...")
 
@@ -103,9 +103,9 @@ class AudioAnalysisPipeline:
 
         return speech_frames
 
-    # -------------------------------
+
     # Transcription
-    # -------------------------------
+
     def transcribe(self, frames: List[bytes]) -> Dict:
         self._log("\nTranscribing audio...")
 
@@ -129,9 +129,9 @@ class AudioAnalysisPipeline:
             "language_probability": info.language_probability,
         }
 
-    # -------------------------------
+
     # Feature extraction
-    # -------------------------------
+
     def extract_features(self, audio: np.ndarray, sr: int) -> Dict[str, float]:
         self._log("\nExtracting audio features...")
 
@@ -153,9 +153,8 @@ class AudioAnalysisPipeline:
         self._log(f"✓ Extracted {len(features)} features")
         return features
 
-    # -------------------------------
+
     # Main pipeline
-    # -------------------------------
     def process(self, audio_path: str, skip_vad: bool = False) -> Dict:
         self._log("\n" + "=" * 60)
         self._log("AUDIO ANALYSIS PIPELINE – InnovaCX")
