@@ -27,6 +27,7 @@ import pyotp  # for RFC 6238 TOTP
 import qrcode
 import io
 import re as _re
+import uuid as _uuid_mod
 try:
     from api.ticket_creation_gate import create_ticket_via_gate, dispatch_ticket_to_orchestrator
 except Exception:
@@ -6837,8 +6838,6 @@ def _validate_type(value, expected_type, field: str):
 
 
 # ── Path-parameter sanitisation helpers ──────────────────────────────────────
-
-import uuid as _uuid_mod
 
 def _sanitize_uuid(value: str, field: str = "ID") -> str:
     """Validate that a path parameter is a well-formed UUID.
