@@ -695,7 +695,7 @@
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
-/* Section C only — 4 KPI cards fill full width */
+/* Section C only - 4 KPI cards fill full width */
 .ct-sectionC .kpiRow {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
