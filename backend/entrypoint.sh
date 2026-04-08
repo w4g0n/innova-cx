@@ -1,5 +1,4 @@
 #!/bin/sh
-# =============================================================================
 # InnovaCX Backend Entrypoint
 #
 # Runs on every container start (fresh volumes AND restarts).
@@ -16,13 +15,14 @@
 # ENV VARS REQUIRED:
 #   DATABASE_URL        — runtime app user  (innovacx_app)   — used by backfill + uvicorn
 #   DATABASE_ADMIN_URL  — superuser         (innovacx_admin) — used by migrations only
-# =============================================================================
+
+
 set -e
 
 echo "[entrypoint] === InnovaCX backend starting ==="
 echo "[entrypoint] $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-# ── Step 1: Wait for DB ───────────────────────────────────────────────────────
+#  Step 1: Wait for DB 
 echo "[entrypoint] Waiting for PostgreSQL..."
 python3 - << 'PYEOF'
 import os, sys, time
@@ -47,7 +47,7 @@ else:
     sys.exit(1)
 PYEOF
 
-# ── Step 2: Run migrations ────────────────────────────────────────────────────
+# Step 2: Run migrations
 echo "[entrypoint] Running schema migrations..."
 python3 - << 'PYEOF'
 import os, sys
@@ -97,7 +97,7 @@ for path in migration_files:
 print("[entrypoint] Migrations complete.", flush=True)
 PYEOF
 
-# ── Step 3: Run backfill ──────────────────────────────────────────────────────
+# Step 3: Run backfill
 echo "[entrypoint] Running employee report backfill..."
 BACKFILL="/app/scripts/backfill_employee_reports.py"
 if [ -f "$BACKFILL" ]; then
@@ -106,6 +106,6 @@ else
     echo "[entrypoint] WARNING: Backfill script not found at $BACKFILL — skipping"
 fi
 
-# ── Step 4: Start Uvicorn ─────────────────────────────────────────────────────
+# Step 4: Start Uvicorn
 echo "[entrypoint] Starting Uvicorn..."
 exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload
