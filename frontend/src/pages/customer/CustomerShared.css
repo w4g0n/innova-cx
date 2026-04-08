@@ -445,6 +445,8 @@
 .cs-status--resolved   { background:rgba(22,163,74,.12);  color:#4ade80; border:1px solid rgba(22,163,74,.22); }
 .cs-status--overdue    { background:rgba(220,38,38,.14);  color:#fca5a5; border:1px solid rgba(220,38,38,.28); }
 .cs-status--closed     { background:rgba(107,114,128,.12); color:#9ca3af; border:1px solid rgba(107,114,128,.22); }
+.cs-status--linked     { background:rgba(107,114,128,.10); color:#9ca3af; border:1px solid rgba(107,114,128,.20); }
+.cs-status--reopened   { background:rgba(234,88,12,.12);  color:#fb923c; border:1px solid rgba(234,88,12,.22); }
 
 /* priority pill */
 .cs-priority {

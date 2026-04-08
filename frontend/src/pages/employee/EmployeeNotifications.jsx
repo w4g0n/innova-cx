@@ -24,6 +24,7 @@ function iconForType(type) {
     case "customer_reply":    return "💬";
     case "status_change":     return "🔄";
     case "report_ready":      return "📊";
+    case "recurrence_reminder": return "🔁";
     case "system":            return "🛠️";
     default:                  return "🔔";
   }

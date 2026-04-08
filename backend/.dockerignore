@@ -4,13 +4,19 @@
 .DS_Store
 
 # Python caches and local envs
-__pycache__/
-*.pyc
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.venv/
-venv/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/venv/
+
+# Service-local venvs and model weights (each service has its own Docker image)
+services/*/hf-env/
+services/*/whisper-env/
+services/*/model/
+services/*/node_modules/
 
 # Runtime/local artifacts
 uploads/

@@ -1,28 +1,28 @@
 """
-Step 1 — Recurrence Agent (V11)
-================================
+Step 1 — Recurrence Agent
+==========================
 First stage of the pipeline. Detects recurring submissions via transformer
 semantic similarity, then applies one of four branches:
 
   A  Open ticket, SLA < 50% elapsed  → employee reminder notification
   B  Open ticket, SLA ≥ 50% elapsed  → reminder + priority bump +1 (skip if Critical)
-  C  Resolved < 1 month ago          → reopen old ticket, assign back, attach last resolution
-  D  Resolved ≥ 1 month ago          → new ticket proceeds; inherits old ticket's priority
+  C  Resolved < 1 month ago          → reopen old ticket, assign back, archive prior resolution
+  D  Resolved ≥ 1 month ago          → new ticket runs full pipeline; old ticket referenced only
 
-For branches A/B/C the new ticket is cancelled (merged into existing) and
+For branches A/B/C the new ticket is set to Linked status and
 `state["_recurrence_handled"] = True` stops the pipeline.
-For branch D the pipeline continues normally with prior context in state.
+For branch D the pipeline continues with prior context injected into state.
 
 In all 4 cases `is_recurring = True` and `linked_ticket_code` is written to DB.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
-from langchain_core.runnables import RunnableLambda
 
 from db import db_connect
 from recurrence_encoder import find_similar_ticket, encoder_is_available
@@ -31,25 +31,10 @@ logger = logging.getLogger(__name__)
 
 _UTC = timezone.utc
 _PRIORITY_ORDER = ["Low", "Medium", "High", "Critical"]
+_OPEN_STATUSES = {"Open", "Assigned", "In Progress", "Escalated", "Overdue", "Reopened"}
 
-# Keep heuristic helpers so recurrence_encoder can import them as fallback
-_RECURRING_PATTERNS = (
-    r"\bagain\b",
-    r"\brepeat(?:ed|ing)?\b",
-    r"\brepeatedly\b",
-    r"\bmultiple times\b",
-    r"\bstill not fixed\b",
-    r"\bnot the first time\b",
-    r"\bfor weeks\b",
-    r"\bfor months\b",
-    r"\bfifth time\b",
-    r"\bthird time\b",
-    r"\bsecond time\b",
-    r"\bcalled before\b",
-    r"\breported (this )?before\b",
-)
-_RECURRING_REGEX = re.compile("|".join(_RECURRING_PATTERNS), re.IGNORECASE)
-SIMILARITY_RECURRENCE_THRESHOLD = 0.72
+# Threshold used by the heuristic fallback (imported by recurrence_encoder)
+SIMILARITY_RECURRENCE_THRESHOLD = 0.75
 
 
 def _normalize_text(value: str) -> str:
@@ -87,8 +72,17 @@ def _find_similar_ticket(
                     FROM tickets
                     WHERE (%s IS NULL OR ticket_code <> %s)
                       AND (%s IS NULL OR created_by_user_id = %s::uuid)
-                      AND status <> 'Open'::ticket_status
+                      AND status NOT IN ('Open'::ticket_status, 'Linked'::ticket_status)
                       AND priority_assigned_at IS NOT NULL
+                      AND EXISTS (
+                          SELECT 1
+                          FROM pipeline_stage_events pse
+                          WHERE pse.ticket_code = tickets.ticket_code
+                            AND pse.stage_name = 'ReviewAgent'
+                            AND pse.step_order = 11
+                            AND pse.event_type = 'output'
+                            AND pse.status = 'success'
+                      )
                     ORDER BY created_at DESC
                     LIMIT 120
                     """,
@@ -163,7 +157,7 @@ def _fetch_ticket(ticket_code: str) -> dict | None:
 
 
 def _write_ticket_link(ticket_id: str, linked_code: str) -> None:
-    """Set linked_ticket_code and is_recurring on the new ticket."""
+    """Set linked_ticket_code and is_recurring on the new ticket (Branch D only)."""
     try:
         with db_connect() as conn:
             with conn.cursor() as cur:
@@ -181,15 +175,28 @@ def _write_ticket_link(ticket_id: str, linked_code: str) -> None:
 
 
 def _cancel_new_ticket(ticket_id: str, old_ticket_code: str) -> None:
-    """Record that the new ticket was absorbed into the existing one."""
+    """Set the new ticket to Linked status, write the link, and record the merge — single transaction."""
     try:
         with db_connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
+                    UPDATE tickets
+                    SET status             = 'Linked'::ticket_status,
+                        linked_ticket_code = %s,
+                        is_recurring       = TRUE
+                    WHERE id = %s::uuid
+                    """,
+                    (old_ticket_code, ticket_id),
+                )
+                rows_updated = cur.rowcount
+                if rows_updated == 0:
+                    logger.warning("recurrence | _cancel_new_ticket: no row updated for ticket_id=%s", ticket_id)
+                cur.execute(
+                    """
                     INSERT INTO ticket_updates (ticket_id, update_type, message)
                     VALUES (%s::uuid, 'merged_into_existing',
-                            'Recurring submission — merged into existing ticket ' || %s)
+                            'Recurring submission — linked to existing ticket ' || %s)
                     """,
                     (ticket_id, old_ticket_code),
                 )
@@ -246,14 +253,13 @@ def _has_recurrence_escalation(ticket_id: str) -> bool:
 def _determine_branch(matched: dict) -> str:
     status = matched["status"]
     resolved_at = matched["resolved_at"]
-    _open_statuses = {"Open", "Assigned", "In Progress", "Escalated", "Overdue", "Reopened"}
 
     if status == "Resolved":
         if resolved_at and _is_within_one_month(resolved_at):
             return "C"
         return "D"
 
-    if status in _open_statuses:
+    if status in _OPEN_STATUSES:
         pct = _sla_pct(matched["priority_assigned_at"], matched["respond_due_at"])
         # SLA not started yet → treat as < 50% (branch A)
         if pct is None or pct < 0.50:
@@ -342,16 +348,19 @@ def _branch_b(matched: dict, new_ticket_code: str) -> None:
                         """,
                         (new_priority, old_ticket_id),
                     )
+                escalation_msg = (
+                    f"Priority escalated {current_priority} → {new_priority} "
+                    f"(SLA ≥ 50%, recurring submission {new_ticket_code})."
+                    if current_priority != "Critical"
+                    else f"Already Critical — no priority change "
+                    f"(SLA ≥ 50%, recurring submission {new_ticket_code})."
+                )
                 cur.execute(
                     """
                     INSERT INTO ticket_updates (ticket_id, update_type, message)
                     VALUES (%s, 'recurrence_escalation', %s)
                     """,
-                    (
-                        old_ticket_id,
-                        f"Priority escalated {current_priority} → {new_priority} "
-                        f"(SLA ≥ 50%, recurring submission {new_ticket_code}).",
-                    ),
+                    (old_ticket_id, escalation_msg),
                 )
     except Exception as exc:
         logger.warning("recurrence | _branch_b priority update failed: %s", exc)
@@ -399,6 +408,18 @@ def _branch_c(matched: dict, new_submission_text: str) -> None:
                         f"Last resolution: {resolution_note} | "
                         f"New submission: {new_submission_text[:300]}",
                     ),
+                )
+                # Archive the previous resolution cleanly for UI display
+                prev_res_payload = json.dumps({
+                    "resolved_at": matched.get("resolved_at").isoformat() if matched.get("resolved_at") else None,
+                    "resolution": matched.get("final_resolution") or "(no resolution recorded)",
+                })
+                cur.execute(
+                    """
+                    INSERT INTO ticket_updates (ticket_id, update_type, message)
+                    VALUES (%s, 'previous_resolution', %s)
+                    """,
+                    (old_ticket_id, prev_res_payload),
                 )
                 if assigned_user_id:
                     cur.execute(
@@ -463,10 +484,6 @@ async def check_recurrence(state: dict) -> dict:
     branch = _determine_branch(matched)
     state["recurrence_branch"] = branch
 
-    # Always write the link on the new ticket
-    if ticket_id:
-        _write_ticket_link(ticket_id=ticket_id, linked_code=matched_code)
-
     if branch == "A":
         _branch_a(matched, new_ticket_code=ticket_code or "")
         if ticket_id:
@@ -495,17 +512,19 @@ async def check_recurrence(state: dict) -> dict:
         )
 
     elif branch == "D":
-        # New ticket runs through pipeline with inherited priority + prior context
+        # New ticket runs through pipeline — write link without cancelling
+        if ticket_id:
+            _write_ticket_link(ticket_id=ticket_id, linked_code=matched_code)
+        # Inject prior context
         state["prior_ticket_code"] = matched_code
         state["prior_ticket_resolution"] = matched.get("final_resolution")
         state["prior_ticket_details"] = (matched.get("details") or "")[:500]
-        state["priority_override"] = matched.get("priority")
         state["recurrence_reason"] = (
-            f"Prior ticket {matched_code} resolved > 1 month ago — new ticket with context"
+            f"Prior ticket {matched_code} resolved > 1 month ago — new ticket, old ticket referenced"
         )
         logger.info(
-            "recurrence | branch D: new ticket linked to %s, priority_override=%s",
-            matched_code, matched.get("priority"),
+            "recurrence | branch D: new ticket linked to %s (fresh pipeline — old ticket referenced only)",
+            matched_code,
         )
 
     logger.info(
@@ -513,6 +532,3 @@ async def check_recurrence(state: dict) -> dict:
         branch, ticket_code, matched_code, score,
     )
     return state
-
-
-recurrence_step = RunnableLambda(check_recurrence)

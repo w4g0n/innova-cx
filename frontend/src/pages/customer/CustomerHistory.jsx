@@ -21,6 +21,8 @@ const STATUS_LABELS = {
   assigned:   "Assigned",
   resolved:   "Resolved",
   overdue:    "Overdue",
+  reopened:   "Reopened",
+  linked:     "Linked",
 };
 
 // Allowlist for sort order values — never trust user-controlled state directly in sort logic

@@ -21,7 +21,7 @@ import httpx
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 import pyotp  # for RFC 6238 TOTP
 import qrcode
@@ -129,6 +129,7 @@ ROUTING_CONFIDENCE_THRESHOLD = float(
     )
 )
 CHATBOT_PROXY_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_PROXY_TIMEOUT_SECONDS", "30"))
+MAX_CUSTOMER_TEXT_WORDS = 250
 ANALYTICS_REFRESH_INTERVAL_SECONDS = int(os.getenv("ANALYTICS_REFRESH_INTERVAL_HOURS", "12")) * 3600
 _sla_heartbeat_task: Optional[asyncio.Task] = None
 _analytics_refresh_task: Optional[asyncio.Task] = None
@@ -205,6 +206,20 @@ app.add_middleware(CSPMiddleware)
 
 
 api = APIRouter(prefix="/api")
+
+
+def _word_count(value: str) -> int:
+    return len(str(value or "").split())
+
+
+def _validate_customer_text_words(value: Optional[str], field_name: str) -> Optional[str]:
+    if value is None:
+        return value
+    if _word_count(value) > MAX_CUSTOMER_TEXT_WORDS:
+        raise ValueError(f"{field_name} must be {MAX_CUSTOMER_TEXT_WORDS} words or fewer.")
+    return value
+
+
 def _ensure_uploads_root() -> str:
     # Use env var if provided, otherwise default
     root = os.getenv("UPLOADS_DIR", "/app/uploads")
@@ -507,7 +522,8 @@ def execute(sql: str, params: Optional[tuple] = None) -> int:
 # Auth helpers (bcrypt + JWT)
 # =========================================================
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
-JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "86400"))  # 24h
+JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "900"))  # 15 minutes
+MFA_TEMP_TTL_SECONDS = int(os.getenv("MFA_TEMP_TTL_SECONDS", "900"))  # 15 minutes
 DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "false").lower() == "true"
 DISABLE_MFA = os.getenv("DISABLE_MFA", "false").lower() == "true"
 
@@ -1214,8 +1230,10 @@ def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_cs
         execute("UPDATE users SET totp_secret = %s WHERE id = %s", (secret, user["id"]))
         user["totp_secret"] = secret
 
-    # Temporary token valid for 10 minutes
-    temp_token = create_jwt({"sub": str(user["id"]), "type": "mfa_temp"}, ttl_seconds=600)
+    # Temporary token for MFA setup/verification. Kept separate from the full
+    # dashboard session token so it can be longer than one OTP attempt but
+    # still scoped to the verification flow.
+    temp_token = create_jwt({"sub": str(user["id"]), "type": "mfa_temp"}, ttl_seconds=MFA_TEMP_TTL_SECONDS)
 
     # Flag to indicate MFA setup required
     requires_setup = not user.get("mfa_enabled", False)
@@ -1790,6 +1808,24 @@ def employee_resolution_suggestion(
     return {"ticketId": row["ticket_code"], "suggestedResolution": suggestion}
 
 
+def _extract_previous_resolutions(updates_rows: list) -> list:
+    """Extract archived previous resolutions stored by Branch C at reopen time."""
+    import json as _json
+    result = []
+    for u in updates_rows:
+        if u.get("update_type") != "previous_resolution":
+            continue
+        try:
+            data = _json.loads(u.get("message") or "{}")
+            result.append({
+                "resolution": str(data.get("resolution") or ""),
+                "resolvedAt": data.get("resolved_at"),
+            })
+        except Exception:
+            pass
+    return result
+
+
 @api.get("/employee/tickets/{ticket_code}")
 def employee_ticket_details(
     ticket_code: str,
@@ -1875,6 +1911,17 @@ def employee_ticket_details(
     response_time = minutes_to_label(diff_minutes(respond_due_at, resp_base))
     resolution_time = minutes_to_label(diff_minutes(resolve_due_at, priority_assigned_at or created_at))
 
+    # Ticket updates (for previous resolutions)
+    updates_rows = fetch_all(
+        """
+        SELECT update_type, message
+        FROM ticket_updates
+        WHERE ticket_id = %s
+        ORDER BY created_at ASC
+        """,
+        (row["id"],),
+    )
+
     ticket = {
         "ticketId": row.get("ticket_code"),
         "priority": row.get("priority"),
@@ -1883,6 +1930,7 @@ def employee_ticket_details(
         "suggestedResolution": row.get("suggested_resolution") or "",
         "modelSuggestion": row.get("suggested_resolution") or row.get("model_suggestion"),
         "finalResolution": row.get("final_resolution") or "",
+        "previousResolutions": _extract_previous_resolutions(updates_rows or []),
         "metrics": {
             "minTimeToRespond": response_time,
             "minTimeToResolve": resolution_time,
@@ -3029,7 +3077,8 @@ def customer_mytickets(
           respond_due_at,
           resolve_due_at,
           first_response_at,
-          resolved_at
+          resolved_at,
+          linked_ticket_code
         FROM tickets
         WHERE created_by_user_id = %s
         ORDER BY created_at DESC
@@ -3058,6 +3107,7 @@ def customer_mytickets(
                 "priority": r.get("priority"),
                 "ticketType": r.get("ticket_type"),
                 "status": r.get("status"),
+                "linkedTicketCode": r.get("linked_ticket_code") or None,
                 "issueDate": issue_date,
                 "minTimeToRespond": response_time,
                 "minTimeToResolve": resolution_time,
@@ -3086,6 +3136,7 @@ def customer_ticket_details(
           t.details,
           t.priority,
           t.status,
+          t.linked_ticket_code,
           t.created_at,
           t.priority_assigned_at,
           t.assigned_at,
@@ -3151,6 +3202,7 @@ def customer_ticket_details(
         "ticketId": row.get("ticket_code"),
         "priority": row.get("priority"),
         "status": row.get("status"),
+        "linkedTicketCode": row.get("linked_ticket_code") or None,
         "issueDate": issue_date,
         "modelSuggestion": row.get("model_suggestion"),
         "assignedEmployee": row.get("assigned_employee_name") or None,
@@ -3164,16 +3216,7 @@ def customer_ticket_details(
         },
         "attachments": [{"fileName": a["file_name"], "fileUrl": a["file_url"]} for a in atts] if atts else [],
 
-        # ✅ Added Updates Section
-        "updates": [
-            {
-                "message": u.get("message"),
-                "type": u.get("update_type"),
-                "author": u.get("author_name"),
-                "date": u.get("created_at").isoformat() if u.get("created_at") else None,
-            }
-            for u in updates_rows
-        ],
+        "previousResolutions": _extract_previous_resolutions(updates_rows),
     }
 
     return {"ticket": ticket}
@@ -3272,6 +3315,11 @@ class CreateTicketRequest(BaseModel):
     attachments: Optional[List[TicketAttachment]] = []
     sentiment: Optional[dict] = None
 
+    @field_validator("details")
+    @classmethod
+    def details_within_word_limit(cls, value: str) -> str:
+        return _validate_customer_text_words(value, "details") or ""
+
 
 class InternalCreateTicketRequest(BaseModel):
     created_by_user_id: str
@@ -3280,6 +3328,11 @@ class InternalCreateTicketRequest(BaseModel):
     details: str
     ticket_source: Optional[str] = "chatbot"
     asset_type: Optional[str] = "General"
+
+    @field_validator("details")
+    @classmethod
+    def details_within_word_limit(cls, value: str) -> str:
+        return _validate_customer_text_words(value, "details") or ""
 
 
 def _dispatch_orchestrator_after_submit(
@@ -5060,6 +5113,11 @@ class ChatbotProxyRequest(BaseModel):
     message: str
     user_id: str
     session_id: Optional[str] = None
+
+    @field_validator("message")
+    @classmethod
+    def message_within_word_limit(cls, value: str) -> str:
+        return _validate_customer_text_words(value, "message") or ""
 
 
 @api.post("/complaints")

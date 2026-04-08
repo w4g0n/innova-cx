@@ -16,6 +16,8 @@ const upload = multer({ dest: UPLOAD_DIR });
 // ------------------------------------
 // Routes
 // ------------------------------------
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
 app.post("/transcribe", upload.single("audio"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No audio file provided" });

@@ -2,19 +2,31 @@ import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.controller import handle_message
 from core.llm import generate_response
 from core.session import create_session, session_belongs_to_user
 
 router = APIRouter()
+MAX_CHAT_MESSAGE_WORDS = 250
+
+
+def _word_count(value: str) -> int:
+    return len(str(value or "").split())
 
 
 class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     user_id: str = Field(..., min_length=1)
     message: Optional[str] = None
+
+    @field_validator("message")
+    @classmethod
+    def message_within_word_limit(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and _word_count(value) > MAX_CHAT_MESSAGE_WORDS:
+            raise ValueError(f"message must be {MAX_CHAT_MESSAGE_WORDS} words or fewer.")
+        return value
 
 
 class ChatResponse(BaseModel):
@@ -26,6 +38,13 @@ class ChatResponse(BaseModel):
 
 class SubjectSuggestionRequest(BaseModel):
     details: str = Field(..., min_length=1)
+
+    @field_validator("details")
+    @classmethod
+    def details_within_word_limit(cls, value: str) -> str:
+        if _word_count(value) > MAX_CHAT_MESSAGE_WORDS:
+            raise ValueError(f"details must be {MAX_CHAT_MESSAGE_WORDS} words or fewer.")
+        return value
 
 
 class SubjectSuggestionResponse(BaseModel):
