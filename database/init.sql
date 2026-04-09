@@ -5,7 +5,10 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'innovacx_app') THEN
-    CREATE ROLE innovacx_app WITH LOGIN PASSWORD 'changeme123';
+    -- Password is injected later by zzz_least_privilege.sh from env vars.
+    -- Keeping it out of init.sql avoids drift between bootstrap defaults,
+    -- CI overrides, and local .env values.
+    CREATE ROLE innovacx_app WITH LOGIN;
   END IF;
 END $$;
 
