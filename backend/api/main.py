@@ -170,9 +170,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-CSRF-Token", "X-Internal-Key"],
 )
 
 
@@ -513,7 +513,13 @@ def execute(sql: str, params: Optional[tuple] = None) -> int:
 
 
 # Auth helpers (bcrypt + JWT)
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
+_raw_jwt_secret = os.getenv("JWT_SECRET")
+if not _raw_jwt_secret or len(_raw_jwt_secret) < 32:
+    raise RuntimeError(
+        "JWT_SECRET env var must be set to a random string of at least 32 characters. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+JWT_SECRET = _raw_jwt_secret
 JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "900"))  # 15 minutes
 MFA_TEMP_TTL_SECONDS = int(os.getenv("MFA_TEMP_TTL_SECONDS", "900"))  # 15 minutes
 DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "false").lower() == "true"
@@ -801,17 +807,8 @@ async def _stop_sla_heartbeat() -> None:
 
 
 # Auth dependencies
-def _get_bearer_token(authorization: Optional[str]) -> str:
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-    parts = authorization.split(" ", 1)
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(status_code=401, detail="Invalid Authorization header")
-    return parts[1].strip()
-
-
-def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
-    token = _get_bearer_token(authorization)
+def _validate_token_and_fetch_user(token: str) -> Dict[str, Any]:
+    """Validate a raw JWT string and return the user record."""
     payload = verify_jwt(token)
     jti = str(payload.get("jti") or "").strip()
     if jti and is_token_revoked(jti):
@@ -829,9 +826,55 @@ def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dic
     )
     if not user or not user.get("is_active"):
         raise HTTPException(status_code=401, detail="Invalid or inactive user")
-    # Reject tokens issued before the user's last password change
     _check_token_issued_after_password_change(payload, user)
     return user
+
+
+def _get_bearer_token(authorization: Optional[str]) -> str:
+    """Extract and return the raw token from an Authorization: Bearer header."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    parts = authorization.split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Invalid Authorization header")
+    return parts[1].strip()
+
+
+def get_current_user(
+    request: Request,
+    authorization: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
+    """FastAPI dependency: resolves the current user from httpOnly cookie or Bearer header.
+    Cookie is checked first (preferred — not accessible to JavaScript).
+    Bearer header is accepted as fallback for backward compatibility.
+    """
+    token = request.cookies.get("access_token") if request else None
+    if not token and authorization:
+        parts = authorization.split(" ", 1)
+        if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1].strip():
+            token = parts[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return _validate_token_and_fetch_user(token)
+
+
+def _set_auth_cookie(response, token: str) -> None:
+    """Set the access_token httpOnly cookie on a response object."""
+    is_prod = os.getenv("ENVIRONMENT", "").lower() == "production"
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=is_prod,
+        samesite="strict" if is_prod else "lax",
+        max_age=JWT_TTL_SECONDS,
+        path="/",
+    )
+
+
+def _clear_auth_cookie(response) -> None:
+    """Clear the access_token httpOnly cookie."""
+    response.delete_cookie(key="access_token", path="/")
 
 
 def require_employee(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -1125,6 +1168,16 @@ async def require_csrf(x_csrf_token: str = Header(None, alias="X-CSRF-Token")):
         raise HTTPException(status_code=403, detail="Invalid or missing CSRF token.")
 
 
+_INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+
+async def require_internal_key(x_internal_key: str = Header(None, alias="X-Internal-Key")):
+    """FastAPI dependency: validates X-Internal-Key header on internal service endpoints."""
+    if not _INTERNAL_API_KEY:
+        raise HTTPException(status_code=503, detail="Internal API key not configured.")
+    if not x_internal_key or not hmac.compare_digest(x_internal_key, _INTERNAL_API_KEY):
+        raise HTTPException(status_code=403, detail="Invalid or missing internal API key.")
+
+
 # MFA / TOTP Setup & Verification
 @api.get("/auth/totp-status")
 def totp_status(user: Dict[str, Any] = Depends(get_current_user)):
@@ -1206,8 +1259,7 @@ def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_cs
         access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
         profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
         log_auth_event("login_success", user_id=str(user["id"]), email=email, ip=client_ip, extra={"mfa_bypassed": True})
-        return {
-            "access_token": access_token,
+        resp = JSONResponse(content={
             "token_type": "bearer",
             "requiresSetup": False,
             "user": {
@@ -1216,7 +1268,9 @@ def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_cs
                 "role": user["role"],
                 "full_name": (profile or {}).get("full_name") or user["email"],
             },
-        }
+        })
+        _set_auth_cookie(resp, access_token)
+        return resp
 
     # Generate secret if missing
     if not user.get("totp_secret"):
@@ -1290,8 +1344,7 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
     _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
     log_auth_event("totp_success", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
-    return {
-        "access_token": access_token,
+    resp = JSONResponse(content={
         "token_type": "bearer",
         "user": {
             "id": str(user["id"]),
@@ -1299,7 +1352,9 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
             "role": user["role"],
             "full_name": (_profile or {}).get("full_name") or user["email"],
         },
-    }
+    })
+    _set_auth_cookie(resp, access_token)
+    return resp
 
 
 # Routes: Password Reset
@@ -1423,6 +1478,7 @@ def auth_logout(
     authorization: Optional[str] = Header(default=None),
     request: Request = None,
     user: Dict[str, Any] = Depends(get_current_user),
+    _csrf: None = Depends(require_csrf),
 ):
     token = _get_bearer_token(authorization)
     payload = verify_jwt(token)
@@ -1697,6 +1753,7 @@ def employee_notifications(
 def employee_notification_mark_read(
     notification_id: str,
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
 
@@ -1726,6 +1783,7 @@ def employee_notification_mark_read(
 @api.post("/employee/notifications/read-all")
 def employee_notifications_mark_all_read(
     user: Dict[str, Any] = Depends(require_employee),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
 
@@ -3688,7 +3746,7 @@ def _dispatch_orchestrator_after_submit(
 
 
 @api.post("/internal/tickets/create")
-def create_internal_ticket_via_gate(body: InternalCreateTicketRequest):
+def create_internal_ticket_via_gate(body: InternalCreateTicketRequest, _key: None = Depends(require_internal_key)):
     """
     Internal ticket creation endpoint for services (e.g., chatbot).
     Flow: ticket_creation_gate insert -> orchestrator dispatch.
@@ -3902,6 +3960,7 @@ def get_customer_settings(
 def update_customer_settings(
     payload: Dict[str, Any],
     user: Dict[str, Any] = Depends(require_customer),
+    _csrf: None = Depends(require_csrf),
 ):
     user_id = user["id"]
 
@@ -4093,7 +4152,7 @@ def assign_ticket(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
-    user = get_current_user(authorization)
+    user = _validate_token_and_fetch_user(_get_bearer_token(authorization))
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -4162,7 +4221,7 @@ def manager_resolve_ticket(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
-    user = get_current_user(authorization)
+    user = _validate_token_and_fetch_user(_get_bearer_token(authorization))
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -4263,7 +4322,7 @@ def manager_rescore_ticket(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
-    user = get_current_user(authorization)
+    user = _validate_token_and_fetch_user(_get_bearer_token(authorization))
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -4361,7 +4420,7 @@ def route_ticket_department(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
-    user = get_current_user(authorization)
+    user = _validate_token_and_fetch_user(_get_bearer_token(authorization))
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -4434,7 +4493,7 @@ def route_ticket_department(
 @app.get("/manager/departments")
 @api.get("/manager/departments")
 def get_departments(authorization: Optional[str] = Header(default=None)):
-    user = get_current_user(authorization)
+    user = _validate_token_and_fetch_user(_get_bearer_token(authorization))
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
     depts = fetch_all("SELECT name FROM departments ORDER BY name;")
@@ -4579,8 +4638,9 @@ def decide_approval(
     request_id: str,
     body: ApprovalDecisionRequest,
     authorization: Optional[str] = Header(default=None),
+    _csrf: None = Depends(require_csrf),
 ):
-    user = get_current_user(authorization)
+    user = _validate_token_and_fetch_user(_get_bearer_token(authorization))
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
     decision = (body.decision or "").strip()
@@ -5139,6 +5199,7 @@ def manager_notifications(
 def manager_notification_mark_read(
     notification_id: str,
     user: Dict[str, Any] = Depends(require_manager),
+    _csrf: None = Depends(require_csrf),
 ):
     import uuid
     try:
@@ -5157,6 +5218,7 @@ def manager_notification_mark_read(
 @api.post("/manager/notifications/read-all")
 def manager_notifications_mark_all_read(
     user: Dict[str, Any] = Depends(require_manager),
+    _csrf: None = Depends(require_csrf),
 ):
     execute(
         "UPDATE notifications SET read = TRUE WHERE user_id = %s AND read = FALSE;",
@@ -5271,6 +5333,7 @@ def decide_routing_review(
     review_id: str,
     body: RoutingReviewDecisionRequest,
     user: Dict[str, Any] = Depends(require_manager),
+    _csrf: None = Depends(require_csrf),
 ):
     manager_dept_row = fetch_one(
         """
@@ -5354,6 +5417,7 @@ def operator_notifications(
 def operator_notification_mark_read(
     notification_id: str,
     user: Dict[str, Any] = Depends(require_operator),
+    _csrf: None = Depends(require_csrf),
 ):
     import uuid
     try:
@@ -5373,6 +5437,7 @@ def operator_notification_mark_read(
 @api.post("/operator/notifications/read-all")
 def operator_notifications_mark_all_read(
     user: Dict[str, Any] = Depends(require_operator),
+    _csrf: None = Depends(require_csrf),
 ):
     execute(
         "UPDATE notifications SET read = TRUE WHERE user_id = %s AND read = FALSE;",
@@ -5413,7 +5478,7 @@ class ChatbotProxyRequest(BaseModel):
 
 
 @api.post("/complaints")
-def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
+def create_orchestrator_complaint(body: OrchestratorComplaintRequest, _key: None = Depends(require_internal_key)):
     """
     Internal endpoint called by the orchestrator service.
     Creates a ticket on behalf of the submitting user (or any active customer
@@ -5875,7 +5940,7 @@ def create_orchestrator_complaint(body: OrchestratorComplaintRequest):
 
 
 @api.post("/internal/tickets/{ticket_code}/generate-suggested-resolution")
-def internal_generate_suggested_resolution(ticket_code: str):
+def internal_generate_suggested_resolution(ticket_code: str, _key: None = Depends(require_internal_key)):
     """
     Return the latest stored suggestion for a ticket code.
     Suggested resolution generation is owned by the orchestrator pipeline.
@@ -5966,7 +6031,7 @@ async def proxy_chatbot_chat(body: ChatbotProxyRequest, _csrf: None = Depends(re
 
 @api.post("/transcriber/transcribe")
 @api.post("/whisper/transcribe")
-async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
+async def proxy_transcriber_transcribe(audio: UploadFile = File(...), _user: Dict[str, Any] = Depends(get_current_user)):
     """
     Frontend-facing transcriber proxy.
     Forwards multipart audio to transcriber service and returns transcript.
@@ -6004,7 +6069,7 @@ async def proxy_transcriber_transcribe(audio: UploadFile = File(...)):
 
 
 @api.post("/orchestrator/process/text")
-async def proxy_orchestrator_process_text(request: Request):
+async def proxy_orchestrator_process_text(request: Request, _user: Dict[str, Any] = Depends(get_current_user)):
     """
     Frontend-facing orchestrator proxy for form-based ticket submission.
     The orchestrator is not exposed to the internet, so the backend proxies
@@ -6930,6 +6995,7 @@ def operator_update_user(
     user_id: str,
     body: UpdateUserRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
+    _csrf: None = Depends(require_csrf),
 ):
     """Update user + profile (operator-only)."""
     if current_user.get("role") != "operator":
@@ -7080,6 +7146,7 @@ def operator_update_user_status(
     user_id: str,
     body: UpdateUserStatusRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
+    _csrf: None = Depends(require_csrf),
 ):
     """Activate/Deactivate user (operator-only)."""
     if current_user.get("role") != "operator":
@@ -7110,6 +7177,7 @@ def operator_update_user_status(
 def operator_delete_user(
     user_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
+    _csrf: None = Depends(require_csrf),
 ):
     """Delete a user (operator-only)."""
     if current_user.get("role") != "operator":
@@ -7173,7 +7241,7 @@ class TTSSpeakRequest(BaseModel):
 
 
 @api.post("/tts/speak")
-async def tts_speak(body: TTSSpeakRequest):
+async def tts_speak(body: TTSSpeakRequest, _user: Dict[str, Any] = Depends(get_current_user)):
     if _edge_tts is None:
         return JSONResponse(
             status_code=503,
@@ -7227,7 +7295,7 @@ class InternalNotifyOperatorsRequest(BaseModel):
     message: str
 
 @api.post("/internal/notify-operators")
-def internal_notify_operators(body: InternalNotifyOperatorsRequest):
+def internal_notify_operators(body: InternalNotifyOperatorsRequest, _key: None = Depends(require_internal_key)):
     """Send a notification to all active operators (pipeline_held or system warning)."""
     notif_type = body.notification_type or "pipeline_held"
     priority = "Medium" if notif_type == "system" else "High"
@@ -7267,7 +7335,7 @@ class ReviewVerdictRequest(BaseModel):
 
 
 @api.post("/internal/review-verdict")
-def internal_review_verdict(body: ReviewVerdictRequest):
+def internal_review_verdict(body: ReviewVerdictRequest, _key: None = Depends(require_internal_key)):
     """
     Apply the Review Agent's verdict to the ticket.
 
@@ -7402,6 +7470,7 @@ def internal_review_verdict(body: ReviewVerdictRequest):
 def operator_delete_ticket(
     ticket_id: str,
     user: Dict[str, Any] = Depends(require_operator),
+    _csrf: None = Depends(require_csrf),
 ):
     """
     Hard-delete a ticket and all related rows (cascades via FK).
