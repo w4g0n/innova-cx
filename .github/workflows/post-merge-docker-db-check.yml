@@ -91,6 +91,24 @@ jobs:
             return 1
           }
 
+          wait_db_app_auth() {
+            local profile="$1"
+            local max_attempts="${2:-60}"
+            echo "Waiting for app-role TCP authentication to succeed..."
+            for i in $(seq 1 "$max_attempts"); do
+              if docker compose --profile "$profile" run --rm --no-deps backup \
+                sh -lc 'export PGPASSWORD="$APP_DB_PASSWORD"; psql -h postgres -U "$APP_DB_USER" -d "$POSTGRES_DB" -tAc "select 1"' \
+                2>/dev/null | grep -q "^1$"; then
+                echo "App-role TCP authentication is ready"
+                return 0
+              fi
+              echo "  app-role auth not ready yet... attempt $i/$max_attempts"
+              sleep 5
+            done
+            echo "::error::App-role TCP authentication did not become ready in time"
+            return 1
+          }
+
           check_running() {
             local container="$1"
             local status
@@ -140,7 +158,9 @@ jobs:
             # we depend on: the app role and core seeded tables.
             wait_db_bootstrap innovacx-db 60
 
-            services="backend frontend backup"
+            wait_db_app_auth "$profile" 60
+
+            services="backend frontend"
             if [ "$profile" = "pipeline" ]; then
               services="$services orchestrator"
             elif [ "$profile" = "live" ]; then
