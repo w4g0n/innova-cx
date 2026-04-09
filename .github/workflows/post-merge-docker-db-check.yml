@@ -103,30 +103,38 @@ jobs:
 
           run_profile() {
             local profile="$1"
+            local services=""
             echo "=== Running profile: $profile ==="
 
             docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
 
             # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
-            CHATBOT_USE_MOCK=true \
-            CHATBOT_AUTO_DOWNLOAD=false \
-            SHARED_QWEN_MODEL_PATH=/tmp/nonexistent-shared-qwen \
-            SHARED_QWEN_AUTO_DOWNLOAD=false \
-            CLASSIFIER_MODEL_PATH=/tmp/nonexistent-classifier/model.pkl \
-            CLASSIFIER_MODEL_DIR=/tmp/nonexistent-classifier \
-            SENTIMENT_MODEL_DIR=/tmp/nonexistent-sentiment-model \
-            FEATURE_LABELER_MODEL_PATH=/tmp/nonexistent-feature-model \
-            FEATURE_LABELER_AUTO_DOWNLOAD=false \
-            DEPARTMENT_ROUTER_MODEL_PATH=/tmp/nonexistent-router-model \
-            DEPARTMENT_ROUTER_AUTO_DOWNLOAD=false \
-            SUBJECT_GENERATOR_MODEL_PATH=/tmp/nonexistent-subject-model \
-            SUBJECT_GENERATOR_AUTO_DOWNLOAD=false \
-            SUGGESTED_RESOLUTION_MODEL_PATH=/tmp/nonexistent-suggested-model \
-            SUGGESTED_RESOLUTION_USE_MOCK=true \
-            SUGGESTED_RESOLUTION_AUTO_DOWNLOAD=false \
-            PRIORITY_USE_MOCK=true \
-            PRIORITY_MODEL_DIR=/tmp/nonexistent-priority-model \
-            docker compose --profile "$profile" up -d --build
+            export CHATBOT_USE_MOCK=true
+            export CHATBOT_AUTO_DOWNLOAD=false
+            export SHARED_QWEN_MODEL_PATH=/tmp/nonexistent-shared-qwen
+            export SHARED_QWEN_AUTO_DOWNLOAD=false
+            export CLASSIFIER_MODEL_PATH=/tmp/nonexistent-classifier/model.pkl
+            export CLASSIFIER_MODEL_DIR=/tmp/nonexistent-classifier
+            export SENTIMENT_MODEL_DIR=/tmp/nonexistent-sentiment-model
+            export FEATURE_LABELER_MODEL_PATH=/tmp/nonexistent-feature-model
+            export FEATURE_LABELER_AUTO_DOWNLOAD=false
+            export DEPARTMENT_ROUTER_MODEL_PATH=/tmp/nonexistent-router-model
+            export DEPARTMENT_ROUTER_AUTO_DOWNLOAD=false
+            export SUBJECT_GENERATOR_MODEL_PATH=/tmp/nonexistent-subject-model
+            export SUBJECT_GENERATOR_AUTO_DOWNLOAD=false
+            export SUGGESTED_RESOLUTION_MODEL_PATH=/tmp/nonexistent-suggested-model
+            export SUGGESTED_RESOLUTION_USE_MOCK=true
+            export SUGGESTED_RESOLUTION_AUTO_DOWNLOAD=false
+            export PRIORITY_USE_MOCK=true
+            export PRIORITY_MODEL_DIR=/tmp/nonexistent-priority-model
+
+            # Compose on the self-hosted runner occasionally fails while resolving
+            # depends_on: service_healthy during `up`, reporting "No such container"
+            # for a freshly-created postgres container. Build first, then start
+            # postgres alone, wait for it to finish init, and finally start the
+            # remaining services without dependency resolution.
+            docker compose --profile "$profile" build
+            docker compose --profile "$profile" up -d postgres
             wait_health innovacx-db
 
             # Wait for initdb scripts to finish before querying roles/tables.
@@ -134,6 +142,14 @@ jobs:
             # happens before docker-entrypoint-initdb.d scripts complete. This wait
             # ensures zzz_least_privilege.sh and all init SQL have finished.
             wait_db_init innovacx-db 60
+
+            services="backend frontend backup"
+            if [ "$profile" = "pipeline" ]; then
+              services="$services orchestrator"
+            elif [ "$profile" = "live" ]; then
+              services="$services orchestrator chatbot transcriber"
+            fi
+            docker compose --profile "$profile" up -d --no-deps $services
 
             # Database wiring sanity checks
             docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
@@ -188,8 +204,10 @@ jobs:
             run_profile pipeline
             run_profile live
           else
-            echo "Lightweight gate mode: running the frontend profile smoke test only."
+            echo "Pull request gate mode: running frontend, pipeline, and live profiles."
             run_profile frontend
+            run_profile pipeline
+            run_profile live
           fi
 
       - name: Show container status
