@@ -41,6 +41,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+
           wait_health() {
             local container="$1"
             local max_attempts="${2:-50}"
@@ -107,6 +108,26 @@ jobs:
           apply_bootstrap_fallback() {
             local container="$1"
             echo "Applying CI bootstrap fallback inside $container ..."
+
+            echo "==> [ci-fallback] removing stale init files"
+            docker exec "$container" sh -lc '
+              set -e
+              rm -rf /docker-entrypoint-initdb.d/*
+            '
+
+            echo "==> [ci-fallback] copying fresh init files from repo"
+            docker cp database/. "$container":/docker-entrypoint-initdb.d/
+
+            echo "==> [ci-fallback] listing init directory"
+            docker exec "$container" sh -lc '
+              ls -l /docker-entrypoint-initdb.d
+            '
+
+            echo "==> [ci-fallback] showing first 20 lines of init.sql"
+            docker exec "$container" sh -lc '
+              sed -n "1,20p" /docker-entrypoint-initdb.d/init.sql || true
+            '
+
             docker exec "$container" sh -lc '
               set -e
               for file in /docker-entrypoint-initdb.d/*; do
