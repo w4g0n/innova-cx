@@ -357,8 +357,10 @@ export default function CustomerAuthPage() {
 
       if (!res.ok) throw new Error("Verification failed");
 
-      const data      = await res.json();
-      const tokenType = sanitizeText(data.token_type, 32);
+      const data        = await res.json();
+      const accessToken = sanitizeText(data.access_token, 2048);
+      const tokenType   = sanitizeText(data.token_type,   32);
+      if (!accessToken) throw new Error("Invalid token response");
 
       setVerified(true);
 
@@ -368,7 +370,6 @@ export default function CustomerAuthPage() {
             const csrf2 = await getCsrfToken();
             await fetch(apiUrl("/api/auth/totp-setup-complete"), {
               method: "POST",
-              credentials: "include",
               headers: {
                 Authorization: `Bearer ${loginToken}`,
                 ...(csrf2 ? { "X-CSRF-Token": csrf2 } : {}),
@@ -376,6 +377,7 @@ export default function CustomerAuthPage() {
             });
           }
 
+          localStorage.setItem("access_token", accessToken);
           localStorage.setItem("user", JSON.stringify({ ...storedUser, token_type: tokenType }));
           sessionStorage.removeItem("mfa_token");
           sessionStorage.removeItem("mfa_user");

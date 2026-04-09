@@ -49,11 +49,23 @@ class GlobalErrorBoundary extends Component {
 // Only fires on 401 (token expired/missing) — NOT 403, which this backend uses for
 // "wrong role" (a normal, in-app condition that should never force a logout).
 // Guard flag prevents duplicate redirects when concurrent requests all return 401.
+//
+// Also injects credentials: "include" on every request so httpOnly auth cookies
+// are sent automatically — individual pages no longer need to set this per-call.
 let _sessionRedirecting = false;
 const _origFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
-  const res = await _origFetch(...args);
+  // Inject credentials: "include" so the httpOnly auth cookie is sent automatically.
+  // Exclude pre-MFA flows (/auth/totp-status, /auth/totp-setup) — those use a
+  // short-lived Bearer temp token and must NOT send a stale session cookie, which
+  // get_current_user would try first and reject if expired.
   const url = (typeof args[0] === 'string' ? args[0] : args[0]?.url) ?? '';
+  const init = args[1] ?? {};
+  const isPreMfaFlow = url.includes('/auth/totp-status') || url.includes('/auth/totp-setup');
+  if (!init.credentials && !isPreMfaFlow) {
+    args = [args[0], { ...init, credentials: 'include' }];
+  }
+  const res = await _origFetch(...args);
   if (
     res.status === 401 &&
     !url.includes('/auth/login') &&

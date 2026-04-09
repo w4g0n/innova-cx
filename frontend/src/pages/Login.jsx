@@ -429,6 +429,7 @@ export default function Login() {
         return;
       }
 
+      localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("user", JSON.stringify(userPayload));
 
       const rawNext = searchParams.get("next");

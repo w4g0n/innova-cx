@@ -1269,6 +1269,7 @@ def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_cs
         profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
         log_auth_event("login_success", user_id=str(user["id"]), email=email, ip=client_ip, extra={"mfa_bypassed": True})
         resp = JSONResponse(content={
+            "access_token": access_token,
             "token_type": "bearer",
             "requiresSetup": False,
             "user": {
@@ -1329,8 +1330,6 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     If correct, marks MFA as enabled (first-time setup) and returns a full JWT.
     """
     payload = verify_jwt(body.login_token)
-    if payload.get("type") != "mfa_temp":
-        raise HTTPException(status_code=400, detail="Invalid login token")
     client_ip = request.client.host if request and request.client else None
     user = fetch_one(
         "SELECT id, email, role, totp_secret, mfa_enabled FROM users WHERE id = %s",
@@ -1356,6 +1355,7 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
     log_auth_event("totp_success", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
     resp = JSONResponse(content={
+        "access_token": access_token,
         "token_type": "bearer",
         "user": {
             "id": str(user["id"]),
