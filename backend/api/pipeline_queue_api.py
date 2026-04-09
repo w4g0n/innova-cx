@@ -57,26 +57,32 @@ def _db_connect():
 
 
 def _ensure_pipeline_control_table() -> None:
-    with _db_connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS pipeline_runtime_control (
-                    singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton = TRUE),
-                    is_paused BOOLEAN NOT NULL DEFAULT FALSE,
-                    paused_at TIMESTAMPTZ NULL,
-                    resumed_at TIMESTAMPTZ NULL,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    """
+    Ensures the pipeline_runtime_control table has its required seed row.
+
+    The table itself is created by the database migration (init.sql / zzz scripts)
+    running as innovacx_admin.  The runtime role (innovacx_app) has INSERT/SELECT
+    on the table but NOT CREATE TABLE on the public schema — so we never issue DDL
+    here.  If the table is missing entirely (e.g. a very old volume) we log a
+    warning and return gracefully rather than crashing the endpoint.
+    """
+    try:
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO pipeline_runtime_control (singleton, is_paused)
+                    VALUES (TRUE, FALSE)
+                    ON CONFLICT (singleton) DO NOTHING
+                    """
                 )
-                """
-            )
-            cur.execute(
-                """
-                INSERT INTO pipeline_runtime_control (singleton, is_paused)
-                VALUES (TRUE, FALSE)
-                ON CONFLICT (singleton) DO NOTHING
-                """
-            )
+    except Exception as exc:
+        # Table may not exist on very old volumes — log and continue.
+        # The /stats and /control endpoints degrade gracefully when the row
+        # is absent (they return {} / default values).
+        logger.warning(
+            "pipeline_queue | pipeline_runtime_control upsert skipped: %s", exc
+        )
 
 
 def _fetch_one(sql: str, params: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
