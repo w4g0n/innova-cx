@@ -101,16 +101,27 @@ jobs:
             [ "$status" = "running" ] || { echo "::error::$container is not running (status=$status)"; return 1; }
           }
 
+          # Dump logs for every known container immediately — called on any failure
+          # inside run_profile via the ERR trap, before compose teardown removes them.
+          dump_logs() {
+            echo "=== DIAGNOSTIC LOGS (captured before teardown) ==="
+            for c in innovacx-db innovacx-backend innovacx-frontend innovacx-backup \
+                     innovacx-orchestrator innovacx-chatbot innovacx-transcriber; do
+              echo "--- $c ---"
+              docker logs --tail 300 "$c" 2>&1 || echo "(no logs / container already gone)"
+            done
+            echo "=== docker ps -a ==="
+            docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.ID}}' || true
+          }
+
           run_profile() {
             local profile="$1"
             echo "=== Running profile: $profile ==="
             docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
-            # Force-remove any stale containers by name that compose down may have
-            # missed on the self-hosted runner (e.g. containers in a crashed/restarting
-            # state whose IDs are no longer resolvable, causing "No such container" when
-            # compose's dependency resolver holds a stale reference during the next up).
-            docker rm -f innovacx-db innovacx-backend innovacx-frontend innovacx-backup \
-                          innovacx-orchestrator innovacx-chatbot innovacx-transcriber 2>/dev/null || true
+
+            # Trap ANY error inside run_profile: dump logs immediately before the
+            # failed `compose up` transaction removes the containers it created.
+            trap 'dump_logs' ERR
 
             # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
             CHATBOT_USE_MOCK=true \
@@ -186,6 +197,7 @@ jobs:
             fi
 
             docker ps -a --format 'table {{.Names}}\t{{.Status}}'
+            trap - ERR
           }
 
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
