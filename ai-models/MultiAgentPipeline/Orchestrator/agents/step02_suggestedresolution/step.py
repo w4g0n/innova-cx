@@ -25,12 +25,27 @@ from db import db_connect
 
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
 SUGGESTED_RESOLUTION_PROMPT_EXAMPLES = max(
-    4,
-    int(os.getenv("SUGGESTED_RESOLUTION_PROMPT_EXAMPLES", "3")),
+    0,
+    int(os.getenv("SUGGESTED_RESOLUTION_PROMPT_EXAMPLES", "1")),
+)
+SUGGESTED_RESOLUTION_TIMEOUT_SECONDS = max(
+    1.0,
+    float(os.getenv("SUGGESTED_RESOLUTION_TIMEOUT_SECONDS", "55")),
+)
+SUGGESTED_RESOLUTION_MAX_INPUT_CHARS = max(
+    80,
+    int(os.getenv("SUGGESTED_RESOLUTION_MAX_INPUT_CHARS", "320")),
+)
+SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS = max(
+    128,
+    int(os.getenv("SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS", "512")),
+)
+SUGGESTED_RESOLUTION_MAX_NEW_TOKENS = max(
+    8,
+    int(os.getenv("SUGGESTED_RESOLUTION_MAX_NEW_TOKENS", "18")),
 )
 
 logger = logging.getLogger(__name__)
-SUGGESTED_RESOLUTION_TIMEOUT_SECONDS = 45.0
 _BACKGROUND_SUGGESTED_RESOLUTION_TASKS: set[asyncio.Task] = set()
 
 
@@ -143,6 +158,13 @@ def _is_low_quality_resolution(text: str) -> bool:
     if _looks_like_past_tense_resolution(cleaned):
         return True
     return len(cleaned.split()) < 8
+
+
+def _compact_prompt_text(value: object, limit: int = SUGGESTED_RESOLUTION_MAX_INPUT_CHARS) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0].strip()
 
 
 def _load_resolution_examples(limit: int = 3, department: str | None = None) -> list[dict[str, Any]]:
@@ -287,9 +309,9 @@ def _format_examples_for_prompt(limit: int, department: str | None = None) -> st
         return ""
     lines = []
     for i, ex in enumerate(examples, start=1):
-        subject = str(ex.get("subject") or "").strip() or "No subject"
-        details = str(ex.get("details") or "").strip() or "No details"
-        resolution = str(ex.get("final_resolution") or "").strip() or "No resolution"
+        subject = _compact_prompt_text(ex.get("subject"), 120) or "No subject"
+        details = _compact_prompt_text(ex.get("details")) or "No details"
+        resolution = _compact_prompt_text(ex.get("final_resolution"), 180) or "No resolution"
         lines.append(
             (
                 f"Example {i}\n"
@@ -306,7 +328,7 @@ def _format_learning_rules_for_prompt(limit: int, department: str | None = None)
         return ""
     lines = []
     for i, ex in enumerate(examples, start=1):
-        resolution = str(ex.get("final_resolution") or "").strip()
+        resolution = _compact_prompt_text(ex.get("final_resolution"), 180)
         if not resolution:
             continue
         lines.append(f"{i}. Employee-accepted outcome: {resolution}")
@@ -319,10 +341,10 @@ def _format_declined_examples_for_prompt(limit: int, department: str | None = No
         return ""
     lines = []
     for i, ex in enumerate(examples, start=1):
-        subject = str(ex.get("subject") or "").strip() or "No subject"
-        details = str(ex.get("details") or "").strip() or "No details"
-        suggested = str(ex.get("suggested_resolution") or "").strip() or "No suggestion"
-        final_resolution = str(ex.get("final_resolution") or "").strip() or "No final resolution"
+        subject = _compact_prompt_text(ex.get("subject"), 120) or "No subject"
+        details = _compact_prompt_text(ex.get("details")) or "No details"
+        suggested = _compact_prompt_text(ex.get("suggested_resolution"), 180) or "No suggestion"
+        final_resolution = _compact_prompt_text(ex.get("final_resolution"), 180) or "No final resolution"
         lines.append(
             (
                 f"Rejected Example {i}\n"
@@ -335,7 +357,7 @@ def _format_declined_examples_for_prompt(limit: int, department: str | None = No
 
 
 def _build_generation_prompt(ticket: dict[str, Any]) -> str:
-    details = str(ticket.get("details") or "").strip() or "No details"
+    details = _compact_prompt_text(ticket.get("details")) or "No details"
     department = str(ticket.get("department_name") or "").strip() or None
 
     prompt = (
@@ -468,6 +490,9 @@ def get_suggested_resolution_diagnostics() -> dict[str, object]:
         "suggested_resolution_model_name": model_name,
         "suggested_resolution_model_exists": model_exists,
         "suggested_resolution_timeout_seconds": SUGGESTED_RESOLUTION_TIMEOUT_SECONDS,
+        "suggested_resolution_prompt_examples": SUGGESTED_RESOLUTION_PROMPT_EXAMPLES,
+        "suggested_resolution_max_prompt_tokens": SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS,
+        "suggested_resolution_max_new_tokens": SUGGESTED_RESOLUTION_MAX_NEW_TOKENS,
         "suggested_resolution_learning_source": "suggested_resolution_usage",
         "suggested_resolution_mode": "model" if model_exists else "unavailable",
     }
@@ -520,13 +545,23 @@ async def _generate_resolution_text(ticket: dict[str, Any]) -> tuple[str | None,
                 tokenize=False,
                 add_generation_prompt=True,
             )
-            inputs = tokenizer([rendered_prompt], return_tensors="pt", truncation=True).to(device)
+            inputs = tokenizer(
+                [rendered_prompt],
+                return_tensors="pt",
+                truncation=True,
+                max_length=SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS,
+            ).to(device)
         else:
-            inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(device)
+            inputs = tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS,
+            ).to(device)
         with torch.no_grad():
             output_ids = model.generate(
                 **inputs,
-                max_new_tokens=24,
+                max_new_tokens=SUGGESTED_RESOLUTION_MAX_NEW_TOKENS,
                 do_sample=False,
                 no_repeat_ngram_size=3,
                 repetition_penalty=1.2,

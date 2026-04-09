@@ -50,7 +50,6 @@ function formatTicketSource(value) {
   return sanitizeTicketSource(value);
 }
 
-// --- AttachmentThumb --------------------------------------------------------
 function AttachmentThumb({ url, fileName, token }) {
   const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(fileName || "");
   const [imgError,     setImgError]     = useState(false);
@@ -130,7 +129,6 @@ function AttachmentThumb({ url, fileName, token }) {
   );
 }
 
-// ─── Modal ──────────────────────────────────────────────────────────────────
 function TicketModal({
   type,
   ticket,
@@ -836,7 +834,6 @@ function statusPillClass(status) {
   }
 }
 
-// ─── Main Component ─────────────────────────────────────────────────────────
 export default function ComplaintDetails() {
   const { id: rawId } = useParams();
   const navigate      = useNavigate();
@@ -967,6 +964,12 @@ export default function ComplaintDetails() {
               fileUrl:  att?.fileUrl ?? null,
             }))
           : [],
+        previousResolutions: Array.isArray(t.previousResolutions)
+          ? t.previousResolutions.map((r) => ({
+              resolution: sanitizeText(r?.resolution || "", MAX_RESOLUTION_LEN),
+              resolvedAt: sanitizeText(r?.resolvedAt || "", 40),
+            }))
+          : [],
       });
     } catch {
       // Fixed internal message — raw error.message never rendered
@@ -1081,8 +1084,8 @@ export default function ComplaintDetails() {
           </div>
         </section>
 
-        <section className="details-grid">
-          <div className="card-section">
+        <section className={`details-grid${ticket.stepsTaken.length === 0 ? " details-grid--single" : ""}`}>
+          <div className="card-section ticket-details-card">
             <h2 className="section-title">Ticket Details</h2>
             <div className="subject">{ticket.description.subject}</div>
             <p className="description">{ticket.description.details}</p>
@@ -1130,18 +1133,39 @@ export default function ComplaintDetails() {
           )}
         </section>
 
-        <TicketChat
-          ticketId={ticket.ticketId}
-          role="employee"
-          authHeader={() => ({ Authorization: `Bearer ${authToken}` })}
-          disabled={isResolved}
-          paused={!!modalType}
-        />
+        <div className="ticket-conversation-section">
+          <TicketChat
+            ticketId={ticket.ticketId}
+            role="employee"
+            authHeader={() => ({ Authorization: `Bearer ${authToken}` })}
+            disabled={isResolved}
+            paused={!!modalType}
+          />
+        </div>
 
         {ticket.finalResolution && (
-          <section className="card-section">
+          <section className="card-section final-resolution-section">
             <h2 className="section-title">Final Resolution</h2>
             <p className="description">{ticket.finalResolution}</p>
+          </section>
+        )}
+
+        {ticket.previousResolutions?.length > 0 && (
+          <section className="card-section previous-resolutions-section">
+            <h2 className="section-title">Previous Resolutions</h2>
+            {ticket.previousResolutions.map((r, i) => (
+              <div
+                key={i}
+                className={`previous-resolution-entry${
+                  i < ticket.previousResolutions.length - 1 ? " previous-resolution-entry--spaced" : ""
+                }`}
+              >
+                <div className="previous-resolution-date">
+                  Resolved {r.resolvedAt ? new Date(r.resolvedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "—"}
+                </div>
+                <p className="description previous-resolution-text">{r.resolution}</p>
+              </div>
+            ))}
           </section>
         )}
       </div>

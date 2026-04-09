@@ -1,4 +1,4 @@
-/*  Design tokens  */
+/* Design tokens */
 :root {
   --purple-900: #2d1b69;
   --purple-800: #3d2690;
@@ -34,7 +34,7 @@
   --transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/*  Root wrapper  */
+/* Root wrapper */
 .sl-root {
   min-height: 100vh;
   background: var(--purple-50);
@@ -43,7 +43,7 @@
   padding-bottom: 60px;
 }
 
-/*  Banner  */
+/* Banner */
 .sl-banner {
   position: relative;
   overflow: hidden;
@@ -102,7 +102,7 @@
   font-weight: 400;
 }
 
-/*  Tab rail  */
+/* Tab rail */
 .sl-tabs {
   display: flex;
   gap: 4px;
@@ -147,7 +147,7 @@
   line-height: 1;
 }
 
-/*  Content panel  */
+/* Content panel */
 .sl-panel {
   max-width: 860px;
   margin: 36px auto 0;
@@ -447,21 +447,21 @@
   background: #fee2e2;
 }
 
-/* ── Danger zone additional ── */
+/* Danger zone additional */
 .dz-zone-desc {
   font-size: 13px;
   color: var(--text-muted);
   margin: 0 0 16px;
 }
 
-/* ── Settings card description ── */
+/* Settings card description */
 .sc-card-desc {
   font-size: 12px;
   color: var(--text-muted);
   margin: 2px 0 0;
 }
 
-/* ── Password row inside card ── */
+/* Password row inside card */
 .settingsPasswordRow {
   display: flex;
   align-items: center;
@@ -483,7 +483,7 @@
   margin: 0;
 }
 
-/* ── Settings footer row ── */
+/* Settings footer row */
 .settingsFooterRow {
   display: flex;
   justify-content: flex-end;

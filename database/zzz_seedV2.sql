@@ -68,7 +68,7 @@ INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secr
   ('customer2@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
   ('customer3@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
   -- Operator
-  ('operator@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  TRUE, FALSE, NULL),
+  ('operator@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  TRUE, FALSE, NULL),
   -- Managers (1 per department)
   ('hamad@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
   ('leen@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
@@ -94,7 +94,7 @@ ON CONFLICT (email) DO UPDATE SET mfa_enabled = FALSE, totp_secret = NULL;
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
 SELECT u.id, 'System Operator', '+97155000001', 'Dubai',
        NULL, NULL, 'System Operator'
-FROM users u WHERE u.email='operator@innova.cx'
+FROM users u WHERE u.email='operator@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 -- Manager profiles
@@ -738,7 +738,7 @@ SELECT
   v.meta::jsonb,
   v.ts::timestamptz
 FROM (VALUES
-  ('CX-A001','operator@innova.cx','status_change',
+  ('CX-A001','operator@innovacx.net','status_change',
    'Critical ticket created via chat escalation. Assigned to Ahmed Hassan.',
    'Open','Assigned',
    '{"source":"chat","escalation_level":1}',
@@ -748,7 +748,7 @@ FROM (VALUES
    'Assigned','In Progress',
    '{"temp_reading":32.5,"backup_cooling":"active"}',
    '2026-03-01 07:00:00+00'),
-  ('CX-A002','operator@innova.cx','status_change',
+  ('CX-A002','operator@innovacx.net','status_change',
    'Gate 2 access failure. Omar Ali dispatched. Temporary manual entry authorised.',
    'Open','In Progress',
    '{"affected_staff":32,"manual_entry":"authorised"}',
@@ -1138,7 +1138,7 @@ VALUES
    'This sounds critical. I am escalating to an operator immediately.',
    '2026-03-01 06:15:45+00','escalate','HVAC',0.05,TRUE,NULL),
   ('aaaaaaaa-0001-0001-0001-000000000001'::uuid, 'operator',
-   (SELECT id FROM users WHERE email='operator@innova.cx'),
+   (SELECT id FROM users WHERE email='operator@innovacx.net'),
    'Critical ticket CX-A001 raised. Ahmed Hassan assigned and en route.',
    '2026-03-01 06:20:00+00','resolution','HVAC',0.30,FALSE,
    (SELECT id FROM tickets WHERE ticket_code='CX-A001')),
@@ -1152,7 +1152,7 @@ VALUES
    'I understand — this is urgent. Escalating to our security team immediately.',
    '2026-03-01 07:25:45+00','escalate','Access Control',0.05,TRUE,NULL),
   ('aaaaaaaa-0002-0002-0002-000000000002'::uuid, 'operator',
-   (SELECT id FROM users WHERE email='operator@innova.cx'),
+   (SELECT id FROM users WHERE email='operator@innovacx.net'),
    'Ticket CX-A002 created as Critical. Omar Ali dispatched. Manual entry authorised.',
    '2026-03-01 07:30:00+00','resolution','Access Control',0.20,FALSE,
    (SELECT id FROM tickets WHERE ticket_code='CX-A002')),
@@ -1212,7 +1212,7 @@ VALUES
    'I completely understand your frustration. Connecting you to a senior operator now.',
    '2026-02-25 11:00:50+00','escalate','HVAC',0.05,TRUE,NULL),
   ('aaaaaaaa-0007-0007-0007-000000000007'::uuid, 'operator',
-   (SELECT id FROM users WHERE email='operator@innova.cx'),
+   (SELECT id FROM users WHERE email='operator@innovacx.net'),
    'I sincerely apologise. I am personally escalating your case to the department manager.',
    '2026-02-25 11:05:00+00','resolution','HVAC',0.30,FALSE,NULL),
 
@@ -2675,7 +2675,7 @@ UPDATE users
 SET mfa_enabled = FALSE, totp_secret = NULL
 WHERE email IN (
   'customer1@innovacx.net','customer2@innovacx.net','customer3@innovacx.net',
-  'operator@innova.cx',
+  'operator@innovacx.net',
   'hamad@innovacx.net','leen@innovacx.net','rami@innovacx.net','majid@innovacx.net',
   'ali@innovacx.net','yara@innovacx.net','hana@innovacx.net',
   'ahmed@innovacx.net','lena@innovacx.net','bilal@innovacx.net','sameer@innovacx.net',

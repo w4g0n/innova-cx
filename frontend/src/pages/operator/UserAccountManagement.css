@@ -130,7 +130,7 @@
   }
 }
 
-/* ── Phone input ── */
+/* Phone input */
 .uamPhoneWrap .react-tel-input {
   width: 100%;
 }
@@ -167,7 +167,7 @@
   border: 1px solid rgba(255,255,255,0.12) !important;
 }
 
-/* ── Password eye ── */
+/* Password eye */
 .uamPwdWrap {
   position: relative;
   display: flex;

@@ -11,8 +11,8 @@ import "./ManagerSettings.css";
 import { getUser } from "../../utils/auth";
 import { sanitizeText } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 
-// ─── Auth token helper (same pattern as all other manager pages) ──────────────
 function getAuthToken() {
   return (
     localStorage.getItem("access_token") ||
@@ -23,7 +23,6 @@ function getAuthToken() {
   );
 }
 
-// ─── Self-contained Change Password Modal ────────────────────────────────────
 // Calls POST /api/auth/change-password with { current_password, new_password }
 function ChangePasswordModal({ onClose }) {
   const [currentPw, setCurrentPw] = useState("");
@@ -54,11 +53,13 @@ function ChangePasswordModal({ onClose }) {
 
     setLoading(true);
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl("/api/auth/change-password"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
         body: JSON.stringify({
           current_password: currentPw,
@@ -165,7 +166,6 @@ function ChangePasswordModal({ onClose }) {
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
 export default function ManagerSettings() {
   const [showPwModal, setShowPwModal] = useState(false);
 

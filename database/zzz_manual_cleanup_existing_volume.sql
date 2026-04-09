@@ -42,7 +42,7 @@ ON CONFLICT (email) DO UPDATE
 
 -- Operator
 INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secret)
-VALUES ('operator@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'operator', TRUE, FALSE, NULL)
+VALUES ('operator@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'operator', TRUE, FALSE, NULL)
 ON CONFLICT (email) DO UPDATE
   SET role='operator', is_active=TRUE, mfa_enabled=FALSE, totp_secret=NULL,
       password_hash=crypt('Innova@2025', gen_salt('bf', 12));
@@ -81,7 +81,7 @@ ON CONFLICT (email) DO UPDATE
 
 -- Operator
 INSERT INTO user_profiles (user_id, full_name, job_title)
-SELECT id, 'System Operator', 'System Operator' FROM users WHERE email='operator@innova.cx'
+SELECT id, 'System Operator', 'System Operator' FROM users WHERE email='operator@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 -- Manager profiles

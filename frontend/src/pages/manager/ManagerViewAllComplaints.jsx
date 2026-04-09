@@ -21,6 +21,7 @@ import {
   MAX_SEARCH_LEN,
 } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import useScrollReveal from "../../utils/useScrollReveal";
 
 function getAuthToken() {
@@ -39,7 +40,6 @@ function formatTicketSource(value) {
 
 const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3, "": 4 };
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ toasts }) {
   return (
     <div className="mv-toastStack">
@@ -65,7 +65,6 @@ function useToast() {
   return { toasts, push };
 }
 
-// ── Sortable header ────────────────────────────────────────────────────────────
 function SortableHeader({ label, col, sortCol, sortDir, onSort, className }) {
   const active = sortCol === col;
   const arrow = active ? (sortDir === "asc" ? " ▲" : " ▼") : " ⇅";
@@ -82,7 +81,6 @@ function SortableHeader({ label, col, sortCol, sortDir, onSort, className }) {
   );
 }
 
-// ── Status pill colours ────────────────────────────────────────────────────────
 const STATUS_CLASS = {
   Submitted:  "mv-statusPill--submitted",
   Assigned:   "mv-statusPill--assigned",
@@ -92,7 +90,6 @@ const STATUS_CLASS = {
   Overdue:    "mv-statusPill--overdue",
 };
 
-// ── KPI quick-filter map ───────────────────────────────────────────────────────
 // Maps KPI label → { statusFilter, priorityFilter }
 const KPI_FILTER = {
   "Open Tickets":     { statusFilter: null,       priorityFilter: null,       kpiKey: "openTickets" },
@@ -163,7 +160,6 @@ export default function ManagerViewComplaints() {
       .catch((err) => { console.error("Failed to fetch employees:", err); setEmployees([]); });
   }, [token]);
 
-  // ── KPI click-to-filter ──────────────────────────────────────────────────────
   const handleKpiClick = (label) => {
     if (activeKpi === label) {
       // toggle off
@@ -180,7 +176,6 @@ export default function ManagerViewComplaints() {
     setSearch("");
   };
 
-  // ── Sort ─────────────────────────────────────────────────────────────────────
   const handleSort = (col) => {
     if (!ALLOWED_SORT_KEYS.includes(col)) return;
     if (sortCol === col) {
@@ -191,7 +186,6 @@ export default function ManagerViewComplaints() {
     }
   };
 
-  // ── Menu / Modal handlers ─────────────────────────────────────────────────────
   const toggleMenu = (ticketId) => setOpenMenuFor((prev) => (prev === ticketId ? null : ticketId));
   const closeMenu  = () => setOpenMenuFor(null);
 
@@ -216,9 +210,10 @@ export default function ManagerViewComplaints() {
   const confirmAssignment = async () => {
     if (!activeTicketId) return;
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/complaints/${activeTicketId}/assign`), {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify({ employee_name: selectedEmployee || null }),
       });
       if (!res.ok) {
@@ -249,9 +244,10 @@ export default function ManagerViewComplaints() {
 
   const handleReroute = async (ticketId, dept) => {
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/complaints/${ticketId}/department`), {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify({ department: dept }),
       });
       if (!res.ok) {
@@ -271,7 +267,6 @@ export default function ManagerViewComplaints() {
     closeMenu();
   };
 
-  // ── Filtering / KPIs / Sorting ────────────────────────────────────────────────
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
@@ -339,7 +334,6 @@ export default function ManagerViewComplaints() {
 
   const shProps = { sortCol, sortDir, onSort: handleSort };
 
-  // ── JSX ───────────────────────────────────────────────────────────────────────
   return (
     <Layout role="manager">
       <Toast toasts={toasts} />

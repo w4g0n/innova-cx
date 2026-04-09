@@ -4,13 +4,13 @@
   animation: csFadeUp 420ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
 }
 
-/* ── Dark mode: fill the Layout shell so no light-lavender strip shows on sides ── */
+/* Dark mode: fill the Layout shell so no light-lavender strip shows on sides */
 [data-theme="dark"] .appShell--noSidebar,
 [data-theme="dark"] .appContent--noSidebar {
   background: #0d0520;
 }
 
-/* ── Explicit page background so it never shows the wrong colour ── */
+/* Explicit page background so it never shows the wrong colour */
 .cs-page.custSettings {
   min-height: 100%;
   background: var(--purple-50, #f5f2ff);
@@ -19,7 +19,7 @@
   background: #0d0520;
 }
 
-/* ── Dark mode: PageHeader title + subtitle use dark-invisible colours by default ── */
+/* Dark mode: PageHeader title + subtitle use dark-invisible colours by default */
 [data-theme="dark"] .custSettings .pageHeader__title {
   color: var(--text-primary, #f0e8ff);
 }
@@ -27,7 +27,7 @@
   color: var(--text-secondary, rgba(196, 181, 253, 0.72));
 }
 
-/* --- Use same PageHeader alignment behavior as My Tickets --- */
+/* Use same PageHeader alignment behavior as My Tickets */
 .custSettings {
   display: flex;
   flex-direction: column;

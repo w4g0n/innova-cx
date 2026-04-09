@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ManagerDashboard.css";
@@ -72,17 +72,18 @@ export default function ManagerDashboard() {
       });
   }, []);
 
-  const title =
-    managerName && departmentName
-      ? `${managerName} – ${departmentName}`
-      : managerName || "Manager Dashboard";
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    const tod = h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening";
+    return managerName ? `${tod}, ${managerName}` : tod;
+  }, [managerName]);
 
   return (
     <Layout role="manager">
       <div className="mgrDashboard" ref={revealRef}>
         <PageHeader
-          title={title}
-          subtitle="Quick overview of your department's activity."
+          title={greeting}
+          subtitle={departmentName ? `${departmentName} · Quick overview of your department's activity.` : "Quick overview of your department's activity."}
         />
 
         <section className="managerKpiRow">

@@ -1,6 +1,4 @@
-/* ================================================
-   QualityControl — Section 05
-   ================================================ */
+/* QualityControl */
 
 .modelAnalysis {
   width: 100%;
@@ -10,10 +8,10 @@
   color: var(--text-dark);
 }
 
-/* ---- Top filter bar ---- */
+/* Top filter bar */
 .ma-top-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 
-/* ---- Nav tabs ---- */
+/* Nav tabs */
 .ma-nav {
   display: flex;
   gap: 8px;
@@ -41,10 +39,10 @@
 .ma-nav__btn:hover        { color: var(--btn-primary); background: rgba(89,36,180,0.05); }
 .ma-nav__btn--active      { color: var(--btn-primary); border-bottom-color: var(--btn-primary); background: rgba(89,36,180,0.06); }
 
-/* ---- View container ---- */
+/* View container */
 .ma-view { margin-top: 24px; display: flex; flex-direction: column; gap: 20px; }
 
-/* ---- Section headings ---- */
+/* Section headings */
 .ma-section-heading {
   display: flex;
   align-items: center;
@@ -62,17 +60,18 @@
 .ma-section-heading__icon   { font-size: 18px; line-height: 1; display: flex; align-items: center; }
 .ma-section-heading__label  { letter-spacing: -0.1px; }
 
-/* ---- KPI row ---- */
+/* KPI row */
 .ma-kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .ma-kpi {
   background: #ffffff;
   border-radius: 18px;
-  padding: 20px 22px;
+  padding: 24px 24px;
   border: 1px solid rgba(0,0,0,0.07);
   box-shadow: 0 6px 22px rgba(64,28,81,0.09);
   display: flex; flex-direction: column; gap: 4px;
   position: relative; overflow: hidden;
   transition: transform 0.18s, box-shadow 0.18s;
+  min-height: 110px;
 }
 .ma-kpi::before          { content:''; position:absolute; inset:0 0 auto 0; height:3px; background:linear-gradient(90deg,var(--btn-primary),rgba(155,113,163,0.5)); border-radius:18px 18px 0 0; }
 .ma-kpi--warn::before    { background: linear-gradient(90deg, #6b3a8a, #9b71a3); }
@@ -82,7 +81,6 @@
 
 .ma-kpi__top   { display:flex; justify-content:space-between; align-items:center; gap:8px; }
 .ma-kpi__label { font-size:11px; text-transform:uppercase; letter-spacing:0.10em; font-weight:750; color:rgba(17,17,17,0.55); }
-.ma-kpi__pill  { font-size:11px; padding:3px 10px; border-radius:999px; background:rgba(89,36,180,0.10); color:var(--btn-primary); font-weight:650; white-space:nowrap; }
 .ma-kpi__value { font-size:30px; font-weight:900; color:var(--btn-primary); font-family:var(--font-heading); margin-top:6px; }
 .ma-kpi--warn   .ma-kpi__value   { color:#6b3a8a; }
 .ma-kpi--danger .ma-kpi__value   { color:#401c51; }
@@ -90,17 +88,17 @@
 .ma-kpi__sub { font-size:11.5px; color:rgba(17,17,17,0.55); line-height:1.4; margin-top:4px; }
 
 /* ---- Cards row ---- */
-.ma-cards-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-.ma-card { background:#ffffff; border-radius:18px; padding:20px 22px; border:1px solid rgba(0,0,0,0.07); box-shadow:0 6px 20px rgba(0,0,0,0.06); }
+.ma-cards-row { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.ma-card { background:#ffffff; border-radius:18px; padding:24px 26px; border:1px solid rgba(0,0,0,0.07); box-shadow:0 6px 20px rgba(0,0,0,0.06); }
 .ma-card--wide { grid-column:1 / -1; }
 .ma-card__title { margin:0; font-size:15px; font-weight:800; color:var(--text-dark); font-family:var(--font-heading); }
 .ma-card__sub   { margin:5px 0 0; font-size:12px; color:rgba(17,17,17,0.60); line-height:1.5; }
 
 /* ---- Chart box ---- */
-.ma-chart-box { margin-top:14px; padding:14px; border-radius:12px; background:#f0eef5; border:1px solid rgba(64,28,81,0.09); }
+.ma-chart-box { margin-top:16px; padding:16px; border-radius:12px; background:#f0eef5; border:1px solid rgba(64,28,81,0.09); }
 .ma-chart-box * { user-select:none; outline:none !important; }
 
-/* ---- Routing blocks ---- */
+/* Routing blocks */
 .ma-routing-list { margin-top:14px; display:flex; flex-direction:column; gap:14px; }
 .ma-routing-row  { display:flex; flex-direction:column; gap:6px; }
 .ma-routing-dept { font-size:13px; font-weight:700; color:var(--btn-primary); }
@@ -120,7 +118,7 @@
 .ma-dot--warn   { background:#6b3a8a; }
 .ma-dot--danger { background:#401c51; }
 
-/* ---- Review table ---- */
+/* Review table */
 .ma-table-wrap { margin-top:14px; border-radius:12px; border:1px solid rgba(0,0,0,0.07); overflow-x:auto; }
 .ma-table { width:100%; border-collapse:collapse; font-size:13px; min-width:820px; }
 .ma-table thead th {
@@ -177,9 +175,7 @@
   transform: translate(1px, -1px);
 }
 
-/* ================================================
-   Date Range Picker
-   ================================================ */
+/* Date Range Picker */
 .qc-datepicker { position:relative; }
 .qc-datepicker__btn {
   display:inline-flex; align-items:center; gap:7px;
@@ -218,16 +214,12 @@
 }
 .qc-datepicker__clear:hover { background:rgba(64,28,81,0.10); }
 
-/* ================================================
-   Responsive
-   ================================================ */
+/* Responsive */
 @media (max-width:1200px) { .ma-kpi-row { grid-template-columns:repeat(2,1fr); } }
 @media (max-width:900px)  { .ma-cards-row { grid-template-columns:1fr; } .ma-nav { overflow-x:auto; } }
 @media (max-width:680px)  { .ma-kpi-row { grid-template-columns:1fr; } .ma-top-actions { flex-direction:column; align-items:stretch; } .qc-datepicker__dropdown { right:auto; left:0; } }
 
-/* ================================================
-   Learning Tab — 3-box layout + modal
-   ================================================ */
+/* Learning Tab — 3-box layout + modal */
 
 /* 3-column grid */
 .lrn-grid {
@@ -428,7 +420,7 @@
 .ma-used-yes { font-weight:700; color:#15803d; }
 .ma-used-no  { color:rgba(26,26,46,0.40); }
 
-/* ── Tab state helpers ────────────────────────────────────────── */
+/* Tab state helpers */
 .ma-empty-state { padding: 1.5rem; color: rgba(26,26,46,0.45); text-align: center; font-size: 14px; }
 .ma-tab-loading { padding: 2rem; text-align: center; color: rgba(26,26,46,0.45); }
 .ma-tab-error   { padding: 2rem; text-align: center; color: #dc2626; }
@@ -449,7 +441,7 @@
   .ma-table { min-width: 980px; }
 }
 
-/* ── Clickable / expandable rows ─────────────────────────────── */
+/* Clickable / expandable rows */
 .lrn-row--clickable { cursor: pointer; border-radius: 7px; transition: background 0.12s; }
 .lrn-row--clickable:hover { background: rgba(89,36,180,0.05); }
 .lrn-row--expanded { background: rgba(89,36,180,0.04); border-radius: 7px 7px 0 0; }
@@ -459,7 +451,7 @@
 .ma-tr--expanded td { background: rgba(89,36,180,0.03); }
 .ma-tr-detail td { background: rgba(89,36,180,0.02); }
 
-/* ── Expanded detail panel ────────────────────────────────────── */
+/* Expanded detail panel */
 .lrn-expand {
   padding: 12px 10px 14px;
   border-top: 1px solid rgba(89,36,180,0.10);

@@ -1,6 +1,4 @@
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 /** Hard cap for free-text areas (reason, resolution, steps taken). */
 export const MAX_REASON_LEN = 2000;
 

@@ -1,10 +1,8 @@
-/* ═══════════════════════════════════════════════════════════════
-   InnovaCX  ·  PublicLanding.css  ·  Galaxy Theme v7
-   ═══════════════════════════════════════════════════════════════ */
+/* InnovaCX  ·  PublicLanding.css  ·  Galaxy Theme */
 
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap');
 
-/* ── Design tokens ── */
+/* Design tokens */
 :root {
   --void:     #03010a;
   --space:    #07030f;
@@ -22,14 +20,14 @@
   --ease-in:  cubic-bezier(0.55, 0, 1, 0.45);
 }
 
-/* ── Reset ── */
+/* Reset */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-/* ── Root shell ── */
+/* Root shell */
 .pl-root {
   font-family: "Outfit", sans-serif;
   background: var(--void);
@@ -39,7 +37,7 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Shared keyframes ── */
+/* Shared keyframes */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(24px); }
   to   { opacity: 1; transform: translateY(0);    }
@@ -82,9 +80,7 @@
 }
 
 
-/* ═══════════════════════════════════════════════════════════════
-   HERO SECTION
-   ═══════════════════════════════════════════════════════════════ */
+/* Hero Section */
 
 .pl-hero {
   position: relative;
@@ -131,7 +127,7 @@
 }
 
 
-/* ── Nav bar ── */
+/* Nav bar */
 .pl-nav {
   position: relative;
   z-index: 20;
@@ -168,7 +164,7 @@
 }
 
 
-/* ── Hero two-column body ── */
+/* Hero two-column body */
 .pl-hero-body {
   position: relative;
   z-index: 10;
@@ -391,7 +387,7 @@
 }
 
 
-/* ── Right column — solar system ── */
+/* Right column — solar system */
 .pl-hero-right {
   display: flex;
   align-items: center;
@@ -434,7 +430,7 @@
   height: 100% !important;
 }
 
-/* ── Planet hover tooltip ── */
+/* Planet hover tooltip */
 .pl-planet-tooltip {
   position: absolute;
   bottom: 56px;
@@ -548,9 +544,7 @@
 }
 
 
-/* ═══════════════════════════════════════════════════════════════
-   MARQUEE STRIP
-   ═══════════════════════════════════════════════════════════════ */
+/* Marquee Strip */
 
 .pl-marquee {
   overflow: hidden;
@@ -577,9 +571,7 @@
 }
 
 
-/* ═══════════════════════════════════════════════════════════════
-   SECTION TYPOGRAPHY (shared)
-   ═══════════════════════════════════════════════════════════════ */
+/* Section Typography */
 
 .pl-section-tag {
   font-family: "JetBrains Mono", monospace;
@@ -611,9 +603,7 @@
 .pl-section-p.light { color: var(--muted); }
 
 
-/* ═══════════════════════════════════════════════════════════════
-   PIPELINE SECTION
-   ═══════════════════════════════════════════════════════════════ */
+/* Pipeline Section */
 
 .pl-pipeline-section {
   background: var(--deep);
@@ -896,9 +886,7 @@
 .pl-pipe-dot.done { background: rgba(74, 222, 128, .40); }
 
 
-/* ═══════════════════════════════════════════════════════════════
-   AGENTS SHOWCASE SECTION
-   ═══════════════════════════════════════════════════════════════ */
+/* Agents Showcase Section */
 
 .pl-agents-section {
   background: var(--space);
@@ -938,7 +926,7 @@
   gap: 14px;
 }
 
-/* ── Agent card ── */
+/* Agent card */
 .pl-agent-hex {
   position: relative;
   border-radius: 20px;
@@ -1075,7 +1063,7 @@
 }
 
 
-/* ── Agent detail panel ── */
+/* Agent detail panel */
 .pl-agent-panel {
   position: sticky;
   top: 24px;
@@ -1259,9 +1247,7 @@
 }
 
 
-/* ═══════════════════════════════════════════════════════════════
-   CTA SECTION
-   ═══════════════════════════════════════════════════════════════ */
+/* Cta Section */
 
 .pl-cta {
   background: var(--void);
@@ -1308,9 +1294,7 @@
 }
 
 
-/* ═══════════════════════════════════════════════════════════════
-   FOOTER
-   ═══════════════════════════════════════════════════════════════ */
+/* Footer */
 
 .pl-footer {
   background: #020108;
@@ -1379,14 +1363,13 @@
 .pl-footer-copy {
   font-size: 11px;
   color: rgba(255, 255, 255, .16);
-  width: 100%;
+  flex: 1;
   text-align: center;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, .04);
+  white-space: nowrap;
 }
 
 
-/* ── FIXED SOCIAL DOCK ── */
+/* Fixed Social Dock */
 .pl-social-dock {
   position: fixed;
   bottom: 48px;
@@ -1412,9 +1395,7 @@
 }
 
 
-/* ═══════════════════════════════════════════════════════════════
-   RESPONSIVE
-   ═══════════════════════════════════════════════════════════════ */
+/* Responsive */
 
 @media (max-width: 1100px) {
   .pl-agents-showcase       { grid-template-columns: 1fr 320px; }

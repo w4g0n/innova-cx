@@ -1,7 +1,25 @@
 -- =========================================================
 -- InnovaCX 
 -- =========================================================
+-- Create the application role if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'innovacx_app') THEN
+    CREATE ROLE innovacx_app WITH LOGIN PASSWORD 'changeme123';
+  END IF;
+END $$;
 
+-- Grant necessary permissions
+GRANT CONNECT ON DATABASE complaints_db TO innovacx_app;
+GRANT USAGE ON SCHEMA public TO innovacx_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO innovacx_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO innovacx_app;
+
+-- Ensure future tables are also accessible
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO innovacx_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO innovacx_app;
 -- -------------------------
 -- Extensions
 -- -------------------------
@@ -22,7 +40,8 @@ DO $$ BEGIN
     'Escalated',
     'Overdue',
     'Resolved',
-    'Reopened'
+    'Reopened',
+    'Linked'
   );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
@@ -190,6 +209,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_active                BOOLEAN NOT NULL DEFAULT TRUE,
   created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login_at            TIMESTAMPTZ,
+  password_changed_at      TIMESTAMPTZ,
   -- ADDED: tracks when the password was last rotated.
   -- Without this column you have NO way to know if a password is 3 days
   -- old or 3 years old. Your app can query this to enforce expiry rules.
@@ -365,6 +385,10 @@ EXCEPTION WHEN others THEN NULL; END $$;
 
 DO $$ BEGIN
   ALTER TYPE ticket_status ADD VALUE IF NOT EXISTS 'Reopened';
+EXCEPTION WHEN others THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TYPE ticket_status ADD VALUE IF NOT EXISTS 'Linked';
 EXCEPTION WHEN others THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);
@@ -1501,7 +1525,7 @@ INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
   ('customer2@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
   ('customer3@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
   -- Operator
-  ('operator@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  FALSE, NULL),
+  ('operator@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  FALSE, NULL),
   -- Managers (1 per department)
   ('hamad@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
   ('leen@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
@@ -1613,7 +1637,7 @@ ON CONFLICT (user_id) DO NOTHING;
 -- Operator profile
 INSERT INTO user_profiles (user_id, full_name, job_title)
 SELECT u.id, 'System Operator', 'System Operator'
-FROM users u WHERE u.email='operator@innova.cx'
+FROM users u WHERE u.email='operator@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 -- Customer profiles
@@ -2017,7 +2041,7 @@ WHERE email IN (
   'customer1@innovacx.net',
   'customer2@innovacx.net',
   'customer3@innovacx.net',
-  'operator@innova.cx',
+  'operator@innovacx.net',
   'hamad@innovacx.net',
   'leen@innovacx.net',
   'rami@innovacx.net',
@@ -3546,7 +3570,7 @@ FROM (VALUES
    'collect_info','HVAC', 0.10,FALSE,NULL),
   ('customer','customer1@innovacx.net','2026-03-01 06:21:10+00','Building A, server room on ground floor. Temperature is at 30°C already.',
    'provide_info','HVAC',-0.80,TRUE,NULL),
-  ('operator','operator@innova.cx','2026-03-01 06:25:00+00','I am creating a Critical ticket now and dispatching the HVAC team immediately.',
+  ('operator','operator@innovacx.net','2026-03-01 06:25:00+00','I am creating a Critical ticket now and dispatching the HVAC team immediately.',
    'resolution','HVAC', 0.20,FALSE,'CX-R01')
 ) AS msg(sender_type, email, ts, body, intent, category, score, escalate, link_ticket)
 WHERE NOT EXISTS (
@@ -3613,7 +3637,7 @@ FROM (VALUES
    'report_issue','Access Control',-0.85,FALSE,NULL),
   ('bot','bot','2026-03-01 09:25:25+00',$msg$I'm escalating this to an operator immediately given the severity.$msg$,
    'escalate','Access Control',0.05,TRUE,NULL),
-  ('operator','operator@innova.cx','2026-03-01 09:30:00+00','Ticket CX-R06 raised as Critical. Omar Ali is on his way to Gate 2 now.',
+  ('operator','operator@innovacx.net','2026-03-01 09:30:00+00','Ticket CX-R06 raised as Critical. Omar Ali is on his way to Gate 2 now.',
    'resolution','Access Control',0.30,FALSE,'CX-R06')
 ) AS msg(sender_type, email, ts, body, intent, category, score, escalate, link_ticket)
 WHERE NOT EXISTS (
@@ -3773,7 +3797,7 @@ SELECT
   v.ts::timestamptz
 FROM (VALUES
   -- CX-R01 lifecycle
-  ('CX-R01','operator@innova.cx','status_change',
+  ('CX-R01','operator@innovacx.net','status_change',
    'Ticket created via chat escalation. Assigned to Ahmed Hassan.',
    'Open','Assigned',
    '{"source":"chat_escalation","chat_conv_id":"11111111-1111-1111-1111-000000000001"}',
@@ -3784,7 +3808,7 @@ FROM (VALUES
    '{"location":"Ground Floor Server Room","temp_reading":30.2}',
    '2026-03-01 07:20:00+00'),
   -- CX-R06 lifecycle
-  ('CX-R06','operator@innova.cx','status_change',
+  ('CX-R06','operator@innovacx.net','status_change',
    'Critical access control failure — all Gate 2 readers down. Omar dispatched.',
    'Open','In Progress',
    '{"affected_staff":15,"gate":"Gate 2"}',

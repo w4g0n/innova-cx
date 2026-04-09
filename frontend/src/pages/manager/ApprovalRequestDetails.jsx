@@ -4,6 +4,7 @@ import Layout from "../../components/Layout";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { sanitizeText, sanitizeId } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import "./ApprovalRequestDetails.css";
 
 function getAuthToken() {
@@ -136,11 +137,13 @@ export default function ApprovalRequestDetails() {
     triggerAnimation(decision);
 
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/approvals/${requestId}`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
         body: JSON.stringify({ decision }),
       });

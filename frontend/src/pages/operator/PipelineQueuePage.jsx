@@ -5,8 +5,8 @@ import PageHeader from "../../components/common/PageHeader";
 import "./PipelineQueuePage.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 
-/* ─── Auth helper ──────────────────────────────────────────────────────────── */
 function getStoredToken() {
   const direct =
     localStorage.getItem("access_token") ||
@@ -40,7 +40,6 @@ async function apiFetch(path, opts = {}) {
   return res.json();
 }
 
-/* ─── Formatters ───────────────────────────────────────────────────────────── */
 const fmtTs = (ts) =>
   ts
     ? new Date(ts).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })
@@ -56,7 +55,6 @@ function fmtAge(ts) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-/* ─── Config ───────────────────────────────────────────────────────────────── */
 const AUTO_REFRESH_INTERVAL_MS = 20_000;
 const REASON_TRUNCATE_LENGTH = 140;
 
@@ -95,7 +93,6 @@ function getPriorityMeta(priority) {
   };
 }
 
-/* ─── Small components ─────────────────────────────────────────────────────── */
 function Pill({ label, cls }) {
   return <span className={`pq-pill ${cls || ""}`}>{label}</span>;
 }
@@ -109,7 +106,6 @@ function StatCard({ label, value, flag, loading }) {
   );
 }
 
-/* ─── SVG icons ────────────────────────────────────────────────────────────── */
 function Ico({ name, size = 15 }) {
   const p = {
     width: size, height: size, viewBox: "0 0 24 24",
@@ -142,7 +138,6 @@ function Ico({ name, size = 15 }) {
   }
 }
 
-/* ─── Action Required Card ─────────────────────────────────────────────────── */
 function ActionCard({ item }) {
   const navigate = useNavigate();
   const priorityMeta = getPriorityMeta(item.priority);
@@ -241,7 +236,6 @@ function ActionCard({ item }) {
   );
 }
 
-/* ─── Stage indicator for processing rows ──────────────────────────────────── */
 const STAGE_SHORT = {
   SubjectGenerationAgent:   "Subject",
   SuggestedResolutionAgent: "Resolution",
@@ -257,7 +251,6 @@ const STAGE_SHORT = {
 };
 const TOTAL_PIPELINE_STEPS = 11;
 
-/* ─── Derived data constants (module-level to avoid re-creation on render) ── */
 const STATUS_ORDER = { processing: 0, queued: 1, held: 2 };
 const ACTIVE_STATUSES = new Set(["processing", "queued", "held"]);
 
@@ -280,7 +273,6 @@ function StageBar({ currentStage, currentStep }) {
   );
 }
 
-/* ─── Queue Table Row ──────────────────────────────────────────────────────── */
 // ClassificationAgent is step_order=4; only show ticket type after it has run
 const CLASSIFICATION_STEP = 4;
 
@@ -370,7 +362,6 @@ function QueueRow({ item, index, rerunBusy, onRerun }) {
   );
 }
 
-/* ─── Main Page ────────────────────────────────────────────────────────────── */
 export default function PipelineQueuePage() {
   const revealRef = useScrollReveal();
 
@@ -419,7 +410,8 @@ export default function PipelineQueuePage() {
     setRerunId(item.id);
     setError(null);
     try {
-      await apiFetch(`/operator/pipeline-queue/${item.id}/rerun`, { method: "POST" });
+      const csrf = await getCsrfToken();
+      await apiFetch(`/operator/pipeline-queue/${item.id}/rerun`, { method: "POST", headers: csrf ? { "X-CSRF-Token": csrf } : {} });
       await loadAll(true);
     } catch (err) {
       setError(err.message);
@@ -439,7 +431,8 @@ export default function PipelineQueuePage() {
     setPipelineToggleBusy(true);
     setError(null);
     try {
-      await apiFetch(`/operator/pipeline-queue/control/${isPaused ? "resume" : "pause"}`, { method: "POST" });
+      const csrf = await getCsrfToken();
+      await apiFetch(`/operator/pipeline-queue/control/${isPaused ? "resume" : "pause"}`, { method: "POST", headers: csrf ? { "X-CSRF-Token": csrf } : {} });
       await loadAll(true);
     } catch (err) {
       setError(err.message);
@@ -556,7 +549,6 @@ export default function PipelineQueuePage() {
           </div>
         )}
 
-        {/* ── Action Required ──────────────────────────────────────────────── */}
         {(heldItems.length > 0 || itemsLoading) && (
           <section className="pq-actions">
             <div className="pq-section-header pq-section-header--warn">
@@ -598,7 +590,6 @@ export default function PipelineQueuePage() {
           </div>
         )}
 
-        {/* ── Full Queue ───────────────────────────────────────────────────── */}
         <section className="pq-queue">
           <div className="pq-queue__toolbar">
             <div className="pq-tabs">

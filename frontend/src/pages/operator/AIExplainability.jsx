@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import PillSearch from "../../components/common/PillSearch";
 import PriorityPill from "../../components/common/PriorityPill";
 import {
@@ -288,7 +289,7 @@ function normalizeStageIO(stage, ticket) {
       Business_Impact: asLevel(overrides.business_impact ?? inputState.business_impact, "medium"),
       Sentiment_Score: sentimentNormalized,
       ticket_type: asTicketType(overrides.ticket_type ?? inputState.ticket_type ?? inputState.label, "complaint"),
-      Is_Recurring: asBool(overrides.is_recurring ?? inputState.is_recurring, false),
+      Is_Recurring: false, // always false — recurrence handled separately, not a model input
     };
     return {
       input: effectiveInput,
@@ -356,7 +357,6 @@ function computePriorityFormulaLines(priorityInput) {
   };
   const sentiment = String(priorityInput?.Sentiment_Score || "Neutral").toLowerCase();
   const safety = Boolean(priorityInput?.Safety_Concern);
-  const recurring = Boolean(priorityInput?.Is_Recurring);
   const ticketType = String(priorityInput?.ticket_type || "complaint").toLowerCase() === "inquiry" ? "inquiry" : "complaint";
   const impact = toLevel(priorityInput?.Business_Impact);
   const severity = toLevel(priorityInput?.Issue_Severity);
@@ -382,13 +382,6 @@ function computePriorityFormulaLines(priorityInput) {
     lines.push("Safety Concern = TRUE -> enforce minimum HIGH");
   } else {
     lines.push("Safety Concern = FALSE -> no safety floor");
-  }
-
-  if (recurring) {
-    idx += 1;
-    lines.push("Is_Recurring = TRUE -> +1 level");
-  } else {
-    lines.push("Is_Recurring = FALSE -> +0");
   }
 
   if (ticketType === "inquiry") {
@@ -556,7 +549,6 @@ function stageHasAudio(stage) {
   return false;
 }
 
-// ── Module-level constants (never recreated on render) ──────────────────────
 
 const STATUS_CLASS = {
   Open: "ev-status-open",
@@ -567,8 +559,6 @@ const STATUS_CLASS = {
   Resolved: "ev-status-resolved",
   Completed: "ev-status-resolved",
 };
-
-// ────────────────────────────────────────────────────────────────────────────
 
 export default function AIExplainability() {
   const navigate = useNavigate();
@@ -725,11 +715,12 @@ export default function AIExplainability() {
     setOverrideErr("");
     setOverrideMsg("");
     try {
+      const csrf = await getCsrfToken();
       const response = await fetch(
         apiUrl(`/api/operator/ai-explainability/tickets/${encodeURIComponent(detailTicket.ticketId)}/pipeline-rerun`),
         {
           method: "POST",
-          headers: getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {},
+          headers: { ...(getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {}), ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         },
       );
       if (!response.ok) {
@@ -858,11 +849,13 @@ export default function AIExplainability() {
     setOverrideErr("");
     setOverrideMsg("");
     try {
+      const csrf = await getCsrfToken();
       const response = await fetch(apiUrl(`/api/operator/ai-explainability/tickets/${encodeURIComponent(detailTicket.ticketId)}/pipeline-overrides`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           ...(getStoredToken() ? { Authorization: `Bearer ${getStoredToken()}` } : {}),
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
         body: JSON.stringify({
           ticket_type: overrideForm.ticketType,
@@ -900,9 +893,10 @@ export default function AIExplainability() {
     if (!window.confirm("Permanently delete this ticket and all its data? This cannot be undone.")) return;
     try {
       const token = getStoredToken();
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/operator/tickets/${ticketId}`), {
         method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
       });
       if (!res.ok) { const d = await res.text().catch(() => "Failed"); throw new Error(d); }
       await loadTicketList();
@@ -1118,7 +1112,7 @@ export default function AIExplainability() {
                 <section className="aix-card-section">
                   <h2 className="aix-section-title">Pipeline Controls</h2>
                   <div className="aix-subtle">
-                    Current model-selected: type={modelSelectedSummary.ticketType}, impact={modelSelectedSummary.businessImpact}, severity={modelSelectedSummary.issueSeverity}, urgency={modelSelectedSummary.issueUrgency}, safety={modelSelectedSummary.safetyConcern ? "true" : "false"}, recurring={modelSelectedSummary.isRecurring ? "true" : "false"}, sentiment={modelSelectedSummary.sentimentScore}.
+                    Current model-selected: type={modelSelectedSummary.ticketType}, impact={modelSelectedSummary.businessImpact}, severity={modelSelectedSummary.issueSeverity}, urgency={modelSelectedSummary.issueUrgency}, safety={modelSelectedSummary.safetyConcern ? "true" : "false"}, sentiment={modelSelectedSummary.sentimentScore}.
                   </div>
                   <div className="aix-controls-grid">
                     <label className="aix-field">

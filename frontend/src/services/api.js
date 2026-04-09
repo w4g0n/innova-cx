@@ -24,7 +24,6 @@ const API_CONFIG = {
     inferServiceBase(8004, "http://localhost:8004"),
 };
 
-// --- CSRF token (fetched once, cached for the page session) ---
 let _csrfToken = null;
 
 export async function getCsrfToken() {
@@ -254,6 +253,33 @@ export async function submitCustomerTicket(payload = {}) {
   }
 
   return response.json();
+}
+
+/**
+ * Upload attachment files for a customer ticket after it has been created.
+ * @param {string} ticketCode
+ * @param {File[]} files
+ */
+export async function uploadCustomerAttachments(ticketCode, files) {
+  if (!files || files.length === 0) return;
+  const token = localStorage.getItem("access_token");
+  for (const file of files) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const csrf = await getCsrfToken();
+    const res = await fetch(
+      apiUrl(`/api/customer/tickets/${encodeURIComponent(ticketCode)}/attachments`),
+      {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
+        body: fd,
+      }
+    );
+    if (!res.ok) throw new Error(`Attachment upload failed (${res.status})`);
+  }
 }
 
 /**

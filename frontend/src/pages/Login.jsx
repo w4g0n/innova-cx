@@ -6,7 +6,6 @@ import { getCsrfToken } from "../services/api";
 import { isStaffHost } from "../utils/hostUtils";
 import "./Login.css";
 
-/* ── Validation helpers ── */
 const validators = {
   email: (val) => {
     if (!val) return "Email is required.";
@@ -21,7 +20,6 @@ const validators = {
   },
 };
 
-/* ── Starfield ── */
 function Starfield() {
   const ref = useRef(null);
   useEffect(() => {
@@ -118,7 +116,6 @@ function Starfield() {
   return <canvas ref={ref} className="login-starfield" />;
 }
 
-/* ── Staff Background — floating orbs + aurora ribbons ── */
 function StaffBackground() {
   const ref = useRef(null);
   useEffect(() => {
@@ -270,7 +267,6 @@ function StaffBackground() {
   return <canvas ref={ref} className="login-starfield staff-canvas" />;
 }
 
-/* ── Mouse-tracking glow on the card ── */
 function useCardGlow() {
   const cardRef = useRef(null);
   const handleMouseMove = (e) => {
@@ -291,7 +287,6 @@ function useCardGlow() {
   return { cardRef, handleMouseMove, handleMouseLeave };
 }
 
-/* ── Inline field message ── */
 function FieldMessage({ error, success, touched }) {
   if (!touched) return <div className="field-msg-placeholder" />;
   if (error)
@@ -400,7 +395,6 @@ export default function Login() {
 
       const role = data.user?.role;
 
-      // ── Domain enforcement ──
       // null  = localhost / dev → skip enforcement
       // true  = staff.domain.com → staff roles only
       // false = domain.com → customer only
@@ -419,17 +413,23 @@ export default function Login() {
         }
       }
 
+      const userPayload = {
+        id: data.user?.id,
+        email: data.user?.email,
+        role: data.user?.role,
+        full_name: data.user?.full_name,
+        token_type: data.token_type,
+      };
+
+      if (data.token_type === "temporary") {
+        sessionStorage.setItem("mfa_token", data.access_token);
+        sessionStorage.setItem("mfa_user", JSON.stringify(userPayload));
+        navigate("/verify", { replace: true });
+        return;
+      }
+
       localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          id: data.user?.id,
-          email: data.user?.email,
-          role: data.user?.role,
-          full_name: data.user?.full_name,
-          token_type: data.token_type,
-        })
-      );
+      localStorage.setItem("user", JSON.stringify(userPayload));
 
       const rawNext = searchParams.get("next");
       const nextPath =
@@ -467,7 +467,6 @@ export default function Login() {
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
-        {/* ── Left panel ── */}
         <section className="loginLeft">
           <div className="loginOverlay" />
           <div className="loginLeftContent">
@@ -479,7 +478,6 @@ export default function Login() {
           </div>
         </section>
 
-        {/* ── Right panel ── */}
         <section className="loginRight">
           <button
             className="backBtn"

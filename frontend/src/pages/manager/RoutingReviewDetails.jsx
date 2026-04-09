@@ -4,6 +4,7 @@ import Layout from "../../components/Layout";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { sanitizeText, sanitizeId } from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import "./RoutingReviewDetails.css";
 
 function getAuthToken() {
@@ -16,7 +17,6 @@ function getAuthToken() {
   );
 }
 
-// ── Confidence ring ───────────────────────────────────────────────────────────
 function ConfidenceRing({ pct }) {
   const r = 44;
   const circ = 2 * Math.PI * r;
@@ -47,7 +47,6 @@ function ConfidenceRing({ pct }) {
   );
 }
 
-// ── Keyword chip ──────────────────────────────────────────────────────────────
 function KeywordChip({ word, weight }) {
   const opacity = 0.35 + weight * 0.65;
   const size    = 11 + Math.round(weight * 4);
@@ -58,7 +57,6 @@ function KeywordChip({ word, weight }) {
   );
 }
 
-// ── Status badge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
   const cfg = {
     Pending:    { cls: "rrd-badge--pending",    icon: "●", label: "Pending" },
@@ -69,7 +67,6 @@ function StatusBadge({ status }) {
   return <span className={`rrd-badge ${cfg.cls}`}>{cfg.icon} {cfg.label}</span>;
 }
 
-// ── Keyword extractor — pulls meaningful words from ticket text ───────────────
 function extractKeywords(text = "", targetDept = "") {
   if (!text) return [];
 
@@ -104,7 +101,6 @@ function extractKeywords(text = "", targetDept = "") {
     .slice(0, 18);
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
 export default function RoutingReviewDetails() {
   const { reviewId: rawReviewId } = useParams();
   const reviewId = sanitizeId(rawReviewId);
@@ -202,9 +198,10 @@ export default function RoutingReviewDetails() {
     triggerFlash(decision);
 
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/routing-review/${encodeURIComponent(reviewId)}`), {
         method: "PATCH",
-        headers,
+        headers: { ...headers, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify({
           decision,
           approved_department: decision === "Overridden" ? dept
@@ -235,7 +232,6 @@ export default function RoutingReviewDetails() {
     }
   };
 
-  // ── Derived ───────────────────────────────────────────────────────────────
   const isPending  = item?.status === "Pending";
   const confidence = item ? parseFloat(item.confidencePct) : 0;
   const keywords   = extractKeywords(ticket?.details || ticket?.subject || "", item?.predictedDepartment || "");

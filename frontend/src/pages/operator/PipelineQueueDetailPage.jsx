@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import "./PipelineQueuePage.css";
 
 function getStoredToken() {
@@ -431,9 +432,10 @@ export default function PipelineQueueDetailPage() {
     });
     try {
       const token = getStoredToken();
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/operator/pipeline-queue/${queueId}/rerun-stage`), {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
       });
       if (!res.ok) {
         const msg = await res.text().catch(() => "Failed");
@@ -461,9 +463,10 @@ export default function PipelineQueueDetailPage() {
     setReleaseErr("");
     try {
       const token = getStoredToken();
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/operator/pipeline-queue/${queueId}/rerun`), {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
       });
       if (!res.ok) {
         const msg = await res.text().catch(() => "Failed");

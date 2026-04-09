@@ -8,6 +8,7 @@ import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import {
   sanitizeText,
   sanitizeId,
@@ -28,7 +29,6 @@ function getAuthToken() {
   );
 }
 
-// ── Confidence bar ─────────────────────────────────────────────────────────────
 function ConfidenceBar({ pct }) {
   const color = pct >= 70 ? "#16a34a" : pct >= 50 ? "#d97706" : "#dc2626";
   return (
@@ -42,7 +42,6 @@ function ConfidenceBar({ pct }) {
 }
 
 
-// ── Value pill — parses "Priority: High" or "Dept: Facilities" ────────────────
 const PRIORITY_COLORS = {
   critical: { bg: "rgba(220,38,38,0.1)",   border: "rgba(220,38,38,0.3)",   color: "#b91c1c" },
   high:     { bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.3)",  color: "#b45309" },
@@ -93,7 +92,6 @@ function ValuePill({ value, isRequested }) {
   );
 }
 
-// ── Toast system ───────────────────────────────────────────────────────────────
 function ToastStack({ toasts }) {
   return (
     <div className="apr-toastStack">
@@ -117,7 +115,6 @@ function useToast() {
   return { toasts, push };
 }
 
-// ── Sortable column header ─────────────────────────────────────────────────────
 function SortableHeader({ label, col, sortCol, sortDir, onSort, style }) {
   const active = sortCol === col;
   return (
@@ -145,7 +142,6 @@ function useSort(defaultCol, defaultDir = "asc") {
   return { sortCol, sortDir, handleSort };
 }
 
-// ── Tab button ─────────────────────────────────────────────────────────────────
 function TabBtn({ active, onClick, children, badge }) {
   return (
     <button type="button" className={`apr-tab ${active ? "apr-tab--active" : ""}`} onClick={onClick}>
@@ -155,7 +151,6 @@ function TabBtn({ active, onClick, children, badge }) {
   );
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────────
 export default function Approvals() {
   const revealRef = useScrollReveal();
   const navigate  = useNavigate();
@@ -163,7 +158,6 @@ export default function Approvals() {
 
   const [activeTab, setActiveTab] = useState("approvals"); // "approvals" | "rrq"
 
-  // ── Approval requests state ────────────────────────────────────────────────
   const [query, setQuery]           = useState("");
   const [requestType, setRequestType] = useState("All Request Types");
   const [status, setStatus]         = useState("Pending");
@@ -179,7 +173,6 @@ export default function Approvals() {
 
   const aprSort = useSort("submittedOn", "desc");
 
-  // ── Routing review state ───────────────────────────────────────────────────
   const [rrqRows, setRrqRows]           = useState([]);
   const [rrqLoading, setRrqLoading]     = useState(true);
   const [rrqQuery, setRrqQuery]         = useState("");
@@ -199,7 +192,6 @@ export default function Approvals() {
   const token   = getAuthToken();
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!token) { navigate("/login"); return; }
     setLoading(true);
@@ -245,7 +237,6 @@ export default function Approvals() {
 
   useEffect(() => { if (token) fetchRrq(); }, [fetchRrq]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── KPI totals ─────────────────────────────────────────────────────────────
   const totals = useMemo(() => ({
     total:    rows.length,
     pending:  rows.filter((r) => r.status === "Pending").length,
@@ -259,7 +250,6 @@ export default function Approvals() {
     overridden: rrqRows.filter((r) => r.status === "Overridden").length,
   }), [rrqRows]);
 
-  // ── KPI click-to-filter ────────────────────────────────────────────────────
   const handleKpiClick = (label) => {
     if (activeKpi === label) { setActiveKpi(null); setStatus("All Status"); return; }
     setActiveKpi(label);
@@ -273,7 +263,6 @@ export default function Approvals() {
     setRrqQuery("");
   };
 
-  // ── Filtering ──────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
@@ -301,7 +290,6 @@ export default function Approvals() {
     });
   }, [rrqRows, rrqQuery, rrqStatus, rrqActiveKpi]);
 
-  // ── Sorting ────────────────────────────────────────────────────────────────
   const sortedFiltered = useMemo(() => {
     const arr = [...filtered];
     arr.sort((a, b) => {
@@ -344,7 +332,6 @@ export default function Approvals() {
     return arr;
   }, [rrqFiltered, rrqSort.sortCol, rrqSort.sortDir]);
 
-  // ── Actions ────────────────────────────────────────────────────────────────
   const decide = async (requestId, decision, selectedDepartment = undefined, overrideValue = undefined) => {
     if (!token) { navigate("/login"); return; }
     const safeRequestId  = sanitizeId(requestId);
@@ -367,8 +354,9 @@ export default function Approvals() {
         // Normal reroute approve
       }
 
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/approvals/${encodeURIComponent(safeRequestId)}`), {
-        method: "PATCH", headers,
+        method: "PATCH", headers: { ...headers, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify(body),
       });
       if (!res.ok) {
@@ -391,8 +379,9 @@ export default function Approvals() {
   const decideRrq = async (reviewId, decision, department) => {
     setRrqRows((prev) => prev.map((r) => (r.reviewId === reviewId ? { ...r, status: decision } : r)));
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/routing-review/${encodeURIComponent(sanitizeId(reviewId))}`), {
-        method: "PATCH", headers,
+        method: "PATCH", headers: { ...headers, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify({ decision, approved_department: sanitizeText(department, 100) || undefined }),
       });
       if (!res.ok) { throw new Error(`Failed (${res.status})`); }
@@ -409,7 +398,6 @@ export default function Approvals() {
   const shApr = { sortCol: aprSort.sortCol, sortDir: aprSort.sortDir, onSort: aprSort.handleSort };
   const shRrq = { sortCol: rrqSort.sortCol, sortDir: rrqSort.sortDir, onSort: rrqSort.handleSort };
 
-  // ── JSX ────────────────────────────────────────────────────────────────────
   return (
     <Layout role="manager">
       <ToastStack toasts={toasts} />
@@ -420,7 +408,6 @@ export default function Approvals() {
           subtitle="Approve or reject requests for rescoring and rerouting complaints."
         />
 
-        {/* ── Tabs ─────────────────────────────────────────────────────────── */}
         <div className="apr-tabBar">
           <TabBtn active={activeTab === "approvals"} onClick={() => setActiveTab("approvals")} badge={totals.pending}>
             Approval Requests

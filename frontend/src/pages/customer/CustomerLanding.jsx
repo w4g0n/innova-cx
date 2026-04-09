@@ -14,6 +14,9 @@ import {
   sanitizeText,
   sanitizeId,
   formatTimeAgo,
+  limitWords,
+  sanitizeTextByWords,
+  MAX_TEXT_WORDS,
 } from "./sanitize";
 
 // Static lookup maps — never derived from server data
@@ -114,14 +117,12 @@ export default function CustomerLanding() {
   const notifRef          = useRef(null);
   const loadingTimeoutRef = useRef(null);
 
-  // ── Nova chat widget state ──────────────────────────────────────────────
   const [isOpen,             setIsOpen]             = useState(false);
   const [isExpanded,         setIsExpanded]          = useState(false);
   const [showCloseConfirm,   setShowCloseConfirm]   = useState(false);
   const [showResetConfirm,   setShowResetConfirm]   = useState(false);
   const [showLogoutConfirm,  setShowLogoutConfirm]  = useState(false);
 
-  // ── Fill-Form widget state ──────────────────────────────────────────────
   const [formOpen,             setFormOpen]             = useState(false);
   const [formExpanded,         setFormExpanded]         = useState(false);
   const [showFormCloseConfirm, setShowFormCloseConfirm] = useState(false);
@@ -180,6 +181,17 @@ export default function CustomerLanding() {
       if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
     };
   }, [fetchRecentTicket]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const el  = document.documentElement;
+      const max = el.scrollHeight - el.clientHeight;
+      const pct = max > 0 ? (el.scrollTop / max) * 100 : 0;
+      document.documentElement.style.setProperty("--scroll-pct", `${pct.toFixed(1)}%`);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     if (!recentTicket || hasUsableSubject(recentTicket)) return undefined;
@@ -272,7 +284,6 @@ export default function CustomerLanding() {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, isOpen, isExpanded, novaView, listRef]);
 
-  // ── Nova widget handlers ───────────────────────────────────────────────
   const handleClose  = () => setShowCloseConfirm(true);
   const confirmClose = () => {
     setShowCloseConfirm(false);
@@ -291,7 +302,6 @@ export default function CustomerLanding() {
   };
   const minimizeWidget = () => { setIsOpen(false); setIsExpanded(false); };
 
-  // ── Fill Form widget handlers ──────────────────────────────────────────
   const openFormWidget    = () => { closeAllPopovers(); setFormOpen(true); };
   const handleFormClose   = () => setShowFormCloseConfirm(true);
   const confirmFormClose  = () => {
@@ -353,7 +363,6 @@ export default function CustomerLanding() {
     else if (action === "form")    openFormWidget();
   };
 
-  // ── Voice input for Nova ───────────────────────────────────────────────
   const speechRef   = useRef(null);
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceDraft,  setVoiceDraft]  = useState("");
@@ -386,7 +395,7 @@ export default function CustomerLanding() {
         else interim += chunk;
       }
       // Sanitize SpeechRecognition output — browser APIs can return arbitrary text
-      const raw = sanitizeText((finalText || interim || "").trim(), 5000);
+      const raw = sanitizeTextByWords((finalText || interim || "").trim());
       setVoiceDraft(raw);
     };
     rec.onerror = () => { setVoiceActive(false); setVoiceBusy(false); };
@@ -406,14 +415,13 @@ export default function CustomerLanding() {
     const t = (voiceDraft || "").trim();
     if (!t) { cancelVoice(); return; }
     // voiceDraft is already sanitized in onresult
-    setText((prev) => (prev ? `${prev} ${t}` : t));
+    setText((prev) => limitWords(prev ? `${prev} ${t}` : t, MAX_TEXT_WORDS));
     cancelVoice();
   };
 
   return (
     <div className="cl-dashboard pl-root">
 
-      {/* ─── TOPBAR ────────────────────────────────────────────── */}
       <header className="cl-topbar">
         <div className="cl-topbar-left">
           <img src={novaLogo} alt="InnovaAI" className="cl-topbar-logo" />
@@ -564,7 +572,6 @@ export default function CustomerLanding() {
         </div>
       </header>
 
-      {/* ─── MAIN ──────────────────────────────────────────────── */}
       <main className="cl-main">
 
         {/* GREETING HERO */}
@@ -585,7 +592,7 @@ export default function CustomerLanding() {
               <span className="cl-greeting-name">{firstName}.</span>
             </h1>
             <p className="cl-greeting-sub">
-              Welcome back to your InnovaAI dashboard. How can we help you today?
+              Welcome back to your InnovaCX dashboard. How can we help you today?
             </p>
           </div>
 
@@ -850,7 +857,6 @@ export default function CustomerLanding() {
         </section>
       </main>
 
-      {/* ─── FOOTER ────────────────────────────────────────────── */}
       <footer className="cl-footer">
         <img src={novaLogo} alt="InnovaAI" className="cl-footer-logo" />
         <div className="cl-footer-links">
@@ -870,7 +876,6 @@ export default function CustomerLanding() {
         <p className="cl-footer-copy">© 2026 InnovaAI</p>
       </footer>
 
-      {/* ─── NOVA CHAT WIDGET ──────────────────────────────────── */}
       {isOpen && (
         <div className={`novaWidget ${isExpanded ? "expanded" : ""} open`}>
           <div className="novaWidgetHeader">
@@ -1038,12 +1043,10 @@ export default function CustomerLanding() {
                     <input
                       value={text}
                       onChange={(e) => {
-                        // Cap input length client-side
                         const v = e.target.value;
-                        if (v.length <= 5000) setText(v);
+                        setText(limitWords(v, MAX_TEXT_WORDS));
                       }}
                       placeholder="Type a message…"
-                      maxLength={5000}
                     />
                     <button type="submit">Send</button>
                   </form>
@@ -1078,7 +1081,6 @@ export default function CustomerLanding() {
         </div>
       )}
 
-      {/* ─── FILL FORM WIDGET ── */}
       {formOpen && (
         <div
           className={`novaWidget ${formExpanded ? "expanded" : ""} open`}
@@ -1142,7 +1144,6 @@ export default function CustomerLanding() {
         </div>
       )}
 
-      {/* ─── TICKET CONFIRM POPUP ────── */}
       {ticketPopup && (
         <TicketConfirmPopup
           open
@@ -1154,7 +1155,6 @@ export default function CustomerLanding() {
         />
       )}
 
-      {/* ─── LOGOUT CONFIRM ────────────────────────────────────── */}
       {showLogoutConfirm && (
         <div className="novaCloseModal" role="dialog" aria-modal="true" aria-label="Confirm logout">
           <div className="novaCloseModalContent">
