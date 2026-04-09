@@ -22,6 +22,7 @@ from typing import Any
 import httpx
 from langchain_core.runnables import RunnableLambda
 from db import db_connect
+from backend_client import internal_backend_headers
 
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
 SUGGESTED_RESOLUTION_PROMPT_EXAMPLES = max(
@@ -602,7 +603,11 @@ async def _persist_suggested_resolution(state: dict) -> None:
         "suggested_resolution_model": state.get("suggested_resolution_model"),
     }
     async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.post(f"{BACKEND_URL}/api/complaints", json=payload)
+        response = await client.post(
+            f"{BACKEND_URL}/api/complaints",
+            json=payload,
+            headers=internal_backend_headers(),
+        )
         response.raise_for_status()
 
 

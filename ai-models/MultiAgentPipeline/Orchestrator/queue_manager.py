@@ -42,6 +42,7 @@ from typing import Any
 
 from db import db_connect
 from execution_logger import _write_stage_event
+from backend_client import internal_backend_headers
 
 from agents.step01_subjectgeneration.step import generate_subject
 from agents.step02_suggestedresolution.step import generate_suggested_resolution
@@ -816,6 +817,7 @@ def _notify_operator(ticket_id: str, ticket_code: str, failed_stage: str, queue_
                     f"Review and correct the output in the Pipeline Queue. Queue ID: {queue_id}"
                 ),
             },
+            headers=internal_backend_headers(),
             timeout=5.0,
         )
     except Exception as exc:
@@ -842,6 +844,7 @@ def _notify_operator_noncritical(
                     f"(queue_id: {queue_id})"
                 ),
             },
+            headers=internal_backend_headers(),
             timeout=5.0,
         )
     except Exception as exc:

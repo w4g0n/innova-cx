@@ -187,6 +187,7 @@ services:
       SUBJECT_GENERATOR_AUTO_DOWNLOAD: "${SUBJECT_GENERATOR_AUTO_DOWNLOAD:-false}"
       RECURRENCE_ENCODER_MODEL: "${RECURRENCE_ENCODER_MODEL:-/app/agents/step01_recurrence/model}"
       RECURRENCE_SIMILARITY_THRESHOLD: "${RECURRENCE_SIMILARITY_THRESHOLD:-0.75}"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-}"
     depends_on:
       postgres:
         condition: service_healthy

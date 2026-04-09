@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from pipeline import pipeline
+from backend_client import internal_backend_headers
 from queue_manager import (
     enqueue_ticket,
     ensure_pipeline_control_table,
@@ -544,7 +545,11 @@ async def process_text(
     }
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(f"{BACKEND_URL}/api/complaints", json=initial_payload)
+            response = await client.post(
+                f"{BACKEND_URL}/api/complaints",
+                json=initial_payload,
+                headers=internal_backend_headers(),
+            )
             response.raise_for_status()
             open_ticket = response.json()
             ticket_id = open_ticket.get("ticket_id")
