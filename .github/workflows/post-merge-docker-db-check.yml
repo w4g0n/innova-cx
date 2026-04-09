@@ -28,10 +28,12 @@ jobs:
       - name: Sweep all compose profiles
         env:
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
-          POSTGRES_PASSWORD: ci-postgres-password
-          APP_DB_PASSWORD: ci-app-db-password
-          READONLY_DB_PASSWORD: ci-readonly-db-password
-          TEST_DB_PASSWORD: ci-test-db-password
+          # Match the committed bootstrap defaults so CI does not fight the
+          # seeded role passwords created during docker-entrypoint init.
+          POSTGRES_PASSWORD: changeme123
+          APP_DB_PASSWORD: changeme123
+          READONLY_DB_PASSWORD: innovacx123
+          TEST_DB_PASSWORD: innovacx123
           JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min
           CSRF_SECRET: ci-csrf-secret-placeholder-32-chars-min
           INTERNAL_API_KEY: ci-internal-api-key-placeholder-value
@@ -247,10 +249,10 @@ jobs:
         if: always()
         env:
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
-          POSTGRES_PASSWORD: ci-postgres-password
-          APP_DB_PASSWORD: ci-app-db-password
-          READONLY_DB_PASSWORD: ci-readonly-db-password
-          TEST_DB_PASSWORD: ci-test-db-password
+          POSTGRES_PASSWORD: changeme123
+          APP_DB_PASSWORD: changeme123
+          READONLY_DB_PASSWORD: innovacx123
+          TEST_DB_PASSWORD: innovacx123
           JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min
           CSRF_SECRET: ci-csrf-secret-placeholder-32-chars-min
           INTERNAL_API_KEY: ci-internal-api-key-placeholder-value
