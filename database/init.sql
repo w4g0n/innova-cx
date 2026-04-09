@@ -9,7 +9,7 @@ BEGIN
     CREATE ROLE innovacx_app WITH LOGIN;
   END IF;
 END $$;
-ALTER ROLE innovacx_app PASSWORD current_setting('app.db_password', true);
+--ALTER ROLE innovacx_app PASSWORD current_setting('app.db_password', true);
 
 -- Grant necessary permissions
 GRANT CONNECT ON DATABASE complaints_db TO innovacx_app;
