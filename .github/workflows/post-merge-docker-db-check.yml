@@ -25,6 +25,17 @@ jobs:
         with:
           clean: false
 
+      - name: DEBUG runner state
+        run: |
+          echo "=== all containers ==="
+          docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.ID}}\t{{.Image}}'
+          echo "=== innovacx volumes ==="
+          docker volume ls | grep innova || true
+          echo "=== innovacx networks ==="
+          docker network ls | grep innova || true
+          echo "=== containers using postgres_data volume ==="
+          docker ps -a --filter volume=innova-cx_postgres_data --format '{{.Names}}: {{.Status}}: {{.ID}}' || true
+
       - name: Sweep all compose profiles
         env:
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
@@ -105,17 +116,7 @@ jobs:
             local profile="$1"
             echo "=== Running profile: $profile ==="
 
-            # Step 1: compose down to remove containers compose knows about,
-            # including volumes so postgres starts with a clean data directory.
             docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
-
-            # Step 2: force-remove any container still holding one of our names
-            # on this runner — covers containers left by crashed/concurrent jobs
-            # that compose down did not own and therefore did not remove.
-            # A surviving container from a previous run owns the postgres data
-            # volume lock; postgres refuses to start (duplicate instance), exits
-            # immediately, and compose's dependency waiter hits a stale ID:
-            # "No such container: <id>".
             docker rm -f \
               innovacx-db \
               innovacx-backend \
@@ -125,6 +126,11 @@ jobs:
               innovacx-chatbot \
               innovacx-transcriber \
               2>/dev/null || true
+
+            echo "=== container state after cleanup, before up ==="
+            docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.ID}}' | grep -i innova || echo "(none)"
+            echo "=== volumes after cleanup ==="
+            docker volume ls | grep innova || echo "(none)"
 
             # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
             CHATBOT_USE_MOCK=true \
