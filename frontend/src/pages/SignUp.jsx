@@ -1,6 +1,5 @@
 import { useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiUrl } from "../config/apiBase";
 
 // ─── Google OAuth redirect ────────────────────────────────────────────────────
 function initiateGoogleOAuth() {
