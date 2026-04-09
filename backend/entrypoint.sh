@@ -22,13 +22,15 @@ set -e
 echo "[entrypoint] === InnovaCX backend starting ==="
 echo "[entrypoint] $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-#  Step 1: Wait for DB 
+#  Step 1: Wait for DB
+#  Use the runtime app URL for startup readiness. The admin URL is only for
+#  migrations and may be intentionally narrower than the app connection path.
 echo "[entrypoint] Waiting for PostgreSQL..."
 python3 - << 'PYEOF'
 import os, sys, time
 import psycopg2
 
-url = os.environ.get("DATABASE_ADMIN_URL") or os.environ.get("DATABASE_URL")
+url = os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_ADMIN_URL")
 if not url:
     print("[entrypoint] ERROR: No DATABASE_URL or DATABASE_ADMIN_URL set", flush=True)
     sys.exit(1)
