@@ -1329,6 +1329,8 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     If correct, marks MFA as enabled (first-time setup) and returns a full JWT.
     """
     payload = verify_jwt(body.login_token)
+    if payload.get("type") != "mfa_temp":
+        raise HTTPException(status_code=400, detail="Invalid login token")
     client_ip = request.client.host if request and request.client else None
     user = fetch_one(
         "SELECT id, email, role, totp_secret, mfa_enabled FROM users WHERE id = %s",
@@ -1632,17 +1634,28 @@ def auth_logout(
     user: Dict[str, Any] = Depends(get_current_user),
     _csrf: None = Depends(require_csrf),
 ):
-    token = _get_bearer_token(authorization)
-    payload = verify_jwt(token)
+    # Token may be in the httpOnly cookie or Bearer header — try both.
+    token = (request.cookies.get("access_token") if request else None) or None
+    if not token and authorization:
+        parts = authorization.split(" ", 1)
+        if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1].strip():
+            token = parts[1].strip()
     client_ip = request.client.host if request and request.client else None
-    logout_user(
-        jti=str(payload.get("jti") or "") or None,
-        token_exp=float(payload.get("exp")) if payload.get("exp") is not None else None,
-        user_id=str(user["id"]),
-        db_execute=execute,
-        ip=client_ip,
-    )
-    return {"ok": True}
+    if token:
+        try:
+            payload = verify_jwt(token)
+            logout_user(
+                jti=str(payload.get("jti") or "") or None,
+                token_exp=float(payload.get("exp")) if payload.get("exp") is not None else None,
+                user_id=str(user["id"]),
+                db_execute=execute,
+                ip=client_ip,
+            )
+        except Exception:
+            pass  # Token unreadable — still clear the cookie
+    resp = JSONResponse(content={"ok": True})
+    _clear_auth_cookie(resp)
+    return resp
 
 class ResetTokenEmailRequest(BaseModel):
     token: str

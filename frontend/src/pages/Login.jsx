@@ -369,6 +369,7 @@ export default function Login() {
       const csrf = await getCsrfToken();
       const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           ...(csrf ? { "X-CSRF-Token": csrf } : {}),
@@ -428,7 +429,6 @@ export default function Login() {
         return;
       }
 
-      localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("user", JSON.stringify(userPayload));
 
       const rawNext = searchParams.get("next");
