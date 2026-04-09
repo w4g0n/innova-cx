@@ -1151,10 +1151,8 @@ def get_operator_qc_data(
     date_end   = period_end.date()   if hasattr(period_end,   "date") else period_end
 
     # Build dept filter fragments
-    qc_dept_filter = ""
     qc_dept_params: List[Any] = [date_start, date_end]
     if department and department != "All Departments":
-        qc_dept_filter = "AND department_name = %s"
         qc_dept_params.append(department)
 
     # A: ACCEPTANCE — from mv_acceptance_daily
@@ -1812,7 +1810,6 @@ def get_operator_feature_data(
     imp_low    = int(overall.get("impact_low")      or 0)
 
     low_conf_rate    = round(low_conf  / total * 100, 1) if total else 0
-    recurring_rate   = round(recurring / total * 100, 1) if total else 0  # kept internally
     safety_rate      = round(safety    / total * 100, 1) if total else 0
     mismatch_rate    = round(mismatch  / total * 100, 1) if total else 0
 

@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
@@ -232,11 +231,11 @@ function RescoringReroutingView({ data, loading, error, onRetry }) {
   if (error)   return <TabError message={error} onRetry={onRetry} />;
   if (!data)   return null;
 
-  const { kpis, byDepartment, reassignmentByDept, reroutingKpis } = data;
+  const { kpis, reassignmentByDept, reroutingKpis } = data;
 
   // Rescore KPIs
   const rescoreRate         = kpis?.rescoreRate        ?? 0;
-  const totalRescores       = kpis?.totalRescored       ?? kpis?.upscores + kpis?.downscores ?? "—";
+  const totalRescores       = kpis?.totalRescored       ?? kpis?.upscores + kpis?.downscores || "—";
   const avgRescodesPerEmp   = kpis?.avgRescoresPerEmployee != null
     ? kpis.avgRescoresPerEmployee.toFixed(1)
     : "—";
