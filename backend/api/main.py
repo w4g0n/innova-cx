@@ -728,7 +728,13 @@ async def _start_sla_heartbeat() -> None:
             else:
                 logger.warning("dev_seed | gave up after 15 attempts: %s", _e)
 
-    # Wire analytics service to DB helpers and warm-up refresh
+    # ── One-time repair: fix any stale ISO week labels from pre-fix reports ────
+    try:
+        _repair_week_labels_once()
+    except Exception as _e:
+        logger.warning("week_label_repair | startup call failed: %s", _e)
+
+    # ── Wire analytics service to DB helpers and warm-up refresh ─────────────
     if _ANALYTICS_READY:
         try:
             _analytics.init(fetch_one, fetch_all, db_connect)
@@ -3076,8 +3082,15 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
 
     # weekly rows
     # Derive week-of-month from created_day; group mv_employee_daily by ISO week.
-    # We use date_trunc('week', created_day) to get the Monday of each week,
+    # We use date_trunc('week', created_day) to get the Monday of each ISO week,
     # then label it as "Week N" relative to the start of the month.
+    #
+    # IMPORTANT — label clamping:
+    # date_trunc('week', ...) in PostgreSQL always returns the Monday of the ISO
+    # week, which can fall in the *previous* month when the 1st of the month is
+    # not a Monday.  Example: April 1 2026 is a Wednesday → its ISO week Monday
+    # is March 30.  We clamp the display date to period_start so that the first
+    # week of April is always labelled with an April (or later) date.
     weekly_rows = fetch_all(
         """
         SELECT
@@ -3125,10 +3138,26 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
 
         prev_resolved = w_resolved
 
-        # Use ISO week date as label (e.g. "Week 1 (Mar 3)")
+        # Build the week label (e.g. "Week 1 (Apr 1)").
+        # Clamp week_monday to period_start: date_trunc('week', ...) returns the
+        # ISO Monday, which can precede the month boundary (e.g. Mar 30 for an
+        # April report whose first ticket falls in ISO-week starting Mar 30).
+        # Displaying that Monday is misleading — show the first day of the month
+        # instead whenever week_monday falls before period_start.
         week_monday_obj = wr.get("week_monday")
         if week_monday_obj:
-            week_label = f"Week {week_num} ({week_monday_obj.strftime('%b %-d')})"
+            # Normalise to datetime.date — psycopg2 may return datetime.datetime
+            # or datetime.date depending on column type; explicit cast avoids a
+            # silent TypeError when comparing with period_start (always date).
+            import datetime as _dt
+            if isinstance(week_monday_obj, _dt.datetime):
+                wm_date = week_monday_obj.date()
+            else:
+                wm_date = week_monday_obj
+            # Clamp: if the ISO Monday falls before this month's first day, use
+            # period_start as the label anchor instead.
+            label_date = wm_date if wm_date >= period_start else period_start
+            week_label = f"Week {week_num} ({label_date.strftime('%b %-d')})"
         else:
             week_label = f"Week {week_num}"
 
@@ -3217,30 +3246,58 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
     return report_code
 
 
-# Demo months guarantee
-# These are the fixed months every employee must have reports for.
-# They are also the minimum floor — any newer month with MV data is added too.
-_DEMO_MONTHS = [
-    (2026, 1),  # January 2026
-    (2026, 2),  # February 2026
-    (2026, 3),  # March 2026
-    (2026, 4),  # April 2026
-]
+# ── One-time repair: fix stale ISO week labels ────────────────────────────────
+def _repair_week_labels_once() -> None:
+    """One-time startup repair for reports generated before the ISO week label
+    clamping fix.  Detects any employee_report_weekly row whose week_label
+    contains a date from a *different* month than the report's own month, then
+    force-regenerates that report using the fixed _generate_employee_report().
+
+    Idempotent — once all labels are correct the query returns zero rows and
+    this function exits immediately with no DB writes.  Safe to call on every
+    startup; after the first run it becomes a no-op in under 1ms.
+    """
+    try:
+        stale = fetch_all(
+            """
+            SELECT DISTINCT er.report_code,
+                            er.employee_user_id,
+                            EXTRACT(YEAR  FROM er.period_start)::int AS yr,
+                            EXTRACT(MONTH FROM er.period_start)::int AS mo
+            FROM employee_report_weekly ew
+            JOIN employee_reports er ON er.id = ew.report_id
+            WHERE ew.week_label ~ '\\(([A-Za-z]+ \\d+)\\)'
+              AND to_date(
+                    substring(ew.week_label FROM '\\(([A-Za-z]+ \\d+)\\)') || ' ' ||
+                    EXTRACT(YEAR FROM er.period_start)::text,
+                    'Mon DD YYYY'
+                  ) < er.period_start
+            """,
+            (),
+        )
+        if not stale:
+            logger.info("week_label_repair | all week labels are correct — nothing to fix")
+            return
+        logger.info("week_label_repair | found %d report(s) with stale week labels — repairing", len(stale))
+        for row in stale:
+            try:
+                code = _generate_employee_report(
+                    str(row["employee_user_id"]), int(row["yr"]), int(row["mo"])
+                )
+                logger.info("week_label_repair | repaired %s", code)
+            except Exception as _e:
+                logger.warning("week_label_repair | failed for %s: %s", row["report_code"], _e)
+        logger.info("week_label_repair | repair complete")
+    except Exception as exc:
+        logger.warning("week_label_repair | skipped due to error: %s", exc)
 
 
+# ── Report coverage guarantee (real MV data only) ────────────────────────────
 def _ensure_recent_reports(user_id: str) -> None:
-    """Ensure the employee has a FULLY POPULATED report for:
+    """Ensure the employee has a FULLY POPULATED report for every month where
+    they have real MV data in mv_employee_daily.
 
-    1. Every fixed demo month in _DEMO_MONTHS (Jan–Apr 2026), regardless of
-       whether MV data exists for that month.  This guarantees uniform coverage
-       across all employees — zero-activity months produce a valid empty report.
-
-    2. Every newer month (> April 2026) where the employee has MV activity data.
-       This keeps the system forward-compatible: May 2026, June 2026, etc. appear
-       automatically as ticket data accumulates.
-
-    2025 months are NEVER generated.  Any 2025 report that exists is treated as
-    legacy data that the cleanup migration should have removed.
+    No hardcoded months. No demo floor. Reports come from real data only.
 
     Two-pass logic per month:
       Pass 1 — generate missing reports (report row does not exist at all).
@@ -3260,35 +3317,23 @@ def _ensure_recent_reports(user_id: str) -> None:
     if not user_slug:
         user_slug = _re_slug2.sub(r"[^a-z0-9]", "", str(user_id).replace("-", ""))[:8]
 
-    # Build the full target set
-    # Start with the fixed demo months
-    target_months: set = set(_DEMO_MONTHS)
-
-    # Add any newer months (> last demo month) that have MV data for this employee
-    last_demo_year, last_demo_month = max(_DEMO_MONTHS)
-    from datetime import date as _date
-    cutoff = _date(last_demo_year, last_demo_month, 1)
-
-    mv_newer = fetch_all(
+    # ── Discover target months from real MV data for this employee ────────────
+    mv_months = fetch_all(
         """
         SELECT DISTINCT
             EXTRACT(YEAR  FROM created_month)::int AS yr,
             EXTRACT(MONTH FROM created_month)::int AS mo
         FROM mv_employee_daily
         WHERE employee_id = %s::uuid
-          AND created_month > %s
+          AND EXTRACT(YEAR FROM created_month)::int >= 2026
         ORDER BY yr, mo
         """,
-        (user_id, cutoff),
+        (user_id,),
     )
-    for row in mv_newer:
-        yr = int(row["yr"])
-        mo = int(row["mo"])
-        if yr >= 2026:          # hard guard: never below 2026
-            target_months.add((yr, mo))
+    target_months = [(int(r["yr"]), int(r["mo"])) for r in mv_months]
 
-    # Process each target month
-    for year, month in sorted(target_months):
+    # ── Process each target month ─────────────────────────────────────────────
+    for year, month in target_months:
         if year < 2026:
             continue            # absolute safety: never generate pre-2026
 
@@ -3319,7 +3364,7 @@ def _ensure_recent_reports(user_id: str) -> None:
 def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
     user_id = user["id"]
 
-    # Ensure demo months + any newer MV-backed months are fully populated.
+    # Ensure all MV-backed months are fully populated for this employee.
     try:
         _ensure_recent_reports(user_id)
     except Exception as exc:
@@ -6443,6 +6488,36 @@ def get_operator_qc_rerouting(
     except Exception as e:
         logger.error("get_operator_qc_rerouting failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+@api.get("/operator/analytics/qc/rescoring-rerouting")
+def get_operator_qc_rescoring_rerouting(
+    timeRange:  str           = Query("last30days"),
+    department: str           = Query("All Departments"),
+    dateFrom:   Optional[str] = Query(None),
+    dateTo:     Optional[str] = Query(None),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """
+    Merged Rescoring + Rerouting tab payload.
+    Returns rescoring kpis, reassignmentByDept (all departments, incl. 0-value rows),
+    and reroutingKpis — all in one response for the unified B tab.
+    """
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
+    if not _ANALYTICS_READY:
+        raise HTTPException(status_code=503, detail="Analytics MVs not ready.")
+    try:
+        full = _analytics.get_operator_qc_data(period_start, period_end, department)
+        rescoring = full["rescoring"]
+        return {
+            "kpis":               rescoring["kpis"],
+            "byDepartment":       rescoring["byDepartment"],
+            "reassignmentByDept": rescoring["reassignmentByDept"],
+            "reroutingKpis":      rescoring["reroutingKpis"],
+        }
+    except Exception as e:
+        logger.error("get_operator_qc_rescoring_rerouting failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @api.get("/operator/learning/reroute")
 def get_learning_reroute(

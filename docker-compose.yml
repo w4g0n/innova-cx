@@ -62,6 +62,10 @@ services:
       SUGGESTED_RESOLUTION_USE_MOCK: "${SUGGESTED_RESOLUTION_USE_MOCK:-true}"
       SUGGESTED_RESOLUTION_PIPELINE_ONLY: "${SUGGESTED_RESOLUTION_PIPELINE_ONLY:-true}"
       WATCHFILES_FORCE_POLLING: "true"
+      # DEV_SEED_USERS: default false in production.
+      # Set DEV_SEED_USERS=true in .env only for local dev if you need
+      # the hardcoded demo accounts auto-created/reset on every startup.
+      DEV_SEED_USERS: "${DEV_SEED_USERS:-false}"
     depends_on:
       postgres:
         condition: service_healthy

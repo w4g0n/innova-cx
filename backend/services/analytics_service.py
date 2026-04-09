@@ -1151,10 +1151,8 @@ def get_operator_qc_data(
     date_end   = period_end.date()   if hasattr(period_end,   "date") else period_end
 
     # Build dept filter fragments
-    qc_dept_filter = ""
     qc_dept_params: List[Any] = [date_start, date_end]
     if department and department != "All Departments":
-        qc_dept_filter = "AND department_name = %s"
         qc_dept_params.append(department)
 
     # A: ACCEPTANCE — from mv_acceptance_daily
@@ -1204,21 +1202,50 @@ def get_operator_qc_data(
         for r in acc_trend_raw
     ]
 
-    # B: RESCORING — from mv_operator_qc_daily
+    # ─────────────────────────────────────────────────────────────────────────
+    # B: RESCORING — derived from tickets base table
+    # (mv_operator_qc_daily not yet materialized; use tickets directly)
+    # ─────────────────────────────────────────────────────────────────────────
+    t_dept_filter = ""
+    t_dept_params: List[Any] = [date_start, date_end]
+    if department and department != "All Departments":
+        t_dept_filter = "AND COALESCE(d.name, 'Unassigned') = %s"
+        t_dept_params.append(department)
     rescore_overall = _fetch_one(
         f"""
         SELECT
-            SUM(total)            AS total,
-            SUM(rescored)         AS rescored,
-            SUM(upscored)         AS upscored,
-            SUM(downscored)       AS downscored,
-            SUM(total_with_model) AS total_with_model
-        FROM mv_operator_qc_daily
-        WHERE created_day >= %s::date
-          AND created_day <  %s::date
-          {qc_dept_filter}
+            COUNT(DISTINCT t.id)                                          AS total,
+            COUNT(DISTINCT t.id) FILTER (WHERE
+                t.model_priority IS NOT NULL
+                AND t.priority::TEXT <> t.model_priority::TEXT
+            )                                                             AS rescored,
+            COUNT(DISTINCT t.id) FILTER (WHERE
+                t.model_priority IS NOT NULL
+                AND t.priority::TEXT <> t.model_priority::TEXT
+                AND (
+                    (t.model_priority::TEXT = 'Low'    AND t.priority::TEXT IN ('Medium','High','Critical'))
+                 OR (t.model_priority::TEXT = 'Medium' AND t.priority::TEXT IN ('High','Critical'))
+                 OR (t.model_priority::TEXT = 'High'   AND t.priority::TEXT = 'Critical')
+                )
+            )                                                             AS upscored,
+            COUNT(DISTINCT t.id) FILTER (WHERE
+                t.model_priority IS NOT NULL
+                AND t.priority::TEXT <> t.model_priority::TEXT
+                AND (
+                    (t.model_priority::TEXT = 'Critical' AND t.priority::TEXT IN ('Low','Medium','High'))
+                 OR (t.model_priority::TEXT = 'High'     AND t.priority::TEXT IN ('Low','Medium'))
+                 OR (t.model_priority::TEXT = 'Medium'   AND t.priority::TEXT = 'Low')
+                )
+            )                                                             AS downscored,
+            COUNT(DISTINCT t.id) FILTER (WHERE t.model_priority IS NOT NULL)
+                                                                          AS total_with_model
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.created_at::date >= %s::date
+          AND t.created_at::date <  %s::date
+          {t_dept_filter}
         """,
-        qc_dept_params,
+        t_dept_params,
     ) or {}
 
     total_twm      = int(rescore_overall.get("total_with_model") or 0)
@@ -1231,17 +1258,34 @@ def get_operator_qc_data(
     rescore_by_dept_raw = _fetch_all(
         f"""
         SELECT
-            department_name AS department,
-            SUM(upscored)   AS upscored,
-            SUM(downscored) AS downscored
-        FROM mv_operator_qc_daily
-        WHERE created_day >= %s::date
-          AND created_day <  %s::date
-          {qc_dept_filter}
-        GROUP BY department_name
-        ORDER BY department_name
+            COALESCE(d.name, 'Unassigned') AS department,
+            COUNT(DISTINCT t.id) FILTER (WHERE
+                t.model_priority IS NOT NULL
+                AND t.priority::TEXT <> t.model_priority::TEXT
+                AND (
+                    (t.model_priority::TEXT = 'Low'    AND t.priority::TEXT IN ('Medium','High','Critical'))
+                 OR (t.model_priority::TEXT = 'Medium' AND t.priority::TEXT IN ('High','Critical'))
+                 OR (t.model_priority::TEXT = 'High'   AND t.priority::TEXT = 'Critical')
+                )
+            ) AS upscored,
+            COUNT(DISTINCT t.id) FILTER (WHERE
+                t.model_priority IS NOT NULL
+                AND t.priority::TEXT <> t.model_priority::TEXT
+                AND (
+                    (t.model_priority::TEXT = 'Critical' AND t.priority::TEXT IN ('Low','Medium','High'))
+                 OR (t.model_priority::TEXT = 'High'     AND t.priority::TEXT IN ('Low','Medium'))
+                 OR (t.model_priority::TEXT = 'Medium'   AND t.priority::TEXT = 'Low')
+                )
+            ) AS downscored
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.created_at::date >= %s::date
+          AND t.created_at::date <  %s::date
+          {t_dept_filter}
+        GROUP BY COALESCE(d.name, 'Unassigned')
+        ORDER BY COALESCE(d.name, 'Unassigned')
         """,
-        qc_dept_params,
+        t_dept_params,
     )
     rescore_by_dept = [
         {
@@ -1252,113 +1296,256 @@ def get_operator_qc_data(
         for r in rescore_by_dept_raw
     ]
 
-    # C: REROUTING — from mv_operator_qc_daily (aggregate) + mv_ticket_base (cases)
+    # ── Rescoring: additional KPIs ────────────────────────────────────────
+    # Total Rescores
+    total_rescored_count = total_rescored  # already computed above
+
+    # Avg Rescores per Employee — derived from tickets + user_profiles
+    emp_rescore_raw = _fetch_one(
+        f"""
+        SELECT
+            ROUND(
+                COUNT(DISTINCT t.id) FILTER (WHERE
+                    t.model_priority IS NOT NULL
+                    AND t.priority::TEXT <> t.model_priority::TEXT
+                )::NUMERIC / NULLIF(COUNT(DISTINCT t.assigned_to_user_id), 0),
+            2) AS avg_per_emp
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.created_at::date >= %s::date
+          AND t.created_at::date <  %s::date
+          AND t.assigned_to_user_id IS NOT NULL
+          {t_dept_filter}
+        """,
+        t_dept_params,
+    ) or {}
+    avg_rescores_per_employee = float(emp_rescore_raw.get("avg_per_emp") or 0)
+
+    # Rescore Acceptance Rate: % of Rescoring approval_requests approved by manager
+    # Uses approval_requests table (submitted_at is the date column, not created_at)
+    rescore_accept_raw = _fetch_one(
+        """
+        SELECT
+            COUNT(*) AS total_submitted,
+            COUNT(*) FILTER (WHERE status = 'Approved') AS approved
+        FROM approval_requests
+        WHERE request_type = 'Rescoring'
+          AND submitted_at::date >= %s::date
+          AND submitted_at::date <  %s::date
+        """,
+        [date_start, date_end],
+    ) or {}
+    rs_total    = int(rescore_accept_raw.get("total_submitted") or 0)
+    rs_approved = int(rescore_accept_raw.get("approved")        or 0)
+    rescore_acceptance_rate = round(rs_approved / rs_total * 100, 1) if rs_total else 0
+
+    # Avg Confidence Score (global, from model_execution_log for priority agent)
+    conf_qc_raw = _fetch_one(
+        """
+        SELECT ROUND(AVG(confidence_score) FILTER (WHERE confidence_score IS NOT NULL), 4) AS avg_conf
+        FROM model_execution_log
+        WHERE started_at::date >= %s::date
+          AND started_at::date <  %s::date
+          AND agent_name = 'priority'
+        """,
+        [date_start, date_end],
+    ) or {}
+    avg_confidence_score = float(conf_qc_raw.get("avg_conf") or 0) if conf_qc_raw.get("avg_conf") else None
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # C: REROUTING — derived from tickets + approval_requests base tables
+    # (mv_operator_qc_daily not yet materialized; use base tables directly)
+    # ALL departments shown even when avg = 0
+    # ─────────────────────────────────────────────────────────────────────────
     reroute_raw = _fetch_all(
         f"""
         SELECT
-            department_name                             AS department,
-            SUM(rerouting_requests)                     AS rerouting_requests,
-            SUM(rerouted_tickets)                       AS rerouted_tickets,
+            COALESCE(d.name, 'Unassigned')              AS department,
+            COUNT(ar.id)                                AS rerouting_requests,
+            COUNT(DISTINCT ar.ticket_id)                AS rerouted_tickets,
             ROUND(
-                SUM(rerouting_requests)::NUMERIC
-                / NULLIF(SUM(total), 0),
+                COUNT(ar.id)::NUMERIC
+                / NULLIF(COUNT(DISTINCT t.id), 0),
                 2
             )                                           AS avg_per_ticket
-        FROM mv_operator_qc_daily
-        WHERE created_day >= %s::date
-          AND created_day <  %s::date
-          {qc_dept_filter}
-        GROUP BY department_name
-        ORDER BY avg_per_ticket DESC NULLS LAST
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        LEFT JOIN approval_requests ar
+            ON ar.ticket_id     = t.id
+            AND ar.request_type = 'Rerouting'
+        WHERE t.created_at::date >= %s::date
+          AND t.created_at::date <  %s::date
+          {t_dept_filter}
+        GROUP BY COALESCE(d.name, 'Unassigned')
+        ORDER BY COALESCE(d.name, 'Unassigned')
         """,
-        qc_dept_params,
+        t_dept_params,
     )
+
+    # ── Canonical department name normalization ───────────────────────────
+    # The departments table may contain variant spellings (e.g. "Legal and Compliance"
+    # vs "Legal & Compliance"). Normalize all to canonical names here.
+    CANONICAL_DEPTS = [
+        "Facilities Management", "HR", "IT", "Legal & Compliance",
+        "Leasing", "Maintenance", "Safety & Security",
+    ]
+    DEPT_ALIAS = {
+        "legal and compliance": "Legal & Compliance",
+        "legal & compliance":   "Legal & Compliance",
+        "facilities management": "Facilities Management",
+        "safety & security":    "Safety & Security",
+        "safety and security":  "Safety & Security",
+    }
+
+    def _canon_dept(name: str) -> str:
+        return DEPT_ALIAS.get((name or "").strip().lower(), (name or "").strip())
+
+    # Build reroute_map from query results, normalizing dept names
+    reroute_map: Dict[str, dict] = {}
+    for r in reroute_raw:
+        canon = _canon_dept(r["department"])
+        if canon in reroute_map:
+            # Merge duplicate canonical names (sum requests, recalc avg)
+            existing = reroute_map[canon]
+            existing["reroutingRequests"] += int(r["rerouting_requests"] or 0)
+            existing["reroutedTickets"]   += int(r["rerouted_tickets"]   or 0)
+            existing["avg"] = float(existing["reroutingRequests"]) / max(existing.get("_total", 1), 1)
+        else:
+            reroute_map[canon] = {
+                "department":        canon,
+                "avg":               float(r["avg_per_ticket"] or 0),
+                "reroutingRequests": int(r["rerouting_requests"] or 0),
+                "reroutedTickets":   int(r["rerouted_tickets"]   or 0),
+            }
+
+    # Guarantee all 7 canonical departments are present, even with zero values
+    for dept in CANONICAL_DEPTS:
+        if dept not in reroute_map:
+            reroute_map[dept] = {
+                "department": dept, "avg": 0.0,
+                "reroutingRequests": 0, "reroutedTickets": 0,
+            }
+    # Return exactly canonical departments in canonical order, no extras
     reassignment_by_dept = [
-        {
-            "department":        r["department"],
-            "avg":               float(r["avg_per_ticket"] or 0),
-            "reroutingRequests": int(r["rerouting_requests"] or 0),
-            "reroutedTickets":   int(r["rerouted_tickets"] or 0),
-        }
-        for r in reroute_raw
+        reroute_map[d] for d in CANONICAL_DEPTS if d in reroute_map
     ]
 
-    # Review cases: tickets with human override, rescoring, or rerouting
-    # from mv_ticket_base — MV-only, no base table touch
-    base_where, base_params = _build_filters(
-        period_start, period_end,
-        department=department,
-        priority="All Priorities",
-        use_date_col=False,
-    )
-    review_raw = _fetch_all(
-        f"""
+    # ── Rerouting KPIs ────────────────────────────────────────────────────
+    # Manager AI Acceptance Rate: % of Rerouting approval_requests decided by manager
+    # that were Approved (manager kept the AI routing suggestion).
+    # Uses approval_requests (submitted_at column).
+    mgr_acc_raw = _fetch_one(
+        """
         SELECT
-            ticket_code,
-            ticket_id,
-            created_at,
-            department_name,
-            priority,
-            model_priority,
-            was_rescored,
-            was_upscored,
-            was_downscored,
-            human_overridden,
-            override_reason,
-            is_recurring,
-            status
-        FROM mv_ticket_base
-        WHERE {base_where}
-          AND (human_overridden = TRUE OR was_rescored = TRUE)
-        ORDER BY created_at DESC
-        LIMIT 50
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE status = 'Approved') AS accepted
+        FROM approval_requests
+        WHERE request_type = 'Rerouting'
+          AND submitted_at::date >= %s::date
+          AND submitted_at::date <  %s::date
+          AND decided_by_user_id IS NOT NULL
         """,
-        base_params,
+        [date_start, date_end],
+    ) or {}
+    mgr_rr_total = int(mgr_acc_raw.get("total")    or 0)
+    mgr_rr_kept  = int(mgr_acc_raw.get("accepted") or 0)
+    manager_ai_acceptance_rate = round(mgr_rr_kept / mgr_rr_total * 100, 1) if mgr_rr_total else 0
+
+    # Employee AI Acceptance Rate: % of Rerouting approval_requests that were Approved
+    emp_arr_raw = _fetch_one(
+        """
+        SELECT
+            COUNT(*)                                      AS total,
+            COUNT(*) FILTER (WHERE status = 'Approved')  AS accepted
+        FROM approval_requests
+        WHERE request_type = 'Rerouting'
+          AND submitted_at::date >= %s::date
+          AND submitted_at::date <  %s::date
+        """,
+        [date_start, date_end],
+    ) or {}
+    emp_arr_total    = int(emp_arr_raw.get("total")    or 0)
+    emp_arr_accepted = int(emp_arr_raw.get("accepted") or 0)
+    employee_ai_acceptance_rate = round(emp_arr_accepted / emp_arr_total * 100, 1) if emp_arr_total else 0
+
+    # Employee Reroute Request Rate: rerouting approval_requests / total distinct tickets
+    ticket_count_raw = _fetch_one(
+        f"""
+        SELECT COUNT(DISTINCT t.id) AS total
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.created_at::date >= %s::date
+          AND t.created_at::date <  %s::date
+          {t_dept_filter}
+        """,
+        t_dept_params,
+    ) or {}
+    ticket_count_for_rate = int(ticket_count_raw.get("total") or 0)
+    employee_reroute_request_rate = (
+        round(emp_arr_total / ticket_count_for_rate * 100, 1)
+        if ticket_count_for_rate else 0
     )
-    review_cases = [
-        {
-            "ticketCode":     r["ticket_code"],
-            "ticketId":       str(r["ticket_id"]),
-            "createdAt":      r["created_at"].isoformat() if r["created_at"] else None,
-            "department":     r["department_name"],
-            "priority":       r["priority"],
-            "modelPriority":  r["model_priority"],
-            "wasRescored":    bool(r["was_rescored"]),
-            "wasUpscored":    bool(r["was_upscored"]),
-            "wasDownscored":  bool(r["was_downscored"]),
-            "humanOverridden": bool(r["human_overridden"]),
-            "overrideReason": r["override_reason"],
-            "isRecurring":    bool(r["is_recurring"]),
-            "status":         r["status"],
-        }
-        for r in review_raw
-    ]
+
+    # AI Reroute Suggestion Rate: % of tickets where routing agent ran successfully
+    ai_sug_raw = _fetch_one(
+        """
+        SELECT
+            COUNT(DISTINCT mel.ticket_id) AS with_suggestion
+        FROM model_execution_log mel
+        WHERE mel.agent_name = 'routing'
+          AND mel.status     = 'success'
+          AND mel.started_at::date >= %s::date
+          AND mel.started_at::date <  %s::date
+        """,
+        [date_start, date_end],
+    ) or {}
+    ai_sug_count = int(ai_sug_raw.get("with_suggestion") or 0)
+    ai_reroute_suggestion_rate = (
+        round(ai_sug_count / ticket_count_for_rate * 100, 1)
+        if ticket_count_for_rate else 0
+    )
 
     return {
         "acceptance": {
             "kpis": {
-                "totalResolutions": total_res,
-                "acceptanceRate":   acc_rate,
-                "declinedRate":     dec_rate,
-                "acceptedCount":    total_acc,
-                "declinedCount":    total_dec,
+                "totalResolutions":   total_res,
+                "acceptanceRate":     acc_rate,
+                "declinedRate":       dec_rate,
+                "acceptedCount":      total_acc,
+                "declinedCount":      total_dec,
+                "avgConfidenceScore": avg_confidence_score,
             },
             "trend":     acc_trend,
             "breakdown": {"accepted": total_acc, "declined": total_dec},
         },
         "rescoring": {
             "kpis": {
-                "rescoreRate":    rescore_rate,
-                "upscores":       total_up,
-                "downscores":     total_down,
-                "unchanged":      unchanged_pct,
-                "totalWithModel": total_twm,
+                "rescoreRate":              rescore_rate,
+                "upscores":                 total_up,
+                "downscores":               total_down,
+                "unchanged":                unchanged_pct,
+                "totalWithModel":           total_twm,
+                # New rescoring KPIs
+                "totalRescored":            total_rescored_count,
+                "avgRescoresPerEmployee":   avg_rescores_per_employee,
+                "rescoreAcceptanceRate":    rescore_acceptance_rate,
+                "avgConfidenceScore":       avg_confidence_score,
             },
             "byDepartment": rescore_by_dept,
+            # Merged rerouting data for the unified B+C tab
+            "reassignmentByDept": reassignment_by_dept,
+            "reroutingKpis": {
+                "managerAiAcceptanceRate":   manager_ai_acceptance_rate,
+                "employeeAiAcceptanceRate":  employee_ai_acceptance_rate,
+                "employeeRerouteRequestRate": employee_reroute_request_rate,
+                "aiRerouteSuggestionRate":   ai_reroute_suggestion_rate,
+                "avgConfidenceScore":        avg_confidence_score,
+            },
         },
+        # rerouting key kept for backward-compat with any other consumers
         "rerouting": {
             "reassignmentByDept": reassignment_by_dept,
-            "reviewCases":        review_cases,
+            # reviewCases intentionally omitted (UI section removed)
         },
     }
 
@@ -1615,7 +1802,6 @@ def get_operator_feature_data(
 
     total      = int(overall.get("total_processed") or 0)
     low_conf   = int(overall.get("low_confidence")  or 0)
-    recurring  = int(overall.get("recurring_count") or 0)
     safety     = int(overall.get("safety_flag_count") or 0)
     mismatch   = int(overall.get("mismatch_count")  or 0)
     imp_high   = int(overall.get("impact_high")     or 0)
@@ -1623,76 +1809,145 @@ def get_operator_feature_data(
     imp_low    = int(overall.get("impact_low")      or 0)
 
     low_conf_rate    = round(low_conf  / total * 100, 1) if total else 0
-    recurring_rate   = round(recurring / total * 100, 1) if total else 0
     safety_rate      = round(safety    / total * 100, 1) if total else 0
     mismatch_rate    = round(mismatch  / total * 100, 1) if total else 0
 
-    # Recurring rate daily trend
-    recurring_raw = _fetch_all(
+    # ── Avg confidence score ──────────────────────────────────────────────
+    # Queried directly from model_execution_log for the feature agent
+    conf_overall = _fetch_one(
         f"""
         SELECT
-            created_day AS day,
-            ROUND(
-                SUM(recurring_count)::NUMERIC / NULLIF(SUM(total_processed), 0) * 100
-            , 1) AS rate
-        FROM mv_feature_daily
-        WHERE created_day >= %s::date
-          AND created_day <  %s::date
-          {dept_filter}
-        GROUP BY created_day
-        ORDER BY created_day
-        LIMIT 7
+            ROUND(AVG(mel.confidence_score) FILTER (WHERE mel.confidence_score IS NOT NULL), 4)
+                AS avg_conf
+        FROM model_execution_log mel
+        JOIN feature_outputs fo ON fo.execution_id = mel.id
+        JOIN tickets t ON t.id = fo.ticket_id
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE mel.started_at::date >= %s::date
+          AND mel.started_at::date <  %s::date
+          AND fo.is_current = TRUE
+          {"AND COALESCE(d.name,'Unassigned') = %s" if (dept_filter and "= %s" in dept_filter) else ""}
+        """,
+        params,
+    ) or {}
+    avg_confidence_score = float(conf_overall.get("avg_conf") or 0) if conf_overall.get("avg_conf") else None
+
+    # ── Correlation rate ──────────────────────────────────────────────────
+    # % of tickets where sentiment, severity (issue_severity), and category (asset_category)
+    # all align with expected pattern:
+    #   - Negative sentiment → High/Critical severity → non-trivial category
+    # Computed on mv_ticket_base joined to feature_outputs and sentiment_outputs
+    corr_raw = _fetch_one(
+        f"""
+        SELECT
+            COUNT(*)::NUMERIC AS total,
+            COUNT(*) FILTER (
+                WHERE so.sentiment_score < -0.1
+                  AND fo.raw_features->>'issue_severity' IN ('High','Critical')
+                  AND fo.asset_category IS NOT NULL
+                  AND fo.asset_category <> ''
+            )::NUMERIC AS correlated
+        FROM mv_ticket_base mtb
+        JOIN feature_outputs fo ON fo.ticket_id = mtb.ticket_id AND fo.is_current = TRUE
+        JOIN sentiment_outputs so ON so.ticket_id = mtb.ticket_id AND so.is_current = TRUE
+        WHERE mtb.created_day >= %s::date
+          AND mtb.created_day <  %s::date
+          {"AND mtb.department_name = %s" if (dept_filter and "= %s" in dept_filter) else ""}
+        """,
+        params,
+    ) or {}
+    corr_total = float(corr_raw.get("total") or 0)
+    corr_count = float(corr_raw.get("correlated") or 0)
+    correlation_rate = round(corr_count / corr_total * 100, 1) if corr_total else 0
+
+    # ── Urgency distribution ──────────────────────────────────────────────
+    urgency_raw = _fetch_all(
+        f"""
+        SELECT
+            COALESCE(fo.raw_features->>'issue_urgency', 'Unknown') AS label,
+            COUNT(*) AS value
+        FROM feature_outputs fo
+        JOIN tickets t ON t.id = fo.ticket_id
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE fo.created_at::date >= %s::date
+          AND fo.created_at::date <  %s::date
+          AND fo.is_current = TRUE
+          {"AND COALESCE(d.name,'Unassigned') = %s" if (dept_filter and "= %s" in dept_filter) else ""}
+        GROUP BY label
+        ORDER BY value DESC
         """,
         params,
     )
-    recurring_trend = [
-        {
-            "day":  r["day"].strftime("%a"),
-            "rate": float(r["rate"] or 0),
-        }
-        for r in recurring_raw
+    urgency_dist = [
+        {"label": r["label"], "value": int(r["value"] or 0)}
+        for r in urgency_raw
     ]
 
-    # Business impact by department
-    dept_raw = _fetch_all(
+    # ── Severity distribution ─────────────────────────────────────────────
+    severity_raw = _fetch_all(
         f"""
         SELECT
-            department_name AS department,
-            ROUND(SUM(impact_high)::NUMERIC   / NULLIF(SUM(total_processed), 0) * 100, 1) AS high,
-            ROUND(SUM(impact_medium)::NUMERIC / NULLIF(SUM(total_processed), 0) * 100, 1) AS medium,
-            ROUND(SUM(impact_low)::NUMERIC    / NULLIF(SUM(total_processed), 0) * 100, 1) AS low
-        FROM mv_feature_daily
-        WHERE created_day >= %s::date
-          AND created_day <  %s::date
-          {dept_filter}
-        GROUP BY department_name
-        ORDER BY department_name
+            COALESCE(fo.raw_features->>'issue_severity', 'Unknown') AS label,
+            COUNT(*) AS value
+        FROM feature_outputs fo
+        JOIN tickets t ON t.id = fo.ticket_id
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE fo.created_at::date >= %s::date
+          AND fo.created_at::date <  %s::date
+          AND fo.is_current = TRUE
+          {"AND COALESCE(d.name,'Unassigned') = %s" if (dept_filter and "= %s" in dept_filter) else ""}
+        GROUP BY label
+        ORDER BY value DESC
         """,
         params,
     )
-    feature_by_dept = [
-        {
-            "department": r["department"],
-            "high":   float(r["high"]   or 0),
-            "medium": float(r["medium"] or 0),
-            "low":    float(r["low"]    or 0),
-        }
-        for r in dept_raw
+    severity_dist = [
+        {"label": r["label"], "value": int(r["value"] or 0)}
+        for r in severity_raw
+    ]
+
+    # ── Category distribution ─────────────────────────────────────────────
+    category_raw = _fetch_all(
+        f"""
+        SELECT
+            COALESCE(fo.asset_category, 'Unclassified') AS label,
+            COUNT(*) AS value
+        FROM feature_outputs fo
+        JOIN tickets t ON t.id = fo.ticket_id
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE fo.created_at::date >= %s::date
+          AND fo.created_at::date <  %s::date
+          AND fo.is_current = TRUE
+          {"AND COALESCE(d.name,'Unassigned') = %s" if (dept_filter and "= %s" in dept_filter) else ""}
+        GROUP BY label
+        ORDER BY value DESC
+        LIMIT 10
+        """,
+        params,
+    )
+    category_dist = [
+        {"label": r["label"], "value": int(r["value"] or 0)}
+        for r in category_raw
     ]
 
     return {
         "kpis": {
-            "safetyFlagRate":       safety_rate,
-            "recurringIssueRate":   recurring_rate,
-            "severityUrgencyMismatch": mismatch_rate,
-            "lowConfidenceRate":    low_conf_rate,
-            "totalProcessed":       total,
+            "safetyFlagRate":          safety_rate,
+            # recurringIssueRate intentionally omitted from API response (hidden from UI)
+            # but recurring_rate is computed above for internal use / other systems
+            "correlationRate":         correlation_rate,
+            "avgConfidenceScore":      avg_confidence_score,
+            "lowConfidenceRate":       low_conf_rate,
+            "severityUrgencyMismatch": mismatch_rate,  # kept for fallback
+            "totalProcessed":          total,
         },
         "businessImpact": [
             {"label": "High",   "value": imp_high},
             {"label": "Medium", "value": imp_med},
             {"label": "Low",    "value": imp_low},
         ],
-        "recurringTrend": recurring_trend,
-        "featureByDept":  feature_by_dept,
+        "urgencyDist":   urgency_dist,
+        "severityDist":  severity_dist,
+        "categoryDist":  category_dist,
+        # featureByDept and recurringTrend omitted from response (removed from UI)
     }
