@@ -56,7 +56,7 @@
   margin-top: 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 /* Section headings */
@@ -86,7 +86,7 @@
 .ma-kpi {
   background: #ffffff;
   border-radius: 18px;
-  padding: 20px 22px;
+  padding: 24px 24px;
   border: 1px solid rgba(0,0,0,0.07);
   box-shadow: 0 6px 22px rgba(64,28,81,0.09);
   display: flex;
@@ -95,6 +95,7 @@
   position: relative;
   overflow: hidden;
   transition: transform 0.18s, box-shadow 0.18s;
+  min-height: 110px;
 }
 .ma-kpi::before {
   content: '';
@@ -111,7 +112,6 @@
 
 .ma-kpi__top   { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .ma-kpi__label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.10em; font-weight: 750; color: rgba(17,17,17,0.55); }
-.ma-kpi__pill  { font-size: 11px; padding: 3px 10px; border-radius: 999px; background: rgba(89,36,180,0.10); color: var(--btn-primary); font-weight: 650; white-space: nowrap; }
 .ma-kpi__value { font-size: 30px; font-weight: 900; color: var(--btn-primary); font-family: var(--font-heading); margin-top: 6px; }
 .ma-kpi--warn   .ma-kpi__value { color: #6b3a8a; }
 .ma-kpi--danger .ma-kpi__value { color: #401c51; }
@@ -123,7 +123,7 @@
 .ma-card {
   background: #ffffff;
   border-radius: 18px;
-  padding: 20px 22px;
+  padding: 24px 26px;
   border: 1px solid rgba(0,0,0,0.07);
   box-shadow: 0 6px 20px rgba(0,0,0,0.06);
 }

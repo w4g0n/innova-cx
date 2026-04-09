@@ -4,23 +4,17 @@ backfill_employee_reports.py
 Generates and repairs employee monthly performance reports for ALL employees.
 
 DESIGN PRINCIPLES
+-----------------
+1. REAL DATA ONLY — Months are sourced exclusively from mv_employee_daily.
+   No hardcoded month list. No demo floor. No forced zero-activity months.
 
-1. DEMO MONTHS GUARANTEED — Every active employee always gets reports for:
-     January 2026, February 2026, March 2026, April 2026
-   Enforced regardless of whether MV data exists for that employee/month.
-   Zero-activity months produce a valid report showing 0 resolved, 0% closure.
-
-2. FORWARD-COMPATIBLE — Any month NEWER than April 2026 where an employee has
-   MV data is also included automatically. May 2026, June 2026, etc. appear
-   as data accumulates, without requiring code changes.
+2. FORWARD-COMPATIBLE — Any future month where an employee has MV data is
+   included automatically. No code changes required as data accumulates.
 
 3. 2025 NEVER REGENERATED — Absolute year guard (year < 2026) enforces this.
    Any surviving pre-2026 rows are deleted in Step 0.
 
-4. FULL MATRIX — All employees x all required months are processed, not just
-   combinations that happen to exist in mv_employee_daily.
-
-5. IDEMPOTENT — GENERATES missing, REPAIRS incomplete (rc_count=0), SKIPS OK.
+4. IDEMPOTENT — GENERATES missing, REPAIRS incomplete (rc_count=0), SKIPS OK.
 
 RUN:
     docker cp backend/scripts/backfill_employee_reports.py \
@@ -43,8 +37,6 @@ from psycopg2 import OperationalError
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("backfill")
 
-# Fixed demo months — every employee guaranteed these 4
-DEMO_MONTHS: List[Tuple[int,int]] = [(2026,1),(2026,2),(2026,3),(2026,4)]
 MIN_YEAR = 2026  # absolute floor — no reports below this year
 
 # DB helpers
@@ -180,9 +172,9 @@ def generate_report(user_id: str, year: int, month: int) -> Optional[str]:
                SUM(total) AS a, SUM(resolved) AS r,
                ROUND(SUM(total-breached)::numeric/NULLIF(SUM(total),0)*100,1) AS sp,
                ROUND(SUM(avg_respond_mins*total)/NULLIF(SUM(total),0),1) AS ar
-        FROM mv_employee_daily WHERE employee_id=%s::uuid
-          AND created_day>=%s AND created_day<%s
-        GROUP BY date_trunc('week',created_day)::date ORDER BY wm""",
+        FROM mv_employee_daily
+        WHERE employee_id=%s::uuid AND created_day>=%s AND created_day<%s
+        GROUP BY 1 ORDER BY 1""",
         (user_id,period_start,period_end))
     execute("DELETE FROM employee_report_weekly WHERE report_id=%s",(rid,))
     prev=None
@@ -249,7 +241,7 @@ def generate_report(user_id: str, year: int, month: int) -> Optional[str]:
 # Main
 def main():
     logger.info("=== backfill_employee_reports starting ===")
-    logger.info("Demo months: %s", [f"{_ML[m]} {y}" for y,m in DEMO_MONTHS])
+    logger.info("Mode: REAL MV DATA ONLY — no hardcoded months")
     logger.info("Year floor: %d (pre-%d reports never generated)", MIN_YEAR, MIN_YEAR)
 
     # Step 0: delete ALL pre-2026 reports (any format, idempotent)
@@ -272,20 +264,24 @@ def main():
         sys.exit(1)
     logger.info("Active employees: %d", len(employees))
 
-    # Step 2: build required month set
-    demo_set=set(DEMO_MONTHS)
-    last_y,last_m=max(DEMO_MONTHS)
-    cutoff=date(last_y,last_m,1)
-    newer=fetch_all("""
-        SELECT DISTINCT EXTRACT(YEAR FROM created_month)::int AS yr,
-                        EXTRACT(MONTH FROM created_month)::int AS mo
+    # Step 2: discover all months from MV data only — no hardcoding
+    all_months_rows = fetch_all("""
+        SELECT DISTINCT
+            EXTRACT(YEAR  FROM created_month)::int AS yr,
+            EXTRACT(MONTH FROM created_month)::int AS mo
         FROM mv_employee_daily
-        WHERE created_month>%s AND EXTRACT(YEAR FROM created_month)::int>=%s
-        ORDER BY yr,mo""",(cutoff,MIN_YEAR))
-    newer_set={(int(r["yr"]),int(r["mo"])) for r in newer if int(r["yr"])>=MIN_YEAR}
-    all_req=sorted(demo_set|newer_set)
-    logger.info("Required months (%d): %s", len(all_req),
-                [f"{_ML[m]} {y}" for y,m in all_req])
+        WHERE EXTRACT(YEAR FROM created_month)::int >= %s
+        ORDER BY yr, mo""", (MIN_YEAR,))
+    all_mv_months: List[Tuple[int,int]] = [
+        (int(r["yr"]), int(r["mo"])) for r in all_months_rows
+    ]
+    if not all_mv_months:
+        logger.warning("No MV data found for year >= %d. Nothing to backfill.", MIN_YEAR)
+        logger.info("=== backfill_employee_reports complete — no MV data ===")
+        return
+
+    logger.info("MV months found (%d): %s", len(all_mv_months),
+                [f"{_ML[m]} {y}" for y,m in all_mv_months])
 
     gen=rep=skip=err=0
 
@@ -295,57 +291,88 @@ def main():
         raw=str(emp.get("email","")).split("@")[0].strip().lower()
         slug=re.sub(r"[^a-z0-9]","",raw)[:12] or re.sub(r"[^a-z0-9]","",uid.replace("-",""))[:8]
 
-        for year,month in all_req:
-            if year<MIN_YEAR:
+        # Per-employee: only months where THIS employee has MV rows
+        emp_months_rows = fetch_all("""
+            SELECT DISTINCT
+                EXTRACT(YEAR  FROM created_month)::int AS yr,
+                EXTRACT(MONTH FROM created_month)::int AS mo
+            FROM mv_employee_daily
+            WHERE employee_id = %s::uuid
+              AND EXTRACT(YEAR FROM created_month)::int >= %s
+            ORDER BY yr, mo""", (uid, MIN_YEAR))
+        emp_months: List[Tuple[int,int]] = [
+            (int(r["yr"]), int(r["mo"])) for r in emp_months_rows
+        ]
+
+        if not emp_months:
+            logger.info("  SKIP (no MV data) %-20s %s", "", name)
+            continue
+
+        for year, month in emp_months:
+            if year < MIN_YEAR:
                 continue
-            code=f"{_MA[month]}-{year}-{slug}"
-            tag="[DEMO]" if (year,month) in demo_set else "[NEW] "
-            ex=fetch_one("""SELECT er.id,
-                (SELECT COUNT(*) FROM employee_report_rating_components WHERE report_id=er.id) AS rc
+            code = f"{_MA[month]}-{year}-{slug}"
+            ex = fetch_one("""
+                SELECT er.id,
+                    (SELECT COUNT(*) FROM employee_report_rating_components
+                     WHERE report_id=er.id) AS rc
                 FROM employee_reports er
-                WHERE er.report_code=%s AND er.employee_user_id=%s::uuid""",(code,uid))
+                WHERE er.report_code=%s AND er.employee_user_id=%s::uuid""", (code, uid))
             try:
                 if not ex:
-                    r=generate_report(uid,year,month)
+                    r = generate_report(uid, year, month)
                     if r:
-                        logger.info("  GENERATED %s %-24s %s (%s %d)",tag,code,name,_ML[month],year)
-                        gen+=1
+                        logger.info("  GENERATED  %-28s %s (%s %d)", code, name, _ML[month], year)
+                        gen += 1
                     else:
-                        logger.warning("  FAILED    %-24s %s",code,name)
-                        err+=1
-                elif int(ex.get("rc") or 0)==0:
-                    r=generate_report(uid,year,month)
+                        logger.warning("  FAILED     %-28s %s", code, name)
+                        err += 1
+                elif int(ex.get("rc") or 0) == 0:
+                    r = generate_report(uid, year, month)
                     if r:
-                        logger.info("  REPAIRED  %-24s %s (%s %d)",code,name,_ML[month],year)
-                        rep+=1
+                        logger.info("  REPAIRED   %-28s %s (%s %d)", code, name, _ML[month], year)
+                        rep += 1
                     else:
-                        logger.warning("  REPAIR FAILED %-24s %s",code,name)
-                        err+=1
+                        logger.warning("  REPAIR FAILED %-24s %s", code, name)
+                        err += 1
                 else:
-                    logger.info("  OK        %-24s %s (%s %d)",code,name,_ML[month],year)
-                    skip+=1
+                    logger.info("  OK         %-28s %s (%s %d)", code, name, _ML[month], year)
+                    skip += 1
             except Exception as exc:
-                logger.error("  ERROR     %-24s %s: %s",code,name,exc)
-                err+=1
+                logger.error("  ERROR      %-28s %s: %s", code, name, exc)
+                err += 1
 
-    # Step 4: verification
-    missing=False
+    # Step 3: verification — check no employee×month MV row is missing a report
+    missing = False
     for emp in employees:
-        uid=str(emp["user_id"])
-        name=str(emp.get("full_name") or emp.get("email") or uid)
-        raw=str(emp.get("email","")).split("@")[0].strip().lower()
-        slug=re.sub(r"[^a-z0-9]","",raw)[:12] or re.sub(r"[^a-z0-9]","",uid.replace("-",""))[:8]
-        for year,month in DEMO_MONTHS:
-            code=f"{_MA[month]}-{year}-{slug}"
-            row=fetch_one("""SELECT (SELECT COUNT(*) FROM employee_report_rating_components
-                             WHERE report_id=er.id) AS rc FROM employee_reports er
-                             WHERE er.report_code=%s AND er.employee_user_id=%s::uuid""",(code,uid))
-            if not row or int(row.get("rc") or 0)==0:
-                logger.warning("  MISSING/INCOMPLETE %-24s %s (%s %d)",code,name,_ML[month],year)
-                missing=True
+        uid = str(emp["user_id"])
+        name = str(emp.get("full_name") or emp.get("email") or uid)
+        raw = str(emp.get("email","")).split("@")[0].strip().lower()
+        slug = re.sub(r"[^a-z0-9]","",raw)[:12] or re.sub(r"[^a-z0-9]","",uid.replace("-",""))[:8]
 
-    pre=fetch_one("SELECT COUNT(*) AS c FROM employee_reports WHERE month_label LIKE '%%2025' OR month_label LIKE '%%2024'") or {}
-    pre_cnt=int(pre.get("c") or 0)
+        emp_months_rows = fetch_all("""
+            SELECT DISTINCT
+                EXTRACT(YEAR  FROM created_month)::int AS yr,
+                EXTRACT(MONTH FROM created_month)::int AS mo
+            FROM mv_employee_daily
+            WHERE employee_id = %s::uuid
+              AND EXTRACT(YEAR FROM created_month)::int >= %s
+            ORDER BY yr, mo""", (uid, MIN_YEAR))
+
+        for r in emp_months_rows:
+            year, month = int(r["yr"]), int(r["mo"])
+            code = f"{_MA[month]}-{year}-{slug}"
+            row = fetch_one("""
+                SELECT (SELECT COUNT(*) FROM employee_report_rating_components
+                        WHERE report_id=er.id) AS rc
+                FROM employee_reports er
+                WHERE er.report_code=%s AND er.employee_user_id=%s::uuid""", (code, uid))
+            if not row or int(row.get("rc") or 0) == 0:
+                logger.warning("  MISSING/INCOMPLETE %-28s %s (%s %d)", code, name, _ML[month], year)
+                missing = True
+
+    pre = fetch_one("SELECT COUNT(*) AS c FROM employee_reports WHERE month_label LIKE '%%2025' OR month_label LIKE '%%2024'") or {}
+    pre_cnt = int(pre.get("c") or 0)
 
     logger.info("")
     logger.info("=== backfill_employee_reports complete ===")
@@ -356,10 +383,10 @@ def main():
     logger.info("  Pre-2026 remaining : %d  (expected 0)", pre_cnt)
     logger.info("  Coverage gaps      : %s", "NONE ✓" if not missing else "SEE WARNINGS ABOVE")
 
-    if err or missing or pre_cnt>0:
+    if err or missing or pre_cnt > 0:
         logger.error("Backfill completed with issues. Check warnings above.")
         sys.exit(1)
     logger.info("All reports fully populated.")
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()

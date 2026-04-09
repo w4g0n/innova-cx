@@ -11,6 +11,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
 from starlette.middleware.base import BaseHTTPMiddleware
+import resend
 
 import bcrypt
 import psycopg2
@@ -27,6 +28,7 @@ import pyotp  # for RFC 6238 TOTP
 import qrcode
 import io
 import re as _re
+import uuid as _uuid_mod
 try:
     from api.ticket_creation_gate import create_ticket_via_gate, dispatch_ticket_to_orchestrator
 except Exception:
@@ -135,6 +137,7 @@ _sla_heartbeat_task: Optional[asyncio.Task] = None
 _analytics_refresh_task: Optional[asyncio.Task] = None
 _has_sla_policy_fn = False
 
+resend.api_key = os.environ.get("RESEND_API_KEY")
 # App
 _EXPOSE_DOCS = os.getenv("EXPOSE_API_DOCS", "false").lower() == "true"
 app = FastAPI(
@@ -731,7 +734,13 @@ async def _start_sla_heartbeat() -> None:
             else:
                 logger.warning("dev_seed | gave up after 15 attempts: %s", _e)
 
-    # Wire analytics service to DB helpers and warm-up refresh
+    # ── One-time repair: fix any stale ISO week labels from pre-fix reports ────
+    try:
+        _repair_week_labels_once()
+    except Exception as _e:
+        logger.warning("week_label_repair | startup call failed: %s", _e)
+
+    # ── Wire analytics service to DB helpers and warm-up refresh ─────────────
     if _ANALYTICS_READY:
         try:
             _analytics.init(fetch_one, fetch_all, db_connect)
@@ -1357,7 +1366,121 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     return resp
 
 
+# Forgot Password and reset link api call
 # Routes: Password Reset
+RESET_EMAIL_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Reset Your Password</title>
+  <style>
+    body,table,td,a{{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}}
+    table,td{{mso-table-lspace:0pt;mso-table-rspace:0pt}}
+    img{{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none}}
+    body{{margin:0;padding:0;background-color:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}}
+    .ew{{width:100%;background-color:#f4f4f7;padding:40px 0}}
+    .ec{{max-width:560px;margin:0 auto;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08)}}
+    .hd{{background:linear-gradient(135deg,#6d28d9 0%,#9333ea 100%);padding:36px 40px;text-align:center}}
+    .hl{{font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;margin:0}}
+    .hl span{{opacity:.75;font-weight:400}}
+    .bd{{padding:40px 40px 32px}}
+    .gr{{font-size:15px;color:#374151;margin:0 0 16px;line-height:1.6}}
+    .ti{{font-size:22px;font-weight:700;color:#111827;margin:0 0 12px;letter-spacing:-0.3px}}
+    .de{{font-size:15px;color:#6b7280;line-height:1.65;margin:0 0 32px}}
+    .bw{{text-align:center;margin:0 0 32px}}
+    .btn{{display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#6d28d9,#9333ea);color:#ffffff!important;text-decoration:none;border-radius:6px;font-size:15px;font-weight:600;letter-spacing:.1px}}
+    .dv{{border:none;border-top:1px solid #e5e7eb;margin:0 0 24px}}
+    .fl{{font-size:12px;color:#9ca3af;margin:0 0 8px;text-transform:uppercase;letter-spacing:.6px;font-weight:600}}
+    .fk{{font-size:13px;color:#6d28d9;word-break:break-all;line-height:1.5;margin:0 0 32px}}
+    .wb{{background-color:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:14px 16px;margin:0 0 32px}}
+    .wt{{font-size:13px;color:#92400e;margin:0;line-height:1.55}}
+    .wt strong{{color:#78350f}}
+    .ft{{background-color:#f9fafb;border-top:1px solid #e5e7eb;padding:24px 40px;text-align:center}}
+    .fx{{font-size:12px;color:#9ca3af;line-height:1.6;margin:0 0 4px}}
+    .fx a{{color:#9ca3af;text-decoration:underline}}
+    @media only screen and (max-width:600px){{
+      .ec{{border-radius:0}}
+      .hd{{padding:28px 24px}}
+      .bd{{padding:28px 24px 24px}}
+      .ft{{padding:20px 24px}}
+    }}
+  </style>
+</head>
+<body>
+  <div class="ew">
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+      <tr><td align="center">
+        <div class="ec">
+
+          <!-- Header -->
+          <div class="hd">
+            <p class="hl">Innova<span>CX</span></p>
+          </div>
+
+          <!-- Body -->
+          <div class="bd">
+            <p class="gr">Hi,</p>
+            <p class="ti">Reset your password</p>
+            <p class="de">
+              We received a request to reset the password for the account associated with
+              <strong>{email}</strong>. Click the button below to choose a new password.
+              This link will expire in <strong>30 minutes</strong>.
+            </p>
+
+            <div class="bw">
+              <!--[if mso]>
+              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml"
+                xmlns:w="urn:schemas-microsoft-com:office:word"
+                href="{reset_link}"
+                style="height:48px;v-text-anchor:middle;width:200px;"
+                arcsize="12%" fillcolor="#9333ea" strokecolor="#9333ea">
+                <w:anchorlock/>
+                <center style="color:#fff;font-family:sans-serif;font-size:15px;font-weight:600;">
+                  Reset Password
+                </center>
+              </v:roundrect>
+              <![endif]-->
+              <!--[if !mso]><!-->
+              <a href="{reset_link}" class="btn" target="_blank">Reset Password</a>
+              <!--<![endif]-->
+            </div>
+
+            <hr class="dv" />
+
+            <p class="fl">Or copy this link</p>
+            <p class="fk">{reset_link}</p>
+
+            <div class="wb">
+              <p class="wt">
+                <strong>Didn't request this?</strong> Your password will not change unless
+                you click the button above. If you're concerned about your account security,
+                please contact support.
+              </p>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="ft">
+            <p class="fx">
+              This email was sent by InnovaCX &mdash; innovacx.net<br />
+              This is an automated message, please do not reply to this email.
+            </p>
+            <p class="fx" style="margin-top:8px;">
+              &copy; {year} InnovaCX. All rights reserved.
+            </p>
+          </div>
+
+        </div>
+      </td></tr>
+    </table>
+  </div>
+</body>
+</html>"""
+
+
 @api.post("/auth/forgot-password")
 @rate_limit_auth()
 def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None = Depends(require_csrf)):
@@ -1388,10 +1511,29 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
             """,
             (user["id"], token_hash),
         )
+
+        # FIX: Token is placed in the URL fragment (#) instead of a query parameter (?).
+        # Fragments are never sent to the server, never appear in nginx/CDN/proxy access
+        # logs, and are not stored in browser history on the server side. This prevents
+        # a valid 30-minute account-takeover credential from leaking into log files.
+        reset_link = f"https://innovacx.net/forgot-password#token={raw_token}"
+
+        resend.Emails.send({
+            "from": "no-reply@innovacx.net",
+            "to": "innovacx.reset@gmail.com",   # hardcoded until domain email is set up
+            "subject": "Reset your InnovaCX password",
+            "html": RESET_EMAIL_HTML.format(
+                email=email,
+                reset_link=reset_link,
+                year=datetime.utcnow().year,
+            ),
+        })
+
         # DEV_LOG_RESET_TOKENS defaults to false; set to true only in local dev envs.
         # Never enable in production — tokens grant full account takeover.
         if DEV_LOG_RESET_TOKENS:
             print(f"[DEV] Password reset token for {email}: {raw_token}")
+            print(f"[DEV] Reset link: {reset_link}")
         log_auth_event("password_reset_requested", user_id=str(user["id"]), email=email, ip=client_ip)
     else:
         log_auth_event("password_reset_requested", email=email, ip=client_ip, extra={"user_exists": False})
@@ -1401,24 +1543,32 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
 
 
 @api.post("/auth/reset-password")
-@rate_limit_auth()
-def reset_password(request: Request, body: ResetPasswordRequest, user: Dict[str, Any] = Depends(get_current_user), _csrf: None = Depends(require_csrf)):
+@rate_limit_auth()  # FIX: added — prevents hammering a token even at low guess probability
+def reset_password(request: Request, body: ResetPasswordRequest, _csrf: None = Depends(require_csrf)):
+    # get_current_user removed — user is not logged in during a password reset
     raw_token = (body.token or "").strip()
     new_password = body.new_password or ""
-    
-    if len(raw_token) < 10:
+
+    # FIX: tightened from < 10 to < 40. A real token is always 43 chars
+    # (base64url of 32 random bytes, no padding). Anything shorter is
+    # definitively malformed and not worth a DB round-trip.
+    if len(raw_token) < 40:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
-    validate_password_complexity(body.new_password, field_name="New password", email=user["email"])
 
     client_ip = request.client.host if request and request.client else None
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Join users to get email for password complexity validation
             cur.execute(
                 """
-                SELECT id, user_id
-                FROM password_reset_tokens
-                WHERE token_hash = %s AND used_at IS NULL AND expires_at > NOW()
+                SELECT prt.id, prt.user_id, u.email
+                FROM password_reset_tokens prt
+                JOIN users u ON u.id = prt.user_id
+                WHERE prt.token_hash = %s
+                  AND prt.used_at IS NULL
+                  AND prt.expires_at > NOW()
                 """,
                 (token_hash,),
             )
@@ -1426,11 +1576,12 @@ def reset_password(request: Request, body: ResetPasswordRequest, user: Dict[str,
             if not row:
                 raise HTTPException(status_code=400, detail="Invalid or expired token")
 
+            # Email comes from DB via token, not from a logged-in session
+            validate_password_complexity(new_password, field_name="New password", email=row["email"])
+
             new_hash = hash_password(new_password)
             # Update password and stamp password_changed_at so existing JWTs issued
             # before this moment can be detected as stale on next verification.
-            # This is the safest session-invalidation measure available without a
-            # separate token revocation table (see ADDITIONAL FILES NEEDED below).
             cur.execute(
                 """
                 UPDATE users
@@ -1448,6 +1599,7 @@ def reset_password(request: Request, body: ResetPasswordRequest, user: Dict[str,
 
     log_auth_event("password_reset_complete", user_id=str(row["user_id"]), ip=client_ip)
     return {"ok": True, "message": "Password updated successfully"}
+
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
@@ -1491,6 +1643,48 @@ def auth_logout(
         ip=client_ip,
     )
     return {"ok": True}
+
+class ResetTokenEmailRequest(BaseModel):
+    token: str
+
+@api.post("/auth/reset-token-email")
+@rate_limit_auth()
+def reset_token_email(request: Request, body: ResetTokenEmailRequest, _csrf: None = Depends(require_csrf)):
+    """
+    Given a raw reset token, return the associated email address if the token
+    is valid and unexpired. Used by the frontend to enable the "password too
+    similar to email" client-side check on the reset form.
+
+    This endpoint reveals nothing an attacker doesn't already have — the token
+    itself is the credential. It does NOT mark the token as used. It is
+    rate-limited identically to the other auth endpoints.
+    """
+    raw_token = (body.token or "").strip()
+
+    # Same length guard as reset-password — reject garbage before DB round-trip
+    if len(raw_token) < 40:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
+    row = fetch_one(
+        """
+        SELECT u.email
+        FROM password_reset_tokens prt
+        JOIN users u ON u.id = prt.user_id
+        WHERE prt.token_hash = %s
+          AND prt.used_at IS NULL
+          AND prt.expires_at > NOW()
+        """,
+        (token_hash,),
+    )
+
+    if not row:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    return {"email": row["email"]}
+
+
 
 # Employee Dashboard (EmployeeDashboard.jsx)
 @api.get("/employee/dashboard")
@@ -1809,6 +2003,7 @@ def employee_resolution_suggestion(
     ticket_code: str,
     user: Dict[str, Any] = Depends(require_employee),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     row = fetch_one(
         """
@@ -1873,6 +2068,7 @@ def employee_ticket_details(
     ticket_code: str,
     user: Dict[str, Any] = Depends(require_employee),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
 
     # Ticket must belong to this employee
@@ -2010,6 +2206,7 @@ def employee_resolve_ticket(
     user: Dict[str, Any] = Depends(require_employee),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     decision = (body.decision or "").strip().lower()
     if decision not in {"accepted", "declined_custom"}:
@@ -2185,6 +2382,7 @@ async def employee_upload_attachment(
     Stores an uploaded file under <UPLOADS_DIR>/<ticket_code>/<filename>
     and records it in ticket_attachments.
     """
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
 
     row = fetch_one(
@@ -2297,6 +2495,7 @@ def employee_rescore_ticket(
     user: Dict[str, Any] = Depends(require_employee),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     new_priority = (body.new_priority or "").strip()
     reason = (body.reason or "").strip()
@@ -2382,6 +2581,7 @@ def employee_reroute_ticket(
     user: Dict[str, Any] = Depends(require_employee),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     new_dept_name = (body.new_department or "").strip()
     reason = (body.reason or "").strip()
@@ -2476,11 +2676,21 @@ def employee_reroute_ticket(
 class TicketMessageRequest(BaseModel):
     body: str
 
+    @property
+    def sanitized_body(self) -> str:
+        v = (self.body or "").strip()
+        if not v:
+            raise HTTPException(status_code=422, detail="Message body cannot be empty.")
+        if len(v) > 4000:
+            raise HTTPException(status_code=422, detail="Message body exceeds maximum length of 4000 characters.")
+        return v
+
 @api.get("/employee/tickets/{ticket_code}/messages")
 def employee_get_ticket_messages(
     ticket_code: str,
     user: Dict[str, Any] = Depends(require_employee),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     ticket = fetch_one(
         "SELECT id FROM tickets WHERE ticket_code = %s AND assigned_to_user_id = %s LIMIT 1;",
@@ -2519,10 +2729,9 @@ def employee_post_ticket_message(
     user: Dict[str, Any] = Depends(require_employee),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
-    text = (body.body or "").strip()
-    if not text:
-        raise HTTPException(status_code=422, detail="Message body cannot be empty")
+    text = body.sanitized_body
 
     ticket = fetch_one(
         """
@@ -2602,6 +2811,7 @@ def customer_get_ticket_messages(
     ticket_code: str,
     user: Dict[str, Any] = Depends(require_customer),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
     ticket = fetch_one(
         "SELECT id FROM tickets WHERE ticket_code = %s AND created_by_user_id = %s LIMIT 1;",
@@ -2640,10 +2850,9 @@ def customer_post_ticket_message(
     user: Dict[str, Any] = Depends(require_customer),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
-    text = (body.body or "").strip()
-    if not text:
-        raise HTTPException(status_code=422, detail="Message body cannot be empty")
+    text = body.sanitized_body
 
     ticket = fetch_one(
         """
@@ -2931,8 +3140,15 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
 
     # weekly rows
     # Derive week-of-month from created_day; group mv_employee_daily by ISO week.
-    # We use date_trunc('week', created_day) to get the Monday of each week,
+    # We use date_trunc('week', created_day) to get the Monday of each ISO week,
     # then label it as "Week N" relative to the start of the month.
+    #
+    # IMPORTANT — label clamping:
+    # date_trunc('week', ...) in PostgreSQL always returns the Monday of the ISO
+    # week, which can fall in the *previous* month when the 1st of the month is
+    # not a Monday.  Example: April 1 2026 is a Wednesday → its ISO week Monday
+    # is March 30.  We clamp the display date to period_start so that the first
+    # week of April is always labelled with an April (or later) date.
     weekly_rows = fetch_all(
         """
         SELECT
@@ -2980,10 +3196,26 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
 
         prev_resolved = w_resolved
 
-        # Use ISO week date as label (e.g. "Week 1 (Mar 3)")
+        # Build the week label (e.g. "Week 1 (Apr 1)").
+        # Clamp week_monday to period_start: date_trunc('week', ...) returns the
+        # ISO Monday, which can precede the month boundary (e.g. Mar 30 for an
+        # April report whose first ticket falls in ISO-week starting Mar 30).
+        # Displaying that Monday is misleading — show the first day of the month
+        # instead whenever week_monday falls before period_start.
         week_monday_obj = wr.get("week_monday")
         if week_monday_obj:
-            week_label = f"Week {week_num} ({week_monday_obj.strftime('%b %-d')})"
+            # Normalise to datetime.date — psycopg2 may return datetime.datetime
+            # or datetime.date depending on column type; explicit cast avoids a
+            # silent TypeError when comparing with period_start (always date).
+            import datetime as _dt
+            if isinstance(week_monday_obj, _dt.datetime):
+                wm_date = week_monday_obj.date()
+            else:
+                wm_date = week_monday_obj
+            # Clamp: if the ISO Monday falls before this month's first day, use
+            # period_start as the label anchor instead.
+            label_date = wm_date if wm_date >= period_start else period_start
+            week_label = f"Week {week_num} ({label_date.strftime('%b %-d')})"
         else:
             week_label = f"Week {week_num}"
 
@@ -3072,30 +3304,58 @@ def _generate_employee_report(user_id: str, year: int, month: int) -> Optional[s
     return report_code
 
 
-# Demo months guarantee
-# These are the fixed months every employee must have reports for.
-# They are also the minimum floor — any newer month with MV data is added too.
-_DEMO_MONTHS = [
-    (2026, 1),  # January 2026
-    (2026, 2),  # February 2026
-    (2026, 3),  # March 2026
-    (2026, 4),  # April 2026
-]
+# ── One-time repair: fix stale ISO week labels ────────────────────────────────
+def _repair_week_labels_once() -> None:
+    """One-time startup repair for reports generated before the ISO week label
+    clamping fix.  Detects any employee_report_weekly row whose week_label
+    contains a date from a *different* month than the report's own month, then
+    force-regenerates that report using the fixed _generate_employee_report().
+
+    Idempotent — once all labels are correct the query returns zero rows and
+    this function exits immediately with no DB writes.  Safe to call on every
+    startup; after the first run it becomes a no-op in under 1ms.
+    """
+    try:
+        stale = fetch_all(
+            """
+            SELECT DISTINCT er.report_code,
+                            er.employee_user_id,
+                            EXTRACT(YEAR  FROM er.period_start)::int AS yr,
+                            EXTRACT(MONTH FROM er.period_start)::int AS mo
+            FROM employee_report_weekly ew
+            JOIN employee_reports er ON er.id = ew.report_id
+            WHERE ew.week_label ~ '\\(([A-Za-z]+ \\d+)\\)'
+              AND to_date(
+                    substring(ew.week_label FROM '\\(([A-Za-z]+ \\d+)\\)') || ' ' ||
+                    EXTRACT(YEAR FROM er.period_start)::text,
+                    'Mon DD YYYY'
+                  ) < er.period_start
+            """,
+            (),
+        )
+        if not stale:
+            logger.info("week_label_repair | all week labels are correct — nothing to fix")
+            return
+        logger.info("week_label_repair | found %d report(s) with stale week labels — repairing", len(stale))
+        for row in stale:
+            try:
+                code = _generate_employee_report(
+                    str(row["employee_user_id"]), int(row["yr"]), int(row["mo"])
+                )
+                logger.info("week_label_repair | repaired %s", code)
+            except Exception as _e:
+                logger.warning("week_label_repair | failed for %s: %s", row["report_code"], _e)
+        logger.info("week_label_repair | repair complete")
+    except Exception as exc:
+        logger.warning("week_label_repair | skipped due to error: %s", exc)
 
 
+# ── Report coverage guarantee (real MV data only) ────────────────────────────
 def _ensure_recent_reports(user_id: str) -> None:
-    """Ensure the employee has a FULLY POPULATED report for:
+    """Ensure the employee has a FULLY POPULATED report for every month where
+    they have real MV data in mv_employee_daily.
 
-    1. Every fixed demo month in _DEMO_MONTHS (Jan–Apr 2026), regardless of
-       whether MV data exists for that month.  This guarantees uniform coverage
-       across all employees — zero-activity months produce a valid empty report.
-
-    2. Every newer month (> April 2026) where the employee has MV activity data.
-       This keeps the system forward-compatible: May 2026, June 2026, etc. appear
-       automatically as ticket data accumulates.
-
-    2025 months are NEVER generated.  Any 2025 report that exists is treated as
-    legacy data that the cleanup migration should have removed.
+    No hardcoded months. No demo floor. Reports come from real data only.
 
     Two-pass logic per month:
       Pass 1 — generate missing reports (report row does not exist at all).
@@ -3115,35 +3375,23 @@ def _ensure_recent_reports(user_id: str) -> None:
     if not user_slug:
         user_slug = _re_slug2.sub(r"[^a-z0-9]", "", str(user_id).replace("-", ""))[:8]
 
-    # Build the full target set
-    # Start with the fixed demo months
-    target_months: set = set(_DEMO_MONTHS)
-
-    # Add any newer months (> last demo month) that have MV data for this employee
-    last_demo_year, last_demo_month = max(_DEMO_MONTHS)
-    from datetime import date as _date
-    cutoff = _date(last_demo_year, last_demo_month, 1)
-
-    mv_newer = fetch_all(
+    # ── Discover target months from real MV data for this employee ────────────
+    mv_months = fetch_all(
         """
         SELECT DISTINCT
             EXTRACT(YEAR  FROM created_month)::int AS yr,
             EXTRACT(MONTH FROM created_month)::int AS mo
         FROM mv_employee_daily
         WHERE employee_id = %s::uuid
-          AND created_month > %s
+          AND EXTRACT(YEAR FROM created_month)::int >= 2026
         ORDER BY yr, mo
         """,
-        (user_id, cutoff),
+        (user_id,),
     )
-    for row in mv_newer:
-        yr = int(row["yr"])
-        mo = int(row["mo"])
-        if yr >= 2026:          # hard guard: never below 2026
-            target_months.add((yr, mo))
+    target_months = [(int(r["yr"]), int(r["mo"])) for r in mv_months]
 
-    # Process each target month
-    for year, month in sorted(target_months):
+    # ── Process each target month ─────────────────────────────────────────────
+    for year, month in target_months:
         if year < 2026:
             continue            # absolute safety: never generate pre-2026
 
@@ -3174,7 +3422,7 @@ def _ensure_recent_reports(user_id: str) -> None:
 def employee_reports_list(user: Dict[str, Any] = Depends(require_employee)):
     user_id = user["id"]
 
-    # Ensure demo months + any newer MV-backed months are fully populated.
+    # Ensure all MV-backed months are fully populated for this employee.
     try:
         _ensure_recent_reports(user_id)
     except Exception as exc:
@@ -3499,6 +3747,7 @@ def customer_ticket_details(
     ticket_code: str,
     user: Dict[str, Any] = Depends(require_customer),
 ):
+    ticket_code = _sanitize_ticket_code(ticket_code)
     user_id = user["id"]
 
     row = fetch_one(
@@ -3685,10 +3934,62 @@ class CreateTicketRequest(BaseModel):
     attachments: Optional[List[TicketAttachment]] = []
     sentiment: Optional[dict] = None
 
-    @field_validator("details")
-    @classmethod
-    def details_within_word_limit(cls, value: str) -> str:
-        return _validate_customer_text_words(value, "details") or ""
+    from pydantic import validator
+
+    @validator("name")
+    def name_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("name must not be empty.")
+        if len(v) > 120:
+            raise ValueError("name exceeds maximum length of 120 characters.")
+        return v
+
+    @validator("email")
+    def email_format(cls, v):
+        import re as _r
+        v = (v or "").strip().lower()
+        if not _r.match(r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-.]+$', v):
+            raise ValueError("Invalid email address.")
+        if len(v) > 254:
+            raise ValueError("Email address too long.")
+        return v
+
+    @validator("type")
+    def type_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("type must not be empty.")
+        if len(v) > 60:
+            raise ValueError("type exceeds maximum length of 60 characters.")
+        return v
+
+    @validator("asset_type")
+    def asset_type_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("asset_type must not be empty.")
+        if len(v) > 120:
+            raise ValueError("asset_type exceeds maximum length of 120 characters.")
+        return v
+
+    @validator("subject")
+    def subject_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("subject must not be empty.")
+        if len(v) > 300:
+            raise ValueError("subject exceeds maximum length of 300 characters.")
+        return v
+
+    @validator("details")
+    def details_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("details must not be empty.")
+        if len(v) > 10000:
+            raise ValueError("details exceeds maximum length of 10000 characters.")
+        return v
 
 
 class InternalCreateTicketRequest(BaseModel):
@@ -4152,6 +4453,7 @@ def assign_ticket(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_id = _sanitize_uuid(ticket_id, "ticket_id")
     user = _validate_token_and_fetch_user(_get_bearer_token(authorization))
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4221,6 +4523,7 @@ def manager_resolve_ticket(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_id = _sanitize_uuid(ticket_id, "ticket_id")
     user = _validate_token_and_fetch_user(_get_bearer_token(authorization))
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4322,6 +4625,7 @@ def manager_rescore_ticket(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_id = _sanitize_uuid(ticket_id, "ticket_id")
     user = _validate_token_and_fetch_user(_get_bearer_token(authorization))
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4420,6 +4724,7 @@ def route_ticket_department(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
+    ticket_id = _sanitize_uuid(ticket_id, "ticket_id")
     user = _validate_token_and_fetch_user(_get_bearer_token(authorization))
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4640,6 +4945,7 @@ def decide_approval(
     authorization: Optional[str] = Header(default=None),
     _csrf: None = Depends(require_csrf),
 ):
+    request_id = _sanitize_uuid(request_id, "request_id")
     user = _validate_token_and_fetch_user(_get_bearer_token(authorization))
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -4793,6 +5099,12 @@ def decide_approval(
 @app.get("/manager/complaints/{ticket_id}")
 @api.get("/manager/complaints/{ticket_id}")
 def get_manager_complaint_details(ticket_id: str, user: Dict[str, Any] = Depends(require_manager)):
+    # Accepts both ticket_code (CX-…) and UUID
+    _stripped = ticket_id.strip()
+    if _TICKET_CODE_RE.match(_stripped.upper()):
+        ticket_id = _stripped.upper()
+    else:
+        ticket_id = _sanitize_uuid(_stripped, "ticket_id")
     ticket = fetch_one("""
         SELECT
             t.id AS ticket_id,
@@ -4884,7 +5196,15 @@ def get_manager_trends(
     priority: str = Query("All Priorities"),
     user: Dict[str, Any] = Depends(require_manager),
 ):
-    # Resolve time window
+    # Validate timeRange against known allowlist
+    timeRange = _sanitize_time_range(timeRange)
+    # Clamp department and priority to safe lengths (they are used in SQL via
+    # parameterised queries, but we still reject absurdly long values early)
+    if len(department) > 120:
+        raise HTTPException(status_code=400, detail="Invalid department value.")
+    if len(priority) > 40:
+        raise HTTPException(status_code=400, detail="Invalid priority value.")
+    # ── Resolve time window ───────────────────────────────────────────────────
     range_sql = {
         "7d":             "now() - interval '7 days'",
         "Last 7 Days":    "now() - interval '7 days'",
@@ -5232,6 +5552,7 @@ def get_routing_review_queue(
     status_filter: str = Query(default="Pending"),
     user: Dict[str, Any] = Depends(require_manager),
 ):
+    status_filter = _sanitize_status_filter(status_filter)
     manager_dept_row = fetch_one(
         """
         SELECT d.name AS department_name
@@ -5261,6 +5582,7 @@ def get_routing_review_item(
     user: Dict[str, Any] = Depends(require_manager),
 ):
     """Fetch a single routing review item by its UUID."""
+    review_id = _sanitize_uuid(review_id, "review_id")
     manager_dept_row = fetch_one(
         """
         SELECT d.name AS department_name
@@ -5335,6 +5657,7 @@ def decide_routing_review(
     user: Dict[str, Any] = Depends(require_manager),
     _csrf: None = Depends(require_csrf),
 ):
+    review_id = _sanitize_uuid(review_id, "review_id")
     manager_dept_row = fetch_one(
         """
         SELECT d.name AS department_name
@@ -5471,10 +5794,30 @@ class ChatbotProxyRequest(BaseModel):
     user_id: str
     session_id: Optional[str] = None
 
-    @field_validator("message")
-    @classmethod
-    def message_within_word_limit(cls, value: str) -> str:
-        return _validate_customer_text_words(value, "message") or ""
+    from pydantic import validator
+
+    @validator("message")
+    def message_length(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("message must not be empty.")
+        if len(v) > 4000:
+            raise ValueError("message exceeds maximum length of 4000 characters.")
+        return v
+
+    @validator("user_id")
+    def user_id_format(cls, v):
+        import uuid as _u
+        try:
+            return str(_u.UUID(str(v).strip()))
+        except (ValueError, AttributeError):
+            raise ValueError("user_id must be a valid UUID.")
+
+    @validator("session_id", pre=True, always=True)
+    def session_id_length(cls, v):
+        if v is not None and len(str(v)) > 128:
+            raise ValueError("session_id exceeds maximum length of 128 characters.")
+        return v
 
 
 @api.post("/complaints")
@@ -5945,6 +6288,7 @@ def internal_generate_suggested_resolution(ticket_code: str, _key: None = Depend
     Return the latest stored suggestion for a ticket code.
     Suggested resolution generation is owned by the orchestrator pipeline.
     """
+    ticket_code = _sanitize_ticket_code(ticket_code)
     row = fetch_one(
         """
         SELECT
@@ -6209,6 +6553,36 @@ def get_operator_qc_rerouting(
     except Exception as e:
         logger.error("get_operator_qc_rerouting failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+@api.get("/operator/analytics/qc/rescoring-rerouting")
+def get_operator_qc_rescoring_rerouting(
+    timeRange:  str           = Query("last30days"),
+    department: str           = Query("All Departments"),
+    dateFrom:   Optional[str] = Query(None),
+    dateTo:     Optional[str] = Query(None),
+    user: Dict[str, Any] = Depends(require_operator),
+):
+    """
+    Merged Rescoring + Rerouting tab payload.
+    Returns rescoring kpis, reassignmentByDept (all departments, incl. 0-value rows),
+    and reroutingKpis — all in one response for the unified B tab.
+    """
+    period_start, period_end = _parse_time_range(timeRange, dateFrom, dateTo)
+    if not _ANALYTICS_READY:
+        raise HTTPException(status_code=503, detail="Analytics MVs not ready.")
+    try:
+        full = _analytics.get_operator_qc_data(period_start, period_end, department)
+        rescoring = full["rescoring"]
+        return {
+            "kpis":               rescoring["kpis"],
+            "byDepartment":       rescoring["byDepartment"],
+            "reassignmentByDept": rescoring["reassignmentByDept"],
+            "reroutingKpis":      rescoring["reroutingKpis"],
+        }
+    except Exception as e:
+        logger.error("get_operator_qc_rescoring_rerouting failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @api.get("/operator/learning/reroute")
 def get_learning_reroute(
@@ -6509,6 +6883,12 @@ def get_operator_complaint_detail(
     Full ticket detail for the QC TicketReviewDetail page.
     Accepts either a ticket_code (e.g. CX-0042) or a raw UUID.
     """
+    # Accept both ticket_code (CX-…) and UUID — validate accordingly
+    _stripped = ticket_id.strip()
+    if _TICKET_CODE_RE.match(_stripped.upper()):
+        ticket_id = _stripped.upper()
+    else:
+        ticket_id = _sanitize_uuid(_stripped, "ticket_id")
     ticket = fetch_one(
         """
         SELECT
@@ -6803,6 +7183,54 @@ def _validate_type(value, expected_type, field: str):
         )
     return value
 
+
+# ── Path-parameter sanitisation helpers ──────────────────────────────────────
+
+def _sanitize_uuid(value: str, field: str = "ID") -> str:
+    """Validate that a path parameter is a well-formed UUID.
+    Returns the lower-cased canonical string form.
+    Raises HTTP 400 on failure so callers never reach the DB with garbage.
+    """
+    try:
+        return str(_uuid_mod.UUID(str(value).strip()))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail=f"Invalid {field}: must be a valid UUID.")
+
+
+_TICKET_CODE_RE = _re.compile(r'^CX-\d{1,10}$', _re.IGNORECASE)
+
+def _sanitize_ticket_code(value: str, field: str = "ticket code") -> str:
+    """Validate a ticket_code path parameter (format: CX-<digits>).
+    Returns the upper-cased canonical form.
+    Raises HTTP 400 on failure.
+    """
+    v = (value or "").strip().upper()
+    if not _TICKET_CODE_RE.match(v):
+        raise HTTPException(status_code=400, detail=f"Invalid {field}: expected format CX-<number>.")
+    return v
+
+
+_ALLOWED_TIME_RANGES = frozenset({
+    "7d", "Last 7 Days", "30d", "Last 30 Days",
+    "This Month", "Last 3 Months", "Last 6 Months",
+    "Last 12 Months", "90d", "last30days",
+})
+
+def _sanitize_time_range(value: str) -> str:
+    """Reject timeRange query params not in the known allowlist."""
+    if value not in _ALLOWED_TIME_RANGES:
+        raise HTTPException(status_code=400, detail=f"Invalid timeRange value: '{value}'.")
+    return value
+
+
+_ALLOWED_ROUTING_STATUSES = frozenset({"Pending", "Approved", "Overridden", "Denied", "All"})
+
+def _sanitize_status_filter(value: str) -> str:
+    """Reject status_filter values not in the known allowlist."""
+    if value not in _ALLOWED_ROUTING_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status_filter value: '{value}'.")
+    return value
+
 class CreateUserRequest(BaseModel):
     fullName:   str
     email:      str
@@ -6998,6 +7426,7 @@ def operator_update_user(
     _csrf: None = Depends(require_csrf),
 ):
     """Update user + profile (operator-only)."""
+    user_id = _sanitize_uuid(user_id, "user_id")
     if current_user.get("role") != "operator":
         raise HTTPException(status_code=403, detail="Only operators can update users.")
 
@@ -7149,6 +7578,7 @@ def operator_update_user_status(
     _csrf: None = Depends(require_csrf),
 ):
     """Activate/Deactivate user (operator-only)."""
+    user_id = _sanitize_uuid(user_id, "user_id")
     if current_user.get("role") != "operator":
         raise HTTPException(status_code=403, detail="Only operators can update users.")
 
@@ -7180,6 +7610,7 @@ def operator_delete_user(
     _csrf: None = Depends(require_csrf),
 ):
     """Delete a user (operator-only)."""
+    user_id = _sanitize_uuid(user_id, "user_id")
     if current_user.get("role") != "operator":
         raise HTTPException(status_code=403, detail="Only operators can delete users.")
 
@@ -7476,6 +7907,7 @@ def operator_delete_ticket(
     Hard-delete a ticket and all related rows (cascades via FK).
     Also removes the ticket from pipeline_queue if present.
     """
+    ticket_id = _sanitize_uuid(ticket_id, "ticket_id")
     with db_connect() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT id, ticket_code FROM tickets WHERE id = %s::uuid", (ticket_id,))
