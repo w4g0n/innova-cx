@@ -424,6 +424,14 @@ export default function CustomerAuthPage() {
 
       <div className="auth-card">
 
+        <button
+          type="button"
+          className="backBtn"
+          onClick={() => navigate("/login")}
+        >
+          ← Back
+        </button>
+
         <div className="auth-header-tag">Identity Verification</div>
         <h1 className="auth-title">Verify your identity</h1>
 

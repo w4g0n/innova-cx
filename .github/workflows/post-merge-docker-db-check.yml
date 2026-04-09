@@ -104,6 +104,7 @@ jobs:
           run_profile() {
             local profile="$1"
             echo "=== Running profile: $profile ==="
+
             docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
 
             # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
@@ -126,7 +127,6 @@ jobs:
             PRIORITY_USE_MOCK=true \
             PRIORITY_MODEL_DIR=/tmp/nonexistent-priority-model \
             docker compose --profile "$profile" up -d --build
-
             wait_health innovacx-db
 
             # Wait for initdb scripts to finish before querying roles/tables.
