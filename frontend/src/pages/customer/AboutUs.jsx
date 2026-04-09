@@ -980,7 +980,7 @@ export default function AboutUs() {
             {
               icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
               title: "Encryption in Transit and at Rest",
-              desc: "All data transmitted between clients and the InnovaCX platform is encrypted in transit using TLS 1.2+, with HTTPS enforced across every endpoint. Sensitive fields are encrypted at rest.",
+              desc: "All data transmitted between clients and the InnovaCX platform is encrypted in transit using TLS 1.2+, with HTTP redirected to HTTPS and auto-renewing SSL certificates. Sensitive fields are encrypted at rest.",
             },
             {
               icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
@@ -1000,12 +1000,12 @@ export default function AboutUs() {
             {
               icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>,
               title: "Secure Data Storage",
-              desc: "Database users follow the principle of least privilege, with application accounts limited to the operations they need. Sensitive columns are encrypted at rest, all database connections use TLS, and credentials are stored in environment variables rather than code.",
+              desc: "Database users follow the principle of least privilege, with application accounts limited to the operations they need. Sensitive columns and backups are encrypted at rest, and credentials are stored in environment variables - never hardcoded in application code.",
             },
             {
               icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M11 8v3l2 2"/></svg>,
               title: "Monitoring and Alerts",
-              desc: "Alerts are used to detect unusual or suspicious activity. Application-level event logs are maintained and reviewed to help identify suspicious activity.",
+              desc: "All authentication events and access to sensitive data are logged via Cloud Audit Logs. Cloud Monitoring is configured with alerts to track platform activity, and logs are exported to Cloud Storage for retention and review.",
             },
           ].map((item, i) => (
             <div key={i} className="au-feat au-reveal" style={{ "--rd": `${i * 60}ms` }}>

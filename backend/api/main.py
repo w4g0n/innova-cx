@@ -1374,111 +1374,136 @@ RESET_EMAIL_HTML = """\
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
   <title>Reset Your Password</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&display=swap');
     body,table,td,a{{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}}
     table,td{{mso-table-lspace:0pt;mso-table-rspace:0pt}}
-    img{{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none}}
-    body{{margin:0;padding:0;background-color:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}}
-    .ew{{width:100%;background-color:#f4f4f7;padding:40px 0}}
-    .ec{{max-width:560px;margin:0 auto;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08)}}
-    .hd{{background:linear-gradient(135deg,#6d28d9 0%,#9333ea 100%);padding:36px 40px;text-align:center}}
-    .hl{{font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;margin:0}}
-    .hl span{{opacity:.75;font-weight:400}}
-    .bd{{padding:40px 40px 32px}}
-    .gr{{font-size:15px;color:#374151;margin:0 0 16px;line-height:1.6}}
-    .ti{{font-size:22px;font-weight:700;color:#111827;margin:0 0 12px;letter-spacing:-0.3px}}
-    .de{{font-size:15px;color:#6b7280;line-height:1.65;margin:0 0 32px}}
-    .bw{{text-align:center;margin:0 0 32px}}
-    .btn{{display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#6d28d9,#9333ea);color:#ffffff!important;text-decoration:none;border-radius:6px;font-size:15px;font-weight:600;letter-spacing:.1px}}
-    .dv{{border:none;border-top:1px solid #e5e7eb;margin:0 0 24px}}
-    .fl{{font-size:12px;color:#9ca3af;margin:0 0 8px;text-transform:uppercase;letter-spacing:.6px;font-weight:600}}
-    .fk{{font-size:13px;color:#6d28d9;word-break:break-all;line-height:1.5;margin:0 0 32px}}
-    .wb{{background-color:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:14px 16px;margin:0 0 32px}}
-    .wt{{font-size:13px;color:#92400e;margin:0;line-height:1.55}}
-    .wt strong{{color:#78350f}}
-    .ft{{background-color:#f9fafb;border-top:1px solid #e5e7eb;padding:24px 40px;text-align:center}}
-    .fx{{font-size:12px;color:#9ca3af;line-height:1.6;margin:0 0 4px}}
-    .fx a{{color:#9ca3af;text-decoration:underline}}
+    body{{margin:0;padding:0;background:#0c0520;font-family:'Outfit',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}}
+    .ew{{width:100%;background:#0c0520;padding:40px 0}}
+    .ec{{max-width:560px;margin:0 auto;border-radius:16px;overflow:hidden;border:1px solid rgba(168,85,247,.25);box-shadow:0 0 0 1px rgba(168,85,247,.1),0 8px 40px rgba(0,0,0,.6),0 0 80px rgba(147,51,234,.15)}}
+    /* Header */
+    .hd{{background:linear-gradient(160deg,#0e0525 0%,#1a0840 50%,#0c0320 100%);padding:52px 44px 44px;text-align:center;position:relative;overflow:hidden}}
+    /* Nebula blobs */
+    .nb1{{position:absolute;width:280px;height:280px;top:-80px;left:-60px;border-radius:50%;background:radial-gradient(circle,rgba(147,51,234,.28),transparent 70%);pointer-events:none}}
+    .nb2{{position:absolute;width:200px;height:200px;bottom:-60px;right:-40px;border-radius:50%;background:radial-gradient(circle,rgba(232,121,249,.16),transparent 70%);pointer-events:none}}
+    /* Orbital rings */
+    .r1{{position:absolute;width:220px;height:220px;top:50%;left:50%;margin:-110px 0 0 -110px;border-radius:50%;border:1px solid rgba(168,85,247,.18);animation:rp 4s ease-in-out infinite}}
+    .r2{{position:absolute;width:310px;height:310px;top:50%;left:50%;margin:-155px 0 0 -155px;border-radius:50%;border:1px solid rgba(147,51,234,.08);animation:rp 4s ease-in-out 1s infinite}}
+    @keyframes rp{{0%,100%{{transform:scale(1);opacity:.6}}50%{{transform:scale(1.06);opacity:.2}}}}
+    /* Star dots */
+    .s{{position:absolute;border-radius:50%;background:#fff;animation:tw var(--d,3s) ease-in-out infinite}}
+    @keyframes tw{{0%,100%{{opacity:.08}}50%{{opacity:var(--op,.5)}}}}
+    /* Logo float */
+    .lg{{display:block;margin:0 auto 14px;animation:lf 5s ease-in-out infinite;position:relative;z-index:2}}
+    @keyframes lf{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-6px)}}}}
+    .brand{{font-size:24px;font-weight:900;color:#fff;letter-spacing:-.04em;position:relative;z-index:2;margin:0 0 4px}}
+    .brand span{{opacity:.55;font-weight:400}}
+    .ht{{font-size:22px;font-weight:800;color:#fff;letter-spacing:-.03em;line-height:1.15;position:relative;z-index:2;margin:0 0 6px}}
+    .hs{{font-size:12px;color:rgba(196,181,253,.6);position:relative;z-index:2;letter-spacing:.05em;margin:0}}
+    /* Body */
+    .bd{{padding:36px 44px 28px;background:#05010e}}
+    .gr{{font-size:14.5px;color:rgba(255,255,255,.6);margin:0 0 14px;line-height:1.6}}
+    .de{{font-size:14.5px;color:rgba(255,255,255,.55);line-height:1.7;margin:0 0 28px}}
+    .de strong{{color:rgba(255,255,255,.85)}}
+    .bw{{text-align:center;margin:0 0 36px}}
+    .btn{{display:inline-block;padding:15px 44px;background:linear-gradient(135deg,#6d28d9,#9333ea,#a855f7);color:#fff!important;text-decoration:none;border-radius:12px;font-size:15px;font-weight:700;letter-spacing:.01em;box-shadow:0 6px 28px rgba(147,51,234,.5);animation:bp 3s ease-in-out infinite}}
+    @keyframes bp{{0%,100%{{box-shadow:0 6px 28px rgba(147,51,234,.45)}}50%{{box-shadow:0 6px 40px rgba(147,51,234,.75),0 0 60px rgba(147,51,234,.2)}}}}
+    .dv{{border:none;border-top:1px solid rgba(168,85,247,.12);margin:0 0 22px}}
+    .fl{{font-size:10px;color:rgba(255,255,255,.3);margin:0 0 8px;text-transform:uppercase;letter-spacing:.15em;font-weight:600}}
+    .fkw{{background:rgba(147,51,234,.07);border:1px solid rgba(168,85,247,.2);border-radius:10px;padding:12px 16px;margin:0 0 28px}}
+    .fk{{font-size:12px;color:#a855f7;word-break:break-all;line-height:1.5;margin:0;font-family:monospace}}
+    .wb{{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:14px 16px}}
+    .wt{{font-size:13px;color:rgba(251,191,36,.7);line-height:1.55;margin:0}}
+    .wt strong{{color:#fbbf24}}
+    /* Footer */
+    .ft{{background:rgba(255,255,255,.015);border-top:1px solid rgba(168,85,247,.1);padding:24px 44px;text-align:center}}
+    .fn{{font-size:13px;font-weight:800;color:rgba(255,255,255,.45);letter-spacing:-.02em;margin:0 0 10px}}
+    .fn span{{font-weight:400;opacity:.6}}
+    .fx{{font-size:11.5px;color:rgba(255,255,255,.2);line-height:1.7;margin:0 0 4px}}
+    .fx a{{color:rgba(255,255,255,.2);text-decoration:underline}}
+    .fc{{font-size:11px;color:rgba(168,85,247,.4);margin:8px 0 0}}
     @media only screen and (max-width:600px){{
       .ec{{border-radius:0}}
-      .hd{{padding:28px 24px}}
-      .bd{{padding:28px 24px 24px}}
-      .ft{{padding:20px 24px}}
+      .hd,.bd,.ft{{padding-left:24px;padding-right:24px}}
     }}
   </style>
 </head>
 <body>
-  <div class="ew">
-    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-      <tr><td align="center">
-        <div class="ec">
+<div class="ew">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td align="center">
+  <div class="ec">
 
-          <!-- Header -->
-          <div class="hd">
-            <p class="hl">Innova<span>CX</span></p>
-          </div>
+    <div class="hd">
+      <!-- Nebula -->
+      <div class="nb1"></div>
+      <div class="nb2"></div>
+      <!-- Rings -->
+      <div class="r1"></div>
+      <div class="r2"></div>
+      <!-- Stars -->
+      <div class="s" style="width:2px;height:2px;top:12%;left:18%;--d:2.8s;--op:.6"></div>
+      <div class="s" style="width:1px;height:1px;top:22%;left:72%;--d:3.4s;--op:.4"></div>
+      <div class="s" style="width:2px;height:2px;top:8%;left:55%;--d:2.1s;--op:.7;background:#c4b5fd"></div>
+      <div class="s" style="width:1px;height:1px;top:65%;left:12%;--d:4s;--op:.5"></div>
+      <div class="s" style="width:2px;height:2px;top:70%;left:82%;--d:2.5s;--op:.45;background:#e9d5ff"></div>
+      <div class="s" style="width:1px;height:1px;top:38%;left:88%;--d:3.1s;--op:.35"></div>
+      <div class="s" style="width:2px;height:2px;top:80%;left:40%;--d:3.8s;--op:.55;background:#c4b5fd"></div>
+      <div class="s" style="width:1px;height:1px;top:15%;left:38%;--d:2.3s;--op:.4"></div>
+      <div class="s" style="width:2px;height:2px;top:55%;left:65%;--d:4.2s;--op:.5"></div>
+      <div class="s" style="width:1px;height:1px;top:90%;left:25%;--d:3.6s;--op:.3"></div>
+      <div class="s" style="width:2px;height:2px;top:30%;left:8%;--d:2.7s;--op:.6;background:#e9d5ff"></div>
+      <div class="s" style="width:1px;height:1px;top:48%;left:92%;--d:3.3s;--op:.4"></div>
+      <!-- Logo SVG -->
+      <img src="/nova-logo.png" class="lg" width="56" height="56" alt="Logo"/>
+      <p class="brand">Innova<span>CX</span></p>
+      <p class="ht">Reset your password</p>
+      <p class="hs">Secure account recovery</p>
+    </div>
 
-          <!-- Body -->
-          <div class="bd">
-            <p class="gr">Hi,</p>
-            <p class="ti">Reset your password</p>
-            <p class="de">
-              We received a request to reset the password for the account associated with
-              <strong>{email}</strong>. Click the button below to choose a new password.
-              This link will expire in <strong>30 minutes</strong>.
-            </p>
+    <div class="bd">
+      <p class="gr">Hi,</p>
+      <p class="de">
+        We received a request to reset the password for the account associated with
+        <strong>{email}</strong>. Click the button below to choose a new password.
+        This link will expire in <strong>30 minutes</strong>.
+      </p>
+      <div class="bw">
+        <!--[if mso]>
+        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
+          href="{reset_link}" style="height:50px;v-text-anchor:middle;width:220px;"
+          arcsize="12%" fillcolor="#9333ea" strokecolor="#9333ea">
+          <w:anchorlock/>
+          <center style="color:#fff;font-family:sans-serif;font-size:15px;font-weight:700;">Reset Password</center>
+        </v:roundrect>
+        <![endif]-->
+        <!--[if !mso]><!-->
+        <a href="{reset_link}" class="btn" target="_blank">Reset Password &rarr;</a>
+        <!--<![endif]-->
+      </div>
+      <hr class="dv"/>
+      <p class="fl">Or copy this link</p>
+      <div class="fkw"><p class="fk">{reset_link}</p></div>
+      <div class="wb">
+        <p class="wt"><strong>Didn't request this?</strong> Your password will not change unless you click the button above. If you're concerned about your account security, please contact support.</p>
+      </div>
+    </div>
 
-            <div class="bw">
-              <!--[if mso]>
-              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml"
-                xmlns:w="urn:schemas-microsoft-com:office:word"
-                href="{reset_link}"
-                style="height:48px;v-text-anchor:middle;width:200px;"
-                arcsize="12%" fillcolor="#9333ea" strokecolor="#9333ea">
-                <w:anchorlock/>
-                <center style="color:#fff;font-family:sans-serif;font-size:15px;font-weight:600;">
-                  Reset Password
-                </center>
-              </v:roundrect>
-              <![endif]-->
-              <!--[if !mso]><!-->
-              <a href="{reset_link}" class="btn" target="_blank">Reset Password</a>
-              <!--<![endif]-->
-            </div>
+    <div class="ft">
+      <p class="fn">Innova<span>CX</span></p>
+      <p class="fx">
+        This email was sent by InnovaCX &mdash; innovacx.net<br/>
+        This is an automated message, please do not reply to this email.
+      </p>
+      <p class="fc">&copy; {year} InnovaCX. All rights reserved.</p>
+    </div>
 
-            <hr class="dv" />
-
-            <p class="fl">Or copy this link</p>
-            <p class="fk">{reset_link}</p>
-
-            <div class="wb">
-              <p class="wt">
-                <strong>Didn't request this?</strong> Your password will not change unless
-                you click the button above. If you're concerned about your account security,
-                please contact support.
-              </p>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div class="ft">
-            <p class="fx">
-              This email was sent by InnovaCX &mdash; innovacx.net<br />
-              This is an automated message, please do not reply to this email.
-            </p>
-            <p class="fx" style="margin-top:8px;">
-              &copy; {year} InnovaCX. All rights reserved.
-            </p>
-          </div>
-
-        </div>
-      </td></tr>
-    </table>
   </div>
+  </td></tr></table>
+</div>
 </body>
 </html>"""
 

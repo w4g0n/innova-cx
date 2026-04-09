@@ -15,6 +15,7 @@ import re
 
 import httpx
 from langchain_core.runnables import RunnableLambda
+from backend_client import internal_backend_headers
 
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
 logger = logging.getLogger(__name__)
@@ -213,7 +214,11 @@ async def generate_subject(state: dict) -> dict:
         "transcript": details,
     }
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(f"{BACKEND_URL}/api/complaints", json=payload)
+        response = await client.post(
+            f"{BACKEND_URL}/api/complaints",
+            json=payload,
+            headers=internal_backend_headers(),
+        )
         response.raise_for_status()
         data = response.json()
 
