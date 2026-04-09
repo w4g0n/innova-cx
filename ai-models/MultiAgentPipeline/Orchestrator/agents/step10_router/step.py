@@ -19,6 +19,7 @@ from typing import Any
 
 import httpx
 from langchain_core.runnables import RunnableLambda
+from backend_client import internal_backend_headers
 
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
 logger = logging.getLogger(__name__)
@@ -341,7 +342,11 @@ async def route_and_store(state: dict) -> dict:
             route_confidence=top_confidence,
             route_source=source,
         )
-        response = await client.post(f"{BACKEND_URL}/api/complaints", json=ticket_payload)
+        response = await client.post(
+            f"{BACKEND_URL}/api/complaints",
+            json=ticket_payload,
+            headers=internal_backend_headers(),
+        )
         response.raise_for_status()
         data = response.json()
 

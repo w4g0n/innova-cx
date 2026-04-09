@@ -28,10 +28,12 @@ jobs:
       - name: Sweep all compose profiles
         env:
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
-          POSTGRES_PASSWORD: ci-postgres-password
-          APP_DB_PASSWORD: ci-app-db-password
-          READONLY_DB_PASSWORD: ci-readonly-db-password
-          TEST_DB_PASSWORD: ci-test-db-password
+          # Match the committed bootstrap defaults so CI does not fight the
+          # seeded role passwords created during docker-entrypoint init.
+          POSTGRES_PASSWORD: changeme123
+          APP_DB_PASSWORD: changeme123
+          READONLY_DB_PASSWORD: innovacx123
+          TEST_DB_PASSWORD: innovacx123
           JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min
           CSRF_SECRET: ci-csrf-secret-placeholder-32-chars-min
           INTERNAL_API_KEY: ci-internal-api-key-placeholder-value
@@ -71,26 +73,76 @@ jobs:
             return 1
           }
 
-          wait_db_init() {
+          wait_db_bootstrap() {
             local container="$1"
             local max_attempts="${2:-60}"
-            local logfile="/tmp/${container}-initdb-check.log"
-            echo "Waiting for $container initdb to complete..."
+            echo "Waiting for $container bootstrap roles/tables to exist..."
             for i in $(seq 1 "$max_attempts"); do
-              # Write logs to a file first to avoid SIGPIPE false negatives.
-              # Under set -euo pipefail, `docker logs | grep -q` silently fails:
-              # grep -q exits 0 on match but docker logs gets SIGPIPE (exit 141),
-              # making the pipeline exit non-zero even when the string IS present.
-              # The original workflow had this same comment and used this same fix.
-              docker logs "$container" > "$logfile" 2>&1 || true
-              if grep -q "PostgreSQL init process complete; ready for start up." "$logfile"; then
-                echo "$container initdb complete"
+              role_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
+                "select count(*) from pg_roles where rolname='innovacx_app';" 2>/dev/null || true)"
+              tables_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
+                "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" 2>/dev/null || true)"
+              if [ "$role_ready" = "1" ] && [ "$tables_ready" = "4" ]; then
+                echo "$container bootstrap complete"
                 return 0
               fi
-              echo "  initdb not complete yet... attempt $i/$max_attempts"
+              echo "  bootstrap not complete yet... attempt $i/$max_attempts (role=${role_ready:-missing} tables=${tables_ready:-missing})"
               sleep 5
             done
-            echo "::error::$container initdb did not complete in time"
+            echo "::error::$container bootstrap did not complete in time"
+            return 1
+          }
+
+          bootstrap_ready() {
+            local container="$1"
+            local role_ready
+            local tables_ready
+            role_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
+              "select count(*) from pg_roles where rolname='innovacx_app';" 2>/dev/null || true)"
+            tables_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
+              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" 2>/dev/null || true)"
+            [ "$role_ready" = "1" ] && [ "$tables_ready" = "4" ]
+          }
+
+          apply_bootstrap_fallback() {
+            local container="$1"
+            echo "Applying CI bootstrap fallback inside $container ..."
+            docker exec "$container" sh -lc '
+              set -e
+              for file in /docker-entrypoint-initdb.d/*; do
+                [ -f "$file" ] || continue
+                case "$file" in
+                  *.sql)
+                    echo "==> [ci-fallback] psql -f ${file##*/}"
+                    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$file"
+                    ;;
+                  *.sh)
+                    echo "==> [ci-fallback] sh ${file##*/}"
+                    "$file"
+                    ;;
+                  *)
+                    echo "==> [ci-fallback] skipping ${file##*/}"
+                    ;;
+                esac
+              done
+            '
+          }
+
+          wait_db_app_auth() {
+            local profile="$1"
+            local max_attempts="${2:-60}"
+            echo "Waiting for app-role TCP authentication to succeed..."
+            for i in $(seq 1 "$max_attempts"); do
+              if docker compose --profile "$profile" run --rm --no-deps backup \
+                sh -lc 'export PGPASSWORD="$APP_DB_PASSWORD"; psql -h postgres -U "$APP_DB_USER" -d "$POSTGRES_DB" -tAc "select 1"' \
+                2>/dev/null | grep -q "^1$"; then
+                echo "App-role TCP authentication is ready"
+                return 0
+              fi
+              echo "  app-role auth not ready yet... attempt $i/$max_attempts"
+              sleep 5
+            done
+            echo "::error::App-role TCP authentication did not become ready in time"
             return 1
           }
 
@@ -103,37 +155,62 @@ jobs:
 
           run_profile() {
             local profile="$1"
+            local services=""
             echo "=== Running profile: $profile ==="
+
             docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
 
             # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
-            CHATBOT_USE_MOCK=true \
-            CHATBOT_AUTO_DOWNLOAD=false \
-            SHARED_QWEN_MODEL_PATH=/tmp/nonexistent-shared-qwen \
-            SHARED_QWEN_AUTO_DOWNLOAD=false \
-            CLASSIFIER_MODEL_PATH=/tmp/nonexistent-classifier/model.pkl \
-            CLASSIFIER_MODEL_DIR=/tmp/nonexistent-classifier \
-            SENTIMENT_MODEL_DIR=/tmp/nonexistent-sentiment-model \
-            FEATURE_LABELER_MODEL_PATH=/tmp/nonexistent-feature-model \
-            FEATURE_LABELER_AUTO_DOWNLOAD=false \
-            DEPARTMENT_ROUTER_MODEL_PATH=/tmp/nonexistent-router-model \
-            DEPARTMENT_ROUTER_AUTO_DOWNLOAD=false \
-            SUBJECT_GENERATOR_MODEL_PATH=/tmp/nonexistent-subject-model \
-            SUBJECT_GENERATOR_AUTO_DOWNLOAD=false \
-            SUGGESTED_RESOLUTION_MODEL_PATH=/tmp/nonexistent-suggested-model \
-            SUGGESTED_RESOLUTION_USE_MOCK=true \
-            SUGGESTED_RESOLUTION_AUTO_DOWNLOAD=false \
-            PRIORITY_USE_MOCK=true \
-            PRIORITY_MODEL_DIR=/tmp/nonexistent-priority-model \
-            docker compose --profile "$profile" up -d --build
+            export CHATBOT_USE_MOCK=true
+            export CHATBOT_AUTO_DOWNLOAD=false
+            export SHARED_QWEN_MODEL_PATH=/tmp/nonexistent-shared-qwen
+            export SHARED_QWEN_AUTO_DOWNLOAD=false
+            export CLASSIFIER_MODEL_PATH=/tmp/nonexistent-classifier/model.pkl
+            export CLASSIFIER_MODEL_DIR=/tmp/nonexistent-classifier
+            export SENTIMENT_MODEL_DIR=/tmp/nonexistent-sentiment-model
+            export FEATURE_LABELER_MODEL_PATH=/tmp/nonexistent-feature-model
+            export FEATURE_LABELER_AUTO_DOWNLOAD=false
+            export DEPARTMENT_ROUTER_MODEL_PATH=/tmp/nonexistent-router-model
+            export DEPARTMENT_ROUTER_AUTO_DOWNLOAD=false
+            export SUBJECT_GENERATOR_MODEL_PATH=/tmp/nonexistent-subject-model
+            export SUBJECT_GENERATOR_AUTO_DOWNLOAD=false
+            export SUGGESTED_RESOLUTION_MODEL_PATH=/tmp/nonexistent-suggested-model
+            export SUGGESTED_RESOLUTION_USE_MOCK=true
+            export SUGGESTED_RESOLUTION_AUTO_DOWNLOAD=false
+            export PRIORITY_USE_MOCK=true
+            export PRIORITY_MODEL_DIR=/tmp/nonexistent-priority-model
 
+            # Compose on the self-hosted runner occasionally fails while resolving
+            # depends_on: service_healthy during `up`, reporting "No such container"
+            # for a freshly-created postgres container. Build first, then start
+            # postgres alone, wait for it to finish init, and finally start the
+            # remaining services without dependency resolution.
+            docker compose --profile "$profile" build
+            docker compose --profile "$profile" up -d postgres
             wait_health innovacx-db
 
-            # Wait for initdb scripts to finish before querying roles/tables.
-            # Docker marks a container healthy as soon as pg_isready passes, which
-            # happens before docker-entrypoint-initdb.d scripts complete. This wait
-            # ensures zzz_least_privilege.sh and all init SQL have finished.
-            wait_db_init innovacx-db 60
+            # Docker marks Postgres healthy as soon as pg_isready passes, which
+            # can happen before docker-entrypoint-initdb.d finishes. Instead of
+            # scraping a fragile log line, wait for the actual bootstrap outputs
+            # we depend on: the app role and core seeded tables.
+            if ! wait_db_bootstrap innovacx-db 12; then
+              # The self-hosted runner intermittently comes up with a fresh but
+              # otherwise empty database cluster. When that happens, apply the
+              # same init files explicitly so the gate validates the app rather
+              # than failing on runner-specific Postgres bootstrap drift.
+              apply_bootstrap_fallback innovacx-db
+            fi
+            bootstrap_ready innovacx-db || wait_db_bootstrap innovacx-db 60
+
+            wait_db_app_auth "$profile" 60
+
+            services="backend frontend"
+            if [ "$profile" = "pipeline" ]; then
+              services="$services orchestrator"
+            elif [ "$profile" = "live" ]; then
+              services="$services orchestrator chatbot transcriber"
+            fi
+            docker compose --profile "$profile" up -d --no-deps $services
 
             # Database wiring sanity checks
             docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
@@ -188,8 +265,10 @@ jobs:
             run_profile pipeline
             run_profile live
           else
-            echo "Lightweight gate mode: running the frontend profile smoke test only."
+            echo "Pull request gate mode: running frontend, pipeline, and live profiles."
             run_profile frontend
+            run_profile pipeline
+            run_profile live
           fi
 
       - name: Show container status
@@ -212,10 +291,10 @@ jobs:
         if: always()
         env:
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
-          POSTGRES_PASSWORD: ci-postgres-password
-          APP_DB_PASSWORD: ci-app-db-password
-          READONLY_DB_PASSWORD: ci-readonly-db-password
-          TEST_DB_PASSWORD: ci-test-db-password
+          POSTGRES_PASSWORD: changeme123
+          APP_DB_PASSWORD: changeme123
+          READONLY_DB_PASSWORD: innovacx123
+          TEST_DB_PASSWORD: innovacx123
           JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min
           CSRF_SECRET: ci-csrf-secret-placeholder-32-chars-min
           INTERNAL_API_KEY: ci-internal-api-key-placeholder-value

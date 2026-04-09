@@ -562,9 +562,9 @@ function LearningView({ deptFilter }) {
 // B & C are merged into one "B — Rescoring & Rerouting" tab.
 // The endpoint for the merged tab fetches both rescoring and rerouting data.
 const QC_SECTIONS = [
-  { id: "acceptance", label: "A — Suggested Resolution", endpoint: "/operator/analytics/qc/acceptance"    },
-  { id: "rescoring",  label: "B — Rescoring & Rerouting", endpoint: "/operator/analytics/qc/rescoring-rerouting" },
-  { id: "learning",   label: "C — Learning",              endpoint: null                                  },
+  { id: "acceptance", label: "Suggested Resolution", endpoint: "/operator/analytics/qc/acceptance"    },
+  { id: "rescoring",  label: "Rescoring & Rerouting", endpoint: "/operator/analytics/qc/rescoring-rerouting" },
+  { id: "learning",   label: "Learning",              endpoint: null                                  },
 ];
 
 export default function QualityControl() {
