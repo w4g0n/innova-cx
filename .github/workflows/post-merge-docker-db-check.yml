@@ -101,27 +101,30 @@ jobs:
             [ "$status" = "running" ] || { echo "::error::$container is not running (status=$status)"; return 1; }
           }
 
-          # Dump logs for every known container immediately — called on any failure
-          # inside run_profile via the ERR trap, before compose teardown removes them.
-          dump_logs() {
-            echo "=== DIAGNOSTIC LOGS (captured before teardown) ==="
-            for c in innovacx-db innovacx-backend innovacx-frontend innovacx-backup \
-                     innovacx-orchestrator innovacx-chatbot innovacx-transcriber; do
-              echo "--- $c ---"
-              docker logs --tail 300 "$c" 2>&1 || echo "(no logs / container already gone)"
-            done
-            echo "=== docker ps -a ==="
-            docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.ID}}' || true
-          }
-
           run_profile() {
             local profile="$1"
             echo "=== Running profile: $profile ==="
+
+            # Step 1: compose down to remove containers compose knows about,
+            # including volumes so postgres starts with a clean data directory.
             docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
 
-            # Trap ANY error inside run_profile: dump logs immediately before the
-            # failed `compose up` transaction removes the containers it created.
-            trap 'dump_logs' ERR
+            # Step 2: force-remove any container still holding one of our names
+            # on this runner — covers containers left by crashed/concurrent jobs
+            # that compose down did not own and therefore did not remove.
+            # A surviving container from a previous run owns the postgres data
+            # volume lock; postgres refuses to start (duplicate instance), exits
+            # immediately, and compose's dependency waiter hits a stale ID:
+            # "No such container: <id>".
+            docker rm -f \
+              innovacx-db \
+              innovacx-backend \
+              innovacx-frontend \
+              innovacx-backup \
+              innovacx-orchestrator \
+              innovacx-chatbot \
+              innovacx-transcriber \
+              2>/dev/null || true
 
             # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
             CHATBOT_USE_MOCK=true \
@@ -197,7 +200,6 @@ jobs:
             fi
 
             docker ps -a --format 'table {{.Names}}\t{{.Status}}'
-            trap - ERR
           }
 
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
@@ -239,4 +241,14 @@ jobs:
           INTERNAL_API_KEY: ci-internal-api-key-placeholder-value
           RESEND_API_KEY: re_placeholder_ci_key_not_used_in_tests
         working-directory: ${{ github.workspace }}
-        run: docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+        run: |
+          docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+          docker rm -f \
+            innovacx-db \
+            innovacx-backend \
+            innovacx-frontend \
+            innovacx-backup \
+            innovacx-orchestrator \
+            innovacx-chatbot \
+            innovacx-transcriber \
+            2>/dev/null || true
