@@ -1269,6 +1269,7 @@ def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_cs
         profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
         log_auth_event("login_success", user_id=str(user["id"]), email=email, ip=client_ip, extra={"mfa_bypassed": True})
         resp = JSONResponse(content={
+            "access_token": access_token,
             "token_type": "bearer",
             "requiresSetup": False,
             "user": {
@@ -1354,6 +1355,7 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
     log_auth_event("totp_success", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
     resp = JSONResponse(content={
+        "access_token": access_token,
         "token_type": "bearer",
         "user": {
             "id": str(user["id"]),
@@ -1632,17 +1634,28 @@ def auth_logout(
     user: Dict[str, Any] = Depends(get_current_user),
     _csrf: None = Depends(require_csrf),
 ):
-    token = _get_bearer_token(authorization)
-    payload = verify_jwt(token)
+    # Token may be in the httpOnly cookie or Bearer header — try both.
+    token = (request.cookies.get("access_token") if request else None) or None
+    if not token and authorization:
+        parts = authorization.split(" ", 1)
+        if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1].strip():
+            token = parts[1].strip()
     client_ip = request.client.host if request and request.client else None
-    logout_user(
-        jti=str(payload.get("jti") or "") or None,
-        token_exp=float(payload.get("exp")) if payload.get("exp") is not None else None,
-        user_id=str(user["id"]),
-        db_execute=execute,
-        ip=client_ip,
-    )
-    return {"ok": True}
+    if token:
+        try:
+            payload = verify_jwt(token)
+            logout_user(
+                jti=str(payload.get("jti") or "") or None,
+                token_exp=float(payload.get("exp")) if payload.get("exp") is not None else None,
+                user_id=str(user["id"]),
+                db_execute=execute,
+                ip=client_ip,
+            )
+        except Exception:
+            pass  # Token unreadable — still clear the cookie
+    resp = JSONResponse(content={"ok": True})
+    _clear_auth_cookie(resp)
+    return resp
 
 class ResetTokenEmailRequest(BaseModel):
     token: str
