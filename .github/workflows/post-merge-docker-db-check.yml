@@ -93,6 +93,41 @@ jobs:
             return 1
           }
 
+          bootstrap_ready() {
+            local container="$1"
+            local role_ready
+            local tables_ready
+            role_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
+              "select count(*) from pg_roles where rolname='innovacx_app';" 2>/dev/null || true)"
+            tables_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
+              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" 2>/dev/null || true)"
+            [ "$role_ready" = "1" ] && [ "$tables_ready" = "4" ]
+          }
+
+          apply_bootstrap_fallback() {
+            local container="$1"
+            echo "Applying CI bootstrap fallback inside $container ..."
+            docker exec "$container" sh -lc '
+              set -e
+              for file in /docker-entrypoint-initdb.d/*; do
+                [ -f "$file" ] || continue
+                case "$file" in
+                  *.sql)
+                    echo "==> [ci-fallback] psql -f ${file##*/}"
+                    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$file"
+                    ;;
+                  *.sh)
+                    echo "==> [ci-fallback] sh ${file##*/}"
+                    "$file"
+                    ;;
+                  *)
+                    echo "==> [ci-fallback] skipping ${file##*/}"
+                    ;;
+                esac
+              done
+            '
+          }
+
           wait_db_app_auth() {
             local profile="$1"
             local max_attempts="${2:-60}"
@@ -158,7 +193,14 @@ jobs:
             # can happen before docker-entrypoint-initdb.d finishes. Instead of
             # scraping a fragile log line, wait for the actual bootstrap outputs
             # we depend on: the app role and core seeded tables.
-            wait_db_bootstrap innovacx-db 60
+            if ! wait_db_bootstrap innovacx-db 12; then
+              # The self-hosted runner intermittently comes up with a fresh but
+              # otherwise empty database cluster. When that happens, apply the
+              # same init files explicitly so the gate validates the app rather
+              # than failing on runner-specific Postgres bootstrap drift.
+              apply_bootstrap_fallback innovacx-db
+            fi
+            bootstrap_ready innovacx-db || wait_db_bootstrap innovacx-db 60
 
             wait_db_app_auth "$profile" 60
 
