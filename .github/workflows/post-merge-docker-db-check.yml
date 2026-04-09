@@ -101,13 +101,7 @@ jobs:
             [ "$status" = "running" ] || { echo "::error::$container is not running (status=$status)"; return 1; }
           }
 
-          run_profile() {
-            local profile="$1"
-            echo "=== Running profile: $profile ==="
-
-            # Full teardown: stop all profiles, remove volumes, remove any
-            # container still holding our names (e.g. dev stack left running
-            # on the self-hosted Mac runner between jobs).
+          full_teardown() {
             docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
             docker rm -f \
               innovacx-db \
@@ -118,35 +112,44 @@ jobs:
               innovacx-chatbot \
               innovacx-transcriber \
               2>/dev/null || true
-            # Remove volumes explicitly by name in case compose down missed them
-            # (can happen when the project name differs from what compose expects).
             docker volume rm -f \
               innova-cx_postgres_data \
               innova-cx_uploads_data \
               innova-cx_backup_data \
               2>/dev/null || true
+          }
 
-            # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
-            CHATBOT_USE_MOCK=true \
-            CHATBOT_AUTO_DOWNLOAD=false \
-            SHARED_QWEN_MODEL_PATH=/tmp/nonexistent-shared-qwen \
-            SHARED_QWEN_AUTO_DOWNLOAD=false \
-            CLASSIFIER_MODEL_PATH=/tmp/nonexistent-classifier/model.pkl \
-            CLASSIFIER_MODEL_DIR=/tmp/nonexistent-classifier \
-            SENTIMENT_MODEL_DIR=/tmp/nonexistent-sentiment-model \
-            FEATURE_LABELER_MODEL_PATH=/tmp/nonexistent-feature-model \
-            FEATURE_LABELER_AUTO_DOWNLOAD=false \
-            DEPARTMENT_ROUTER_MODEL_PATH=/tmp/nonexistent-router-model \
-            DEPARTMENT_ROUTER_AUTO_DOWNLOAD=false \
-            SUBJECT_GENERATOR_MODEL_PATH=/tmp/nonexistent-subject-model \
-            SUBJECT_GENERATOR_AUTO_DOWNLOAD=false \
-            SUGGESTED_RESOLUTION_MODEL_PATH=/tmp/nonexistent-suggested-model \
-            SUGGESTED_RESOLUTION_USE_MOCK=true \
-            SUGGESTED_RESOLUTION_AUTO_DOWNLOAD=false \
-            PRIORITY_USE_MOCK=true \
-            PRIORITY_MODEL_DIR=/tmp/nonexistent-priority-model \
-            docker compose --profile "$profile" up -d --build
+          run_profile() {
+            local profile="$1"
+            echo "=== Running profile: $profile ==="
 
+            full_teardown
+
+            # Export model-unavailable env vars for compose up calls below.
+            export CHATBOT_USE_MOCK=true
+            export CHATBOT_AUTO_DOWNLOAD=false
+            export SHARED_QWEN_MODEL_PATH=/tmp/nonexistent-shared-qwen
+            export SHARED_QWEN_AUTO_DOWNLOAD=false
+            export CLASSIFIER_MODEL_PATH=/tmp/nonexistent-classifier/model.pkl
+            export CLASSIFIER_MODEL_DIR=/tmp/nonexistent-classifier
+            export SENTIMENT_MODEL_DIR=/tmp/nonexistent-sentiment-model
+            export FEATURE_LABELER_MODEL_PATH=/tmp/nonexistent-feature-model
+            export FEATURE_LABELER_AUTO_DOWNLOAD=false
+            export DEPARTMENT_ROUTER_MODEL_PATH=/tmp/nonexistent-router-model
+            export DEPARTMENT_ROUTER_AUTO_DOWNLOAD=false
+            export SUBJECT_GENERATOR_MODEL_PATH=/tmp/nonexistent-subject-model
+            export SUBJECT_GENERATOR_AUTO_DOWNLOAD=false
+            export SUGGESTED_RESOLUTION_MODEL_PATH=/tmp/nonexistent-suggested-model
+            export SUGGESTED_RESOLUTION_USE_MOCK=true
+            export SUGGESTED_RESOLUTION_AUTO_DOWNLOAD=false
+            export PRIORITY_USE_MOCK=true
+            export PRIORITY_MODEL_DIR=/tmp/nonexistent-priority-model
+
+            # Start postgres alone first, bypassing compose dependency resolver.
+            # This avoids a Docker 29.x bug on Linux where compose loses track of
+            # a freshly-created container ID during depends_on: service_healthy
+            # resolution, producing "No such container: <id>" immediately on up.
+            docker compose --profile "$profile" up -d --build postgres
             wait_health innovacx-db
 
             # Wait for initdb scripts to finish before querying roles/tables.
@@ -154,6 +157,10 @@ jobs:
             # happens before docker-entrypoint-initdb.d scripts complete. This wait
             # ensures zzz_least_privilege.sh and all init SQL have finished.
             wait_db_init innovacx-db 60
+
+            # Now start the remaining services. Postgres is already healthy so
+            # compose dependency checks pass immediately without any race.
+            docker compose --profile "$profile" up -d
 
             # Database wiring sanity checks
             docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
