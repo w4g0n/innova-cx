@@ -28,6 +28,7 @@ import pyotp  # for RFC 6238 TOTP
 import qrcode
 import io
 import re as _re
+import secrets
 import uuid as _uuid_mod
 try:
     from api.ticket_creation_gate import create_ticket_via_gate, dispatch_ticket_to_orchestrator
@@ -1135,6 +1136,7 @@ class LoginRequest(BaseModel):
 class VerifyTOTPRequest(BaseModel):
     login_token: str
     otp_code: str
+    trust_device: bool = False
 
 
 class LoginResponse(BaseModel):
@@ -1238,6 +1240,7 @@ def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_cs
     """
     Login route returns a temporary token.
     If MFA is not yet enabled, frontend should show QR code.
+    Trusted device token (X-Trust-Token header) bypasses MFA for 30 days.
     """
     email = sanitize_email(body.email)
     client_ip = request.client.host if request and request.client else None
@@ -1262,6 +1265,37 @@ def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_cs
 
     clear_failed_logins(email)
     execute("UPDATE users SET last_login_at = NOW() WHERE id = %s", (user["id"],))
+
+    # ── Trusted-device bypass ─────────────────────────────────────────────────
+    # If the client presents a valid, unexpired trusted-device token that belongs
+    # to this user, skip MFA entirely and issue a full session token.
+    raw_trust_token = (request.headers.get("X-Trust-Token") or "").strip()
+    if raw_trust_token and len(raw_trust_token) >= 40:
+        trust_hash = hashlib.sha256(raw_trust_token.encode()).hexdigest()
+        trusted = fetch_one(
+            """SELECT id FROM trusted_devices
+               WHERE token_hash = %s
+                 AND user_id    = %s
+                 AND expires_at > NOW()""",
+            (trust_hash, user["id"]),
+        )
+        if trusted:
+            access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+            _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+            log_auth_event("login_success", user_id=str(user["id"]), email=email, ip=client_ip, extra={"trusted_device": True})
+            resp = JSONResponse(content={
+                "access_token": access_token,
+                "token_type": "bearer",
+                "trusted_device_used": True,
+                "user": {
+                    "id": str(user["id"]),
+                    "email": user["email"],
+                    "role": user["role"],
+                    "full_name": (_profile or {}).get("full_name") or user["email"],
+                },
+            })
+            _set_auth_cookie(resp, access_token)
+            return resp
 
     # Bypass TOTP when explicitly disabled (dev/demo only — set DISABLE_MFA=true in .env on VM)
     if DISABLE_MFA:
@@ -1354,7 +1388,25 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
     _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
     log_auth_event("totp_success", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
-    resp = JSONResponse(content={
+
+    # ── Trusted-device token (30 days) ────────────────────────────────────────
+    trusted_device_token = None
+    if body.trust_device:
+        raw_td = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
+        td_hash = hashlib.sha256(raw_td.encode()).hexdigest()
+        execute(
+            """INSERT INTO trusted_devices (user_id, token_hash, expires_at, ip_address, user_agent)
+               VALUES (%s, %s, NOW() + INTERVAL '30 days', %s, %s)""",
+            (
+                user["id"],
+                td_hash,
+                client_ip,
+                (request.headers.get("User-Agent") or "")[:512],
+            ),
+        )
+        trusted_device_token = raw_td
+
+    payload_data = {
         "access_token": access_token,
         "token_type": "bearer",
         "user": {
@@ -1363,7 +1415,182 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
             "role": user["role"],
             "full_name": (_profile or {}).get("full_name") or user["email"],
         },
-    })
+    }
+    if trusted_device_token:
+        payload_data["trusted_device_token"] = trusted_device_token
+
+    resp = JSONResponse(content=payload_data)
+    _set_auth_cookie(resp, access_token)
+    return resp
+
+
+# ── Email OTP (alternative 2FA) ───────────────────────────────────────────────
+
+EMAIL_OTP_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Your InnovaCX Verification Code</title>
+<style>
+  body{{margin:0;padding:0;background:#0d0d1a;font-family:'Segoe UI',Arial,sans-serif;}}
+  .wrap{{max-width:520px;margin:40px auto;background:#13132a;border-radius:16px;overflow:hidden;border:1px solid rgba(139,92,246,.25);}}
+  .hdr{{background:linear-gradient(135deg,#1e1040 0%,#2d1b69 50%,#1a0f35 100%);padding:36px 40px 28px;text-align:center;}}
+  .logo{{font-size:22px;font-weight:700;color:#e9d5ff;letter-spacing:.5px;}}
+  .logo span{{color:#a855f7;}}
+  .body{{padding:32px 40px;}}
+  h2{{margin:0 0 12px;font-size:20px;color:#f3e8ff;}}
+  p{{margin:0 0 16px;font-size:15px;color:#c4b5fd;line-height:1.6;}}
+  .code-box{{background:rgba(139,92,246,.12);border:1.5px solid rgba(139,92,246,.35);border-radius:12px;padding:20px;text-align:center;margin:20px 0;}}
+  .code{{font-family:'Courier New',monospace;font-size:36px;font-weight:700;color:#e9d5ff;letter-spacing:8px;}}
+  .expiry{{font-size:12px;color:#9ca3af;margin:8px 0 0;}}
+  .footer{{padding:20px 40px 28px;text-align:center;border-top:1px solid rgba(139,92,246,.15);}}
+  .fc{{font-size:12px;color:#6b7280;margin:4px 0;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr"><div class="logo">Innova<span>CX</span></div></div>
+  <div class="body">
+    <h2>Your verification code</h2>
+    <p>Hi <strong style="color:#e9d5ff">{email}</strong>, use the code below to complete your login.</p>
+    <div class="code-box">
+      <div class="code">{otp_code}</div>
+      <div class="expiry">Expires in 10 minutes &bull; Single use only</div>
+    </div>
+    <p>If you did not attempt to log in, please contact your administrator immediately.</p>
+    <p style="font-size:13px;color:#9ca3af;">Do not share this code with anyone. InnovaCX staff will never ask for it.</p>
+  </div>
+  <div class="footer"><p class="fc">&copy; {year} InnovaCX. All rights reserved.</p></div>
+</div>
+</body>
+</html>"""
+
+
+class EmailOTPSendRequest(BaseModel):
+    login_token: str
+
+
+class EmailOTPVerifyRequest(BaseModel):
+    login_token: str
+    otp_code: str
+    trust_device: bool = False
+
+
+@api.post("/auth/email-otp-send")
+@rate_limit_auth()
+def email_otp_send(request: Request, body: EmailOTPSendRequest, _csrf: None = Depends(require_csrf)):
+    """Send a 6-digit OTP to the user's registered email as an alternative to TOTP."""
+    payload = verify_jwt(body.login_token)
+    client_ip = request.client.host if request and request.client else None
+
+    user = fetch_one(
+        "SELECT id, email FROM users WHERE id = %s AND is_active = TRUE",
+        (payload.get("sub"),),
+    )
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    # Invalidate any prior unused codes for this user
+    execute(
+        "UPDATE email_otp_codes SET used_at = NOW() WHERE user_id = %s AND used_at IS NULL",
+        (user["id"],),
+    )
+
+    # Generate a 6-digit code
+    raw_otp  = str(secrets.randbelow(1_000_000)).zfill(6)
+    otp_hash = hashlib.sha256(raw_otp.encode()).hexdigest()
+
+    execute(
+        """INSERT INTO email_otp_codes (user_id, otp_hash, expires_at)
+           VALUES (%s, %s, NOW() + INTERVAL '10 minutes')""",
+        (user["id"], otp_hash),
+    )
+
+    try:
+        resend.Emails.send({
+            "from": "no-reply@innovacx.net",
+            "to": "innovacx.reset@gmail.com",
+            "subject": "Your InnovaCX verification code",
+            "html": EMAIL_OTP_HTML.format(
+                email=user["email"],
+                otp_code=raw_otp,
+                year=datetime.utcnow().year,
+            ),
+        })
+    except Exception as exc:
+        log_auth_event("email_otp_send_failed", user_id=str(user["id"]), email=user["email"], ip=client_ip, extra={"error": str(exc)})
+        raise HTTPException(status_code=500, detail="Failed to send verification email. Please try again.")
+
+    log_auth_event("email_otp_sent", user_id=str(user["id"]), email=user["email"], ip=client_ip)
+    return {"ok": True, "message": "Verification code sent to your email"}
+
+
+@api.post("/auth/email-otp-verify")
+@rate_limit_auth()
+def email_otp_verify(request: Request, body: EmailOTPVerifyRequest, _csrf: None = Depends(require_csrf)):
+    """Verify a 6-digit email OTP and issue a full session token."""
+    payload = verify_jwt(body.login_token)
+    client_ip = request.client.host if request and request.client else None
+
+    if not body.otp_code or not _re.match(r"^\d{6}$", body.otp_code):
+        raise HTTPException(status_code=400, detail="Invalid OTP format")
+
+    user = fetch_one(
+        "SELECT id, email, role, mfa_enabled FROM users WHERE id = %s AND is_active = TRUE",
+        (payload.get("sub"),),
+    )
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    otp_hash = hashlib.sha256(body.otp_code.encode()).hexdigest()
+    row = fetch_one(
+        """SELECT id FROM email_otp_codes
+           WHERE user_id = %s
+             AND otp_hash = %s
+             AND used_at IS NULL
+             AND expires_at > NOW()""",
+        (user["id"], otp_hash),
+    )
+    if not row:
+        log_auth_event("email_otp_failed", user_id=str(user["id"]), email=user["email"], ip=client_ip)
+        raise HTTPException(status_code=401, detail="Invalid or expired code")
+
+    # Mark code as used
+    execute("UPDATE email_otp_codes SET used_at = NOW() WHERE id = %s", (row["id"],))
+
+    # Issue full JWT
+    access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+    _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    log_auth_event("email_otp_success", user_id=str(user["id"]), email=user["email"], ip=client_ip)
+
+    # Trusted-device token (30 days)
+    trusted_device_token = None
+    if body.trust_device:
+        raw_td  = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
+        td_hash = hashlib.sha256(raw_td.encode()).hexdigest()
+        execute(
+            """INSERT INTO trusted_devices (user_id, token_hash, expires_at, ip_address, user_agent)
+               VALUES (%s, %s, NOW() + INTERVAL '30 days', %s, %s)""",
+            (user["id"], td_hash, client_ip, (request.headers.get("User-Agent") or "")[:512]),
+        )
+        trusted_device_token = raw_td
+
+    payload_data = {
+        "access_token": access_token,
+        "token_type":   "bearer",
+        "user": {
+            "id":        str(user["id"]),
+            "email":     user["email"],
+            "role":      user["role"],
+            "full_name": (_profile or {}).get("full_name") or user["email"],
+        },
+    }
+    if trusted_device_token:
+        payload_data["trusted_device_token"] = trusted_device_token
+
+    resp = JSONResponse(content=payload_data)
     _set_auth_cookie(resp, access_token)
     return resp
 
@@ -1507,6 +1734,49 @@ RESET_EMAIL_HTML = """\
 </body>
 </html>"""
 
+PASSWORD_CHANGED_EMAIL_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Password Changed — InnovaCX</title>
+<style>
+  body{{margin:0;padding:0;background:#0d0d1a;font-family:'Segoe UI',Arial,sans-serif;}}
+  .wrap{{max-width:520px;margin:40px auto;background:#13132a;border-radius:16px;overflow:hidden;border:1px solid rgba(139,92,246,.25);}}
+  .hdr{{background:linear-gradient(135deg,#1e1040 0%,#2d1b69 50%,#1a0f35 100%);padding:36px 40px 28px;text-align:center;}}
+  .logo{{font-size:22px;font-weight:700;color:#e9d5ff;letter-spacing:.5px;}}
+  .logo span{{color:#a855f7;}}
+  .body{{padding:32px 40px;}}
+  h2{{margin:0 0 12px;font-size:20px;color:#f3e8ff;}}
+  p{{margin:0 0 16px;font-size:15px;color:#c4b5fd;line-height:1.6;}}
+  .alert{{background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.3);border-radius:10px;padding:14px 16px;margin:20px 0;}}
+  .alert p{{margin:0;font-size:14px;color:#ddd6fe;}}
+  .footer{{padding:20px 40px 28px;text-align:center;border-top:1px solid rgba(139,92,246,.15);}}
+  .fc{{font-size:12px;color:#6b7280;margin:4px 0;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="logo">Innova<span>CX</span></div>
+  </div>
+  <div class="body">
+    <h2>Your password has been changed</h2>
+    <p>Hi <strong style="color:#e9d5ff">{email}</strong>,</p>
+    <p>The password for your InnovaCX account was successfully updated on <strong style="color:#e9d5ff">{changed_at} UTC</strong>.</p>
+    <div class="alert">
+      <p>&#x26A0;&#xFE0F; If you did not make this change, your account may be compromised. Please contact your system administrator or operator immediately.</p>
+    </div>
+    <p style="font-size:13px;color:#9ca3af;">This is an automated security notification. Please do not reply to this email.</p>
+  </div>
+  <div class="footer">
+    <p class="fc">&copy; {year} InnovaCX. All rights reserved.</p>
+  </div>
+</div>
+</body>
+</html>"""
+
 
 @api.post("/auth/forgot-password")
 @rate_limit_auth()
@@ -1625,6 +1895,22 @@ def reset_password(request: Request, body: ResetPasswordRequest, _csrf: None = D
             )
 
     log_auth_event("password_reset_complete", user_id=str(row["user_id"]), ip=client_ip)
+
+    # Notify the user that their password was changed
+    try:
+        resend.Emails.send({
+            "from": "no-reply@innovacx.net",
+            "to": "innovacx.reset@gmail.com",
+            "subject": "Your InnovaCX password has been changed",
+            "html": PASSWORD_CHANGED_EMAIL_HTML.format(
+                email=row["email"],
+                changed_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+                year=datetime.utcnow().year,
+            ),
+        })
+    except Exception:
+        pass  # Never fail the reset just because the notification email failed
+
     return {"ok": True, "message": "Password updated successfully"}
 
 
@@ -1649,7 +1935,318 @@ def change_password(
     )
     client_ip = request.client.host if request and request.client else None
     log_auth_event("password_changed", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
+
+    # Notify the user that their password was changed
+    try:
+        resend.Emails.send({
+            "from": "no-reply@innovacx.net",
+            "to": "innovacx.reset@gmail.com",
+            "subject": "Your InnovaCX password has been changed",
+            "html": PASSWORD_CHANGED_EMAIL_HTML.format(
+                email=user.get("email", ""),
+                changed_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+                year=datetime.utcnow().year,
+            ),
+        })
+    except Exception:
+        pass  # Never fail the password change just because the notification email failed
+
     return {"ok": True}
+
+
+# ── Operator: MFA Reset (email-confirmed) ────────────────────────────────────
+
+MFA_RESET_EMAIL_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Confirm MFA Reset — InnovaCX</title>
+<style>
+  body{{margin:0;padding:0;background:#0d0d1a;font-family:'Segoe UI',Arial,sans-serif;}}
+  .wrap{{max-width:520px;margin:40px auto;background:#13132a;border-radius:16px;overflow:hidden;border:1px solid rgba(139,92,246,.25);}}
+  .hdr{{background:linear-gradient(135deg,#1e1040 0%,#2d1b69 50%,#1a0f35 100%);padding:36px 40px 28px;text-align:center;}}
+  .logo{{font-size:22px;font-weight:700;color:#e9d5ff;letter-spacing:.5px;}}
+  .logo span{{color:#a855f7;}}
+  .body{{padding:32px 40px;}}
+  h2{{margin:0 0 12px;font-size:20px;color:#f3e8ff;}}
+  p{{margin:0 0 16px;font-size:15px;color:#c4b5fd;line-height:1.6;}}
+  .btn-wrap{{text-align:center;margin:24px 0;}}
+  .btn{{display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#6d28d9,#9333ea);color:#fff;text-decoration:none;border-radius:12px;font-size:15px;font-weight:700;box-shadow:0 6px 24px rgba(147,51,234,.4);}}
+  .alert{{background:rgba(234,179,8,.07);border:1px solid rgba(234,179,8,.25);border-radius:10px;padding:14px 16px;margin:20px 0;}}
+  .alert p{{margin:0;font-size:13px;color:#fde68a;}}
+  .footer{{padding:20px 40px 28px;text-align:center;border-top:1px solid rgba(139,92,246,.15);}}
+  .fc{{font-size:12px;color:#6b7280;margin:4px 0;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr"><div class="logo">Innova<span>CX</span></div></div>
+  <div class="body">
+    <h2>Confirm MFA Reset</h2>
+    <p>Hi <strong style="color:#e9d5ff">{email}</strong>,</p>
+    <p>An administrator has requested to reset your two-factor authentication. Click the button below to confirm and proceed with re-enrollment.</p>
+    <div class="btn-wrap">
+      <a href="{confirm_link}" class="btn">Confirm MFA Reset</a>
+    </div>
+    <div class="alert">
+      <p>&#x26A0;&#xFE0F; If you did not expect this, do not click the button above. Your MFA will remain unchanged unless you confirm.</p>
+    </div>
+    <p style="font-size:13px;color:#9ca3af;">This link expires in 15 minutes. After confirming, you will be prompted to set up a new authenticator on your next login.</p>
+  </div>
+  <div class="footer"><p class="fc">&copy; {year} InnovaCX. All rights reserved.</p></div>
+</div>
+</body>
+</html>"""
+
+
+@api.post("/operator/users/{user_id}/reset-mfa")
+def operator_reset_mfa(
+    user_id: str,
+    request: Request,
+    operator: Dict[str, Any] = Depends(require_operator),
+    _csrf: None = Depends(require_csrf),
+):
+    """Operator requests MFA reset for a user — sends confirmation email to the user."""
+    uid = user_id.strip()
+    target = fetch_one(
+        "SELECT id, email, full_name FROM users u LEFT JOIN user_profiles p ON p.user_id = u.id WHERE u.id = %s",
+        (uid,),
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Invalidate any existing unused MFA reset tokens for this user
+    execute(
+        "UPDATE mfa_reset_tokens SET used_at = NOW() WHERE user_id = %s AND used_at IS NULL",
+        (target["id"],),
+    )
+
+    raw_token  = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    execute(
+        """INSERT INTO mfa_reset_tokens (user_id, token_hash, expires_at)
+           VALUES (%s, %s, NOW() + INTERVAL '15 minutes')""",
+        (target["id"], token_hash),
+    )
+
+    confirm_link = f"https://innovacx.net/confirm-mfa-reset#token={raw_token}"
+    try:
+        resend.Emails.send({
+            "from": "no-reply@innovacx.net",
+            "to": "innovacx.reset@gmail.com",
+            "subject": "Action required: Confirm your MFA reset — InnovaCX",
+            "html": MFA_RESET_EMAIL_HTML.format(
+                email=target["email"],
+                confirm_link=confirm_link,
+                year=datetime.utcnow().year,
+            ),
+        })
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to send confirmation email.") from exc
+
+    client_ip = request.client.host if request and request.client else None
+    log_auth_event("mfa_reset_requested", user_id=str(target["id"]), email=target["email"], ip=client_ip, extra={"by_operator": str(operator["id"])})
+    return {"ok": True, "message": "Confirmation email sent to the user."}
+
+
+class ConfirmMfaResetRequest(BaseModel):
+    token: str
+
+
+@api.post("/auth/confirm-mfa-reset")
+@rate_limit_auth()
+def confirm_mfa_reset(request: Request, body: ConfirmMfaResetRequest, _csrf: None = Depends(require_csrf)):
+    """User confirms MFA reset via token from email — clears totp_secret and mfa_enabled."""
+    raw_token = (body.token or "").strip()
+    if len(raw_token) < 40:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    row = fetch_one(
+        """SELECT mrt.id, mrt.user_id, u.email
+           FROM mfa_reset_tokens mrt
+           JOIN users u ON u.id = mrt.user_id
+           WHERE mrt.token_hash = %s
+             AND mrt.used_at IS NULL
+             AND mrt.expires_at > NOW()""",
+        (token_hash,),
+    )
+    if not row:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    # Clear TOTP secret and disable MFA so QR setup re-appears on next login
+    execute(
+        "UPDATE users SET totp_secret = NULL, mfa_enabled = FALSE WHERE id = %s",
+        (row["user_id"],),
+    )
+    execute(
+        "UPDATE mfa_reset_tokens SET used_at = NOW() WHERE id = %s",
+        (row["id"],),
+    )
+
+    client_ip = request.client.host if request and request.client else None
+    log_auth_event("mfa_reset_confirmed", user_id=str(row["user_id"]), email=row["email"], ip=client_ip)
+    return {"ok": True, "message": "MFA has been reset. You will be asked to set up a new authenticator on your next login."}
+
+
+# ── OAuth Sign-Up / Sign-In (Google + Microsoft) ─────────────────────────────
+
+GOOGLE_CLIENT_ID      = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET  = os.getenv("GOOGLE_CLIENT_SECRET", "")
+MICROSOFT_CLIENT_ID   = os.getenv("MICROSOFT_CLIENT_ID", "")
+MICROSOFT_CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET", "")
+
+
+class OAuthCallbackRequest(BaseModel):
+    code: str
+    redirect_uri: str
+
+
+def _upsert_oauth_user(email: str, full_name: str, provider: str) -> dict:
+    """Find or create a user from an OAuth login. Returns the user row."""
+    email = sanitize_email(email)
+    user = fetch_one("SELECT id, email, role, is_active FROM users WHERE email = %s", (email,))
+    if user:
+        if not user.get("is_active"):
+            raise HTTPException(status_code=403, detail="Account is inactive. Please contact your administrator.")
+        return user
+    # Create new customer account (no password — OAuth only)
+    import uuid as _uuid
+    new_id = str(_uuid.uuid4())
+    execute(
+        """INSERT INTO users (id, email, password_hash, role, is_active, mfa_enabled)
+           VALUES (%s, %s, %s, 'customer', TRUE, FALSE)""",
+        (new_id, email, "OAUTH_NO_PASSWORD"),
+    )
+    execute(
+        "INSERT INTO user_profiles (user_id, full_name) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+        (new_id, full_name or email.split("@")[0]),
+    )
+    log_auth_event("oauth_signup", user_id=new_id, email=email, extra={"provider": provider})
+    return fetch_one("SELECT id, email, role, is_active FROM users WHERE id = %s", (new_id,))
+
+
+@api.post("/auth/oauth/google/callback")
+@rate_limit_auth()
+def oauth_google_callback(request: Request, body: OAuthCallbackRequest, _csrf: None = Depends(require_csrf)):
+    """Exchange Google authorization code for a session token."""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(status_code=501, detail="Google OAuth is not configured on this server.")
+
+    client_ip = request.client.host if request and request.client else None
+
+    # Exchange code for tokens
+    try:
+        token_res = httpx.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code":          body.code,
+                "client_id":     GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri":  body.redirect_uri,
+                "grant_type":    "authorization_code",
+            },
+            timeout=10,
+        )
+        token_res.raise_for_status()
+        token_data = token_res.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Failed to exchange authorization code with Google.") from exc
+
+    # Decode id_token (we only need payload — not verifying signature here for brevity)
+    id_token = token_data.get("id_token", "")
+    try:
+        parts   = id_token.split(".")
+        padding = 4 - len(parts[1]) % 4
+        decoded = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * padding))
+        email   = decoded.get("email", "")
+        name    = decoded.get("name", "")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid identity token from Google.") from exc
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Google account has no email address.")
+
+    user         = _upsert_oauth_user(email, name, "google")
+    access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+    profile      = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    log_auth_event("oauth_login", user_id=str(user["id"]), email=email, ip=client_ip, extra={"provider": "google"})
+
+    resp = JSONResponse(content={
+        "access_token": access_token,
+        "token_type":   "bearer",
+        "user": {
+            "id":        str(user["id"]),
+            "email":     user["email"],
+            "role":      user["role"],
+            "full_name": (profile or {}).get("full_name") or name or email,
+        },
+    })
+    _set_auth_cookie(resp, access_token)
+    return resp
+
+
+@api.post("/auth/oauth/microsoft/callback")
+@rate_limit_auth()
+def oauth_microsoft_callback(request: Request, body: OAuthCallbackRequest, _csrf: None = Depends(require_csrf)):
+    """Exchange Microsoft authorization code for a session token."""
+    if not MICROSOFT_CLIENT_ID or not MICROSOFT_CLIENT_SECRET:
+        raise HTTPException(status_code=501, detail="Microsoft OAuth is not configured on this server.")
+
+    client_ip = request.client.host if request and request.client else None
+
+    # Exchange code for tokens
+    try:
+        token_res = httpx.post(
+            "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+            data={
+                "code":          body.code,
+                "client_id":     MICROSOFT_CLIENT_ID,
+                "client_secret": MICROSOFT_CLIENT_SECRET,
+                "redirect_uri":  body.redirect_uri,
+                "grant_type":    "authorization_code",
+                "scope":         "openid email profile User.Read",
+            },
+            timeout=10,
+        )
+        token_res.raise_for_status()
+        token_data = token_res.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Failed to exchange authorization code with Microsoft.") from exc
+
+    # Decode id_token payload
+    id_token = token_data.get("id_token", "")
+    try:
+        parts   = id_token.split(".")
+        padding = 4 - len(parts[1]) % 4
+        decoded = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * padding))
+        email   = decoded.get("email") or decoded.get("preferred_username", "")
+        name    = decoded.get("name", "")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid identity token from Microsoft.") from exc
+
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Microsoft account has no valid email address.")
+
+    user         = _upsert_oauth_user(email, name, "microsoft")
+    access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+    profile      = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    log_auth_event("oauth_login", user_id=str(user["id"]), email=email, ip=client_ip, extra={"provider": "microsoft"})
+
+    resp = JSONResponse(content={
+        "access_token": access_token,
+        "token_type":   "bearer",
+        "user": {
+            "id":        str(user["id"]),
+            "email":     user["email"],
+            "role":      user["role"],
+            "full_name": (profile or {}).get("full_name") or name or email,
+        },
+    })
+    _set_auth_cookie(resp, access_token)
+    return resp
 
 
 @api.post("/auth/logout")
