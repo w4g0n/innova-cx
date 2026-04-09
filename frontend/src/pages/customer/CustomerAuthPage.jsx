@@ -347,6 +347,7 @@ export default function CustomerAuthPage() {
       const csrf = await getCsrfToken();
       const res  = await fetch(apiUrl("/api/auth/totp-verify"), {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           ...(csrf ? { "X-CSRF-Token": csrf } : {}),
