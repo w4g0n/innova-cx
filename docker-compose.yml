@@ -257,6 +257,17 @@ services:
         condition: service_healthy
     networks:
       - innovacx-network
+  
+  pgadmin:
+      image: dpage/pgadmin4
+      container_name: innovacx-pgadmin
+      environment:
+        PGADMIN_DEFAULT_EMAIL: admin@admin.com
+        PGADMIN_DEFAULT_PASSWORD: admin
+      ports:
+        - "5050:80"
+      networks:
+        - innovacx-network
 
 volumes:
   postgres_data:
