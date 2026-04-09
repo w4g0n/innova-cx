@@ -799,7 +799,13 @@ def sanitize_email(value: str) -> str:
 
 
 # [S15] CSRF helpers — stateless HMAC-signed token
-_CSRF_SECRET = os.getenv("CSRF_SECRET", os.getenv("JWT_SECRET", "dev-csrf-secret"))
+_csrf_secret_raw = os.getenv("CSRF_SECRET") or os.getenv("JWT_SECRET")
+if not _csrf_secret_raw or len(_csrf_secret_raw) < 32:
+    raise RuntimeError(
+        "Either CSRF_SECRET or JWT_SECRET env var must be set (at least 32 characters) "
+        "for CSRF token signing."
+    )
+_CSRF_SECRET = _csrf_secret_raw
 
 
 def generate_csrf_token() -> str:

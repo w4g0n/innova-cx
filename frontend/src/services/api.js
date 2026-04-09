@@ -52,6 +52,7 @@ export async function transcribeAudio(audioBlob, filename = "recording.mp4") {
 
   const response = await fetch(`${API_CONFIG.backend}/api/transcriber/transcribe`, {
     method: "POST",
+    credentials: "include",
     body: formData,
   });
 
@@ -136,6 +137,7 @@ export async function sendChatMessage(message, options = {}) {
   const csrf = await getCsrfToken();
   const response = await fetch(apiUrl("/api/chatbot/chat"), {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(csrf ? { "X-CSRF-Token": csrf } : {}),
@@ -180,6 +182,7 @@ export async function submitTextComplaint(text, options = {}) {
   }
   const response = await fetch(apiUrl("/api/orchestrator/process/text"), {
     method: "POST",
+    credentials: "include",
     body,
   });
 
@@ -213,7 +216,6 @@ export async function submitTextComplaint(text, options = {}) {
  * @returns {Promise<{ok: boolean, message?: string, ticket?: {ticketId?: string}}>}
  */
 export async function submitCustomerTicket(payload = {}) {
-  const token = localStorage.getItem("access_token");
   const rawUser = localStorage.getItem("user");
   let user = {};
   try {
@@ -238,10 +240,10 @@ export async function submitCustomerTicket(payload = {}) {
   const csrf = await getCsrfToken();
   const response = await fetch(apiUrl("/api/customer/tickets"), {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(csrf ? { "X-CSRF-Token": csrf } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -262,7 +264,6 @@ export async function submitCustomerTicket(payload = {}) {
  */
 export async function uploadCustomerAttachments(ticketCode, files) {
   if (!files || files.length === 0) return;
-  const token = localStorage.getItem("access_token");
   for (const file of files) {
     const fd = new FormData();
     fd.append("file", file);
@@ -271,8 +272,8 @@ export async function uploadCustomerAttachments(ticketCode, files) {
       apiUrl(`/api/customer/tickets/${encodeURIComponent(ticketCode)}/attachments`),
       {
         method: "POST",
+        credentials: "include",
         headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
         body: fd,
@@ -318,12 +319,11 @@ export async function getAudioReply({
   messageType = "ticket_logged",
 } = {}) {
   try {
-    const token = localStorage.getItem("access_token");
     const response = await fetch(apiUrl("/api/tts/speak"), {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
         message_type: messageType,
