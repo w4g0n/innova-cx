@@ -83,8 +83,14 @@ jobs:
               # making the pipeline exit non-zero even when the string IS present.
               # The original workflow had this same comment and used this same fix.
               docker logs "$container" > "$logfile" 2>&1 || true
+              # Fresh volume: wait for initdb scripts to finish.
               if grep -q "PostgreSQL init process complete; ready for start up." "$logfile"; then
                 echo "$container initdb complete"
+                return 0
+              fi
+              # Existing volume: postgres skips initdb entirely — already ready.
+              if grep -q "database system is ready to accept connections" "$logfile"; then
+                echo "$container skipped initdb (existing data volume) — ready"
                 return 0
               fi
               echo "  initdb not complete yet... attempt $i/$max_attempts"
@@ -156,6 +162,8 @@ jobs:
             # Docker marks a container healthy as soon as pg_isready passes, which
             # happens before docker-entrypoint-initdb.d scripts complete. This wait
             # ensures zzz_least_privilege.sh and all init SQL have finished.
+            # On an existing volume postgres skips initdb — wait_db_init detects
+            # both cases ("init process complete" and "ready to accept connections").
             wait_db_init innovacx-db 60
 
             # Now start the remaining services. Postgres is already healthy so
@@ -241,7 +249,7 @@ jobs:
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
           POSTGRES_PASSWORD: ci-postgres-password
           APP_DB_PASSWORD: ci-app-db-password
-          READONLY_DB_PASSWORD: ci-readonly-db-password
+          READONLY_DB_PASSWORD: ci-postgres-password
           TEST_DB_PASSWORD: ci-test-db-password
           JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min
           CSRF_SECRET: ci-csrf-secret-placeholder-32-chars-min
