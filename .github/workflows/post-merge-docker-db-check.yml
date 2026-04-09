@@ -32,6 +32,10 @@ jobs:
           APP_DB_PASSWORD: ci-app-db-password
           READONLY_DB_PASSWORD: ci-readonly-db-password
           TEST_DB_PASSWORD: ci-test-db-password
+          JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min
+          CSRF_SECRET: ci-csrf-secret-placeholder-32-chars-min
+          INTERNAL_API_KEY: ci-internal-api-key-placeholder-value
+          RESEND_API_KEY: re_placeholder_ci_key_not_used_in_tests
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
@@ -212,5 +216,9 @@ jobs:
           APP_DB_PASSWORD: ci-app-db-password
           READONLY_DB_PASSWORD: ci-readonly-db-password
           TEST_DB_PASSWORD: ci-test-db-password
+          JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min
+          CSRF_SECRET: ci-csrf-secret-placeholder-32-chars-min
+          INTERNAL_API_KEY: ci-internal-api-key-placeholder-value
+          RESEND_API_KEY: re_placeholder_ci_key_not_used_in_tests
         working-directory: ${{ github.workspace }}
         run: docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true

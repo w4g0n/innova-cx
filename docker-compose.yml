@@ -66,6 +66,10 @@ services:
       # Set DEV_SEED_USERS=true in .env only for local dev if you need
       # the hardcoded demo accounts auto-created/reset on every startup.
       DEV_SEED_USERS: "${DEV_SEED_USERS:-false}"
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET must be set in .env}"
+      CSRF_SECRET: "${CSRF_SECRET:-}"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-}"
+      RESEND_API_KEY: "${RESEND_API_KEY:-}"
     depends_on:
       postgres:
         condition: service_healthy
