@@ -1802,7 +1802,6 @@ def get_operator_feature_data(
 
     total      = int(overall.get("total_processed") or 0)
     low_conf   = int(overall.get("low_confidence")  or 0)
-    recurring  = int(overall.get("recurring_count") or 0)
     safety     = int(overall.get("safety_flag_count") or 0)
     mismatch   = int(overall.get("mismatch_count")  or 0)
     imp_high   = int(overall.get("impact_high")     or 0)

@@ -492,7 +492,7 @@ function SentimentAgentView({ data, loading, error, onRetry }) {
                   <YAxis domain={[-1, 1]} tick={{ fill: C.muted, fontSize: 12 }} />
                   <Tooltip
                     contentStyle={{ borderRadius: 10 }}
-                    formatter={(value, _name) => [value?.toFixed(2), "Avg Sentiment"]}
+                    formatter={(value) => [value?.toFixed(2), "Avg Sentiment"]}
                     labelFormatter={(label) => label}
                   />
                   <ReferenceLine y={0} stroke={C.muted} strokeDasharray="3 3" />

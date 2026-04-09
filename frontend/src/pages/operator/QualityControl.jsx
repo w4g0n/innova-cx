@@ -235,7 +235,7 @@ function RescoringReroutingView({ data, loading, error, onRetry }) {
 
   // Rescore KPIs
   const rescoreRate         = kpis?.rescoreRate        ?? 0;
-  const totalRescores       = kpis?.totalRescored       ?? kpis?.upscores + kpis?.downscores || "—";
+  const totalRescores       = kpis?.totalRescored       ?? (kpis?.upscores + kpis?.downscores || "—");
   const avgRescodesPerEmp   = kpis?.avgRescoresPerEmployee != null
     ? kpis.avgRescoresPerEmployee.toFixed(1)
     : "—";
