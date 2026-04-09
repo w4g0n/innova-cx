@@ -105,6 +105,12 @@ jobs:
             local profile="$1"
             echo "=== Running profile: $profile ==="
             docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+            # Force-remove any stale containers by name that compose down may have
+            # missed on the self-hosted runner (e.g. containers in a crashed/restarting
+            # state whose IDs are no longer resolvable, causing "No such container" when
+            # compose's dependency resolver holds a stale reference during the next up).
+            docker rm -f innovacx-db innovacx-backend innovacx-frontend innovacx-backup \
+                          innovacx-orchestrator innovacx-chatbot innovacx-transcriber 2>/dev/null || true
 
             # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
             CHATBOT_USE_MOCK=true \
