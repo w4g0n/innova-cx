@@ -4,6 +4,7 @@ services:
     image: postgres:14.22-alpine
     container_name: innovacx-db
     restart: unless-stopped
+    shm_size: '256mb'                          
     environment:
       # POSTGRES_USER is the superuser/owner used ONLY for DB initialization
       # and migrations. It is NOT used by runtime application services.
