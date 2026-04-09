@@ -12,6 +12,34 @@
   --ease:    cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Back button — identical to Login page */
+.backBtn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.6);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s, transform 0.2s;
+}
+
+.backBtn:hover {
+  color: #c084fc;
+  transform: translateX(-2px);
+}
+
+/* Staff theme override for back button */
+.auth-page--staff .backBtn {
+  color: rgba(17,24,39,0.5);
+}
+
+.auth-page--staff .backBtn:hover {
+  color: #5924b4;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    BASE — layout & structure shared by both themes
    ═══════════════════════════════════════════════════════════════ */
