@@ -354,3 +354,32 @@
 .cl-quick-card:hover .cl-quick-arrow {
   transform: translateX(6px);
 }
+
+/* ── Entrance animations ───────────────────────────────────── */
+@keyframes clFadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Stagger quick-action cards */
+.cl-quick-card {
+  animation: clFadeUp .5s var(--ease, cubic-bezier(.4,0,.2,1)) both;
+}
+.cl-quick-card:nth-child(1) { animation-delay: .05s; }
+.cl-quick-card:nth-child(2) { animation-delay: .13s; }
+.cl-quick-card:nth-child(3) { animation-delay: .21s; }
+
+/* Ticket card + stat cards entrance */
+.cl-ticket-card,
+.cl-stat-card {
+  animation: clFadeUp .5s var(--ease, cubic-bezier(.4,0,.2,1)) .28s both;
+}
+
+/* Hover lift for stat cards */
+.cl-stat-card {
+  transition: transform .2s, box-shadow .2s;
+}
+.cl-stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 28px rgba(147,51,234,.18);
+}

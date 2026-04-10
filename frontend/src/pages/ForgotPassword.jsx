@@ -314,14 +314,19 @@ export default function ForgotPassword() {
   const [step1Error, setStep1Error]     = useState("");
   const [touchedEmail, setTouchedEmail] = useState(false);
 
-  // FIX 5: resend debounce — disable button for 30s after each click to prevent
-  // hammering the endpoint and generating/invalidating tokens on every tap.
+  // Cooldown on send/resend and on reset-password submit — 120 s
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [resetCooldown,  setResetCooldown]  = useState(0);
   useEffect(() => {
     if (resendCooldown <= 0) return;
-    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
-    return () => clearTimeout(t);
+    const t = setInterval(() => setResendCooldown(c => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
   }, [resendCooldown]);
+  useEffect(() => {
+    if (resetCooldown <= 0) return;
+    const t = setInterval(() => setResetCooldown(c => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [resetCooldown]);
 
   // Redirect if token is present but clearly invalid format
   useEffect(() => {
@@ -344,7 +349,9 @@ export default function ForgotPassword() {
     e.preventDefault();
     setTouchedEmail(true);
     if (emailError) return;
+    if (resendCooldown > 0) return;
     setSending(true); setStep1Error("");
+    setResendCooldown(120);
     try {
       const csrf = await getCsrfToken();
       const res = await fetch(apiUrl("/api/auth/forgot-password"), {
@@ -390,8 +397,10 @@ export default function ForgotPassword() {
     e.preventDefault();
     setTouchedStep2({ newPassword: true, confirmPassword: true });
     if (newPasswordError || confirmPasswordError) return;
+    if (resetCooldown > 0) return;
     setResetError("");
     setResetting(true);
+    setResetCooldown(120);
     try {
       const csrf = await getCsrfToken();
       const res = await fetch(apiUrl("/api/auth/reset-password"), {
@@ -536,8 +545,13 @@ export default function ForgotPassword() {
                       </div>
                     )}
 
-                    <button className="fpBtn" type="submit" disabled={resetting}>
-                      {resetting ? "Resetting…" : "Reset Password"}
+                    {resetCooldown > 0 && (
+                      <div className="fp-cooldown-msg" role="status">
+                        Too many attempts — wait <strong>{resetCooldown}s</strong> before trying again.
+                      </div>
+                    )}
+                    <button className="fpBtn" type="submit" disabled={resetting || resetCooldown > 0}>
+                      {resetCooldown > 0 ? `Try again in ${resetCooldown}s` : resetting ? "Resetting…" : "Reset Password"}
                     </button>
                   </form>
                 </>
@@ -627,8 +641,13 @@ export default function ForgotPassword() {
                       </div>
                     )}
 
-                    <button className="fpBtn" type="submit" disabled={sending}>
-                      {sending ? "Sending…" : "Send Reset Link"}
+                    {resendCooldown > 0 && (
+                      <div className="fp-cooldown-msg" role="status">
+                        Please wait <strong>{resendCooldown}s</strong> before requesting another link.
+                      </div>
+                    )}
+                    <button className="fpBtn" type="submit" disabled={sending || resendCooldown > 0}>
+                      {resendCooldown > 0 ? `Wait ${resendCooldown}s` : sending ? "Sending…" : "Send Reset Link"}
                     </button>
                   </form>
                 </>
