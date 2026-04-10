@@ -79,14 +79,14 @@ function Starfield() {
           );
           g.addColorStop(0, "#e9d5ff");
           g.addColorStop(1, "transparent");
+          ctx.strokeStyle = g;
+          ctx.lineWidth = 1.2;
           ctx.beginPath();
           ctx.moveTo(s.x * c.width, s.y * c.height);
           ctx.lineTo(
             (s.x - (Math.cos(s.angle) * s.len) / c.width)  * c.width,
             (s.y - (Math.sin(s.angle) * s.len) / c.height) * c.height
           );
-          ctx.strokeStyle = g;
-          ctx.lineWidth   = 1.8;
           ctx.stroke();
           ctx.restore();
         }
@@ -100,7 +100,7 @@ function Starfield() {
   return <canvas ref={ref} className="auth-starfield" />;
 }
 
-// ─── Staff: animated orbs + ribbons + nodes (identical to Login.jsx) ──────────
+// ─── Staff: neural-network mesh background ────────────────────────────────────
 function StaffBackground() {
   const ref = useRef(null);
   useEffect(() => {
@@ -108,94 +108,62 @@ function StaffBackground() {
     if (!c) return;
     const ctx = c.getContext("2d");
     let raf, t = 0;
-
     const resize = () => { c.width = window.innerWidth; c.height = window.innerHeight; };
     resize();
     window.addEventListener("resize", resize);
 
+    const nodes = Array.from({ length: 38 }, () => ({
+      x: Math.random(), y: Math.random(),
+      vx: (Math.random() - 0.5) * 0.00035,
+      vy: (Math.random() - 0.5) * 0.00035,
+    }));
+    const ribbons = Array.from({ length: 5 }, (_, i) => ({
+      amp: 0.06 + Math.random() * 0.07,
+      freq: 0.6 + Math.random() * 1.2,
+      phase: (i / 5) * Math.PI * 2,
+      speed: 0.004 + Math.random() * 0.006,
+      yBase: 0.2 + (i / 5) * 0.6,
+      alpha: 0.025 + Math.random() * 0.035,
+      color: `rgba(89,36,180,{a})`,
+    }));
     const orbs = [
-      { x: 0.15, y: 0.20, r: 0.18, ax: 0.00004, ay: 0.00003, phase: 0.0, color: [180,150,230] },
-      { x: 0.80, y: 0.15, r: 0.13, ax: 0.00003, ay: 0.00005, phase: 1.2, color: [200,170,255] },
-      { x: 0.65, y: 0.75, r: 0.16, ax: 0.00004, ay: 0.00002, phase: 2.5, color: [170,140,220] },
-      { x: 0.25, y: 0.80, r: 0.11, ax: 0.00005, ay: 0.00004, phase: 3.8, color: [210,190,255] },
-      { x: 0.50, y: 0.45, r: 0.09, ax: 0.00003, ay: 0.00004, phase: 0.7, color: [190,160,240] },
-      { x: 0.90, y: 0.60, r: 0.12, ax: 0.00002, ay: 0.00004, phase: 4.2, color: [220,200,255] },
+      { x: 0.15, y: 0.2,  r: 320, col: "rgba(89,36,180,.07)",  ax: 0.00012, ay: 0.00009, phase: 0 },
+      { x: 0.82, y: 0.75, r: 260, col: "rgba(124,58,237,.05)", ax: 0.00009, ay: 0.00014, phase: 2 },
+      { x: 0.5,  y: 0.5,  r: 180, col: "rgba(167,139,250,.04)",ax: 0.00015, ay: 0.0001,  phase: 4 },
     ];
-
-    const ribbons = [
-      { baseY: 0.28, amp: 0.04, freq: 0.0018, speed: 0.00008, phase: 0.0, color: [180,150,220], alpha: 0.06, thickness: 0.12 },
-      { baseY: 0.55, amp: 0.03, freq: 0.0022, speed: 0.00006, phase: 2.1, color: [200,170,255], alpha: 0.04, thickness: 0.09 },
-      { baseY: 0.72, amp: 0.05, freq: 0.0015, speed: 0.00010, phase: 4.3, color: [170,140,220], alpha: 0.05, thickness: 0.10 },
-    ];
-
     const particles = Array.from({ length: 55 }, () => ({
       x: Math.random(), y: Math.random(),
-      r:           Math.random() * 1.8 + 0.5,
-      speed:       Math.random() * 0.000015 + 0.000005,
-      drift:       Math.random() * 0.000008 - 0.000004,
-      phase:       Math.random() * Math.PI * 2,
-      twinkleSpeed:Math.random() * 0.008 + 0.003,
-      color: Math.random() > 0.5 ? [210,190,255] : [230,215,255],
+      r: Math.random() * 1.2 + 0.3,
+      speed: 0.00018 + Math.random() * 0.00025,
+      drift: (Math.random() - 0.5) * 0.00012,
+      phase: Math.random() * Math.PI * 2,
+      twinkleSpeed: 0.015 + Math.random() * 0.025,
+      color: Math.random() > 0.5 ? [89,36,180] : [124,58,237],
     }));
-
-    const nodes = Array.from({ length: 22 }, () => ({
-      x:  Math.random(), y: Math.random(),
-      vx: (Math.random() - 0.5) * 0.00002,
-      vy: (Math.random() - 0.5) * 0.00002,
-    }));
-
-    const drawOrb = (orb) => {
-      const cx = orb.x * c.width, cy = orb.y * c.height;
-      const rx = orb.r * Math.min(c.width, c.height);
-      const [r, g, b] = orb.color;
-      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, rx * 1.6);
-      glow.addColorStop(0,   `rgba(${r},${g},${b},0.13)`);
-      glow.addColorStop(0.5, `rgba(${r},${g},${b},0.05)`);
-      glow.addColorStop(1,   `rgba(${r},${g},${b},0)`);
-      ctx.beginPath(); ctx.arc(cx, cy, rx * 1.6, 0, Math.PI * 2);
-      ctx.fillStyle = glow; ctx.fill();
-      const core = ctx.createRadialGradient(cx - rx * 0.25, cy - rx * 0.25, 0, cx, cy, rx);
-      core.addColorStop(0,    `rgba(255,255,255,0.22)`);
-      core.addColorStop(0.35, `rgba(${r},${g},${b},0.18)`);
-      core.addColorStop(0.75, `rgba(${r},${g},${b},0.08)`);
-      core.addColorStop(1,    `rgba(${r},${g},${b},0.02)`);
-      ctx.beginPath(); ctx.arc(cx, cy, rx, 0, Math.PI * 2);
-      ctx.fillStyle = core; ctx.fill();
-      const spec = ctx.createRadialGradient(cx - rx * 0.3, cy - rx * 0.3, 0, cx - rx * 0.3, cy - rx * 0.3, rx * 0.45);
-      spec.addColorStop(0, `rgba(255,255,255,0.35)`);
-      spec.addColorStop(1, `rgba(255,255,255,0)`);
-      ctx.beginPath(); ctx.arc(cx, cy, rx, 0, Math.PI * 2);
-      ctx.fillStyle = spec; ctx.fill();
-    };
 
     const drawRibbon = (rib) => {
-      const W = c.width, H = c.height;
-      const [r, g, b] = rib.color;
-      const thick = rib.thickness * H;
-      ctx.save(); ctx.beginPath();
-      for (let px = 0; px <= W; px += 6) {
-        const nx   = px / W;
-        const wave = Math.sin(nx * Math.PI * 2 * rib.freq * W + rib.phase + t * rib.speed * 1000);
-        const py   = (rib.baseY + wave * rib.amp) * H - thick / 2;
-        px === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      ctx.beginPath();
+      for (let xi = 0; xi <= 1; xi += 0.005) {
+        const yi = rib.yBase + Math.sin(xi * rib.freq * Math.PI * 2 + rib.phase) * rib.amp;
+        xi === 0 ? ctx.moveTo(xi * c.width, yi * c.height)
+                 : ctx.lineTo(xi * c.width, yi * c.height);
       }
-      for (let px = W; px >= 0; px -= 6) {
-        const nx   = px / W;
-        const wave = Math.sin(nx * Math.PI * 2 * rib.freq * W + rib.phase + t * rib.speed * 1000);
-        const py   = (rib.baseY + wave * rib.amp) * H + thick / 2;
-        ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      const midY = rib.baseY * H;
-      const grad = ctx.createLinearGradient(0, midY - thick / 2, 0, midY + thick / 2);
-      grad.addColorStop(0,    `rgba(${r},${g},${b},0)`);
-      grad.addColorStop(0.35, `rgba(${r},${g},${b},${rib.alpha})`);
-      grad.addColorStop(0.5,  `rgba(${r},${g},${b},${rib.alpha * 1.6})`);
-      grad.addColorStop(0.65, `rgba(${r},${g},${b},${rib.alpha})`);
-      grad.addColorStop(1,    `rgba(${r},${g},${b},0)`);
-      ctx.fillStyle = grad; ctx.fill(); ctx.restore();
+      ctx.strokeStyle = rib.color.replace("{a}", rib.alpha);
+      ctx.lineWidth = 1;
+      ctx.stroke();
     };
-
+    const drawOrb = (orb) => {
+      const g = ctx.createRadialGradient(
+        orb.x * c.width, orb.y * c.height, 0,
+        orb.x * c.width, orb.y * c.height, orb.r
+      );
+      g.addColorStop(0, orb.col);
+      g.addColorStop(1, "transparent");
+      ctx.beginPath();
+      ctx.arc(orb.x * c.width, orb.y * c.height, orb.r, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+    };
     const drawNodes = () => {
       const W = c.width, H = c.height;
       nodes.forEach((n) => {
@@ -205,8 +173,8 @@ function StaffBackground() {
       });
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
-          const dx   = (nodes[i].x - nodes[j].x) * W;
-          const dy   = (nodes[i].y - nodes[j].y) * H;
+          const dx = (nodes[i].x - nodes[j].x) * W;
+          const dy = (nodes[i].y - nodes[j].y) * H;
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < 180) {
             ctx.beginPath();
@@ -270,15 +238,27 @@ export default function CustomerAuthPage() {
   const rawRole = sanitizeText(storedUser?.role, 20).toLowerCase();
   const role    = ALLOWED_ROLES.includes(rawRole) ? rawRole : null;
 
-  const [qrCode,     setQrCode]     = useState(null);
-  const [otp,        setOtp]        = useState(["", "", "", "", "", ""]);
-  const [verified,   setVerified]   = useState(false);
-  const [needsSetup, setNeedsSetup] = useState(false);
-  const [loading,    setLoading]    = useState(true);
-  const [errorMsg,   setErrorMsg]   = useState("");
+  // ── Core state ─────────────────────────────────────────────────────────────
+  const [qrCode,        setQrCode]        = useState(null);
+  const [otp,           setOtp]           = useState(["", "", "", "", "", ""]);
+  const [verified,      setVerified]      = useState(false);
+  const [needsSetup,    setNeedsSetup]    = useState(false);
+  const [loading,       setLoading]       = useState(true);
+  const [errorMsg,      setErrorMsg]      = useState("");
+
+  // ── Trust device ───────────────────────────────────────────────────────────
+  const [trustDevice,   setTrustDevice]   = useState(false);
+
+  // ── Email OTP mode ─────────────────────────────────────────────────────────
+  // "totp" = use authenticator app, "email" = receive code by email
+  const [otpMode,       setOtpMode]       = useState("totp");
+  const [emailOtpSent,  setEmailOtpSent]  = useState(false);
+  const [emailOtpBusy,  setEmailOtpBusy]  = useState(false);
+  const [resendCooldown,setResendCooldown]= useState(0);
 
   const inputsRef = useRef([]);
 
+  // ── Fetch TOTP status on mount ─────────────────────────────────────────────
   useEffect(() => {
     if (!loginToken || !role) { navigate("/", { replace: true }); return; }
 
@@ -316,6 +296,14 @@ export default function CustomerAuthPage() {
     checkTOTPStatus();
   }, [loginToken, role, navigate]);
 
+  // ── Resend cooldown ticker ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setInterval(() => setResendCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [resendCooldown]);
+
+  // ── OTP input handlers ─────────────────────────────────────────────────────
   const handleChange = (value, index) => {
     if (!/^\d?$/.test(value)) return;
     const updated = [...otp];
@@ -331,6 +319,84 @@ export default function CustomerAuthPage() {
     }
   };
 
+  // ── Handle successful auth (shared by both TOTP and Email OTP paths) ───────
+  const handleAuthSuccess = async (data) => {
+    const accessToken = sanitizeText(data.access_token, 2048);
+    const tokenType   = sanitizeText(data.token_type,   32);
+    if (!accessToken) throw new Error("Invalid token response");
+
+    // Store trusted-device token in localStorage for 30 days
+    if (data.trusted_device_token && storedUser?.email) {
+      const key = `td_${storedUser.email}`;
+      localStorage.setItem(key, JSON.stringify({
+        token:     sanitizeText(data.trusted_device_token, 128),
+        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+      }));
+    }
+
+    setVerified(true);
+
+    setTimeout(async () => {
+      try {
+        if (needsSetup) {
+          const csrf2 = await getCsrfToken();
+          await fetch(apiUrl("/api/auth/totp-setup-complete"), {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${loginToken}`,
+              ...(csrf2 ? { "X-CSRF-Token": csrf2 } : {}),
+            },
+          });
+        }
+
+        localStorage.setItem("access_token", accessToken);
+        localStorage.setItem("user", JSON.stringify({ ...storedUser, token_type: tokenType }));
+        sessionStorage.removeItem("mfa_token");
+        sessionStorage.removeItem("mfa_user");
+
+        navigate(
+          role === "customer" ? "/customer/dashboard" : `/${role}`,
+          { replace: true }
+        );
+      } catch (err) {
+        console.error("Post-verification error:", err);
+        navigate("/", { replace: true });
+      }
+    }, 1500);
+  };
+
+  // ── Send email OTP ─────────────────────────────────────────────────────────
+  const handleSendEmailOtp = async () => {
+    setEmailOtpBusy(true);
+    setErrorMsg("");
+    try {
+      const csrf = await getCsrfToken();
+      const res  = await fetch(apiUrl("/api/auth/email-otp-send"), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
+        body: JSON.stringify({ login_token: loginToken }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to send code");
+      }
+      setEmailOtpSent(true);
+      setResendCooldown(60);
+      setOtp(["", "", "", "", "", ""]);
+      setTimeout(() => inputsRef.current[0]?.focus(), 100);
+    } catch (err) {
+      console.error("Email OTP send failed:", err);
+      setErrorMsg(err.message || "Could not send code. Please try again.");
+    } finally {
+      setEmailOtpBusy(false);
+    }
+  };
+
+  // ── Submit TOTP code ───────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (otp.some((d) => d === "")) return;
@@ -340,65 +406,74 @@ export default function CustomerAuthPage() {
       setErrorMsg("Please enter a valid 6-digit code.");
       return;
     }
-
     setErrorMsg("");
 
     try {
       const csrf = await getCsrfToken();
-      const res  = await fetch(apiUrl("/api/auth/totp-verify"), {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
-        },
-        body: JSON.stringify({ login_token: loginToken, otp_code: otpCode }),
-      });
 
-      if (!res.ok) throw new Error("Verification failed");
-
-      const data        = await res.json();
-      const accessToken = sanitizeText(data.access_token, 2048);
-      const tokenType   = sanitizeText(data.token_type,   32);
-      if (!accessToken) throw new Error("Invalid token response");
-
-      setVerified(true);
-
-      setTimeout(async () => {
-        try {
-          if (needsSetup) {
-            const csrf2 = await getCsrfToken();
-            await fetch(apiUrl("/api/auth/totp-setup-complete"), {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${loginToken}`,
-                ...(csrf2 ? { "X-CSRF-Token": csrf2 } : {}),
-              },
-            });
-          }
-
-          localStorage.setItem("access_token", accessToken);
-          localStorage.setItem("user", JSON.stringify({ ...storedUser, token_type: tokenType }));
-          sessionStorage.removeItem("mfa_token");
-          sessionStorage.removeItem("mfa_user");
-
-          navigate(
-            role === "customer" ? "/customer/dashboard" : `/${role}`,
-            { replace: true }
-          );
-        } catch (err) {
-          console.error("Post-verification error:", err);
-          navigate("/", { replace: true });
+      if (otpMode === "email") {
+        // Email OTP verify path
+        const res = await fetch(apiUrl("/api/auth/email-otp-verify"), {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+          },
+          body: JSON.stringify({
+            login_token:  loginToken,
+            otp_code:     otpCode,
+            trust_device: trustDevice,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Verification failed");
         }
-      }, 1500);
+        const data = await res.json();
+        await handleAuthSuccess(data);
+      } else {
+        // Authenticator app (TOTP) verify path
+        const res = await fetch(apiUrl("/api/auth/totp-verify"), {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+          },
+          body: JSON.stringify({
+            login_token:  loginToken,
+            otp_code:     otpCode,
+            trust_device: trustDevice,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Verification failed");
+        }
+        const data = await res.json();
+        await handleAuthSuccess(data);
+      }
     } catch (err) {
-      console.error("TOTP verification failed:", err);
-      setErrorMsg("Invalid or expired code. Please try again.");
+      console.error("OTP verification failed:", err);
+      setErrorMsg(err.message === "Verification failed"
+        ? "Invalid or expired code. Please try again."
+        : err.message || "Invalid or expired code. Please try again.");
       setOtp(["", "", "", "", "", ""]);
       inputsRef.current[0]?.focus();
     }
   };
 
+  // ── Switch mode: reset email OTP state ────────────────────────────────────
+  const switchMode = (mode) => {
+    setOtpMode(mode);
+    setOtp(["", "", "", "", "", ""]);
+    setErrorMsg("");
+    setEmailOtpSent(false);
+    setResendCooldown(0);
+  };
+
+  // ── Loading state ──────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className={`auth-page ${themeClass}`}>
@@ -418,7 +493,7 @@ export default function CustomerAuthPage() {
       {/* Animated background — swapped by host */}
       {isStaff ? <StaffBackground /> : <Starfield />}
 
-      {/* Customer-only nebula blobs (CSS ::before/::after handle staff blobs) */}
+      {/* Customer-only nebula blobs */}
       {!isStaff && <div className="auth-neb auth-neb1" />}
       {!isStaff && <div className="auth-neb auth-neb2" />}
 
@@ -435,8 +510,8 @@ export default function CustomerAuthPage() {
         <div className="auth-header-tag">Identity Verification</div>
         <h1 className="auth-title">Verify your identity</h1>
 
-        {/* QR setup */}
-        {needsSetup && qrCode && !verified && (
+        {/* QR setup (only shown on first TOTP setup) */}
+        {needsSetup && qrCode && !verified && otpMode === "totp" && (
           <div className="auth-qr-section">
             <p>Scan this QR code with your authenticator app:</p>
             <img src={qrCode} alt="QR code for authenticator app setup" />
@@ -445,8 +520,34 @@ export default function CustomerAuthPage() {
 
         {!verified ? (
           <>
+            {/* ── Mode toggle: only show when MFA is already set up ── */}
+            {!needsSetup && (
+              <div className="auth-mode-toggle" role="group" aria-label="Verification method">
+                <button
+                  type="button"
+                  className={`auth-mode-btn${otpMode === "totp"  ? " active" : ""}`}
+                  onClick={() => switchMode("totp")}
+                >
+                  🔑 Authenticator App
+                </button>
+                <button
+                  type="button"
+                  className={`auth-mode-btn${otpMode === "email" ? " active" : ""}`}
+                  onClick={() => switchMode("email")}
+                >
+                  ✉ Email Code
+                </button>
+              </div>
+            )}
+
             <p className="auth-subtext">
-              Enter the 6-digit code from your authenticator app.
+              {otpMode === "totp"
+                ? needsSetup
+                  ? "Scan the QR code above, then enter the 6-digit code from your authenticator app."
+                  : "Enter the 6-digit code from your authenticator app."
+                : emailOtpSent
+                  ? "A 6-digit code was sent to your email. Enter it below."
+                  : "We'll send a one-time code to your registered email address."}
             </p>
 
             {errorMsg && (
@@ -455,33 +556,78 @@ export default function CustomerAuthPage() {
               </p>
             )}
 
-            <form onSubmit={handleSubmit}>
-              <div className="otp-group" role="group" aria-label="One-time password">
-                {otp.map((digit, index) => (
-                  <input
-                    key={index}
-                    ref={(el) => (inputsRef.current[index] = el)}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    className="otp-input"
-                    value={digit}
-                    onChange={(e) => handleChange(e.target.value, index)}
-                    onKeyDown={(e) => handleKeyDown(e, index)}
-                    aria-label={`Digit ${index + 1} of 6`}
-                    autoComplete="one-time-code"
-                  />
-                ))}
-              </div>
-
+            {/* ── Email OTP: send button ── */}
+            {otpMode === "email" && !emailOtpSent && (
               <button
+                type="button"
                 className="auth-primary-btn"
-                type="submit"
-                disabled={otp.some((d) => d === "")}
+                onClick={handleSendEmailOtp}
+                disabled={emailOtpBusy}
               >
-                Continue
+                {emailOtpBusy ? "Sending…" : "Send Code to Email"}
               </button>
-            </form>
+            )}
+
+            {/* ── OTP input form ── */}
+            {(otpMode === "totp" || emailOtpSent) && (
+              <form onSubmit={handleSubmit}>
+                <div className="otp-group" role="group" aria-label="One-time password">
+                  {otp.map((digit, index) => (
+                    <input
+                      key={index}
+                      ref={(el) => (inputsRef.current[index] = el)}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      className="otp-input"
+                      value={digit}
+                      onChange={(e) => handleChange(e.target.value, index)}
+                      onKeyDown={(e) => handleKeyDown(e, index)}
+                      aria-label={`Digit ${index + 1} of 6`}
+                      autoComplete="one-time-code"
+                    />
+                  ))}
+                </div>
+
+                {/* ── Trust device checkbox ── */}
+                <label className="auth-trust-label">
+                  <input
+                    type="checkbox"
+                    className="auth-trust-checkbox"
+                    checked={trustDevice}
+                    onChange={(e) => setTrustDevice(e.target.checked)}
+                  />
+                  <span className="auth-trust-text">
+                    Trust this device for 30 days
+                  </span>
+                </label>
+
+                <button
+                  className="auth-primary-btn"
+                  type="submit"
+                  disabled={otp.some((d) => d === "")}
+                  style={{ marginTop: "16px" }}
+                >
+                  Continue
+                </button>
+
+                {/* Resend / retry link for email mode */}
+                {otpMode === "email" && (
+                  <div className="auth-resend-row">
+                    <button
+                      type="button"
+                      className="auth-resend-btn"
+                      onClick={handleSendEmailOtp}
+                      disabled={emailOtpBusy || resendCooldown > 0}
+                    >
+                      {resendCooldown > 0
+                        ? `Resend in ${resendCooldown}s`
+                        : "Resend code"}
+                    </button>
+                  </div>
+                )}
+              </form>
+            )}
           </>
         ) : (
           <div className="auth-success" role="status" aria-live="polite">

@@ -367,12 +367,20 @@ export default function Login() {
 
     try {
       const csrf = await getCsrfToken();
+
+      // Check for a stored trusted-device token for this email (set after MFA verify)
+      const tdKey    = `td_${email.trim().toLowerCase()}`;
+      const tdStored = (() => { try { return JSON.parse(localStorage.getItem(tdKey) || "null"); } catch { return null; } })();
+      const tdToken  = (tdStored && tdStored.expiresAt > Date.now()) ? tdStored.token : null;
+      if (tdStored && !tdToken) localStorage.removeItem(tdKey); // clear if expired
+
       const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+          ...(csrf    ? { "X-CSRF-Token":  csrf    } : {}),
+          ...(tdToken ? { "X-Trust-Token": tdToken } : {}),
         },
         body: JSON.stringify({ email, password }),
       });
@@ -704,6 +712,18 @@ export default function Login() {
               {loading ? "Signing in…" : "Sign In →"}
             </button>
           </form>
+
+          {/* Sign-up link */}
+          <p className="loginSignupRow">
+            New to InnovaCX?{" "}
+            <button
+              type="button"
+              className="loginSignupLink"
+              onClick={() => navigate("/signup")}
+            >
+              Create an account
+            </button>
+          </p>
         </section>
       </div>
     </div>

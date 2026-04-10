@@ -1,7 +1,9 @@
 services:
   postgres:
     profiles: ["frontend", "pipeline", "live"]
-    image: postgres:14.22-alpine
+    build:
+      context: ./database
+      dockerfile: Dockerfile
     container_name: innovacx-db
     restart: unless-stopped
     environment:
