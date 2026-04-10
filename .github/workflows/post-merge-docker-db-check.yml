@@ -41,6 +41,32 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          CI_COMPOSE_FILE="${PWD}/.github/ci.merge-gate.compose.yml"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          src = Path("docker-compose.yml").read_text()
+          src = src.replace("      - ./database/pg_hba.conf:/etc/postgresql/pg_hba.conf\n", "")
+          src = re.sub(
+              r"command:\s*postgres -c hba_file=[^\n]+",
+              "command: postgres -c hba_file=/docker-entrypoint-initdb.d/pg_hba.conf",
+              src,
+          )
+          Path(".github/ci.merge-gate.compose.yml").write_text(src)
+          PY
+
+          docker_compose() {
+            docker compose -f "$CI_COMPOSE_FILE" "$@"
+          }
+
+          hard_cleanup() {
+            docker_compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+            docker rm -f innovacx-db innovacx-backend innovacx-frontend innovacx-backup innovacx-orchestrator innovacx-chatbot innovacx-transcriber 2>/dev/null || true
+            docker volume rm innova-cx_postgres_data innova-cx_backup_data innova-cx_uploads_data innova-cx_hf_cache innova-cx_chatbot_models innova-cx_transcriber_model 2>/dev/null || true
+            docker network rm innova-cx_innovacx-network 2>/dev/null || true
+          }
+
           wait_health() {
             local container="$1"
             local max_attempts="${2:-50}"
@@ -133,7 +159,7 @@ jobs:
             local max_attempts="${2:-60}"
             echo "Waiting for app-role TCP authentication to succeed..."
             for i in $(seq 1 "$max_attempts"); do
-              if docker compose --profile "$profile" run --rm --no-deps backup \
+              if docker_compose --profile "$profile" run --rm --no-deps backup \
                 sh -lc 'export PGPASSWORD="$APP_DB_PASSWORD"; psql -h postgres -U "$APP_DB_USER" -d "$POSTGRES_DB" -tAc "select 1"' \
                 2>/dev/null | grep -q "^1$"; then
                 echo "App-role TCP authentication is ready"
@@ -158,7 +184,7 @@ jobs:
             local services=""
             echo "=== Running profile: $profile ==="
 
-            docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+            hard_cleanup
 
             # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
             export CHATBOT_USE_MOCK=true
@@ -180,13 +206,33 @@ jobs:
             export PRIORITY_USE_MOCK=true
             export PRIORITY_MODEL_DIR=/tmp/nonexistent-priority-model
 
+            echo "--- Effective postgres compose snippet ---"
+            python3 - <<'PY'
+            from pathlib import Path
+            lines = Path(".github/ci.merge-gate.compose.yml").read_text().splitlines()
+            capture = False
+            for line in lines:
+                if line.startswith("  postgres:"):
+                    capture = True
+                elif capture and line.startswith("  ") and not line.startswith("    "):
+                    break
+                if capture:
+                    print(line)
+            PY
+
             # Compose on the self-hosted runner occasionally fails while resolving
             # depends_on: service_healthy during `up`, reporting "No such container"
             # for a freshly-created postgres container. Build first, then start
             # postgres alone, wait for it to finish init, and finally start the
             # remaining services without dependency resolution.
-            docker compose --profile "$profile" build
-            docker compose --profile "$profile" up -d postgres
+            docker_compose --profile "$profile" build
+            docker_compose --profile "$profile" up -d postgres
+
+            echo "--- Postgres container command ---"
+            docker inspect -f '{{json .Config.Cmd}}' innovacx-db || true
+            echo "--- Postgres mounts ---"
+            docker inspect -f '{{range .Mounts}}{{println .Source "->" .Destination "type=" .Type}}{{end}}' innovacx-db || true
+
             wait_health innovacx-db
 
             # Docker marks Postgres healthy as soon as pg_isready passes, which
@@ -210,7 +256,7 @@ jobs:
             elif [ "$profile" = "live" ]; then
               services="$services orchestrator chatbot transcriber"
             fi
-            docker compose --profile "$profile" up -d --no-deps $services
+            docker_compose --profile "$profile" up -d --no-deps $services
 
             # Database wiring sanity checks
             docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
@@ -300,4 +346,13 @@ jobs:
           INTERNAL_API_KEY: ci-internal-api-key-placeholder-value
           RESEND_API_KEY: re_placeholder_ci_key_not_used_in_tests
         working-directory: ${{ github.workspace }}
-        run: docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+        run: |
+          CI_COMPOSE_FILE="${PWD}/.github/ci.merge-gate.compose.yml"
+          if [ -f "$CI_COMPOSE_FILE" ]; then
+            docker compose -f "$CI_COMPOSE_FILE" --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+          else
+            docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+          fi
+          docker rm -f innovacx-db innovacx-backend innovacx-frontend innovacx-backup innovacx-orchestrator innovacx-chatbot innovacx-transcriber 2>/dev/null || true
+          docker volume rm innova-cx_postgres_data innova-cx_backup_data innova-cx_uploads_data innova-cx_hf_cache innova-cx_chatbot_models innova-cx_transcriber_model 2>/dev/null || true
+          docker network rm innova-cx_innovacx-network 2>/dev/null || true
