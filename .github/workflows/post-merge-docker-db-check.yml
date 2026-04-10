@@ -41,8 +41,8 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          CI_COMPOSE_FILE="${PWD}/.github/ci.merge-gate.compose.yml"
-          python3 -c 'from pathlib import Path; import re; src = Path("docker-compose.yml").read_text(); src = src.replace("      - ./database/pg_hba.conf:/etc/postgresql/pg_hba.conf\n", ""); src = re.sub(r"command:\s*postgres -c hba_file=[^\n]+", "command: postgres -c hba_file=/docker-entrypoint-initdb.d/pg_hba.conf", src); Path(".github/ci.merge-gate.compose.yml").write_text(src)'
+          CI_COMPOSE_FILE="${PWD}/docker-compose.ci.merge-gate.yml"
+          python3 -c 'from pathlib import Path; import re; src = Path("docker-compose.yml").read_text(); src = src.replace("      - ./database/pg_hba.conf:/etc/postgresql/pg_hba.conf\n", ""); src = re.sub(r"command:\s*postgres -c hba_file=[^\n]+", "command: postgres -c hba_file=/docker-entrypoint-initdb.d/pg_hba.conf", src); Path("docker-compose.ci.merge-gate.yml").write_text(src)'
 
           docker_compose() {
             docker compose -f "$CI_COMPOSE_FILE" "$@"
@@ -199,7 +199,7 @@ jobs:
               /^  postgres:/ { capture=1 }
               capture && /^  [^ ]/ && $0 !~ /^  postgres:/ { exit }
               capture { print }
-            ' .github/ci.merge-gate.compose.yml
+            ' "$CI_COMPOSE_FILE"
 
             # Compose on the self-hosted runner occasionally fails while resolving
             # depends_on: service_healthy during `up`, reporting "No such container"
@@ -328,7 +328,7 @@ jobs:
           RESEND_API_KEY: re_placeholder_ci_key_not_used_in_tests
         working-directory: ${{ github.workspace }}
         run: |
-          CI_COMPOSE_FILE="${PWD}/.github/ci.merge-gate.compose.yml"
+          CI_COMPOSE_FILE="${PWD}/docker-compose.ci.merge-gate.yml"
           if [ -f "$CI_COMPOSE_FILE" ]; then
             docker compose -f "$CI_COMPOSE_FILE" --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
           else
