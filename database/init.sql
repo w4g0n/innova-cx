@@ -350,7 +350,7 @@ CREATE TABLE IF NOT EXISTS trusted_devices (
   ip_address  TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_trusted_devices_token_hash ON trusted_devices(token_hash) WHERE expires_at > now();
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_token_hash ON trusted_devices(token_hash);
 CREATE INDEX IF NOT EXISTS idx_trusted_devices_user_id    ON trusted_devices(user_id);
 
 CREATE TABLE IF NOT EXISTS email_otp_codes (
