@@ -372,24 +372,6 @@
 }
 .forgotLink:hover { opacity: 1; text-decoration: underline; }
 
-/* Sign-up row */
-.loginSignupRow {
-  margin: 18px 0 0;
-  font-size: 13px;
-  color: rgba(255,255,255,.3);
-  text-align: center;
-}
-.loginSignupLink {
-  background: none; border: none; padding: 0;
-  font-family: "Outfit", sans-serif;
-  font-size: 13px; font-weight: 700;
-  color: var(--orchid); cursor: pointer;
-  transition: opacity .2s;
-}
-.loginSignupLink:hover { opacity: .8; text-decoration: underline; }
-.loginBg--staff .loginSignupRow  { color: rgba(17,24,39,.35); }
-.loginBg--staff .loginSignupLink { color: #5924b4; }
-
 /* Submit button */
 .loginBtn {
   width: 100%;
@@ -437,6 +419,49 @@
   animation: btnShimmer 1.2s linear infinite;
 }
 @keyframes btnShimmer { to { left: 160%; } }
+
+/* Google OAuth divider + button (customer view only) */
+.login-or-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 16px;
+  color: rgba(255,255,255,.3);
+  font-size: 12px;
+  letter-spacing: .05em;
+}
+.login-or-divider::before,
+.login-or-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(168,85,247,.15);
+}
+
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 20px;
+  background: rgba(255,255,255,.04);
+  border: 1.5px solid rgba(255,255,255,.12);
+  border-radius: 12px;
+  cursor: pointer;
+  color: rgba(255,255,255,.85);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background .2s, border-color .2s, transform .15s, box-shadow .2s;
+  animation: fadeUp .6s .5s var(--ease) both;
+}
+.google-btn:hover {
+  background: rgba(255,255,255,.08);
+  border-color: rgba(255,255,255,.22);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+}
+.google-btn:active { transform: translateY(0); }
 
 /* Session expired banner */
 @keyframes bannerSlideIn {
@@ -516,7 +541,8 @@
     border-radius: 22px;
   }
   .loginLeft {
-    display: none; /* Hide decorative left panel on phones — keeps modal compact */
+    width: 100%;
+    padding: 44px 32px 36px;
   }
   .loginLeft::before, .loginLeft::after { display: none; }
   .loginRight {
@@ -950,3 +976,30 @@
 }
 
 .passwordInput.has-capslock { padding-right: 80px; }
+
+/* ── Customer-only micro-animations ──────────────────────── */
+
+/* Input focus: pulse the glow ring once */
+@keyframes inputFocusPulse {
+  0%   { box-shadow: 0 0 0 3px rgba(147,51,234,.12), 0 0 20px rgba(147,51,234,.12), inset 0 0 12px rgba(147,51,234,.04); }
+  50%  { box-shadow: 0 0 0 5px rgba(147,51,234,.18), 0 0 28px rgba(147,51,234,.2),  inset 0 0 16px rgba(147,51,234,.06); }
+  100% { box-shadow: 0 0 0 3px rgba(147,51,234,.12), 0 0 20px rgba(147,51,234,.12), inset 0 0 12px rgba(147,51,234,.04); }
+}
+.loginBg--customer .input:focus {
+  animation: inputFocusPulse .6s ease both;
+}
+
+/* Submit button: shimmer sweep on hover */
+@keyframes btnHoverShimmer {
+  0%   { left: -100%; }
+  100% { left: 160%; }
+}
+.loginBg--customer .loginBtn:hover:not(:disabled)::after {
+  content: "";
+  position: absolute;
+  top: 0; left: -100%;
+  width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent);
+  animation: btnHoverShimmer .55s ease forwards;
+  pointer-events: none;
+}
