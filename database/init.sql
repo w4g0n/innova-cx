@@ -1,22 +1,14 @@
 -- =========================================================
 -- InnovaCX
 -- =========================================================
--- Ensure APP_DB_PASSWORD is available to psql-driven init execution.
-\getenv APP_DB_PASSWORD APP_DB_PASSWORD
-\if :{?APP_DB_PASSWORD}
-\else
-\echo 'APP_DB_PASSWORD environment variable was not provided to init.sql'
-\quit 1
-\endif
-
 -- Create the application role if it doesn't exist
+-- Note: password is set by zzz_least_privilege.sh via shell variable expansion
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'innovacx_app') THEN
     CREATE ROLE innovacx_app WITH LOGIN;
   END IF;
 END $$;
-ALTER ROLE innovacx_app PASSWORD :'APP_DB_PASSWORD';
 
 -- Grant necessary permissions
 GRANT CONNECT ON DATABASE complaints_db TO innovacx_app;
@@ -333,6 +325,37 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 );
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS trusted_devices (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  user_agent  TEXT,
+  ip_address  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_token_hash ON trusted_devices(token_hash);
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_user_id    ON trusted_devices(user_id);
+
+CREATE TABLE IF NOT EXISTS email_otp_codes (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  otp_hash    TEXT NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_email_otp_user ON email_otp_codes(user_id) WHERE used_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS mfa_reset_tokens (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash  TEXT NOT NULL UNIQUE,

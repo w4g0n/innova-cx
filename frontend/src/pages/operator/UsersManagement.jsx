@@ -605,6 +605,33 @@ export default function UsersManagement() {
     }
   };
 
+  // ── MFA Reset ───────────────────────────────────────────────────────────────
+  const resetMfa = (id) => {
+    const user = users.find((u) => u.id === id);
+    setConfirm({
+      open: true,
+      icon: "🔐",
+      title: "Reset MFA",
+      message: `Send a confirmation email to "${user?.fullName}" to reset their MFA setup? They must confirm before their authenticator is cleared.`,
+      variant: "warning",
+      onConfirm: async () => {
+        try {
+          await apiFetch(`/operator/users/${encodeURIComponent(sanitizeId(id))}/reset-mfa`, {
+            method: "POST",
+          });
+          setToast({
+            type: "success",
+            message: "MFA reset confirmation email sent. The user must confirm to proceed.",
+          });
+          closeConfirm();
+        } catch {
+          setToast({ type: "error", message: "Failed to send MFA reset email. Please try again." });
+          closeConfirm();
+        }
+      },
+    });
+  };
+
   const toggleActive = (id) => {
     const user = users.find((u) => u.id === id);
     const isActive = user?.status === "active";
@@ -898,6 +925,29 @@ export default function UsersManagement() {
                                 {u.status === "active"
                                   ? "Deactivate"
                                   : "Activate"}
+                              </button>
+
+                              <button
+                                className="umMenuItem warning"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  resetMfa(u.id);
+                                }}
+                              >
+                                <svg
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                </svg>
+                                Reset MFA
                               </button>
 
                               <button

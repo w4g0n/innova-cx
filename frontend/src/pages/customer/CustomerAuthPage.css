@@ -550,6 +550,126 @@
 
 
 /* ═══════════════════════════════════════════════════════════════
+   MODE TOGGLE  (Authenticator App / Email Code)
+   ═══════════════════════════════════════════════════════════════ */
+
+.auth-mode-toggle {
+  display: flex;
+  gap: 6px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(168,85,247,.15);
+  border-radius: 14px;
+  padding: 5px;
+  margin-bottom: 20px;
+  position: relative;
+  z-index: 1;
+  animation: fadeUp .6s .22s var(--ease) both;
+}
+
+.auth-mode-btn {
+  flex: 1;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-family: "Outfit", sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s, color .2s, box-shadow .2s;
+  white-space: nowrap;
+}
+
+.auth-mode-btn.active {
+  background: linear-gradient(135deg, #6d28d9, #9333ea);
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(147,51,234,.35);
+}
+
+/* ── Staff overrides ── */
+.auth-page--staff .auth-mode-toggle {
+  background: rgba(89,36,180,.05);
+  border-color: rgba(89,36,180,.18);
+}
+
+.auth-page--staff .auth-mode-btn { color: rgba(15,5,32,.55); }
+.auth-page--staff .auth-mode-btn.active {
+  background: linear-gradient(135deg, #2d0f72, #5924b4);
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(89,36,180,.3);
+}
+
+/* ── Customer overrides ── */
+.auth-page--customer .auth-mode-btn { color: rgba(255,255,255,.45); }
+.auth-page--customer .auth-mode-btn:not(.active):hover { color: rgba(255,255,255,.75); }
+
+/* ═══════════════════════════════════════════════════════════════
+   TRUST DEVICE CHECKBOX
+   ═══════════════════════════════════════════════════════════════ */
+
+.auth-trust-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  margin-bottom: 4px;
+  user-select: none;
+}
+
+.auth-trust-checkbox {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  accent-color: #9333ea;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.auth-trust-text {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.auth-page--customer .auth-trust-text { color: rgba(255,255,255,.5); }
+.auth-page--staff    .auth-trust-text { color: rgba(17,24,39,.5); }
+
+/* ═══════════════════════════════════════════════════════════════
+   RESEND ROW
+   ═══════════════════════════════════════════════════════════════ */
+
+.auth-resend-row {
+  text-align: center;
+  margin-top: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-resend-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: "Outfit", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color .2s, opacity .2s;
+}
+
+.auth-resend-btn:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.auth-page--customer .auth-resend-btn        { color: #a855f7; }
+.auth-page--customer .auth-resend-btn:hover:not(:disabled) { color: #c084fc; }
+.auth-page--staff    .auth-resend-btn        { color: #5924b4; }
+.auth-page--staff    .auth-resend-btn:hover:not(:disabled) { color: #7c3aed; }
+
+/* ═══════════════════════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════════════════════ */
 
