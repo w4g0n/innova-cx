@@ -1,3 +1,4 @@
+# CI override — applied on top of docker-compose.yml in CI runs only.
 name: Merge Gate Docker + DB Sweep
 
 on:
@@ -5,7 +6,7 @@ on:
     branches: ["**"]
     types: [opened, synchronize, reopened, ready_for_review]
   push:
-    branches: [main]
+    branches: ["**"]
   workflow_dispatch:
 
 jobs:
@@ -81,7 +82,7 @@ jobs:
               role_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
                 "select count(*) from pg_roles where rolname='innovacx_app';" 2>/dev/null || true)"
               tables_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
-                "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" 2>/dev/null || true)"
+                "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','departments','user_profiles');" 2>/dev/null || true)"
               if [ "$role_ready" = "1" ] && [ "$tables_ready" = "4" ]; then
                 echo "$container bootstrap complete"
                 return 0
@@ -100,7 +101,7 @@ jobs:
             role_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
               "select count(*) from pg_roles where rolname='innovacx_app';" 2>/dev/null || true)"
             tables_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
-              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" 2>/dev/null || true)"
+              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','departments','user_profiles');" 2>/dev/null || true)"
             [ "$role_ready" = "1" ] && [ "$tables_ready" = "4" ]
           }
 
@@ -118,7 +119,7 @@ jobs:
                     ;;
                   *.sh)
                     echo "==> [ci-fallback] sh ${file##*/}"
-                    "$file"
+                    sh "$file"
                     ;;
                   *)
                     echo "==> [ci-fallback] skipping ${file##*/}"
@@ -188,7 +189,7 @@ jobs:
             # for a freshly-created postgres container. Build first, then start
             # postgres alone, wait for it to finish init, and finally start the
             # remaining services without dependency resolution.
-            docker compose --profile "$profile" build
+            docker compose --profile "$profile" build --no-cache
             docker compose --profile "$profile" up -d postgres
             wait_health innovacx-db
 
@@ -219,7 +220,7 @@ jobs:
             docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
               "select rolname from pg_roles where rolname='innovacx_app';" | grep -q "^innovacx_app$"
             docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
-              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" | grep -q "^4$"
+              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','departments','user_profiles');" | grep -q "^4$"
 
             # Core services must be up for every profile
             check_running innovacx-backend
@@ -231,12 +232,23 @@ jobs:
               wait_http_inside innovacx-orchestrator "http://localhost:8004/health" 80
 
               # Pipeline must still work when models are unavailable.
-              payload_out="$(curl -sS -X POST http://localhost:8004/process/text \
-                --form-string 'text=Repeated network outage in Tower B for the third time this week. Staff cannot login and operations are blocked.' \
-                --form-string 'ticket_type=complaint' \
-                --form-string 'subject=')"
+              # Use Python urllib inside the container — the orchestrator image
+              # (python:3.11-slim) has no curl, and this avoids host-port assumptions.
+              payload_out="$(docker exec innovacx-orchestrator python -c "
+import urllib.request, urllib.parse
+data = urllib.parse.urlencode({
+  'text': 'Repeated network outage in Tower B for the third time this week. Staff cannot login and operations are blocked.',
+  'ticket_type': 'complaint',
+  'subject': ''
+}).encode()
+req = urllib.request.Request('http://localhost:8004/process/text', data=data,
+  headers={'Content-Type': 'application/x-www-form-urlencoded'})
+resp = urllib.request.urlopen(req, timeout=30)
+print(resp.read().decode())
+")"
               echo "pipeline submit response: $payload_out"
-              ticket_code="$(echo "$payload_out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ticket_code",""))')"
+              ticket_code="$(echo "$payload_out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ticket_code",""))' 2>/dev/null \
+                || echo "$payload_out" | python -c 'import json,sys; print(json.load(sys.stdin).get("ticket_code",""))')"
               [ -n "$ticket_code" ] || { echo "::error::Pipeline submit did not return ticket_code"; return 1; }
 
               # Wait for terminal success status in DB.
@@ -268,7 +280,7 @@ jobs:
             run_profile pipeline
             run_profile live
           else
-            echo "Pull request gate mode: running frontend, pipeline, and live profiles."
+            echo "Pull request / push gate mode: running frontend, pipeline, and live profiles."
             run_profile frontend
             run_profile pipeline
             run_profile live
@@ -304,5 +316,5 @@ jobs:
           RESEND_API_KEY: re_placeholder_ci_key_not_used_in_tests
         working-directory: ${{ github.workspace }}
         run: |
-          docker rm -f innovacx-db innovacx-backend innovacx-frontend innovacx-backup 2>/dev/null || true
+          docker rm -f innovacx-db innovacx-backend innovacx-frontend innovacx-backup innovacx-orchestrator innovacx-chatbot innovacx-transcriber 2>/dev/null || true
           docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
