@@ -1,0 +1,428 @@
+import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiUrl } from "../config/apiBase";
+import { getCsrfToken } from "../services/api";
+import { safeParseUser, sanitizeText } from "./customer/sanitize";
+
+// ─── Starfield (same as Login/CustomerAuthPage) ───────────────────────────────
+function Starfield() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const ctx = c.getContext("2d");
+    let raf;
+    const resize = () => { c.width = window.innerWidth; c.height = window.innerHeight; };
+    resize();
+    const stars = Array.from({ length: 260 }, () => ({
+      x: Math.random(), y: Math.random(),
+      r: Math.random() * 1.4 + 0.2,
+      twinkle: Math.random() * Math.PI * 2,
+      speed: Math.random() * 0.016 + 0.004,
+      color: Math.random() > 0.8 ? "#c4b5fd" : Math.random() > 0.6 ? "#e9d5ff" : "#fff",
+    }));
+    const shooters = Array.from({ length: 4 }, () => ({
+      x: Math.random() * 0.5, y: Math.random() * 0.4,
+      len: Math.random() * 140 + 80, speed: Math.random() * 5 + 3,
+      angle: Math.PI / 5.5, active: false, timer: Math.random() * 300 + 80, alpha: 0,
+    }));
+    const draw = () => {
+      ctx.clearRect(0, 0, c.width, c.height);
+      stars.forEach((s) => {
+        s.twinkle += s.speed;
+        ctx.globalAlpha = Math.max(0.05, 0.28 + Math.sin(s.twinkle) * 0.5);
+        ctx.fillStyle = s.color;
+        ctx.beginPath(); ctx.arc(s.x * c.width, s.y * c.height, s.r, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      shooters.forEach((s) => {
+        s.timer--;
+        if (s.timer <= 0 && !s.active) { s.active = true; s.alpha = 1; }
+        if (s.active) {
+          s.x += (Math.cos(s.angle) * s.speed) / c.width;
+          s.y += (Math.sin(s.angle) * s.speed) / c.height;
+          s.alpha -= 0.018;
+          if (s.alpha <= 0 || s.x > 1) {
+            s.active = false; s.x = Math.random() * 0.45; s.y = Math.random() * 0.35;
+            s.timer = Math.random() * 400 + 150;
+          }
+          ctx.save(); ctx.globalAlpha = s.alpha;
+          const g = ctx.createLinearGradient(
+            s.x * c.width, s.y * c.height,
+            (s.x - (Math.cos(s.angle) * s.len) / c.width) * c.width,
+            (s.y - (Math.sin(s.angle) * s.len) / c.height) * c.height
+          );
+          g.addColorStop(0, "#e9d5ff"); g.addColorStop(1, "transparent");
+          ctx.beginPath();
+          ctx.moveTo(s.x * c.width, s.y * c.height);
+          ctx.lineTo(
+            (s.x - (Math.cos(s.angle) * s.len) / c.width) * c.width,
+            (s.y - (Math.sin(s.angle) * s.len) / c.height) * c.height
+          );
+          ctx.strokeStyle = g; ctx.lineWidth = 1.8; ctx.stroke(); ctx.restore();
+        }
+      });
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    window.addEventListener("resize", resize);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, []);
+  return <canvas ref={ref} style={{ position: "fixed", inset: 0, width: "100%", height: "100%", zIndex: 0, pointerEvents: "none" }} />;
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+export default function MfaSetup() {
+  const navigate = useNavigate();
+  const loginToken  = sessionStorage.getItem("mfa_token");
+  const storedUser  = safeParseUser(sessionStorage.getItem("mfa_user"));
+
+  const [step,        setStep]        = useState(1); // 1 = email backup, 2 = TOTP QR
+  const [qrCode,      setQrCode]      = useState(null);
+  const [secretKey,   setSecretKey]   = useState(null);
+  const [otp,         setOtp]         = useState(["", "", "", "", "", ""]);
+  const [loading,     setLoading]     = useState(true);
+  const [verifying,   setVerifying]   = useState(false);
+  const [errorMsg,    setErrorMsg]    = useState("");
+  const [shake,       setShake]       = useState(false);
+  const inputsRef     = useRef([]);
+
+  // Guard: redirect if no session
+  useEffect(() => {
+    if (!loginToken) { navigate("/login", { replace: true }); return; }
+
+    // Fetch QR code
+    (async () => {
+      try {
+        const res = await fetch(apiUrl("/api/auth/totp-setup"), {
+          headers: { Authorization: `Bearer ${loginToken}` },
+        });
+        if (!res.ok) throw new Error("Failed to load setup data");
+        const data = await res.json();
+        const rawQr = sanitizeText(data.qrCode, 4096);
+        if (rawQr.startsWith("data:image/") || rawQr.startsWith("https://")) setQrCode(rawQr);
+        if (data.secret) setSecretKey(sanitizeText(data.secret, 64));
+      } catch {
+        navigate("/login", { replace: true });
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [loginToken, navigate]);
+
+  const handleChange = (value, index) => {
+    if (!/^\d?$/.test(value)) return;
+    const updated = [...otp];
+    updated[index] = value;
+    setOtp(updated);
+    setErrorMsg("");
+    if (value && index < 5) inputsRef.current[index + 1]?.focus();
+  };
+
+  const handleKeyDown = (e, index) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) inputsRef.current[index - 1]?.focus();
+  };
+
+  const triggerShake = () => {
+    setShake(true);
+    setTimeout(() => setShake(false), 520);
+  };
+
+  const handleVerifyTotp = async (e) => {
+    e.preventDefault();
+    if (otp.some((d) => d === "")) return;
+    const code = otp.join("");
+    if (!/^\d{6}$/.test(code)) { setErrorMsg("Enter a valid 6-digit code."); return; }
+
+    setVerifying(true);
+    setErrorMsg("");
+    try {
+      const csrf = await getCsrfToken();
+      const res  = await fetch(apiUrl("/api/auth/totp-verify"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
+        body: JSON.stringify({ login_token: loginToken, otp_code: code, trust_device: false }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Verification failed");
+      }
+      const data = await res.json();
+      const accessToken = sanitizeText(data.access_token, 2048);
+      if (!accessToken) throw new Error("Invalid token response");
+
+      // Mark MFA setup complete
+      const csrf2 = await getCsrfToken();
+      await fetch(apiUrl("/api/auth/totp-setup-complete"), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${loginToken}`, ...(csrf2 ? { "X-CSRF-Token": csrf2 } : {}) },
+      });
+
+      localStorage.setItem("access_token", accessToken);
+      localStorage.setItem("user", JSON.stringify({ ...storedUser, token_type: data.token_type }));
+      sessionStorage.removeItem("mfa_token");
+      sessionStorage.removeItem("mfa_user");
+
+      const role = storedUser?.role || "customer";
+      navigate(role === "customer" ? "/customer/dashboard" : `/${role}`, { replace: true });
+    } catch {
+      triggerShake();
+      setErrorMsg("Invalid or expired code. Please try again.");
+      setOtp(["", "", "", "", "", ""]);
+      inputsRef.current[0]?.focus();
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const s = {
+    page: {
+      minHeight: "100vh", background: "#03010a", display: "flex", alignItems: "center",
+      justifyContent: "center", padding: "40px 16px", position: "relative", overflow: "hidden",
+      fontFamily: "'Segoe UI', Arial, sans-serif",
+    },
+    neb1: {
+      position: "fixed", width: 520, height: 520, top: "-120px", left: "-100px",
+      borderRadius: "50%", background: "radial-gradient(circle,rgba(147,51,234,.18),transparent 70%)",
+      pointerEvents: "none", zIndex: 1,
+    },
+    neb2: {
+      position: "fixed", width: 400, height: 400, bottom: "-80px", right: "-60px",
+      borderRadius: "50%", background: "radial-gradient(circle,rgba(232,121,249,.1),transparent 70%)",
+      pointerEvents: "none", zIndex: 1,
+    },
+    card: {
+      position: "relative", zIndex: 10, width: "min(480px,100%)",
+      background: "rgba(13,5,32,0.96)", border: "1px solid rgba(139,92,246,.28)",
+      borderRadius: 24, padding: "40px 36px 44px",
+      boxShadow: "0 0 0 1px rgba(168,85,247,.12), 0 8px 40px rgba(0,0,0,.6), 0 0 80px rgba(147,51,234,.12)",
+      animation: "mfaSetupEnter .65s cubic-bezier(.22,1,.36,1) both",
+    },
+    stepBadge: {
+      display: "inline-flex", alignItems: "center", gap: 6,
+      background: "rgba(139,92,246,.12)", border: "1px solid rgba(139,92,246,.25)",
+      borderRadius: 20, padding: "4px 14px", fontSize: 12, color: "#c4b5fd",
+      fontWeight: 600, letterSpacing: ".04em", marginBottom: 20,
+    },
+    title: { margin: "0 0 8px", fontSize: 22, fontWeight: 800, color: "#f3e8ff", letterSpacing: "-.02em" },
+    sub: { margin: "0 0 28px", fontSize: 14, color: "#9ca3af", lineHeight: 1.6 },
+    emailBox: {
+      background: "rgba(139,92,246,.08)", border: "1px solid rgba(139,92,246,.2)",
+      borderRadius: 12, padding: "16px 18px", marginBottom: 24,
+      display: "flex", alignItems: "center", gap: 12,
+    },
+    emailIcon: { width: 36, height: 36, borderRadius: "50%", background: "rgba(139,92,246,.2)",
+      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+    emailText: { fontSize: 13, color: "#c4b5fd", lineHeight: 1.5 },
+    activeBadge: {
+      display: "inline-flex", alignItems: "center", gap: 4,
+      background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.25)",
+      borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#86efac", fontWeight: 600,
+    },
+    warning: {
+      background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.2)",
+      borderRadius: 12, padding: "14px 16px", marginBottom: 24,
+    },
+    warningText: { margin: 0, fontSize: 13, color: "rgba(251,191,36,.8)", lineHeight: 1.55 },
+    qrWrap: { textAlign: "center", marginBottom: 24 },
+    qrImg: { borderRadius: 12, border: "2px solid rgba(139,92,246,.3)", background: "#fff", padding: 6 },
+    secretBox: {
+      background: "rgba(0,0,0,.3)", border: "1px solid rgba(139,92,246,.2)",
+      borderRadius: 8, padding: "10px 14px", marginBottom: 20, textAlign: "center",
+    },
+    secretKey: { fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: "#c4b5fd", letterSpacing: ".1em", wordBreak: "break-all" },
+    otpGroup: { display: "flex", gap: 10, justifyContent: "center", marginBottom: 20 },
+    otpInput: {
+      width: 46, height: 56, borderRadius: 12, border: "2px solid rgba(139,92,246,.3)",
+      background: "rgba(139,92,246,.08)", color: "#f3e8ff", fontSize: 22, fontWeight: 700,
+      textAlign: "center", outline: "none", transition: "border-color .2s, box-shadow .2s",
+    },
+    error: {
+      background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.25)",
+      borderRadius: 10, padding: "10px 14px", marginBottom: 16,
+      color: "#fca5a5", fontSize: 13,
+    },
+    btn: {
+      width: "100%", padding: "14px", background: "linear-gradient(135deg,#6d28d9,#9333ea,#a855f7)",
+      color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700,
+      cursor: "pointer", transition: "opacity .2s, transform .15s",
+      boxShadow: "0 4px 20px rgba(147,51,234,.4)",
+    },
+    btnSecondary: {
+      width: "100%", padding: "12px", background: "transparent",
+      color: "rgba(196,181,253,.6)", border: "1px solid rgba(139,92,246,.2)",
+      borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: "pointer",
+      marginTop: 12, transition: "color .2s, border-color .2s",
+    },
+    stepper: { display: "flex", gap: 8, marginBottom: 28 },
+    stepDot: (active, done) => ({
+      flex: 1, height: 4, borderRadius: 4,
+      background: done ? "#9333ea" : active ? "rgba(147,51,234,.5)" : "rgba(139,92,246,.15)",
+      transition: "background .4s",
+    }),
+  };
+
+  if (loading) {
+    return (
+      <div style={s.page}>
+        <Starfield />
+        <div style={{ ...s.card, textAlign: "center" }}>
+          <p style={{ color: "#c4b5fd", fontSize: 15 }}>Loading setup…</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={s.page}>
+      <style>{`
+        @keyframes mfaSetupEnter { from { opacity:0; transform:translateY(28px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+        @keyframes mfaShake {
+          0%,100%{transform:translateX(0)}
+          15%{transform:translateX(-8px)}
+          30%{transform:translateX(8px)}
+          45%{transform:translateX(-6px)}
+          60%{transform:translateX(6px)}
+          75%{transform:translateX(-3px)}
+          90%{transform:translateX(3px)}
+        }
+        .mfa-setup-card--shake { animation: mfaShake 0.52s ease !important; }
+        .mfa-otp-input:focus { border-color: #a855f7 !important; box-shadow: 0 0 0 3px rgba(168,85,247,.2); }
+        .mfa-otp-input:not(:placeholder-shown) { border-color: rgba(168,85,247,.5) !important; }
+        .mfa-btn:hover { opacity: .88; transform: translateY(-1px); }
+        .mfa-btn-sec:hover { color: #c4b5fd !important; border-color: rgba(139,92,246,.5) !important; }
+      `}</style>
+
+      <Starfield />
+      <div style={{ ...s.neb1 }} />
+      <div style={{ ...s.neb2 }} />
+
+      <div style={s.card} className={shake ? "mfa-setup-card--shake" : ""}>
+
+        {/* Step progress bar */}
+        <div style={s.stepper}>
+          <div style={s.stepDot(step === 1, step > 1)} />
+          <div style={s.stepDot(step === 2, false)} />
+        </div>
+
+        {/* ── STEP 1: Email backup ── */}
+        {step === 1 && (
+          <>
+            <div style={s.stepBadge}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Step 1 of 2 — Backup Method
+            </div>
+            <h1 style={s.title}>Email OTP enabled</h1>
+            <p style={s.sub}>
+              As a backup, we've enabled email-based one-time codes for your account.
+              You can use this if you ever lose access to your authenticator app.
+            </p>
+
+            <div style={s.emailBox}>
+              <div style={s.emailIcon}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2,4 12,13 22,4"/></svg>
+              </div>
+              <div>
+                <div style={{ ...s.emailText, color: "#e9d5ff", fontWeight: 600, marginBottom: 4 }}>
+                  {storedUser?.email || "your email"}
+                </div>
+                <div style={s.activeBadge}>
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="12"/></svg>
+                  Active
+                </div>
+              </div>
+            </div>
+
+            <div style={s.warning}>
+              <p style={s.warningText}>
+                <strong style={{ color: "#fbbf24" }}>Next step:</strong> You'll scan a QR code to set up your authenticator app (Google Authenticator, Authy, etc.).
+                This is your primary MFA method.
+              </p>
+            </div>
+
+            <button className="mfa-btn" style={s.btn} onClick={() => setStep(2)}>
+              Continue to Authenticator Setup →
+            </button>
+          </>
+        )}
+
+        {/* ── STEP 2: TOTP QR setup ── */}
+        {step === 2 && (
+          <>
+            <div style={s.stepBadge}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Step 2 of 2 — Authenticator Setup
+            </div>
+            <h1 style={s.title}>Scan QR code</h1>
+            <p style={s.sub}>
+              Open Google Authenticator, Authy, or any TOTP app and scan the code below.
+              Then enter the 6-digit code it shows.
+            </p>
+
+            <div style={s.warning}>
+              <p style={s.warningText}>
+                <strong style={{ color: "#fbbf24" }}>Save this now.</strong> This QR code will not be shown again after setup.
+                If you lose access to your authenticator app, contact{" "}
+                <span style={{ color: "#a855f7" }}>support@innovacx.net</span>.
+              </p>
+            </div>
+
+            {qrCode && (
+              <div style={s.qrWrap}>
+                <img src={qrCode} alt="QR code for authenticator setup" width={180} height={180} style={s.qrImg} />
+              </div>
+            )}
+
+            {secretKey && (
+              <div style={s.secretBox}>
+                <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6, letterSpacing: ".08em", textTransform: "uppercase" }}>Manual setup key</div>
+                <div style={s.secretKey}>{secretKey}</div>
+              </div>
+            )}
+
+            {errorMsg && <div style={s.error}>{errorMsg}</div>}
+
+            <form onSubmit={handleVerifyTotp}>
+              <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 12, textAlign: "center" }}>
+                Enter the 6-digit code from your app
+              </div>
+              <div style={s.otpGroup} role="group" aria-label="One-time password">
+                {otp.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={(el) => (inputsRef.current[index] = el)}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    className="mfa-otp-input"
+                    style={s.otpInput}
+                    value={digit}
+                    onChange={(e) => handleChange(e.target.value, index)}
+                    onKeyDown={(e) => handleKeyDown(e, index)}
+                    aria-label={`Digit ${index + 1} of 6`}
+                    autoComplete="one-time-code"
+                  />
+                ))}
+              </div>
+
+              <button
+                type="submit"
+                className="mfa-btn"
+                style={{ ...s.btn, opacity: otp.some((d) => d === "") ? 0.5 : 1 }}
+                disabled={verifying || otp.some((d) => d === "")}
+              >
+                {verifying ? "Verifying…" : "Complete Setup →"}
+              </button>
+            </form>
+
+            <button className="mfa-btn-sec" style={s.btnSecondary} onClick={() => setStep(1)}>
+              ← Back
+            </button>
+          </>
+        )}
+
+      </div>
+    </div>
+  );
+}

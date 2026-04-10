@@ -1,14 +1,9 @@
 -- =========================================================
 -- InnovaCX
 -- =========================================================
--- Create the application role if it doesn't exist
--- Note: password is set by zzz_least_privilege.sh via shell variable expansion
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'innovacx_app') THEN
-    CREATE ROLE innovacx_app WITH LOGIN;
-  END IF;
-END $$;
+-- NOTE: innovacx_app role + password is created by 000b_app_role.sh
+-- (runs before this file alphabetically) to stay compatible with
+-- PostgreSQL 14, which does not support \getenv.
 
 -- Grant necessary permissions
 GRANT CONNECT ON DATABASE complaints_db TO innovacx_app;
@@ -231,7 +226,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TRIGGER trg_user_preferences_updated_at
+CREATE OR REPLACE TRIGGER trg_user_preferences_updated_at
 BEFORE UPDATE ON user_preferences
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
@@ -342,6 +337,7 @@ CREATE TABLE IF NOT EXISTS trusted_devices (
   ip_address  TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Partial index removed: now() is STABLE not IMMUTABLE, illegal in PG14 index predicates
 CREATE INDEX IF NOT EXISTS idx_trusted_devices_token_hash ON trusted_devices(token_hash);
 CREATE INDEX IF NOT EXISTS idx_trusted_devices_user_id    ON trusted_devices(user_id);
 
@@ -438,20 +434,20 @@ CREATE INDEX IF NOT EXISTS idx_tickets_creator     ON tickets(created_by_user_id
 
 -- Track all user changes (password rotations, role changes, deactivation)
 DROP TRIGGER IF EXISTS audit_users ON users;
-CREATE TRIGGER audit_users
+CREATE OR REPLACE TRIGGER audit_users
 AFTER INSERT OR UPDATE OR DELETE ON users
 FOR EACH ROW EXECUTE FUNCTION audit_trigger();
 
 -- Track all ticket changes (status, assignment, priority)
 DROP TRIGGER IF EXISTS audit_tickets ON tickets;
-CREATE TRIGGER audit_tickets
+CREATE OR REPLACE TRIGGER audit_tickets
 AFTER INSERT OR UPDATE OR DELETE ON tickets
 FOR EACH ROW EXECUTE FUNCTION audit_trigger();
 
 -- NOTE: audit_approval_requests is attached after approval_requests table is created below
 
 DROP TRIGGER IF EXISTS trg_tickets_updated_at ON tickets;
-CREATE TRIGGER trg_tickets_updated_at
+CREATE OR REPLACE TRIGGER trg_tickets_updated_at
 BEFORE UPDATE ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
@@ -499,7 +495,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_tickets_status_timestamps ON tickets;
-CREATE TRIGGER trg_tickets_status_timestamps
+CREATE OR REPLACE TRIGGER trg_tickets_status_timestamps
 BEFORE INSERT OR UPDATE ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION sync_ticket_status_timestamps();
@@ -569,7 +565,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_tickets_priority_sla ON tickets;
-CREATE TRIGGER trg_tickets_priority_sla
+CREATE OR REPLACE TRIGGER trg_tickets_priority_sla
 BEFORE INSERT OR UPDATE ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION sync_ticket_priority_sla();
@@ -757,7 +753,7 @@ CREATE INDEX IF NOT EXISTS idx_approval_requests_requested_to ON approval_reques
 
 -- Audit trigger for approval_requests (must be after table creation)
 DROP TRIGGER IF EXISTS audit_approval_requests ON approval_requests;
-CREATE TRIGGER audit_approval_requests
+CREATE OR REPLACE TRIGGER audit_approval_requests
 AFTER INSERT OR UPDATE OR DELETE ON approval_requests
 FOR EACH ROW EXECUTE FUNCTION audit_trigger();
 
@@ -903,7 +899,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_manager_approval_request ON approval_requests;
-CREATE TRIGGER trg_notify_manager_approval_request
+CREATE OR REPLACE TRIGGER trg_notify_manager_approval_request
 AFTER INSERT ON approval_requests
 FOR EACH ROW
 EXECUTE FUNCTION notify_manager_on_approval_request();
@@ -950,7 +946,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_manager_approval_decision ON approval_requests;
-CREATE TRIGGER trg_notify_manager_approval_decision
+CREATE OR REPLACE TRIGGER trg_notify_manager_approval_decision
 AFTER UPDATE ON approval_requests
 FOR EACH ROW
 EXECUTE FUNCTION notify_manager_on_approval_decision();
@@ -998,7 +994,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_customer_ticket_create ON tickets;
-CREATE TRIGGER trg_notify_customer_ticket_create
+CREATE OR REPLACE TRIGGER trg_notify_customer_ticket_create
 AFTER INSERT ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION notify_customer_on_ticket_create();
@@ -1068,7 +1064,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_customer_status_change ON tickets;
-CREATE TRIGGER trg_notify_customer_status_change
+CREATE OR REPLACE TRIGGER trg_notify_customer_status_change
 AFTER UPDATE ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION notify_customer_on_status_change();
@@ -1130,7 +1126,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_customer_approval_submit ON approval_requests;
-CREATE TRIGGER trg_notify_customer_approval_submit
+CREATE OR REPLACE TRIGGER trg_notify_customer_approval_submit
 AFTER INSERT ON approval_requests
 FOR EACH ROW
 EXECUTE FUNCTION notify_customer_on_approval_submit();
@@ -1216,7 +1212,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_customer_approval_decision ON approval_requests;
-CREATE TRIGGER trg_notify_customer_approval_decision
+CREATE OR REPLACE TRIGGER trg_notify_customer_approval_decision
 AFTER UPDATE ON approval_requests
 FOR EACH ROW
 EXECUTE FUNCTION notify_customer_on_approval_decision();
@@ -1273,7 +1269,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 
 DROP TRIGGER IF EXISTS trg_sessions_updated_at ON sessions;
-CREATE TRIGGER trg_sessions_updated_at
+CREATE OR REPLACE TRIGGER trg_sessions_updated_at
 BEFORE UPDATE ON sessions
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();

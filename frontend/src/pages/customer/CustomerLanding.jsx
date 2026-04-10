@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import CustomerLoadingSkeleton from "./CustomerLoadingSkeleton";
 import "./CustomerLanding.css";
 import novaLogo from "../../assets/nova-logo.png";
 import CustomerFillForm from "./CustomerFillForm";
@@ -85,6 +86,20 @@ export default function CustomerLanding() {
   ];
 
   const [theme, toggleTheme] = useTheme();
+
+  // Splash guard — show skeleton for 3 s on first visit per session (survives trust-device bypass)
+  const [showSplash, setShowSplash] = useState(() => {
+    if (sessionStorage.getItem("portal_splash_shown")) return false;
+    return true;
+  });
+  useEffect(() => {
+    if (!showSplash) return;
+    const t = setTimeout(() => {
+      sessionStorage.setItem("portal_splash_shown", "1");
+      setShowSplash(false);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [showSplash]);
 
   const [embeddedFormType, setEmbeddedFormType] = useState("Complaint");
   const [ticketPopup,      setTicketPopup]      = useState(null);
@@ -418,6 +433,8 @@ export default function CustomerLanding() {
     setText((prev) => limitWords(prev ? `${prev} ${t}` : t, MAX_TEXT_WORDS));
     cancelVoice();
   };
+
+  if (showSplash) return <CustomerLoadingSkeleton />;
 
   return (
     <div className="cl-dashboard pl-root">

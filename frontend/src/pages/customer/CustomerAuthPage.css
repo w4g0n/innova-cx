@@ -550,124 +550,161 @@
 
 
 /* ═══════════════════════════════════════════════════════════════
-   MODE TOGGLE  (Authenticator App / Email Code)
+   MODE TOGGLE (Authenticator App / Email Code)
    ═══════════════════════════════════════════════════════════════ */
 
 .auth-mode-toggle {
   display: flex;
   gap: 6px;
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(168,85,247,.15);
-  border-radius: 14px;
-  padding: 5px;
-  margin-bottom: 20px;
+  justify-content: center;
+  margin-bottom: 16px;
   position: relative;
   z-index: 1;
   animation: fadeUp .6s .22s var(--ease) both;
 }
 
 .auth-mode-btn {
-  flex: 1;
-  padding: 9px 10px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
   font-family: "Outfit", sans-serif;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background .2s, color .2s, box-shadow .2s;
-  white-space: nowrap;
+  transition: background .2s, border-color .2s, color .2s, box-shadow .2s;
 }
 
-.auth-mode-btn.active {
-  background: linear-gradient(135deg, #6d28d9, #9333ea);
-  color: #fff;
-  box-shadow: 0 2px 12px rgba(147,51,234,.35);
+/* Customer theme */
+.auth-page--customer .auth-mode-btn {
+  background: rgba(255,255,255,.05);
+  border-color: rgba(255,255,255,.1);
+  color: rgba(255,255,255,.5);
+}
+.auth-page--customer .auth-mode-btn:hover {
+  background: rgba(255,255,255,.09);
+  border-color: rgba(168,85,247,.35);
+  color: rgba(255,255,255,.8);
+}
+.auth-page--customer .auth-mode-btn.active {
+  background: rgba(147,51,234,.18);
+  border-color: rgba(168,85,247,.55);
+  color: #e9d5ff;
+  box-shadow: 0 0 14px rgba(147,51,234,.25);
 }
 
-/* ── Staff overrides ── */
-.auth-page--staff .auth-mode-toggle {
-  background: rgba(89,36,180,.05);
-  border-color: rgba(89,36,180,.18);
+/* Staff theme */
+.auth-page--staff .auth-mode-btn {
+  background: rgba(89,36,180,.06);
+  border-color: rgba(89,36,180,.15);
+  color: rgba(15,5,32,.5);
 }
-
-.auth-page--staff .auth-mode-btn { color: rgba(15,5,32,.55); }
+.auth-page--staff .auth-mode-btn:hover {
+  background: rgba(89,36,180,.1);
+  border-color: rgba(89,36,180,.35);
+  color: #0f0520;
+}
 .auth-page--staff .auth-mode-btn.active {
-  background: linear-gradient(135deg, #2d0f72, #5924b4);
-  color: #fff;
-  box-shadow: 0 2px 12px rgba(89,36,180,.3);
+  background: rgba(89,36,180,.14);
+  border-color: rgba(89,36,180,.5);
+  color: #3b0764;
+  box-shadow: 0 0 10px rgba(89,36,180,.12);
 }
 
-/* ── Customer overrides ── */
-.auth-page--customer .auth-mode-btn { color: rgba(255,255,255,.45); }
-.auth-page--customer .auth-mode-btn:not(.active):hover { color: rgba(255,255,255,.75); }
 
 /* ═══════════════════════════════════════════════════════════════
    TRUST DEVICE CHECKBOX
    ═══════════════════════════════════════════════════════════════ */
 
 .auth-trust-label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   cursor: pointer;
   position: relative;
   z-index: 1;
-  margin-bottom: 4px;
-  user-select: none;
+  animation: fadeUp .6s .38s var(--ease) both;
 }
 
 .auth-trust-checkbox {
-  width: 17px;
-  height: 17px;
-  flex-shrink: 0;
-  accent-color: #9333ea;
+  width: 16px;
+  height: 16px;
+  accent-color: #a855f7;
   cursor: pointer;
-  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.auth-page--staff .auth-trust-checkbox {
+  accent-color: #5924b4;
 }
 
 .auth-trust-text {
   font-size: 13px;
   font-weight: 500;
-  line-height: 1.4;
+  user-select: none;
 }
 
-.auth-page--customer .auth-trust-text { color: rgba(255,255,255,.5); }
-.auth-page--staff    .auth-trust-text { color: rgba(17,24,39,.5); }
+.auth-page--customer .auth-trust-text { color: rgba(255,255,255,.45); }
+.auth-page--staff    .auth-trust-text { color: rgba(15,5,32,.5); }
+
+.auth-trust-label:hover .auth-trust-text {
+  color: inherit;
+  opacity: 1;
+}
+.auth-page--customer .auth-trust-label:hover .auth-trust-text { color: rgba(255,255,255,.75); }
+.auth-page--staff    .auth-trust-label:hover .auth-trust-text { color: #0f0520; }
+
 
 /* ═══════════════════════════════════════════════════════════════
-   RESEND ROW
+   RESEND ROW (email OTP)
    ═══════════════════════════════════════════════════════════════ */
 
 .auth-resend-row {
-  text-align: center;
   margin-top: 14px;
+  text-align: center;
   position: relative;
   z-index: 1;
+  animation: fadeUp .6s .45s var(--ease) both;
 }
 
 .auth-resend-btn {
   background: none;
   border: none;
-  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
   font-family: "Outfit", sans-serif;
   font-size: 13px;
   font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: color .2s, opacity .2s;
+  cursor: pointer;
+  transition: color .2s, background .2s;
 }
 
-.auth-resend-btn:disabled {
+.auth-page--customer .auth-resend-btn {
+  color: #a855f7;
+}
+.auth-page--customer .auth-resend-btn:hover:not(:disabled) {
+  color: #c084fc;
+  background: rgba(168,85,247,.08);
+}
+.auth-page--customer .auth-resend-btn:disabled {
+  color: rgba(255,255,255,.25);
   cursor: not-allowed;
-  opacity: .45;
 }
 
-.auth-page--customer .auth-resend-btn        { color: #a855f7; }
-.auth-page--customer .auth-resend-btn:hover:not(:disabled) { color: #c084fc; }
-.auth-page--staff    .auth-resend-btn        { color: #5924b4; }
-.auth-page--staff    .auth-resend-btn:hover:not(:disabled) { color: #7c3aed; }
+.auth-page--staff .auth-resend-btn {
+  color: #5924b4;
+}
+.auth-page--staff .auth-resend-btn:hover:not(:disabled) {
+  color: #3b0764;
+  background: rgba(89,36,180,.08);
+}
+.auth-page--staff .auth-resend-btn:disabled {
+  color: rgba(15,5,32,.3);
+  cursor: not-allowed;
+}
+
 
 /* ═══════════════════════════════════════════════════════════════
    RESPONSIVE
@@ -679,4 +716,35 @@
   .auth-title { font-size: 24px; }
   .otp-group  { gap: 8px; }
   .otp-input  { width: 40px; height: 50px; font-size: 18px; }
+}
+
+/* Rate-limit cooldown message */
+.auth-cooldown-msg {
+  font-size: 12.5px;
+  color: rgba(251,146,60,.85);
+  background: rgba(251,146,60,.07);
+  border: 1px solid rgba(251,146,60,.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 10px 0 0;
+  text-align: center;
+  line-height: 1.5;
+}
+.auth-cooldown-msg strong {
+  color: #fb923c;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shake animation for wrong OTP */
+@keyframes authCardShake {
+  0%,100% { transform: translateX(0); }
+  15%     { transform: translateX(-7px); }
+  30%     { transform: translateX(7px); }
+  45%     { transform: translateX(-5px); }
+  60%     { transform: translateX(5px); }
+  75%     { transform: translateX(-3px); }
+  90%     { transform: translateX(3px); }
+}
+.auth-card--shake {
+  animation: authCardShake .5s ease both;
 }
