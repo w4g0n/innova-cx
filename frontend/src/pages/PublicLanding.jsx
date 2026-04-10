@@ -923,7 +923,7 @@ function SolarSystem({ onReady }) {
       };
     }
 
-    const THREE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+    const THREE_CDN = "/three.min.js"; // served locally — no CDN dependency
 
     if (window.THREE) {
       init();
