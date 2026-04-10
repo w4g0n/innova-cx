@@ -936,7 +936,20 @@ function SolarSystem({ onReady }) {
       }
       const script = document.createElement("script");
       script.src = THREE_CDN;
-      script.onload = init;
+      script.onload = () => {
+        try {
+          init();
+        } catch (err) {
+          console.warn('[SolarSystem] WebGL unavailable, using CSS fallback:', err.message);
+          if (mount) mount.classList.add('pl-solar-fallback');
+          onReady && onReady();
+        }
+      };
+      script.onerror = () => {
+        console.warn('[SolarSystem] Failed to load three.min.js, using CSS fallback');
+        if (mount) mount.classList.add('pl-solar-fallback');
+        onReady && onReady();
+      };
       document.head.appendChild(script);
       return () => { if (mount._cleanup) mount._cleanup(); if (script.parentNode) script.parentNode.removeChild(script); };
     }
