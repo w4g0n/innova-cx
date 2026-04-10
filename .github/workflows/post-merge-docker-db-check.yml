@@ -42,19 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           CI_COMPOSE_FILE="${PWD}/.github/ci.merge-gate.compose.yml"
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          src = Path("docker-compose.yml").read_text()
-          src = src.replace("      - ./database/pg_hba.conf:/etc/postgresql/pg_hba.conf\n", "")
-          src = re.sub(
-              r"command:\s*postgres -c hba_file=[^\n]+",
-              "command: postgres -c hba_file=/docker-entrypoint-initdb.d/pg_hba.conf",
-              src,
-          )
-          Path(".github/ci.merge-gate.compose.yml").write_text(src)
-          PY
+          python3 -c 'from pathlib import Path; import re; src = Path("docker-compose.yml").read_text(); src = src.replace("      - ./database/pg_hba.conf:/etc/postgresql/pg_hba.conf\n", ""); src = re.sub(r"command:\s*postgres -c hba_file=[^\n]+", "command: postgres -c hba_file=/docker-entrypoint-initdb.d/pg_hba.conf", src); Path(".github/ci.merge-gate.compose.yml").write_text(src)'
 
           docker_compose() {
             docker compose -f "$CI_COMPOSE_FILE" "$@"
@@ -207,18 +195,11 @@ jobs:
             export PRIORITY_MODEL_DIR=/tmp/nonexistent-priority-model
 
             echo "--- Effective postgres compose snippet ---"
-            python3 - <<'PY'
-            from pathlib import Path
-            lines = Path(".github/ci.merge-gate.compose.yml").read_text().splitlines()
-            capture = False
-            for line in lines:
-                if line.startswith("  postgres:"):
-                    capture = True
-                elif capture and line.startswith("  ") and not line.startswith("    "):
-                    break
-                if capture:
-                    print(line)
-            PY
+            awk '
+              /^  postgres:/ { capture=1 }
+              capture && /^  [^ ]/ && $0 !~ /^  postgres:/ { exit }
+              capture { print }
+            ' .github/ci.merge-gate.compose.yml
 
             # Compose on the self-hosted runner occasionally fails while resolving
             # depends_on: service_healthy during `up`, reporting "No such container"
