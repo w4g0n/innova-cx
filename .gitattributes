@@ -21,6 +21,11 @@ test.csv              merge=ours
 README.md             merge=ours
 CLOUD_README.md       merge=ours
 
+# Cross-platform line-ending safety for executable scripts and Docker files
+*.sh                  text eol=lf
+Dockerfile            text eol=lf
+**/Dockerfile         text eol=lf
+
 # Git LFS (retained for compatibility; actual files absent from prod-live)
 data/synthesizerv7/models/**/*.safetensors filter=lfs diff=lfs merge=lfs -text
 data/synthesizerv7/models/**/*.bin         filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,17 @@
+[Unit]
+Description=InnovaCX live stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/innova-cx
+ExecStart=/bin/bash /opt/innova-cx/scripts/gcp-live-up.sh
+ExecStop=/bin/bash -lc 'cd /opt/innova-cx && docker compose --profile live down --remove-orphans'
+RemainAfterExit=yes
+TimeoutStartSec=0
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

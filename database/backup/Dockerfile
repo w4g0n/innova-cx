@@ -23,12 +23,15 @@ COPY backup.sh       /usr/local/bin/backup.sh
 COPY restore_test.sh /usr/local/bin/restore_test.sh
 COPY entrypoint.sh   /usr/local/bin/entrypoint.sh
 
-# Make all scripts executable
-RUN chmod +x /usr/local/bin/backup.sh \
-             /usr/local/bin/restore_test.sh \
-             /usr/local/bin/entrypoint.sh
+# Normalize Windows line endings and make all scripts executable
+RUN sed -i 's/\r$//' /usr/local/bin/backup.sh \
+    && sed -i 's/\r$//' /usr/local/bin/restore_test.sh \
+    && sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
+    && chmod +x /usr/local/bin/backup.sh \
+              /usr/local/bin/restore_test.sh \
+              /usr/local/bin/entrypoint.sh
 
 # The backup volume will be mounted at /backups
 RUN mkdir -p /backups
 
-CMD ["/usr/local/bin/entrypoint.sh"]
+CMD ["/bin/sh", "/usr/local/bin/entrypoint.sh"]
