@@ -5,7 +5,10 @@ import ProtectedRoute from "./auth/ProtectedRoute";
 
 const PublicLanding = lazy(() => import("./pages/PublicLanding"));
 const Login = lazy(() => import("./pages/Login"));
-const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ForgotPassword    = lazy(() => import("./pages/ForgotPassword"));
+const ConfirmMfaReset   = lazy(() => import("./pages/ConfirmMfaReset"));
+const SignUp            = lazy(() => import("./pages/SignUp"));
+const OAuthCallback     = lazy(() => import("./pages/OAuthCallback"));
 
 const CustomerLoadingSkeleton = lazy(() => import("./pages/customer/CustomerLoadingSkeleton"));
 const CustomerLanding = lazy(() =>
@@ -141,7 +144,10 @@ export default function App() {
           />
 
           <Route path="/login" element={<Login />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/forgot-password"    element={<ForgotPassword />} />
+          <Route path="/confirm-mfa-reset"  element={<ConfirmMfaReset />} />
+          <Route path="/signup"             element={<SignUp />} />
+          <Route path="/auth/callback"      element={<OAuthCallback />} />
 
           {/* Customer */}
           <Route

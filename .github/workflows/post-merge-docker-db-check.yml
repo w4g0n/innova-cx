@@ -158,6 +158,9 @@ jobs:
             local services=""
             echo "=== Running profile: $profile ==="
 
+            # Force-remove any lingering named containers and volumes from a previous run
+            docker rm -f innovacx-db innovacx-backend innovacx-frontend innovacx-backup innovacx-orchestrator innovacx-chatbot innovacx-transcriber 2>/dev/null || true
+            docker volume rm innova-cx_postgres_data innova-cx_uploads_data innova-cx_backup_data 2>/dev/null || true
             docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
 
             # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
@@ -300,4 +303,6 @@ jobs:
           INTERNAL_API_KEY: ci-internal-api-key-placeholder-value
           RESEND_API_KEY: re_placeholder_ci_key_not_used_in_tests
         working-directory: ${{ github.workspace }}
-        run: docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+        run: |
+          docker rm -f innovacx-db innovacx-backend innovacx-frontend innovacx-backup 2>/dev/null || true
+          docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true

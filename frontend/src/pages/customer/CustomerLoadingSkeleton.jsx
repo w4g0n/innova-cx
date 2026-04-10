@@ -25,7 +25,8 @@ export default function CustomerLoadingSkeleton() {
       // Ease-out curve: fast at start, slows near end
       const raw = step / steps;
       const eased = 1 - Math.pow(1 - raw, 2.4);
-      setProgress(Math.min(Math.round(eased * 100), 98)); // never fully 100 until done
+      const pct = step >= steps ? 100 : Math.min(Math.round(eased * 100), 98);
+      setProgress(pct);
       setPhase(Math.min(Math.floor(raw * PHASES.length), PHASES.length - 1));
 
       if (step >= steps) clearInterval(timer);
