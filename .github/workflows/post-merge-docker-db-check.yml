@@ -119,7 +119,7 @@ jobs:
                     ;;
                   *.sh)
                     echo "==> [ci-fallback] sh ${file##*/}"
-                    "$file"
+                    sh "$file"
                     ;;
                   *)
                     echo "==> [ci-fallback] skipping ${file##*/}"
