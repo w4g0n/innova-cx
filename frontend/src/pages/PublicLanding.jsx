@@ -1062,13 +1062,19 @@ export default function PublicLanding() {
   const readyRef = useRef(false);
   const splashDoneRef = useRef(false);
 
-  // Minimum hold: 2.8s so text animations finish before fade-out
+  // Minimum hold: 2.8s so text animations finish before fade-out.
+  // Hard fallback at 6s: if Three.js/WebGL never fires onReady, clear splash anyway.
   useEffect(() => {
     const t = setTimeout(() => {
       splashDoneRef.current = true;
       if (readyRef.current) setReady(true);
     }, 2800);
-    return () => clearTimeout(t);
+    const fallback = setTimeout(() => {
+      readyRef.current = true;
+      splashDoneRef.current = true;
+      setReady(true);
+    }, 6000);
+    return () => { clearTimeout(t); clearTimeout(fallback); };
   }, []);
 
   const handleReady = () => {
