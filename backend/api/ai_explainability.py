@@ -9,12 +9,28 @@ from psycopg2.extras import RealDictCursor
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+try:
+    from .pipeline_queue_api import _STAGE_DESCRIPTIONS, _explain_stage  # noqa: F401
+except Exception:
+    from pipeline_queue_api import _STAGE_DESCRIPTIONS, _explain_stage  # noqa: F401
+
 router = APIRouter()
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8004").rstrip("/")
 ORCHESTRATOR_URL_LOCAL = os.getenv("ORCHESTRATOR_URL_LOCAL", "http://localhost:8004").rstrip("/")
 
+
+def _iso(val) -> Optional[str]:
+    return val.isoformat() if val else None
+
+
+def _flt(val) -> Optional[float]:
+    return float(val) if val is not None else None
+
 PRIORITY_LEVELS = ["low", "medium", "high", "critical"]
 PRIORITY_TO_INDEX = {name: idx for idx, name in enumerate(PRIORITY_LEVELS)}
+
+_SENTIMENT_NEGATIVE_THRESHOLD = -0.25
+_SENTIMENT_POSITIVE_THRESHOLD = 0.25
 
 
 def _normalize_3level(value: Any, default: str = "medium") -> str:
@@ -28,9 +44,9 @@ def _normalize_sentiment(value: Any) -> str:
         return s
     try:
         n = float(value)
-        if n < -0.25:
+        if n < _SENTIMENT_NEGATIVE_THRESHOLD:
             return "negative"
-        if n > 0.25:
+        if n > _SENTIMENT_POSITIVE_THRESHOLD:
             return "positive"
         return "neutral"
     except Exception:
@@ -172,7 +188,7 @@ def _build_default_dsn() -> str:
     host = os.getenv("DB_HOST", "localhost")
     port = os.getenv("DB_PORT", "5432")
     name = os.getenv("DB_NAME", "complaints_db")
-    user = os.getenv("DB_USER", "innovacx_admin")
+    user = os.getenv("DB_USER", "innovacx_app")
     password = os.getenv("DB_PASSWORD", "changeme123")
     return f"postgresql://{user}:{password}@{host}:{port}/{name}"
 
@@ -203,9 +219,6 @@ def _fetch_all(sql: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]
 
 @router.get("/operator/ai-explainability")
 def get_operator_ai_explainability_runs(limit: int = Query(default=50, ge=1, le=200)):
-    def _iso(val):
-        return val.isoformat() if val else None
-
     try:
         rows = _fetch_all(
             """
@@ -246,59 +259,33 @@ def get_operator_ai_explainability_runs(limit: int = Query(default=50, ge=1, le=
 
 
 @router.get("/operator/ai-explainability/tickets")
-def get_operator_ai_explainability_tickets(
-    status: Optional[str] = Query(default=None),
-    limit: int = Query(default=500, ge=1, le=2000),
-):
-    def _iso(val):
-        return val.isoformat() if val else None
-
-    allowed_statuses = {
-        "Open",
-        "Assigned",
-        "In Progress",
-        "Resolved",
-        "Escalated",
-        "Overdue",
-    }
-    status_filter = (status or "").strip()
-    if status_filter and status_filter not in allowed_statuses:
-        raise HTTPException(status_code=422, detail="Invalid status filter")
-
-    base_sql = """
+def get_operator_ai_explainability_tickets(limit: int = Query(default=500, ge=1, le=2000)):
+    items = _fetch_all(
+        """
         SELECT
-            t.id::text               AS ticket_id,
-            t.ticket_code            AS ticket_code,
-            t.subject                AS subject,
-            t.status::text           AS status,
-            t.priority::text         AS priority,
-            d.name                   AS department_name,
-            up_assigned.full_name    AS assigned_to_name,
-            t.created_at             AS created_at
+            t.id::text AS ticket_id,
+            t.ticket_code AS ticket_code,
+            t.subject AS subject,
+            CASE
+                WHEN pq.status = 'completed' THEN 'Completed'
+                ELSE t.status::text
+            END AS status,
+            t.priority::text AS priority,
+            d.name AS department_name,
+            up_assigned.full_name AS assigned_to_name,
+            t.created_at AS created_at,
+            pq.completed_at AS pipeline_completed_at
         FROM tickets t
+        LEFT JOIN pipeline_queue pq ON pq.ticket_id = t.id
         LEFT JOIN departments d ON d.id = t.department_id
         LEFT JOIN user_profiles up_assigned ON up_assigned.user_id = t.assigned_to_user_id
-    """
-
-    params: List[Any] = []
-    if status_filter:
-        base_sql += " WHERE t.status = %s::ticket_status"
-        params.append(status_filter)
-
-    base_sql += " ORDER BY t.created_at DESC LIMIT %s"
-    params.append(limit)
-
-    items = _fetch_all(base_sql, tuple(params)) or []
-
-    counts_rows = _fetch_all(
-        """
-        SELECT t.status::text AS status, COUNT(*)::int AS count
-        FROM tickets t
-        GROUP BY t.status
-        ORDER BY t.status
-        """
+        WHERE pq.status = 'completed'
+           OR lower(coalesce(t.status::text, '')) IN ('completed', 'resolved')
+        ORDER BY COALESCE(pq.completed_at, t.created_at) DESC
+        LIMIT %s
+        """,
+        (limit,),
     ) or []
-    counts = {r.get("status"): int(r.get("count") or 0) for r in counts_rows}
 
     return {
         "items": [
@@ -311,28 +298,18 @@ def get_operator_ai_explainability_tickets(
                 "department": r.get("department_name") or "Unassigned",
                 "assignedTo": r.get("assigned_to_name") or "Unassigned",
                 "createdAt": _iso(r.get("created_at")),
+                "pipelineCompletedAt": _iso(r.get("pipeline_completed_at")),
             }
             for r in items
         ],
         "statusCounts": {
-            "Open": counts.get("Open", 0),
-            "Assigned": counts.get("Assigned", 0),
-            "In Progress": counts.get("In Progress", 0),
-            "Resolved": counts.get("Resolved", 0),
-            "Escalated": counts.get("Escalated", 0),
-            "Overdue": counts.get("Overdue", 0),
+            "Completed": len(items),
         },
     }
 
 
 @router.get("/operator/ai-explainability/tickets/{ticket_id}")
 def get_operator_ai_explainability_ticket(ticket_id: str):
-    def _iso(val):
-        return val.isoformat() if val else None
-
-    def _flt(val):
-        return float(val) if val is not None else None
-
     ticket_row = _fetch_one(
         """
         SELECT
@@ -529,6 +506,12 @@ def get_operator_ai_explainability_ticket(ticket_id: str):
                 "inputState": s.get("input_state") or {},
                 "outputState": s.get("output_state") or {},
                 "errorMessage": s.get("error_message"),
+                "description": _STAGE_DESCRIPTIONS.get(s.get("stage_name"), ""),
+                "explanation": _explain_stage(
+                    s.get("stage_name"),
+                    s.get("output_state") or {},
+                    s.get("error_message"),
+                ),
                 "createdAt": _iso(s.get("created_at")),
             }
             for s in pipeline_stages

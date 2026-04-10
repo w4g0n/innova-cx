@@ -106,7 +106,6 @@
   }
 }
 
-/* Fix modal overlay (no muddy background) */
 :is(.cpw-overlay, .cpw-backdrop, .cpwBackdrop, .changePasswordOverlay, .changePasswordBackdrop) {
   background: rgba(15, 10, 24, 0.18) !important;
   backdrop-filter: blur(6px) !important;

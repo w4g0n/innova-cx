@@ -9,6 +9,11 @@ import {
 import "./TicketReviewDetail.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 import { apiUrl } from "../../config/apiBase";
+import {
+  sanitizeText,
+  sanitizeId,
+  MAX_NOTE_LEN,
+} from "./Operatorsanitize";
 
 function getStoredToken() {
   const direct =
@@ -58,7 +63,6 @@ const EXEC_COLOR      = { success: "green", failed: "red", running: "amber", ski
 const AGENT_ICONS     = { sentiment: "brain", feature: "settings", routing: "shuffle", priority: "sliders", resolution: "zap", sla: "clock" };
 const UPDATE_ICONS    = { status_change: "refresh-cw", assignment: "user", override: "edit", resolution: "check-circle", comment: "message-circle" };
 
-// ── Inline SVG icon component ─────────────────────────────────────────────────
 function Ico({ name, size = 14, style = {} }) {
   const p = {
     width: size, height: size, viewBox: "0 0 24 24",
@@ -249,7 +253,8 @@ function ErrorView({ ticketId, message, onRetry }) {
 }
 
 export default function TicketReviewDetail() {
-  const { ticketId } = useParams();
+  const { ticketId: rawTicketId } = useParams();
+  const ticketId  = sanitizeId(rawTicketId);
   const navigate     = useNavigate();
   const revealRef    = useScrollReveal();
 
@@ -266,15 +271,31 @@ export default function TicketReviewDetail() {
   // FIX: useCallback so the function reference is stable — prevents infinite re-renders
   // and ensures onRetry always calls the latest version.
   const loadTicket = useCallback(async () => {
+    if (!ticketId) { setError("Invalid ticket ID."); setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
-      const raw = await apiFetch(`/operator/complaints/${ticketId}`);
+      const raw = await apiFetch(`/operator/complaints/${encodeURIComponent(ticketId)}`);
       const t   = transformTicket(raw);
+      // Sanitize string fields at the load boundary
+      t.ticketCode   = sanitizeId(t.ticketCode);
+      t.subject      = sanitizeText(t.subject, 300);
+      t.details      = sanitizeText(t.details, 5000);
+      t.status       = sanitizeText(t.status, 50);
+      t.priority     = sanitizeText(t.priority, 50);
+      t.finalDept    = sanitizeText(t.finalDept, 100);
+      t.assignedToName  = sanitizeText(t.assignedToName, 100);
+      t.assignedToTitle = sanitizeText(t.assignedToTitle, 100);
+      t.createdByName   = sanitizeText(t.createdByName, 100);
+      t.createdByRole   = sanitizeText(t.createdByRole, 100);
+      t.suggestedResolution = sanitizeText(t.suggestedResolution, 5000);
+      t.finalResolution     = sanitizeText(t.finalResolution, 5000);
+      t.routingReason       = sanitizeText(t.routingReason, 1000);
+      t.overrideReason      = sanitizeText(t.overrideReason, 1000);
       setTicketData(t);
       setFeedbackAct(t.feedbackDecision);
-    } catch (err) {
-      setError(err.message);
+    } catch {
+      setError("Failed to load ticket details. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -316,7 +337,6 @@ export default function TicketReviewDetail() {
           ← Quality Control
         </button>
 
-        {/* ── HERO ── */}
         <div className="trd-hero">
           <div className="trd-hero__left">
             <div className="trd-hero__top-row">
@@ -369,7 +389,6 @@ export default function TicketReviewDetail() {
           </div>
         </div>
 
-        {/* ── TABS ── */}
         <div className="trd-tabs">
           {TABS.map((tb) => (
             <button
@@ -383,7 +402,6 @@ export default function TicketReviewDetail() {
           ))}
         </div>
 
-        {/* ── TAB: OVERVIEW ── */}
         <TabPanel id="overview" active={tab}>
           <div className="trd-overview">
             <div className="trd-card trd-card--full">
@@ -472,7 +490,6 @@ export default function TicketReviewDetail() {
           </div>
         </TabPanel>
 
-        {/* ── TAB: AI ANALYSIS ── */}
         <TabPanel id="ai" active={tab}>
           <div className="trd-ai">
             {t.humanOverridden && (
@@ -585,7 +602,6 @@ export default function TicketReviewDetail() {
           </div>
         </TabPanel>
 
-        {/* ── TAB: ACTIVITY ── */}
         <TabPanel id="activity" active={tab}>
           <div className="trd-activity">
             {t.ticketUpdates.length === 0 ? (
@@ -617,7 +633,6 @@ export default function TicketReviewDetail() {
           </div>
         </TabPanel>
 
-        {/* ── TAB: RESOLUTION ── */}
         <TabPanel id="resolution" active={tab}>
           <div className="trd-resolution">
             <div className="trd-card trd-card--full">
@@ -672,9 +687,13 @@ export default function TicketReviewDetail() {
                 className="trd-textarea"
                 placeholder="e.g. Model missed 'VPN' vocabulary — route to IT was obvious from the subject. Flagging for retraining dataset."
                 value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
+                onChange={(e) => setNoteText(e.target.value.slice(0, MAX_NOTE_LEN))}
+                maxLength={MAX_NOTE_LEN}
                 rows={4}
               />
+              <div style={{ fontSize: 11, color: "rgba(26,26,46,0.4)", textAlign: "right", marginTop: 2 }}>
+                {noteText.length}/{MAX_NOTE_LEN}
+              </div>
               <div className="trd-note-footer">
                 <button type="button" className="trd-save-btn" onClick={saveNote}>Save Note</button>
                 {noteSaved && <span className="trd-note-saved">✓ Saved</span>}

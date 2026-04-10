@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
+import { sanitizeText } from "../../pages/customer/sanitize";
 import "./TicketChat.css";
 
 /**
@@ -47,7 +49,7 @@ function Avatar({ role, initials }) {
   );
 }
 
-export default function TicketChat({ ticketId, role, authHeader, disabled }) {
+export default function TicketChat({ ticketId, role, authHeader, disabled, paused = false }) {
   const [messages, setMessages]       = useState([]);
   const [text, setText]               = useState("");
   const [sending, setSending]         = useState(false);
@@ -59,7 +61,6 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
   const inputRef   = useRef(null);
   const pollRef    = useRef(null);
 
-  /* ── fetch messages ─────────────────────────────────────────── */
   const fetchMessages = useCallback(async (silent = false) => {
     if (!silent) setLoadingMsgs(true);
     try {
@@ -78,21 +79,25 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
     }
   }, [ticketId, role, authHeader]);
 
+  // Initial load
   useEffect(() => {
     fetchMessages(false);
-    pollRef.current = setInterval(() => fetchMessages(true), 5000);
-    return () => clearInterval(pollRef.current);
   }, [fetchMessages]);
 
-  /* ── scroll to bottom on new messages ─────────────────────── */
+  // Polling — pauses while a modal is open so the background doesn't flicker
+  useEffect(() => {
+    if (paused) return;
+    pollRef.current = setInterval(() => fetchMessages(true), 5000);
+    return () => clearInterval(pollRef.current);
+  }, [fetchMessages, paused]);
+
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages]);
 
-  /* ── send message ───────────────────────────────────────────── */
-  const send = async (content = text.trim()) => {
+  const send = async (content = sanitizeText(text.trim(), 5000)) => {
     if (!content || sending || disabled) return;
     setError("");
     setSending(true);
@@ -111,11 +116,16 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
 
     try {
       const base = role === "employee" ? "/api/employee/tickets" : "/api/customer/tickets";
+      const csrf = await getCsrfToken();
       const res = await fetch(
         apiUrl(`${base}/${encodeURIComponent(ticketId)}/messages`),
         {
           method: "POST",
-          headers: { ...authHeader(), "Content-Type": "application/json" },
+          headers: {
+            ...authHeader(),
+            "Content-Type": "application/json",
+            ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+          },
           body: JSON.stringify({ body: content }),
         }
       );
@@ -134,7 +144,6 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
-  /* ── group messages by sender runs ─────────────────────────── */
   const grouped = messages.reduce((acc, msg, i) => {
     const prev = messages[i - 1];
     const sameRun = prev && prev.senderRole === msg.senderRole;
@@ -180,9 +189,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
             const isEmp = run[0].senderRole === "employee";
             return (
               <div key={ri} className={`tc-run ${isOwn ? "tc-run--own" : "tc-run--other"}`}>
-                {!isOwn && (
-                  <Avatar role={run[0].senderRole} />
-                )}
+
                 <div className="tc-bubbles">
                   {!isOwn && (
                     <span className="tc-sender-label">
@@ -198,7 +205,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled }) {
                   ))}
                   <span className="tc-time">{formatTime(run[run.length - 1].createdAt)}</span>
                 </div>
-                {isOwn && <Avatar role={role} />}
+
               </div>
             );
           })

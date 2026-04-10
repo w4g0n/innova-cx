@@ -72,7 +72,6 @@ def get_ticket_status(ticket_id: str, user_id: str) -> dict:
 
 
 def get_open_tickets(user_id: str) -> dict:
-    query = ""  # ensure always defined so the except block can reference it safely
     try:
         rows, query = _fetch_open_ticket_rows(user_id)
 

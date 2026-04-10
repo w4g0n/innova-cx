@@ -4,7 +4,7 @@
    ============================================================ */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
-/* ── Page shell ── */
+/* Page shell */
 .umPage {
   width: 100%;
   max-width: none;
@@ -16,7 +16,7 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Toast ── */
+/* Toast */
 .umToast {
   display: flex;
   align-items: center;
@@ -45,7 +45,7 @@
 .umToast.success::before { content: "✓"; }
 .umToast.error::before   { content: "!"; }
 
-/* ── KPI grid ── */
+/* KPI grid */
 .umKpis {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -54,10 +54,10 @@
   margin-bottom: 26px;
 }
 
-/* ── Search row ── */
+/* Search row */
 .umSearchRow { margin-bottom: 12px; }
 
-/* ── KPI card (legacy classes kept, override via specificity) ── */
+/* KPI card (legacy classes kept, override via specificity) */
 .umKpi {
   background: #fff;
   border-radius: 12px;
@@ -97,7 +97,7 @@
   line-height: 1;
 }
 
-/* ── Filters row ── */
+/* Filters row */
 .umFilters {
   display: flex;
   gap: 8px;
@@ -107,7 +107,7 @@
   flex-wrap: wrap;
 }
 
-/* ── Table card ── */
+/* Table card */
 .umTableCard {
   border-radius: 14px;
   border: 1px solid #e8e8ed;
@@ -175,7 +175,7 @@
   font-size: 14px;
 }
 
-/* ── Role & Status pills ── */
+/* Role & Status pills */
 .umPill {
   display: inline-flex;
   align-items: center;
@@ -195,7 +195,7 @@
 .status-active   { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
 .status-inactive { background: #fff1f2; border: 1px solid #fecdd3; color: #be123c; }
 
-/* ── 3-dot menu ── */
+/* 3-dot menu */
 .umMenuWrap {
   position: relative;
   display: inline-flex;
@@ -274,7 +274,7 @@
 .umMenuItem.danger         { color: #be123c; }
 .umMenuItem.danger:hover   { background: #fff1f2; }
 
-/* ── Buttons (shared) ── */
+/* Buttons (shared) */
 .umBtnPrimary {
   background: linear-gradient(135deg, #6d28d9, #7c3aed);
   color: #fff;
@@ -314,7 +314,7 @@
   border-color: #d1d5db;
 }
 
-/* ── Modal overlay & card ── */
+/* Modal overlay & card */
 .umModalOverlay {
   position: fixed;
   inset: 0;
@@ -451,7 +451,7 @@
   border-top: 1px solid #f3f4f6;
 }
 
-/* ── Password toggle ── */
+/* Password toggle */
 .umPwdWrap {
   position: relative;
   display: flex;
@@ -475,7 +475,7 @@
 }
 .umEyeBtn:hover { color: #7c3aed; }
 
-/* ── Phone input overrides ── */
+/* Phone input overrides */
 .umPhoneWrap .react-tel-input { width: 100%; }
 
 .umPhoneWrap .react-tel-input .form-control {
@@ -514,7 +514,7 @@
   font-family: "DM Sans", sans-serif !important;
 }
 
-/* ── Responsive ── */
+/* Responsive */
 @media (max-width: 1100px) {
   .umKpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -525,4 +525,182 @@
 @media (max-width: 640px) {
   .umTable thead th,
   .umTable tbody td { padding: 10px 12px; }
+}
+
+.umPwdStrength {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 6px;
+}
+
+.umPwdBars {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.umPwdBar {
+  height: 3px;
+  flex: 1;
+  border-radius: 999px;
+  transition: background 0.25s ease;
+}
+
+.umPwdLabel {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  min-width: 72px;
+  text-align: right;
+}
+
+.umPwdReqs {
+  list-style: none;
+  margin: 4px 0 6px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.06);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 8px;
+}
+
+.umPwdReq {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.umPwdReq.pass {
+  color: #34d399;
+}
+
+.umPwdReq.fail {
+  color: rgb(167, 0, 0);
+}
+
+.umPwdReqIcon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.umPwdReq.pass .umPwdReqIcon {
+  background: rgba(52, 211, 153, .15);
+  color: #34d399;
+}
+
+.umPwdReq.fail .umPwdReqIcon {
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.28);
+}
+
+.umPwdAssist {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-6px);
+  transition:
+    max-height 0.28s ease,
+    opacity 0.22s ease,
+    transform 0.22s ease,
+    margin-top 0.22s ease;
+  margin-top: 0;
+}
+
+.umPwdAssist.show {
+  max-height: 220px;
+  opacity: 1;
+  transform: translateY(0);
+  margin-top: 8px;
+}
+
+.umPwdStrength {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 6px;
+}
+
+.umPwdBars {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.umPwdBar {
+  height: 3px;
+  flex: 1;
+  border-radius: 999px;
+  transition: background 0.25s ease;
+}
+
+.umPwdLabel {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  min-width: 72px;
+  text-align: right;
+}
+
+.umPwdReqs {
+  list-style: none;
+  margin: 4px 0 6px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.06);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 8px;
+}
+
+.umPwdReq {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.umPwdReq.pass {
+  color: #34d399;
+}
+
+.umPwdReq.fail {
+  color: #f87171;
+}
+
+.umPwdReqIcon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.umPwdReq.pass .umPwdReqIcon {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+}
+
+.umPwdReq.fail .umPwdReqIcon {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
 }

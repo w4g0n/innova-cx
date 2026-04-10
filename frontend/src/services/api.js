@@ -24,6 +24,22 @@ const API_CONFIG = {
     inferServiceBase(8004, "http://localhost:8004"),
 };
 
+let _csrfToken = null;
+
+export async function getCsrfToken() {
+  if (_csrfToken) return _csrfToken;
+  try {
+    const res = await fetch(apiUrl("/api/csrf-token"));
+    if (res.ok) {
+      const data = await res.json();
+      _csrfToken = data.csrf_token;
+    }
+  } catch {
+    // silently fail — server will reject the form with 403 if token is missing
+  }
+  return _csrfToken;
+}
+
 /**
  * Transcribe audio file using Whisper service
  * @param {Blob} audioBlob - Audio blob to transcribe
@@ -36,6 +52,7 @@ export async function transcribeAudio(audioBlob, filename = "recording.mp4") {
 
   const response = await fetch(`${API_CONFIG.backend}/api/transcriber/transcribe`, {
     method: "POST",
+    credentials: "include",
     body: formData,
   });
 
@@ -117,9 +134,14 @@ export async function sendChatMessage(message, options = {}) {
     throw new Error("sendChatMessage requires options.userId");
   }
 
+  const csrf = await getCsrfToken();
   const response = await fetch(apiUrl("/api/chatbot/chat"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+    },
     body: JSON.stringify({ message, user_id: userId, session_id: sessionId }),
   });
 
@@ -160,6 +182,7 @@ export async function submitTextComplaint(text, options = {}) {
   }
   const response = await fetch(apiUrl("/api/orchestrator/process/text"), {
     method: "POST",
+    credentials: "include",
     body,
   });
 
@@ -193,7 +216,6 @@ export async function submitTextComplaint(text, options = {}) {
  * @returns {Promise<{ok: boolean, message?: string, ticket?: {ticketId?: string}}>}
  */
 export async function submitCustomerTicket(payload = {}) {
-  const token = localStorage.getItem("access_token");
   const rawUser = localStorage.getItem("user");
   let user = {};
   try {
@@ -215,11 +237,13 @@ export async function submitCustomerTicket(payload = {}) {
     attachments: Array.isArray(payload.attachments) ? payload.attachments : [],
   };
 
+  const csrf = await getCsrfToken();
   const response = await fetch(apiUrl("/api/customer/tickets"), {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(csrf ? { "X-CSRF-Token": csrf } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -231,6 +255,32 @@ export async function submitCustomerTicket(payload = {}) {
   }
 
   return response.json();
+}
+
+/**
+ * Upload attachment files for a customer ticket after it has been created.
+ * @param {string} ticketCode
+ * @param {File[]} files
+ */
+export async function uploadCustomerAttachments(ticketCode, files) {
+  if (!files || files.length === 0) return;
+  for (const file of files) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const csrf = await getCsrfToken();
+    const res = await fetch(
+      apiUrl(`/api/customer/tickets/${encodeURIComponent(ticketCode)}/attachments`),
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
+        body: fd,
+      }
+    );
+    if (!res.ok) throw new Error(`Attachment upload failed (${res.status})`);
+  }
 }
 
 /**
@@ -269,12 +319,11 @@ export async function getAudioReply({
   messageType = "ticket_logged",
 } = {}) {
   try {
-    const token = localStorage.getItem("access_token");
     const response = await fetch(apiUrl("/api/tts/speak"), {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
         message_type: messageType,

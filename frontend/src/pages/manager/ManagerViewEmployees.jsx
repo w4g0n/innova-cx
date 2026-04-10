@@ -7,6 +7,12 @@ import PillSearch from "../../components/common/PillSearch";
 import KpiCard from "../../components/common/KpiCard";
 import EmployeeReportPDF from "../employee/EmployeeReportPDF";
 import { apiUrl } from "../../config/apiBase";
+import {
+  sanitizeText,
+  sanitizeId,
+  sanitizeSearchQuery,
+  MAX_SEARCH_LEN,
+} from "./ManagerSanitize";
 import "./ManagerViewEmployees.css";
 
 const API_BASE = apiUrl("/api");
@@ -142,11 +148,17 @@ export default function ManagerViewEmployees() {
         }
 
         const data = await res.json();
-        setEmployees(Array.isArray(data) ? data : data.employees || []);
+        const raw = Array.isArray(data) ? data : data.employees || [];
+        setEmployees(raw.map((e) => ({
+          ...e,
+          name: sanitizeText(e.name, 100),
+          id:   sanitizeId(e.id),
+          role: sanitizeText(e.role, 100),
+        })));
       } catch (err) {
         console.error(err);
         setEmployees([]);
-        setError("Failed to load employees.");
+        setError("Failed to load employees. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -225,12 +237,12 @@ export default function ManagerViewEmployees() {
             <section className="ve-searchRow">
               <PillSearch
                 value={query}
-                onChange={(v) =>
-                  typeof v === "string"
-                    ? setQuery(v)
-                    : setQuery(v?.target?.value ?? "")
-                }
+                onChange={(v) => {
+                  const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
+                  setQuery(sanitizeSearchQuery(raw));
+                }}
                 placeholder="Search employees by name, ID, or role..."
+                maxLength={MAX_SEARCH_LEN}
               />
             </section>
 

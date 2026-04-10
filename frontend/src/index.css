@@ -148,7 +148,7 @@
   .reveal { opacity: 1; transform: none; }
 }
 
-/*  Reset  */
+/* Reset */
 *, *::before, *::after { box-sizing: border-box; }
 
 html, body {
@@ -178,7 +178,7 @@ p  { margin: 0; }
 button { font-family: inherit; cursor: pointer; }
 a  { text-decoration: none; color: inherit; }
 
-/*  Focus ring */
+/* Focus ring */
 :focus-visible {
   outline: none;
   box-shadow: var(--shadow-glow);

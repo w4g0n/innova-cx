@@ -1,0 +1,891 @@
+{
+  "info": {
+    "_postman_id": "d75f686b-2384-444c-9b44-cf9bcaaf95d3",
+    "name": "User APIs",
+    "description": "User-facing endpoints for chatbot, complaint submission, tracking, and dashboard.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "51309617",
+    "_collection_link": "https://go.postman.co/collection/51309617-d75f686b-2384-444c-9b44-cf9bcaaf95d3?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "User Dashboard",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/user/dashboard",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "user",
+            "dashboard"
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "User Dashboard - 200 OK",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/user/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "dashboard"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n    \"user\": {\n        \"id\": \"USR-501\",\n        \"fullName\": \"Amina Khalid\",\n        \"company\": \"Dubai CommerCity Tenant\",\n        \"phoneE164\": \"+971501234567\"\n    },\n    \"quickActions\": [\n        {\n            \"id\": \"raise_audio\",\n            \"title\": \"Raise Audio Complaint\",\n            \"description\": \"Record an audio description\",\n            \"route\": \"/raise-audio\"\n        },\n        {\n            \"id\": \"raise_text\",\n            \"title\": \"Raise Text Complaint\",\n            \"description\": \"Submit a formal written complaint\",\n            \"route\": \"/raise-text\"\n        },\n        {\n            \"id\": \"track\",\n            \"title\": \"Track Complaints\",\n            \"description\": \"View status and history\",\n            \"route\": \"/track\"\n        },\n        {\n            \"id\": \"chatbot\",\n            \"title\": \"Chat Assistant\",\n            \"description\": \"Get instant help from Nova\",\n            \"route\": \"/chatbot\"\n        }\n    ],\n    \"openComplaintsPreview\": [\n        {\n            \"ticketId\": \"CX-1122\",\n            \"status\": \"In Progress\",\n            \"priority\": \"Critical\",\n            \"title\": \"Air conditioning not working\",\n            \"submittedAt\": \"2024-11-19T09:10:00Z\"\n        },\n        {\n            \"ticketId\": \"CX-3862\",\n            \"status\": \"Overdue\",\n            \"priority\": \"Critical\",\n            \"title\": \"Water leakage in pantry\",\n            \"submittedAt\": \"2024-11-18T16:45:00Z\"\n        },\n        {\n            \"ticketId\": \"CX-4587\",\n            \"status\": \"Escalated\",\n            \"priority\": \"High\",\n            \"title\": \"Wi-Fi connection unstable\",\n            \"submittedAt\": \"2024-11-19T11:05:00Z\"\n        },\n        {\n            \"ticketId\": \"CX-4630\",\n            \"status\": \"Assigned\",\n            \"priority\": \"High\",\n            \"title\": \"Lift stopping between floors\",\n            \"submittedAt\": \"2024-11-18T08:25:00Z\"\n        }\n    ],\n    \"embeddedChatPreview\": {\n        \"botName\": \"Nova\",\n        \"messages\": [\n            {\n                \"messageId\": \"MSG-9001\",\n                \"role\": \"bot\",\n                \"text\": \"Hello! I’m Nova. I can help you check the status of your complaints or start a new one.\",\n                \"timestamp\": \"2024-11-19T12:02:00Z\"\n            },\n            {\n                \"messageId\": \"MSG-9002\",\n                \"role\": \"user\",\n                \"text\": \"I want to know if my refund request has been processed.\",\n                \"timestamp\": \"2024-11-19T12:03:00Z\"\n            },\n            {\n                \"messageId\": \"MSG-9003\",\n                \"role\": \"bot\",\n                \"text\": \"Sure. Your complaint CX-1122 is currently marked as In Progress.\",\n                \"timestamp\": \"2024-11-19T12:04:00Z\"\n            }\n        ]\n    },\n    \"lastUpdatedAt\": \"2026-01-11T12:15:00Z\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "My Open Complaints",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/user/complaints?status=open&search=",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "user",
+            "complaints"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "open"
+            },
+            {
+              "key": "search",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Open Complaints List - 200 OK",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/user/complaints?status=open&search=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "complaints"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "open"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                }
+              ]
+            }
+          },
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n    \"filters\": {\n        \"status\": \"open\",\n        \"search\": \"\"\n    },\n    \"count\": 4,\n    \"complaints\": [\n        {\n            \"ticketId\": \"CX-1122\",\n            \"status\": \"In Progress\",\n            \"priority\": \"Critical\",\n            \"title\": \"Air conditioning not working\",\n            \"submittedAt\": \"2024-11-19T09:10:00Z\",\n            \"department\": \"Maintenance\",\n            \"confidenceScore\": 0.91,\n            \"priorityToRespond\": 5,\n            \"priorityToResolve\": 4,\n            \"slaDueAt\": \"2024-11-19T09:40:00Z\",\n            \"slaBreached\": false,\n            \"lastUpdatedAt\": \"2024-11-19T09:25:00Z\"\n        },\n        {\n            \"ticketId\": \"CX-3862\",\n            \"status\": \"Overdue\",\n            \"priority\": \"Critical\",\n            \"title\": \"Water leakage in pantry\",\n            \"submittedAt\": \"2024-11-18T16:45:00Z\",\n            \"department\": \"Facilities\",\n            \"confidenceScore\": 0.88,\n            \"priorityToRespond\": 5,\n            \"priorityToResolve\": 5,\n            \"slaDueAt\": \"2024-11-18T17:15:00Z\",\n            \"slaBreached\": true,\n            \"lastUpdatedAt\": \"2024-11-18T18:00:00Z\"\n        },\n        {\n            \"ticketId\": \"CX-4587\",\n            \"status\": \"Escalated\",\n            \"priority\": \"High\",\n            \"title\": \"Wi-Fi connection unstable\",\n            \"submittedAt\": \"2024-11-19T11:05:00Z\",\n            \"department\": \"IT Support\",\n            \"confidenceScore\": 0.79,\n            \"priorityToRespond\": 4,\n            \"priorityToResolve\": 3,\n            \"slaDueAt\": \"2024-11-19T11:35:00Z\",\n            \"slaBreached\": false,\n            \"lastUpdatedAt\": \"2024-11-19T11:20:00Z\"\n        },\n        {\n            \"ticketId\": \"CX-4630\",\n            \"status\": \"Assigned\",\n            \"priority\": \"High\",\n            \"title\": \"Lift stopping between floors\",\n            \"submittedAt\": \"2024-11-18T08:25:00Z\",\n            \"department\": \"Maintenance\",\n            \"confidenceScore\": 0.84,\n            \"priorityToRespond\": 4,\n            \"priorityToResolve\": 4,\n            \"slaDueAt\": \"2024-11-18T08:55:00Z\",\n            \"slaBreached\": true,\n            \"lastUpdatedAt\": \"2024-11-18T09:10:00Z\"\n        }\n    ],\n    \"lastUpdatedAt\": \"2026-01-11T12:15:00Z\"\n}"
+        },
+        {
+          "name": "Open Complaints List - 200 OK",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/user/complaints?status=open&search=refund",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "complaints"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "open"
+                },
+                {
+                  "key": "search",
+                  "value": "refund"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"filters\": {\n    \"status\": \"open\",\n    \"search\": \"refund\"\n  },\n  \"count\": 0,\n  \"complaints\": [],\n  \"lastUpdatedAt\": \"2026-01-11T12:15:00Z\"\n}\n"
+        }
+      ]
+    },
+    {
+      "name": "Complaint Details",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/user/complaints/CX-1122",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "user",
+            "complaints",
+            "CX-1122"
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Ticket Details - 200 OK",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/user/complaints/CX-1122",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "complaints",
+                "CX-1122"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [
+            {
+              "expires": "Invalid Date",
+              "domain": "",
+              "path": ""
+            }
+          ],
+          "body": "{\n  \"ticketId\": \"CX-1122\",\n  \"subject\": \"AC Stopped Working\",\n  \"title\": \"Air conditioning not working\",\n  \"description\": \"The AC unit in the office is not cooling and has stopped working completely.\",\n  \"channel\": \"text\",\n  \"department\": \"Maintenance\",\n  \"status\": \"Assigned\",\n  \"priority\": \"Critical\",\n  \"confidenceScore\": 0.91,\n  \"priorityToRespond\": 5,\n  \"priorityToResolve\": 4,\n  \"mttRespondMins\": 30,\n  \"mttResolveHours\": 6,\n  \"submittedAt\": \"2024-11-19T09:10:00Z\",\n  \"lastUpdatedAt\": \"2024-11-19T09:25:00Z\",\n  \"sla\": {\n    \"respondDueAt\": \"2024-11-19T09:40:00Z\",\n    \"resolveDueAt\": \"2024-11-19T15:10:00Z\",\n    \"respondBreached\": false,\n    \"resolveBreached\": false\n  },\n  \"statusProgress\": {\n    \"steps\": [\n      \"Unassigned\",\n      \"Assigned\",\n      \"In Progress\",\n      \"Resolved\",\n      \"Overdue\",\n      \"Escalated\"\n    ],\n    \"currentStep\": \"Assigned\"\n  },\n  \"statusHistory\": [\n    { \"status\": \"Unassigned\", \"at\": \"2024-11-19T09:10:00Z\" },\n    { \"status\": \"Assigned\", \"at\": \"2024-11-19T09:18:00Z\" }\n  ],\n  \"novaNote\": \"Your complaint is currently assigned and being processed by the Maintenance Department.\"\n}"
+        },
+        {
+          "name": "Invalid Ticket - 404 Not Found",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/user/complaints/CX-0000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "complaints",
+                "CX-0000"
+              ]
+            }
+          },
+          "status": "Not Found",
+          "code": 404,
+          "_postman_previewlanguage": null,
+          "header": null,
+          "cookie": [],
+          "body": "{\n  \"error\": {\n    \"code\": \"TICKET_NOT_FOUND\",\n    \"message\": \"No complaint found for ticketId CX-0000.\"\n  }\n}\n"
+        }
+      ]
+    },
+    {
+      "name": "Report Issue",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"issueText\": \"The information shown for this complaint appears to be incorrect.\"\n}\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/user/complaints/CX-1122/report-issue",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "user",
+            "complaints",
+            "CX-1122",
+            "report-issue"
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Issue Reported - 201 Created",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"issueText\": \"The submitted complaint is missing important information and needs review.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/complaints/CX-1122/report-issue",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "complaints",
+                "CX-1122",
+                "report-issue"
+              ]
+            }
+          },
+          "status": "Created",
+          "code": 201,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [
+            {
+              "expires": "Invalid Date",
+              "domain": "",
+              "path": ""
+            }
+          ],
+          "body": "{\n  \"message\": \"Issue report submitted successfully.\",\n  \"reportId\": \"RPT-7001\",\n  \"ticketId\": \"CX-1122\",\n  \"submittedAt\": \"2026-01-11T12:25:00Z\",\n  \"status\": \"received\"\n}\n"
+        },
+        {
+          "name": "Missing Text - 400 Bad Request",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/complaints/CX-1122/report-issue",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "complaints",
+                "CX-1122",
+                "report-issue"
+              ]
+            }
+          },
+          "status": "Bad Request",
+          "code": 400,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"issueText is required.\"\n  }\n}\n"
+        }
+      ]
+    },
+    {
+      "name": "Submit Text Complaint",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fullName\": \"Amina Khalid\",\n  \"phoneE164\": \"+971501234567\",\n  \"company\": \"Dubai CommerCity Tenant\",\n  \"subject\": \"AC Stopped Working\",\n  \"description\": \"My AC is broken and it's urgent.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/user/complaints/text",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "user",
+            "complaints",
+            "text"
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Complaint Submitted - 201 Created",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Amina Khalid\",\n  \"phoneE164\": \"+971501234567\",\n  \"company\": \"Dubai CommerCity Tenant\",\n  \"subject\": \"AC Stopped Working\",\n  \"description\": \"My AC is broken and it's urgent.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/complaints/text",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "complaints",
+                "text"
+              ]
+            }
+          },
+          "status": "Created",
+          "code": 201,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"message\": \"Complaint submitted successfully.\",\n  \"ticketId\": \"CX-1122\",\n  \"status\": \"Unassigned\",\n  \"submittedAt\": \"2026-01-11T12:20:00Z\",\n  \"notifications\": [\n    { \"channel\": \"email\", \"status\": \"queued\" },\n    { \"channel\": \"sms\", \"status\": \"queued\" }\n  ]\n}\n"
+        },
+        {
+          "name": "Validation Error - 400 Bad Request",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Amina Khalid\",\n  \"company\": \"Dubai CommerCity Tenant\",\n  \"subject\": \"AC stopped working\",\n  \"description\": \"Broken\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/complaints/text",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "complaints",
+                "text"
+              ]
+            }
+          },
+          "status": "Bad Request",
+          "code": 400,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"Request validation failed.\",\n    \"details\": [\n      { \"field\": \"phoneE164\", \"issue\": \"Phone number is required.\" },\n      { \"field\": \"description\", \"issue\": \"Description must be at least 10 characters.\" }\n    ]\n  }\n}\n"
+        }
+      ]
+    },
+    {
+      "name": "Submit Audio Complaint",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-mock-response-name",
+            "value": "Audio Complaint Submitted - 201",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fullName\": \"Amina Khalid\",\n  \"phoneE164\": \"+971501234567\",\n  \"company\": \"Dubai CommerCity Tenant\",\n  \"audio\": {\n    \"fileName\": \"complaint-audio.webm\",\n    \"contentType\": \"audio/webm\",\n    \"durationSeconds\": 18\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/user/complaints/audio",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "user",
+            "complaints",
+            "audio"
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Audio Complaint Submitted - 201",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Amina Khalid\",\n  \"phoneE164\": \"+971501234567\",\n  \"company\": \"Dubai CommerCity Tenant\",\n  \"audio\": {\n    \"fileName\": \"complaint-audio.webm\",\n    \"contentType\": \"audio/webm\",\n    \"durationSeconds\": 18\n  }\n}\n",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/complaints/audio",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "complaints",
+                "audio"
+              ]
+            }
+          },
+          "status": "Created",
+          "code": 201,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"message\": \"Audio complaint submitted successfully.\",\n  \"ticketId\": \"CX-1122\",\n  \"status\": \"Unassigned\",\n  \"submittedAt\": \"2026-01-11T12:21:00Z\",\n  \"audioProcessing\": {\n    \"state\": \"queued\",\n    \"estimatedWaitSeconds\": 25\n  },\n  \"notifications\": [\n    { \"channel\": \"email\", \"status\": \"queued\" },\n    { \"channel\": \"sms\", \"status\": \"queued\" }\n  ]\n}\n"
+        },
+        {
+          "name": "Unsupported Media Type - 415",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Amina Khalid\",\n  \"phoneE164\": \"+971501234567\",\n  \"company\": \"Dubai CommerCity Tenant\",\n  \"audio\": {\n    \"fileName\": \"complaint-audio.mp3\",\n    \"contentType\": \"audio/mp3\",\n    \"durationSeconds\": 18\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/complaints/audio",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "complaints",
+                "audio"
+              ]
+            }
+          },
+          "status": "Unsupported Media Type",
+          "code": 415,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [
+            {
+              "expires": "Invalid Date",
+              "domain": "",
+              "path": ""
+            }
+          ],
+          "body": "{\n  \"error\": {\n    \"code\": \"UNSUPPORTED_MEDIA_TYPE\",\n    \"message\": \"Only audio/webm and audio/wav are supported.\"\n  }\n}\n"
+        },
+        {
+          "name": "Payload Too Large - 413",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Amina Khalid\",\n  \"phoneE164\": \"+971501234567\",\n  \"company\": \"Dubai CommerCity Tenant\",\n  \"audio\": {\n    \"fileName\": \"complaint-audio.webm\",\n    \"contentType\": \"audio/webm\",\n    \"durationSeconds\": 420,\n    \"sizeBytes\": 35000000\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/complaints/audio",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "complaints",
+                "audio"
+              ]
+            }
+          },
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"error\": {\n    \"code\": \"PAYLOAD_TOO_LARGE\",\n    \"message\": \"Audio file exceeds the maximum allowed size.\"\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Chat Options",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/user/chat/options",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "user",
+            "chat",
+            "options"
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Quick Options - 200",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/user/chat/options",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "chat",
+                "options"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"quickOptions\": [\n    { \"id\": \"billing\", \"label\": \"Billing\" },\n    { \"id\": \"technical\", \"label\": \"Technical\" },\n    { \"id\": \"visas\", \"label\": \"Visas\" },\n    { \"id\": \"account\", \"label\": \"Account\" }\n  ]\n}"
+        }
+      ]
+    },
+    {
+      "name": "Send Chat Message",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"conversationId\": \"CONV-1001\",\n  \"message\": \"My AC is broken and it's very urgent!\",\n  \"context\": {\n    \"userId\": \"USR-501\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/user/chat/message",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "user",
+            "chat",
+            "message"
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Bot asks for location - 200",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"CONV-1001\",\n  \"message\": \"My AC is broken and it's very urgent!\",\n  \"context\": {\n    \"userId\": \"USR-501\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/chat/message",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "chat",
+                "message"
+              ]
+            }
+          },
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n    \"conversationId\": \"CONV-1001\",\n    \"messages\": [\n        {\n            \"messageId\": \"MSG-2001\",\n            \"role\": \"user\",\n            \"text\": \"My AC is broken and it's very urgent!\",\n            \"timestamp\": \"2026-01-11T12:22:00Z\"\n        },\n        {\n            \"messageId\": \"MSG-2002\",\n            \"role\": \"bot\",\n            \"text\": \"I understand this is urgent. Before I proceed, may I know which building or location you are reporting this for?\",\n            \"timestamp\": \"2026-01-11T12:22:02Z\",\n            \"suggestedReplies\": [\n                \"Building A – Office\",\n                \"Building B – Warehouse\",\n                \"Building C – Reception\",\n                \"Other (type location)\"\n            ]\n        }\n    ],\n    \"intent\": \"raise_complaint\",\n    \"nextAction\": {\n        \"type\": \"COLLECT_FIELD\",\n        \"field\": \"location\"\n    }\n}"
+        },
+        {
+          "name": "Bot creates complaint draft - 200",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"CONV-1001\",\n  \"message\": \"My AC is broken and it's very urgent!\",\n  \"context\": {\n    \"userId\": \"USR-501\",\n    \"location\": \"Building A - Office\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/chat/message",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "chat",
+                "message"
+              ]
+            }
+          },
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"conversationId\": \"CONV-1001\",\n  \"messages\": [\n    {\n      \"messageId\": \"MSG-2010\",\n      \"role\": \"bot\",\n      \"text\": \"Thanks. I can create a complaint now. Please confirm: Maintenance issue (AC), Critical priority. Should I submit it?\",\n      \"timestamp\": \"2026-01-11T12:23:10Z\",\n      \"suggestedReplies\": [\n        \"Yes, submit\",\n        \"No, edit details\"\n      ]\n    }\n  ],\n  \"nextAction\": {\n    \"type\": \"CREATE_COMPLAINT_DRAFT\",\n    \"draft\": {\n      \"subject\": \"AC Stopped Working\",\n      \"department\": \"Maintenance\",\n      \"priority\": \"Critical\",\n      \"confidenceScore\": 0.91,\n      \"priorityToRespond\": 5,\n      \"priorityToResolve\": 4\n    }\n  }\n}\n"
+        },
+        {
+          "name": "Too Many Requests - 429",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"CONV-1001\",\n  \"message\": \"My AC is broken and it's very urgent!\",\n  \"context\": {\n    \"userId\": \"USR-501\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/chat/message",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "chat",
+                "message"
+              ]
+            }
+          },
+          "status": "Too Many Requests",
+          "code": 429,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json",
+              "description": "",
+              "type": "text"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n    \"error\": {\n        \"code\": \"RATE_LIMITED\",\n        \"message\": \"Too many requests. Please try again in 30 seconds.\"\n    }\n}"
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://0dadfbb4-e5fb-4521-9448-e3be946f0f9d.mock.pstmn.io"
+    }
+  ]
+}

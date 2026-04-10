@@ -16,7 +16,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN mkdir -p /app/hf_cache
-ENV HF_HOME=/app/hf_cache
 RUN chmod +x /app/start_chatbot.sh
 
 EXPOSE 8000

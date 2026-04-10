@@ -30,7 +30,7 @@ INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secr
   ('customer1@innovacx.net',  crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
   ('customer2@innovacx.net',  crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
   ('customer3@innovacx.net',  crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
-  ('operator@innova.cx',      crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  TRUE, FALSE, NULL),
+  ('operator@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  TRUE, FALSE, NULL),
   ('hamad@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
   ('leen@innovacx.net',       crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
   ('rami@innovacx.net',       crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   TRUE, FALSE, NULL),
@@ -59,7 +59,7 @@ ON CONFLICT (user_id) DO NOTHING;
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
 SELECT u.id, 'Sarah Operator', '+97155000002', 'Dubai',
        NULL, NULL, 'System Operator'
-FROM users u WHERE u.email='operator@innova.cx'
+FROM users u WHERE u.email='operator@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
@@ -608,7 +608,91 @@ VALUES
  (SELECT id FROM departments WHERE name='Safety & Security'), 75.00,
  'Re-encode access card and test all gate readers; confirm system-side permissions.',
  FALSE, TRUE)
+,
 
+-- ---------------------------------------------------------------------------
+-- CX-LT001 to CX-LT005: Lena & Talya coverage tickets
+-- Gives Lena: Jan 2026, Apr 2026 real MV data
+-- Gives Talya: Jan 2026, Mar 2026, Apr 2026 real MV data
+-- These ensure the demo months have actual ticket activity rather than
+-- zero-activity reports for these employees.
+-- ON CONFLICT (ticket_code) DO NOTHING makes this safe to re-run.
+-- ---------------------------------------------------------------------------
+
+-- CX-LT001: Lena — January 2026
+('CX-LT001', 'Network switch intermittent failures – HR floor',
+ 'HR floor network switch dropping connections every few hours. Staff unable to access shared drives.',
+ 'Complaint', 'Resolved', 'High',
+ 'Networking', (SELECT id FROM departments WHERE name='HR'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
+ (SELECT id FROM users WHERE email='lena@innovacx.net'),
+ '2026-01-12 08:00:00+00', '2026-01-12 08:15:00+00', '2026-01-12 08:45:00+00',
+ '2026-01-13 08:00:00+00', '2026-01-14 08:00:00+00',
+ FALSE, FALSE, '2026-01-12 08:00:00+00',
+ -0.45, 'Negative', 'High',
+ (SELECT id FROM departments WHERE name='HR'), 87.00,
+ 'Replace faulty switch module and test failover path.',
+ FALSE, FALSE),
+
+-- CX-LT002: Lena — April 2026
+('CX-LT002', 'VoIP handsets not registering after firmware update – HR',
+ 'HR VoIP handsets lost registration after automated firmware push. Calls routing to voicemail.',
+ 'Complaint', 'Resolved', 'Medium',
+ 'Telephony', (SELECT id FROM departments WHERE name='HR'),
+ (SELECT id FROM users WHERE email='customer2@innovacx.net'),
+ (SELECT id FROM users WHERE email='lena@innovacx.net'),
+ '2026-04-02 09:00:00+00', '2026-04-02 09:20:00+00', '2026-04-02 09:50:00+00',
+ '2026-04-03 09:00:00+00', '2026-04-04 09:00:00+00',
+ FALSE, FALSE, '2026-04-02 09:00:00+00',
+ -0.30, 'Negative', 'Medium',
+ (SELECT id FROM departments WHERE name='HR'), 83.00,
+ 'Roll back firmware on affected handsets; re-register SIP accounts.',
+ FALSE, FALSE),
+
+-- CX-LT003: Talya — January 2026
+('CX-LT003', 'Leasing portal login errors – tenant portal',
+ 'Tenants unable to log in to the leasing portal since the Sunday maintenance window.',
+ 'Complaint', 'Resolved', 'High',
+ 'Portal', (SELECT id FROM departments WHERE name='Leasing'),
+ (SELECT id FROM users WHERE email='customer3@innovacx.net'),
+ (SELECT id FROM users WHERE email='talya@innovacx.net'),
+ '2026-01-20 10:00:00+00', '2026-01-20 10:18:00+00', '2026-01-20 10:45:00+00',
+ '2026-01-21 10:00:00+00', '2026-01-22 10:00:00+00',
+ FALSE, FALSE, '2026-01-20 10:00:00+00',
+ -0.50, 'Negative', 'High',
+ (SELECT id FROM departments WHERE name='Leasing'), 90.00,
+ 'Restore session token configuration from pre-maintenance backup.',
+ FALSE, FALSE),
+
+-- CX-LT004: Talya — March 2026
+('CX-LT004', 'Lease document upload failing – admin portal',
+ 'Lease coordinators unable to upload PDF documents larger than 2 MB to the admin portal.',
+ 'Complaint', 'Resolved', 'Medium',
+ 'Portal', (SELECT id FROM departments WHERE name='Leasing'),
+ (SELECT id FROM users WHERE email='customer1@innovacx.net'),
+ (SELECT id FROM users WHERE email='talya@innovacx.net'),
+ '2026-03-10 11:00:00+00', '2026-03-10 11:22:00+00', '2026-03-10 11:55:00+00',
+ '2026-03-11 11:00:00+00', '2026-03-12 11:00:00+00',
+ FALSE, FALSE, '2026-03-10 11:00:00+00',
+ -0.25, 'Neutral', 'Medium',
+ (SELECT id FROM departments WHERE name='Leasing'), 80.00,
+ 'Increase upload limit in portal config and test with sample 5 MB PDF.',
+ FALSE, FALSE),
+
+-- CX-LT005: Talya — April 2026
+('CX-LT005', 'Rental agreement template missing clauses – new template',
+ 'New rental agreement template is missing the early termination and renewal clauses.',
+ 'Complaint', 'Resolved', 'Medium',
+ 'Documentation', (SELECT id FROM departments WHERE name='Leasing'),
+ (SELECT id FROM users WHERE email='customer2@innovacx.net'),
+ (SELECT id FROM users WHERE email='talya@innovacx.net'),
+ '2026-04-03 08:30:00+00', '2026-04-03 08:48:00+00', '2026-04-03 09:15:00+00',
+ '2026-04-04 08:30:00+00', '2026-04-05 08:30:00+00',
+ FALSE, FALSE, '2026-04-03 08:30:00+00',
+ -0.20, 'Neutral', 'Medium',
+ (SELECT id FROM departments WHERE name='Leasing'), 78.00,
+ 'Reinstate missing clauses from approved template version 2.1.',
+ FALSE, FALSE)
 ON CONFLICT (ticket_code) DO NOTHING;
 
 -- Set resolved_at and resolved_by for historical resolved tickets
@@ -617,7 +701,8 @@ UPDATE tickets SET
   resolved_by_user_id = assigned_to_user_id
 WHERE ticket_code IN ('CX-H001','CX-H002','CX-H003','CX-H004','CX-H005',
                       'CX-H006','CX-H007','CX-H008','CX-H009','CX-H010',
-                      'CX-H011','CX-H012','CX-H013','CX-H014')
+                      'CX-H011','CX-H012','CX-H013','CX-H014',
+                      'CX-LT001','CX-LT002','CX-LT003','CX-LT004','CX-LT005')
   AND resolved_at IS NULL;
 
 -- =============================================================================
@@ -707,7 +792,7 @@ SELECT
   v.meta::jsonb,
   v.ts::timestamptz
 FROM (VALUES
-  ('CX-A001','operator@innova.cx','status_change',
+  ('CX-A001','operator@innovacx.net','status_change',
    'Critical ticket created via chat escalation. Assigned to Ahmed Hassan.',
    'Open','Assigned',
    '{"source":"chat","escalation_level":1}',
@@ -717,7 +802,7 @@ FROM (VALUES
    'Assigned','In Progress',
    '{"temp_reading":32.5,"backup_cooling":"active"}',
    '2026-03-01 07:00:00+00'),
-  ('CX-A002','operator@innova.cx','status_change',
+  ('CX-A002','operator@innovacx.net','status_change',
    'Gate 2 access failure. Omar Ali dispatched. Temporary manual entry authorised.',
    'Open','In Progress',
    '{"affected_staff":32,"manual_entry":"authorised"}',
@@ -898,10 +983,13 @@ WHERE NOT EXISTS (
 );
 
 -- =============================================================================
--- 10. TICKET_RESOLUTION_FEEDBACK
+-- 10. SUGGESTED_RESOLUTION_USAGE
 -- =============================================================================
-INSERT INTO ticket_resolution_feedback (ticket_id, employee_user_id, decision, suggested_resolution, employee_resolution, final_resolution)
-SELECT t.id, u.id, fb.decision, fb.suggested, fb.custom, fb.final
+INSERT INTO suggested_resolution_usage (
+  ticket_id, employee_user_id, decision, department,
+  suggested_text, final_text, used
+)
+SELECT t.id, u.id, fb.decision, d.name, fb.suggested, fb.final, (fb.decision = 'accepted')
 FROM (VALUES
   ('CX-H001','ahmed@innovacx.net','accepted',
    'Isolate gas supply and replace faulty valve.',
@@ -955,8 +1043,13 @@ FROM (VALUES
 ) AS fb(tc, emp, decision, suggested, custom, final)
 JOIN tickets t ON t.ticket_code = fb.tc
 JOIN users u ON u.email = fb.emp
+LEFT JOIN departments d ON d.id = t.department_id
 WHERE NOT EXISTS (
-  SELECT 1 FROM ticket_resolution_feedback trf WHERE trf.ticket_id = t.id AND trf.employee_user_id = u.id
+  SELECT 1 FROM suggested_resolution_usage sru
+  WHERE sru.ticket_id = t.id
+    AND sru.employee_user_id = u.id
+    AND sru.decision = fb.decision
+    AND sru.final_text = fb.final
 );
 
 -- =============================================================================
@@ -1099,7 +1192,7 @@ VALUES
    'This sounds critical. I am escalating to an operator immediately.',
    '2026-03-01 06:15:45+00','escalate','HVAC',0.05,TRUE,NULL),
   ('aaaaaaaa-0001-0001-0001-000000000001'::uuid, 'operator',
-   (SELECT id FROM users WHERE email='operator@innova.cx'),
+   (SELECT id FROM users WHERE email='operator@innovacx.net'),
    'Critical ticket CX-A001 raised. Ahmed Hassan assigned and en route.',
    '2026-03-01 06:20:00+00','resolution','HVAC',0.30,FALSE,
    (SELECT id FROM tickets WHERE ticket_code='CX-A001')),
@@ -1113,7 +1206,7 @@ VALUES
    'I understand — this is urgent. Escalating to our security team immediately.',
    '2026-03-01 07:25:45+00','escalate','Access Control',0.05,TRUE,NULL),
   ('aaaaaaaa-0002-0002-0002-000000000002'::uuid, 'operator',
-   (SELECT id FROM users WHERE email='operator@innova.cx'),
+   (SELECT id FROM users WHERE email='operator@innovacx.net'),
    'Ticket CX-A002 created as Critical. Omar Ali dispatched. Manual entry authorised.',
    '2026-03-01 07:30:00+00','resolution','Access Control',0.20,FALSE,
    (SELECT id FROM tickets WHERE ticket_code='CX-A002')),
@@ -1173,7 +1266,7 @@ VALUES
    'I completely understand your frustration. Connecting you to a senior operator now.',
    '2026-02-25 11:00:50+00','escalate','HVAC',0.05,TRUE,NULL),
   ('aaaaaaaa-0007-0007-0007-000000000007'::uuid, 'operator',
-   (SELECT id FROM users WHERE email='operator@innova.cx'),
+   (SELECT id FROM users WHERE email='operator@innovacx.net'),
    'I sincerely apologise. I am personally escalating your case to the department manager.',
    '2026-02-25 11:05:00+00','resolution','HVAC',0.30,FALSE,NULL),
 
@@ -2265,7 +2358,7 @@ UPDATE users
 SET mfa_enabled = FALSE, totp_secret = NULL
 WHERE email IN (
   'customer1@innovacx.net','customer2@innovacx.net','customer3@innovacx.net',
-  'operator@innova.cx',
+  'operator@innovacx.net',
   'hamad@innovacx.net','leen@innovacx.net','rami@innovacx.net','majid@innovacx.net',
   'ali@innovacx.net','yara@innovacx.net','hana@innovacx.net',
   'ahmed@innovacx.net','lena@innovacx.net','bilal@innovacx.net','sameer@innovacx.net',

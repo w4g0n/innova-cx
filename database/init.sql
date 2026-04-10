@@ -1,13 +1,31 @@
 -- =========================================================
--- InnovaCX 
+-- InnovaCX
 -- =========================================================
+-- Create the application role if it doesn't exist
+-- Note: password is set by zzz_least_privilege.sh via shell variable expansion
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'innovacx_app') THEN
+    CREATE ROLE innovacx_app WITH LOGIN;
+  END IF;
+END $$;
 
+-- Grant necessary permissions
+GRANT CONNECT ON DATABASE complaints_db TO innovacx_app;
+GRANT USAGE ON SCHEMA public TO innovacx_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO innovacx_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO innovacx_app;
+
+-- Ensure future tables are also accessible
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO innovacx_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO innovacx_app;
 -- -------------------------
 -- Extensions
 -- -------------------------
 CREATE EXTENSION IF NOT EXISTS pgcrypto; -- gen_random_uuid() + crypt()
 CREATE EXTENSION IF NOT EXISTS citext;   -- case-insensitive email
-
 -- -------------------------
 -- Enums (match UI strings exactly)
 -- -------------------------
@@ -22,7 +40,9 @@ DO $$ BEGIN
     'Assigned',
     'Escalated',
     'Overdue',
-    'Resolved'
+    'Resolved',
+    'Reopened',
+    'Linked'
   );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
@@ -53,7 +73,8 @@ DO $$ BEGIN
     'customer_reply',
     'status_change',
     'report_ready',
-    'system'
+    'system',
+    'pipeline_held'
   );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
@@ -76,6 +97,80 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- =========================================================
+-- AUDIT LOGGING
+-- =========================================================
+-- WHY THIS EXISTS:
+--   RIGHT NOW: if someone changes a ticket's status, deletes a user,
+--   or approves a request, there is NO record of it happening beyond
+--   whatever your app logs. If something goes wrong (or someone does
+--   something they shouldn't), you can't reconstruct what changed,
+--   who did it, or when.
+--
+-- HOW IT WORKS:
+--   The audit_log table records every INSERT / UPDATE / DELETE on the
+--   tables you care about. Each row captures:
+--     - which table was affected
+--     - what the row looked like BEFORE the change (old_data)
+--     - what the row looks like AFTER the change (new_data)
+--     - which DB role made the change (changed_by)
+--     - when it happened (changed_at)
+--
+-- HOW TO ENABLE AUDITING ON A TABLE:
+--   After creating any table, attach the trigger like this:
+--     CREATE TRIGGER audit_<tablename>
+--     AFTER INSERT OR UPDATE OR DELETE ON <tablename>
+--     FOR EACH ROW EXECUTE FUNCTION audit_trigger();
+--   (We do this below for: users, tickets, approval_requests)
+--
+-- HOW TO QUERY THE AUDIT LOG:
+--   -- See all changes to a specific ticket:
+--   SELECT * FROM audit_log WHERE table_name='tickets'
+--     AND (old_data->>'id' = '<uuid>' OR new_data->>'id' = '<uuid>')
+--     ORDER BY changed_at DESC;
+--
+--   -- See all password changes:
+--   SELECT changed_at, changed_by, old_data->>'email'
+--   FROM audit_log WHERE table_name='users' AND operation='UPDATE'
+--     AND old_data->>'password_hash' IS DISTINCT FROM new_data->>'password_hash';
+-- =========================================================
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id          BIGSERIAL    PRIMARY KEY,
+  table_name  TEXT         NOT NULL,
+  operation   TEXT         NOT NULL CHECK (operation IN ('INSERT','UPDATE','DELETE')),
+  old_data    JSONB,        -- NULL on INSERT
+  new_data    JSONB,        -- NULL on DELETE
+  changed_by  TEXT         NOT NULL DEFAULT current_user,
+  changed_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_table      ON audit_log(table_name, changed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_changed_at ON audit_log(changed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_changed_by ON audit_log(changed_by);
+
+CREATE OR REPLACE FUNCTION audit_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO audit_log (table_name, operation, old_data, new_data)
+    VALUES (TG_TABLE_NAME, 'INSERT', NULL, to_jsonb(NEW));
+    RETURN NEW;
+  ELSIF TG_OP = 'UPDATE' THEN
+    -- Only log if something actually changed (skip no-op updates)
+    IF to_jsonb(OLD) IS DISTINCT FROM to_jsonb(NEW) THEN
+      INSERT INTO audit_log (table_name, operation, old_data, new_data)
+      VALUES (TG_TABLE_NAME, 'UPDATE', to_jsonb(OLD), to_jsonb(NEW));
+    END IF;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    INSERT INTO audit_log (table_name, operation, old_data, new_data)
+    VALUES (TG_TABLE_NAME, 'DELETE', to_jsonb(OLD), NULL);
+    RETURN OLD;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- -------------------------
 -- Reference tables
 -- -------------------------
@@ -88,14 +183,38 @@ CREATE TABLE IF NOT EXISTS departments (
 -- -------------------------
 -- Users + Profiles (Identity)
 -- -------------------------
+-- =========================================================
+-- CREDENTIAL ROTATION EXPLAINED
+-- =========================================================
+-- RIGHT NOW: Every user has the same static password ('Innova@2025').
+-- It was set once during seeding and never tracked. If someone gets
+-- hold of that password, there is no way to know how long they've had
+-- access or when it was last changed.
+--
+-- WHAT WE'RE ADDING:
+--   1. password_last_rotated_at — tracks WHEN the password was last
+--      changed so you can enforce a "must rotate every 90 days" policy.
+--   2. rotate_user_password() function — a safe, reusable way for your
+--      app/scripts to change a password without writing raw SQL.
+--   3. Production guard on the dev reset token — stops the hardcoded
+--      dev token from being inserted into a production database.
+--   4. Token cleanup function — deletes expired/used reset tokens
+--      automatically so they can't pile up and be exploited.
+-- =========================================================
+
 CREATE TABLE IF NOT EXISTS users (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email         CITEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  role          user_role NOT NULL,
-  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_login_at TIMESTAMPTZ
+  id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email                    CITEXT NOT NULL UNIQUE,
+  password_hash            TEXT NOT NULL,
+  role                     user_role NOT NULL,
+  is_active                BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at            TIMESTAMPTZ,
+  password_changed_at      TIMESTAMPTZ,
+  -- ADDED: tracks when the password was last rotated.
+  -- Without this column you have NO way to know if a password is 3 days
+  -- old or 3 years old. Your app can query this to enforce expiry rules.
+  password_last_rotated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- -------------------------
@@ -126,6 +245,74 @@ ADD COLUMN IF NOT EXISTS totp_secret TEXT;
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Also safe-add the rotation column on existing volumes
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS password_last_rotated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+-- =========================================================
+-- CREDENTIAL ROTATION: rotate_user_password()
+-- =========================================================
+-- WHY THIS EXISTS:
+--   Before this function, changing a password meant writing raw SQL
+--   like: UPDATE users SET password_hash = crypt(...)
+--   That's fine in dev, but in production it's risky — easy to forget
+--   the bcrypt call, easy to accidentally skip the active-user check,
+--   and nothing ever updates password_last_rotated_at.
+--
+-- HOW TO USE IT (run this whenever you want to rotate a password):
+--   SELECT rotate_user_password('ahmed@innovacx.net', 'NewSecurePass!99');
+--
+-- It will:
+--   - Reject the call if the user doesn't exist or is inactive
+--   - Hash the password with bcrypt cost 12 (current best practice)
+--   - Update password_last_rotated_at to NOW() automatically
+-- =========================================================
+CREATE OR REPLACE FUNCTION rotate_user_password(
+  p_email  CITEXT,
+  p_new_pw TEXT
+) RETURNS VOID AS $$
+BEGIN
+  UPDATE users
+  SET
+    password_hash            = crypt(p_new_pw, gen_salt('bf', 12)),
+    password_last_rotated_at = now()
+  WHERE email     = p_email
+    AND is_active = TRUE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'rotate_user_password: user not found or inactive: %', p_email;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =========================================================
+-- CREDENTIAL ROTATION: cleanup_expired_tokens()
+-- =========================================================
+-- WHY THIS EXISTS:
+--   RIGHT NOW: expired and already-used password reset tokens stay in
+--   the database forever. They can't be used (expires_at is in the past
+--   or used_at is set), but they clutter the table and could leak info
+--   if the DB is ever compromised.
+--
+-- HOW TO USE IT:
+--   SELECT cleanup_expired_tokens();
+--   Run this on a schedule (e.g. nightly via pg_cron or a cron job):
+--     SELECT cron.schedule('token-cleanup','0 3 * * *','SELECT cleanup_expired_tokens()');
+-- =========================================================
+CREATE OR REPLACE FUNCTION cleanup_expired_tokens()
+RETURNS INTEGER AS $$
+DECLARE
+  deleted_count INTEGER;
+BEGIN
+  DELETE FROM password_reset_tokens
+  WHERE expires_at < now()
+     OR used_at IS NOT NULL;
+
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+  RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id       UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   full_name     TEXT NOT NULL,
@@ -146,6 +333,37 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS trusted_devices (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  user_agent  TEXT,
+  ip_address  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_token_hash ON trusted_devices(token_hash);
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_user_id    ON trusted_devices(user_id);
+
+CREATE TABLE IF NOT EXISTS email_otp_codes (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  otp_hash    TEXT NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_email_otp_user ON email_otp_codes(user_id) WHERE used_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS mfa_reset_tokens (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- -------------------------
 -- Tickets
 -- -------------------------
@@ -154,7 +372,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   ticket_code         TEXT NOT NULL UNIQUE,
   subject             TEXT NOT NULL,
   details             TEXT NOT NULL,
-  ticket_type         ticket_type NOT NULL DEFAULT 'Complaint',
+  ticket_type         ticket_type,
   status              ticket_status NOT NULL DEFAULT 'Open',
   priority            ticket_priority,
   department_id       UUID REFERENCES departments(id) ON DELETE SET NULL,
@@ -191,28 +409,46 @@ ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at T
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS asset_type TEXT;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS human_overridden BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS linked_ticket_code TEXT;
 
-CREATE TABLE IF NOT EXISTS ticket_resolution_feedback (
-    id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    ticket_id            UUID        NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-    employee_user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    decision             TEXT        NOT NULL CHECK (decision IN ('accepted', 'declined_custom')),
-    suggested_resolution TEXT,
-    employee_resolution  TEXT,
-    final_resolution     TEXT        NOT NULL,
-    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+DO $$ BEGIN
+  ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'recurrence_reminder';
+EXCEPTION WHEN others THEN NULL; END $$;
 
-CREATE INDEX IF NOT EXISTS idx_ticket_resolution_feedback_ticket
-    ON ticket_resolution_feedback (ticket_id);
-CREATE INDEX IF NOT EXISTS idx_ticket_resolution_feedback_employee
-    ON ticket_resolution_feedback (employee_user_id);
+DO $$ BEGIN
+  ALTER TYPE ticket_status ADD VALUE IF NOT EXISTS 'Reopened';
+EXCEPTION WHEN others THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TYPE ticket_status ADD VALUE IF NOT EXISTS 'Linked';
+EXCEPTION WHEN others THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS idx_tickets_status      ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_priority    ON tickets(priority);
 CREATE INDEX IF NOT EXISTS idx_tickets_created_at  ON tickets(created_at);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee    ON tickets(assigned_to_user_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_creator     ON tickets(created_by_user_id);
+
+-- =========================================================
+-- AUDIT TRIGGERS: attach to sensitive tables
+-- =========================================================
+-- These fire automatically on every change — you don't need to call
+-- anything. Check audit_log to see a full history of what changed.
+-- =========================================================
+
+-- Track all user changes (password rotations, role changes, deactivation)
+DROP TRIGGER IF EXISTS audit_users ON users;
+CREATE TRIGGER audit_users
+AFTER INSERT OR UPDATE OR DELETE ON users
+FOR EACH ROW EXECUTE FUNCTION audit_trigger();
+
+-- Track all ticket changes (status, assignment, priority)
+DROP TRIGGER IF EXISTS audit_tickets ON tickets;
+CREATE TRIGGER audit_tickets
+AFTER INSERT OR UPDATE OR DELETE ON tickets
+FOR EACH ROW EXECUTE FUNCTION audit_trigger();
+
+-- NOTE: audit_approval_requests is attached after approval_requests table is created below
 
 DROP TRIGGER IF EXISTS trg_tickets_updated_at ON tickets;
 CREATE TRIGGER trg_tickets_updated_at
@@ -240,13 +476,23 @@ BEGIN
 
   -- Resolution timestamp must exist when resolved.
   IF NEW.status = 'Resolved' THEN
-    NEW.resolved_at := COALESCE(NEW.resolved_at, now());
-    IF TG_OP = 'UPDATE' THEN
-      NEW.resolved_by_user_id := COALESCE(NEW.resolved_by_user_id, NEW.assigned_to_user_id, OLD.resolved_by_user_id);
-    ELSE
+    IF TG_OP = 'UPDATE' AND OLD.status <> 'Resolved' THEN
+      -- Transitioning into Resolved from any other state (including Reopened):
+      -- always stamp a fresh timestamp so a second resolution overwrites the first.
+      NEW.resolved_at := now();
       NEW.resolved_by_user_id := COALESCE(NEW.resolved_by_user_id, NEW.assigned_to_user_id);
+    ELSE
+      -- INSERT, or an UPDATE that stays Resolved (e.g. updating other fields):
+      -- preserve existing values if already set.
+      NEW.resolved_at := COALESCE(NEW.resolved_at, now());
+      IF TG_OP = 'UPDATE' THEN
+        NEW.resolved_by_user_id := COALESCE(NEW.resolved_by_user_id, NEW.assigned_to_user_id, OLD.resolved_by_user_id);
+      ELSE
+        NEW.resolved_by_user_id := COALESCE(NEW.resolved_by_user_id, NEW.assigned_to_user_id);
+      END IF;
     END IF;
   END IF;
+
 
   RETURN NEW;
 END;
@@ -509,6 +755,12 @@ CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(sta
 CREATE INDEX IF NOT EXISTS idx_approval_requests_ticket ON approval_requests(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_approval_requests_requested_to ON approval_requests(requested_to_user_id);
 
+-- Audit trigger for approval_requests (must be after table creation)
+DROP TRIGGER IF EXISTS audit_approval_requests ON approval_requests;
+CREATE TRIGGER audit_approval_requests
+AFTER INSERT OR UPDATE OR DELETE ON approval_requests
+FOR EACH ROW EXECUTE FUNCTION audit_trigger();
+
 CREATE TABLE IF NOT EXISTS department_routing_feedback (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ticket_id            UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -542,6 +794,10 @@ CREATE INDEX IF NOT EXISTS idx_department_routing_pending
   ON department_routing(is_confident, final_department, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_department_routing_finalized
   ON department_routing(final_department, routed_by, updated_at DESC);
+
+-- Learning-loop triggers depend on approval_requests and department_routing.
+-- Include after both base tables exist to keep fresh-volume init deterministic.
+\ir scripts/learning.sql
 
 -- -------------------------
 -- Auto-notify manager on new approval requests
@@ -1202,9 +1458,67 @@ CREATE TABLE IF NOT EXISTS system_config_kv (
   value TEXT NOT NULL
 );
 
+-- =========================================================
+-- Pipeline Queue
+-- =========================================================
+DO $$ BEGIN
+  CREATE TYPE pipeline_queue_status AS ENUM (
+    'queued',
+    'processing',
+    'held',
+    'completed',
+    'failed'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS pipeline_queue (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ticket_id            UUID REFERENCES tickets(id) ON DELETE CASCADE,
+    ticket_code          TEXT,
+
+    -- Queue state
+    status               pipeline_queue_status NOT NULL DEFAULT 'queued',
+    queue_position       INT,
+    retry_count          INT NOT NULL DEFAULT 0,
+
+    -- Failure tracking
+    failed_stage         TEXT,
+    failed_at_step       INT,
+    failure_reason       TEXT,
+    failure_category     TEXT,                         -- 'timeout' | 'model_error' | 'connection_error' | 'unknown'
+    failure_history      JSONB NOT NULL DEFAULT '[]',  -- [{attempt, stage, category, reason, ts}]
+
+    -- State snapshots for resume
+    checkpoint_state     JSONB NOT NULL DEFAULT '{}',
+    operator_corrections JSONB NOT NULL DEFAULT '{}',
+
+    -- Initial ticket data needed to start / restart pipeline
+    ticket_input         JSONB NOT NULL DEFAULT '{}',
+
+    -- Execution linkage
+    execution_id         UUID,
+
+    -- Timestamps
+    entered_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at           TIMESTAMPTZ,
+    completed_at         TIMESTAMPTZ,
+    held_at              TIMESTAMPTZ,
+    released_at          TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_pq_status
+    ON pipeline_queue(status, queue_position NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_pq_ticket_id
+    ON pipeline_queue(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_pq_ticket_code
+    ON pipeline_queue(ticket_code);
+CREATE INDEX IF NOT EXISTS idx_pq_entered_at
+    ON pipeline_queue(entered_at DESC);
+
 \ir migrations/001_agent_execution_logs.sql
 \ir migrations/002_operator_notifications.sql
 \ir migrations/007_ticket_priority_nullable.sql
+\ir migrations/018_pipeline_runtime_control.sql
 
 -- =========================================================
 -- Seed data
@@ -1243,7 +1557,7 @@ INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
   ('customer2@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
   ('customer3@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  FALSE, NULL),
   -- Operator
-  ('operator@innova.cx',     crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  FALSE, NULL),
+  ('operator@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'operator',  FALSE, NULL),
   -- Managers (1 per department)
   ('hamad@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
   ('leen@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'manager',   FALSE, NULL),
@@ -1355,7 +1669,7 @@ ON CONFLICT (user_id) DO NOTHING;
 -- Operator profile
 INSERT INTO user_profiles (user_id, full_name, job_title)
 SELECT u.id, 'System Operator', 'System Operator'
-FROM users u WHERE u.email='operator@innova.cx'
+FROM users u WHERE u.email='operator@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 -- Customer profiles
@@ -1759,7 +2073,7 @@ WHERE email IN (
   'customer1@innovacx.net',
   'customer2@innovacx.net',
   'customer3@innovacx.net',
-  'operator@innova.cx',
+  'operator@innovacx.net',
   'hamad@innovacx.net',
   'leen@innovacx.net',
   'rami@innovacx.net',
@@ -2561,13 +2875,16 @@ INSERT INTO tickets (
 ON CONFLICT (ticket_code) DO NOTHING;
 
 -- =========================================================
--- RESOLUTION FEEDBACK SEED
+-- SUGGESTED RESOLUTION USAGE SEED
 -- Provides data for Section C: AI acceptance rate analytics
 -- decision: 'accepted' = employee accepted AI suggestion
 --           'declined_custom' = employee wrote their own resolution
 -- =========================================================
-INSERT INTO ticket_resolution_feedback (ticket_id, employee_user_id, decision, suggested_resolution, employee_resolution, final_resolution)
-SELECT t.id, u.id, fb.decision, fb.suggested, fb.custom, fb.final
+INSERT INTO suggested_resolution_usage (
+  ticket_id, employee_user_id, decision, department,
+  suggested_text, final_text, used
+)
+SELECT t.id, u.id, fb.decision, d.name, fb.suggested, fb.final, (fb.decision = 'accepted')
 FROM (VALUES
   -- Ahmed: high acceptance rate (good AI alignment)
   ('CX-M01', 'ahmed@innovacx.net',  'accepted',         'Dispatch HVAC and check compressor.', NULL, 'Replaced compressor unit and recharged refrigerant.'),
@@ -2641,9 +2958,13 @@ FROM (VALUES
 ) AS fb(ticket_code, emp_email, decision, suggested, custom, final)
 JOIN tickets t ON t.ticket_code = fb.ticket_code
 JOIN users u ON u.email = fb.emp_email
+LEFT JOIN departments d ON d.id = t.department_id
 WHERE NOT EXISTS (
-  SELECT 1 FROM ticket_resolution_feedback trf
-  WHERE trf.ticket_id = t.id AND trf.employee_user_id = u.id
+  SELECT 1 FROM suggested_resolution_usage sru
+  WHERE sru.ticket_id = t.id
+    AND sru.employee_user_id = u.id
+    AND sru.decision = fb.decision
+    AND sru.final_text = fb.final
 );
 
 
@@ -3281,7 +3602,7 @@ FROM (VALUES
    'collect_info','HVAC', 0.10,FALSE,NULL),
   ('customer','customer1@innovacx.net','2026-03-01 06:21:10+00','Building A, server room on ground floor. Temperature is at 30°C already.',
    'provide_info','HVAC',-0.80,TRUE,NULL),
-  ('operator','operator@innova.cx','2026-03-01 06:25:00+00','I am creating a Critical ticket now and dispatching the HVAC team immediately.',
+  ('operator','operator@innovacx.net','2026-03-01 06:25:00+00','I am creating a Critical ticket now and dispatching the HVAC team immediately.',
    'resolution','HVAC', 0.20,FALSE,'CX-R01')
 ) AS msg(sender_type, email, ts, body, intent, category, score, escalate, link_ticket)
 WHERE NOT EXISTS (
@@ -3348,7 +3669,7 @@ FROM (VALUES
    'report_issue','Access Control',-0.85,FALSE,NULL),
   ('bot','bot','2026-03-01 09:25:25+00',$msg$I'm escalating this to an operator immediately given the severity.$msg$,
    'escalate','Access Control',0.05,TRUE,NULL),
-  ('operator','operator@innova.cx','2026-03-01 09:30:00+00','Ticket CX-R06 raised as Critical. Omar Ali is on his way to Gate 2 now.',
+  ('operator','operator@innovacx.net','2026-03-01 09:30:00+00','Ticket CX-R06 raised as Critical. Omar Ali is on his way to Gate 2 now.',
    'resolution','Access Control',0.30,FALSE,'CX-R06')
 ) AS msg(sender_type, email, ts, body, intent, category, score, escalate, link_ticket)
 WHERE NOT EXISTS (
@@ -3508,7 +3829,7 @@ SELECT
   v.ts::timestamptz
 FROM (VALUES
   -- CX-R01 lifecycle
-  ('CX-R01','operator@innova.cx','status_change',
+  ('CX-R01','operator@innovacx.net','status_change',
    'Ticket created via chat escalation. Assigned to Ahmed Hassan.',
    'Open','Assigned',
    '{"source":"chat_escalation","chat_conv_id":"11111111-1111-1111-1111-000000000001"}',
@@ -3519,7 +3840,7 @@ FROM (VALUES
    '{"location":"Ground Floor Server Room","temp_reading":30.2}',
    '2026-03-01 07:20:00+00'),
   -- CX-R06 lifecycle
-  ('CX-R06','operator@innova.cx','status_change',
+  ('CX-R06','operator@innovacx.net','status_change',
    'Critical access control failure — all Gate 2 readers down. Omar dispatched.',
    'Open','In Progress',
    '{"affected_staff":15,"gate":"Gate 2"}',
@@ -3809,31 +4130,37 @@ ON CONFLICT (component) DO UPDATE
 -- ---------------------------------------------------------------------------
 -- 19. PASSWORD RESET TOKEN  (for testing the auth / reset-password views)
 -- ---------------------------------------------------------------------------
-
+-- SECURITY: This token is known and must only be seeded in dev/test/local DBs.
+-- Non-dev databases skip this seed so fresh-volume initialization can continue
+-- without creating a publicly-known reset token.
+-- ---------------------------------------------------------------------------
 INSERT INTO public.password_reset_tokens (user_id, token_hash, expires_at)
 SELECT
   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
   crypt('dev-reset-token-cx1-2026', gen_salt('bf', 10)),
   now() + interval '1 hour'
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.password_reset_tokens prt
-  WHERE prt.user_id=(SELECT id FROM users WHERE email='customer1@innovacx.net')
-    AND prt.used_at IS NULL
-);
+WHERE (
+    current_database() LIKE '%dev%'
+    OR current_database() LIKE '%test%'
+    OR current_database() LIKE '%local%'
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM public.password_reset_tokens prt
+    WHERE prt.user_id=(SELECT id FROM users WHERE email='customer1@innovacx.net')
+      AND prt.used_at IS NULL
+  );
 
 -- ---------------------------------------------------------------------------
--- 20. RESOLUTION FEEDBACK for March 2026 tickets that were resolved
+-- 20. SUGGESTED RESOLUTION USAGE for March 2026 tickets that were resolved
 --     (CX-R01 not yet resolved — only feedback for already-closed CX-M tickets
 --      not yet covered in the original seed)
 -- ---------------------------------------------------------------------------
 
-INSERT INTO public.ticket_resolution_feedback (
-  ticket_id, employee_user_id, decision,
-  suggested_resolution, employee_resolution, final_resolution,
-  model_version, confidence_at_time
+INSERT INTO public.suggested_resolution_usage (
+  ticket_id, employee_user_id, decision, department,
+  suggested_text, final_text, used
 )
-SELECT t.id, u.id, fb.decision, fb.suggested, fb.custom, fb.final,
-  'resolution-v2.0', fb.conf
+SELECT t.id, u.id, fb.decision, d.name, fb.suggested, fb.final, (fb.decision = 'accepted')
 FROM (VALUES
   ('CX-M20','ahmed@innovacx.net','accepted',
    'Tighten mounting bolts and balance fan blade.',
@@ -3850,9 +4177,13 @@ FROM (VALUES
 ) AS fb(ticket_code, emp_email, decision, suggested, custom, final, conf)
 JOIN tickets t ON t.ticket_code = fb.ticket_code
 JOIN users u ON u.email = fb.emp_email
+LEFT JOIN departments d ON d.id = t.department_id
 WHERE NOT EXISTS (
-  SELECT 1 FROM public.ticket_resolution_feedback trf
-  WHERE trf.ticket_id=t.id AND trf.employee_user_id=u.id
+  SELECT 1 FROM public.suggested_resolution_usage sru
+  WHERE sru.ticket_id = t.id
+    AND sru.employee_user_id = u.id
+    AND sru.decision = fb.decision
+    AND sru.final_text = fb.final
 );
 
 
@@ -3899,6 +4230,8 @@ BEGIN
     (t_m53,  'Maintenance', 52.40, FALSE, 'Facilities Management', 'manager', mgr, now() - INTERVAL '5 hours'),
     (t_3862, 'HR',          45.00, FALSE, 'Legal & Compliance',    'manager', mgr, now() - INTERVAL '1 day');
 END $$;
+
+\ir scripts/learning_seed.sql
 
 -- ---------------------------------------------------------------------------
 -- NOTE: Analytics materialized views are created and refreshed by

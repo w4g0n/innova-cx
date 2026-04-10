@@ -1,6 +1,5 @@
 import logging
 import os
-import threading
 from pathlib import Path
 from typing import Any
 
@@ -8,9 +7,9 @@ logger = logging.getLogger(__name__)
 CHATBOT_SERVICE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CHATBOT_MODEL_PATH = CHATBOT_SERVICE_DIR / "model"
 
-# ── Configuration ────────────────────────────────────────────────────────────
+# Configuration
 
-# Provider: "local" (default, Qwen/HF model) | "template" (rule-based, no model required)
+# Provider: "local" (default, local model) | "template" (rule-based, no model required)
 CHATBOT_LLM_PROVIDER = os.environ.get("CHATBOT_LLM_PROVIDER", "local").strip().lower()
 
 MAX_NEW_TOKENS = int(os.environ.get("CHATBOT_MAX_NEW_TOKENS", "128"))
@@ -18,27 +17,22 @@ DO_SAMPLE = os.environ.get("CHATBOT_DO_SAMPLE", "true").lower() == "true"
 TEMPERATURE = float(os.environ.get("CHATBOT_TEMPERATURE", "0.7"))
 TOP_P = float(os.environ.get("CHATBOT_TOP_P", "0.9"))
 QUANTIZATION = os.environ.get("CHATBOT_QUANTIZATION", "4bit").strip().lower()
-HF_TOKEN = os.environ.get("HF_TOKEN") or None
 
 CHATBOT_MODEL_PATH = os.environ.get(
     "CHATBOT_MODEL_PATH", str(DEFAULT_CHATBOT_MODEL_PATH)
 ).strip()
-CHATBOT_MODEL_NAME = os.environ.get(
-    "CHATBOT_MODEL_NAME", "Qwen/Qwen2.5-0.5B-Instruct"
-).strip()
-CHATBOT_AUTO_DOWNLOAD = os.environ.get("CHATBOT_AUTO_DOWNLOAD", "true").lower() in {"1", "true", "yes"}
+CHATBOT_MODEL_NAME = os.environ.get("CHATBOT_MODEL_NAME", "").strip()
+HF_TOKEN = os.environ.get("HF_TOKEN") or None
+CHATBOT_AUTO_DOWNLOAD = os.environ.get("CHATBOT_AUTO_DOWNLOAD", "false").lower() in {"1", "true", "yes"}
 
 
 _tokenizer = None
 _model = None
 _model_init_attempted = False
 _model_warmup_completed = False
-# Serialise all generate() calls — PyTorch CPU inference is not safe to run
-# concurrently on the same model object from multiple threads.
-_generate_lock = threading.Lock()
 
 
-# ── Public helpers ───────────────────────────────────────────────────────────
+#Public helpers
 
 def llm_available() -> bool:
     """Returns True if a real LLM is loaded and ready for inference."""
@@ -87,7 +81,7 @@ def get_llm_diagnostics() -> dict[str, Any]:
     }
 
 
-# ── Model loading ────────────────────────────────────────────────────────────
+#Model loading
 
 def _init_model_once() -> None:
     global _tokenizer, _model, _model_init_attempted
@@ -108,7 +102,6 @@ def _init_model_once() -> None:
     if not (model_path / "config.json").exists() and CHATBOT_AUTO_DOWNLOAD and CHATBOT_MODEL_NAME:
         try:
             from huggingface_hub import snapshot_download
-
             logger.info("chatbot_llm | downloading model=%s to %s", CHATBOT_MODEL_NAME, CHATBOT_MODEL_PATH)
             snapshot_download(
                 repo_id=CHATBOT_MODEL_NAME,
@@ -172,7 +165,7 @@ def _init_model_once() -> None:
         _tokenizer = None
 
 
-# ── Template response ────────────────────────────────────────────────────────
+#Template response
 
 def _template_response(messages: list[dict]) -> str:
     """
@@ -225,7 +218,7 @@ def _template_response(messages: list[dict]) -> str:
     )
 
 
-# ── Local model response ─────────────────────────────────────────────────────
+#Local model response
 
 def _local_model_response(
     messages: list[dict],
@@ -241,42 +234,30 @@ def _local_model_response(
 
     import torch
 
-    last_role = messages[-1].get("role", "") if messages else ""
-    if last_role == "assistant":
-        # Continue the partial assistant message (prefix completion).
-        # add_generation_prompt=True would close the turn and start a new one,
-        # causing the model to generate a conversational reply instead of the label.
-        text = _tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            continue_final_message=True,
-        )
-    else:
-        text = _tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-        )
+    text = _tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
 
     inputs = _tokenizer([text], return_tensors="pt").to(_model.device)
-    with _generate_lock:
-        with torch.no_grad():
-            effective_do_sample = DO_SAMPLE if do_sample is None else do_sample
-            gen_kwargs: dict[str, Any] = {
-                "max_new_tokens": MAX_NEW_TOKENS if max_new_tokens is None else max_new_tokens,
-                "do_sample": effective_do_sample,
-            }
-            if effective_do_sample:
-                gen_kwargs["temperature"] = TEMPERATURE if temperature is None else temperature
-                gen_kwargs["top_p"] = TOP_P if top_p is None else top_p
-            output_ids = _model.generate(**inputs, **gen_kwargs)
+    with torch.no_grad():
+        effective_do_sample = DO_SAMPLE if do_sample is None else do_sample
+        gen_kwargs: dict[str, Any] = {
+            "max_new_tokens": MAX_NEW_TOKENS if max_new_tokens is None else max_new_tokens,
+            "do_sample": effective_do_sample,
+        }
+        if effective_do_sample:
+            gen_kwargs["temperature"] = TEMPERATURE if temperature is None else temperature
+            gen_kwargs["top_p"] = TOP_P if top_p is None else top_p
+        output_ids = _model.generate(**inputs, **gen_kwargs)
 
     generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
     response = _tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
     return response or _template_response(messages)
 
 
-# ── Public API ───────────────────────────────────────────────────────────────
+#Public API
 
 def generate_response(
     messages: list[dict],

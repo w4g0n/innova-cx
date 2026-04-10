@@ -1,45 +1,77 @@
 services:
   postgres:
-    profiles: ["frontend", "pipeline", "dev"]
-    image: postgres:14-alpine
+    profiles: ["frontend", "pipeline", "live"]
+    build:
+      context: ./database
+      dockerfile: Dockerfile
     container_name: innovacx-db
     restart: unless-stopped
     environment:
+      # POSTGRES_USER is the superuser/owner used ONLY for DB initialization
+      # and migrations. It is NOT used by runtime application services.
       POSTGRES_USER: ${POSTGRES_USER:-innovacx_admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:-complaints_db}
+      # These are passed into the init container so that the least-privilege
+      # shell script (zzz_least_privilege.sh) can set the correct
+      # password on each runtime role during first-boot initialization.
+      APP_DB_USER: ${APP_DB_USER:-innovacx_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD must be set in .env}
+      READONLY_DB_PASSWORD: ${READONLY_DB_PASSWORD:?READONLY_DB_PASSWORD must be set in .env}
+      TEST_DB_PASSWORD: ${TEST_DB_PASSWORD:?TEST_DB_PASSWORD must be set in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database:/docker-entrypoint-initdb.d
-    ports:
-      - "5433:5432"
+      - ./database/pg_hba.conf:/etc/postgresql/pg_hba.conf
+    expose:
+      # Port is available to containers on innovacx-network only.
+      # Not mapped to the host — no external or localhost access possible.
+      - "5432"
     networks:
       - innovacx-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 90s
+    command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
 
   backend:
-    profiles: ["frontend", "pipeline", "dev"]
+    profiles: ["frontend", "pipeline", "live"]
     build: ./backend
     container_name: innovacx-backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
-      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innovacx.net}"
+      PYTHONPATH: /app
+      # Runtime DB connection uses innovacx_app (least-privilege role),
+      # NOT the superuser innovacx_admin.
+      DATABASE_URL: postgresql://${APP_DB_USER:-innovacx_app}:${APP_DB_PASSWORD:?APP_DB_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-complaints_db}
+      # Admin URL used ONLY by entrypoint.sh for running schema migrations.
+      # Not used by the application at runtime.
+      DATABASE_ADMIN_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-complaints_db}
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-}"
       DISABLE_MFA: "${DISABLE_MFA:-false}"
+      JWT_TTL_SECONDS: "${JWT_TTL_SECONDS:-900}"
+      MFA_TEMP_TTL_SECONDS: "${MFA_TEMP_TTL_SECONDS:-900}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
       CHATBOT_PROXY_TIMEOUT_SECONDS: "${CHATBOT_PROXY_TIMEOUT_SECONDS:-30}"
-      DEPARTMENT_ROUTING_THRESHOLD: "${DEPARTMENT_ROUTING_THRESHOLD:-0.7}"
-      ROUTING_CONFIDENCE_THRESHOLD: "${DEPARTMENT_ROUTING_THRESHOLD:-0.7}"
+      TRANSCRIBER_URL: "${TRANSCRIBER_URL:-http://transcriber:3001}"
+      TRANSCRIBER_URL_LOCAL: "${TRANSCRIBER_URL_LOCAL:-http://localhost:3001}"
       SUGGESTED_RESOLUTION_MODEL_NAME: "${SUGGESTED_RESOLUTION_MODEL_NAME:-google/flan-t5-small}"
       SUGGESTED_RESOLUTION_MODEL_PATH: "${SUGGESTED_RESOLUTION_MODEL_PATH:-}"
       SUGGESTED_RESOLUTION_AUTO_DOWNLOAD: "${SUGGESTED_RESOLUTION_AUTO_DOWNLOAD:-false}"
       SUGGESTED_RESOLUTION_USE_MOCK: "${SUGGESTED_RESOLUTION_USE_MOCK:-true}"
       SUGGESTED_RESOLUTION_PIPELINE_ONLY: "${SUGGESTED_RESOLUTION_PIPELINE_ONLY:-true}"
       WATCHFILES_FORCE_POLLING: "true"
+      # DEV_SEED_USERS: default false in production.
+      # Set DEV_SEED_USERS=true in .env only for local dev if you need
+      # the hardcoded demo accounts auto-created/reset on every startup.
+      DEV_SEED_USERS: "${DEV_SEED_USERS:-false}"
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET must be set in .env}"
+      CSRF_SECRET: "${CSRF_SECRET:-}"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-}"
+      RESEND_API_KEY: "${RESEND_API_KEY:-}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,18 +85,24 @@ services:
       - innovacx-network
 
   chatbot:
-    profiles: ["pipeline", "dev"]
+    profiles: ["live"]
     build: ./backend/services/chatbot
+    image: innova-cx-chatbot:latest
+    pull_policy: never
     container_name: innovacx-chatbot
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
-      HF_TOKEN: "${HF_TOKEN:-}"
-      HF_HOME: /app/hf_cache
+      # Runtime DB connection uses innovacx_app (least-privilege role),
+      # NOT the superuser innovacx_admin.
+      DATABASE_URL: postgresql://${APP_DB_USER:-innovacx_app}:${APP_DB_PASSWORD:?APP_DB_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-complaints_db}
       CHATBOT_LLM_PROVIDER: "${CHATBOT_LLM_PROVIDER:-template}"
       CHATBOT_MODEL_PATH: "${CHATBOT_MODEL_PATH:-}"
-      CHATBOT_MODEL_NAME: "${CHATBOT_MODEL_NAME:-Qwen/Qwen2.5-0.5B-Instruct}"
-      CHATBOT_AUTO_DOWNLOAD: "${CHATBOT_AUTO_DOWNLOAD:-true}"
+      CHATBOT_MODEL_NAME: "${CHATBOT_MODEL_NAME:-}"
+      CHATBOT_AUTO_DOWNLOAD: "${CHATBOT_AUTO_DOWNLOAD:-false}"
+      HF_TOKEN: "${HF_TOKEN:-}"
       CHATBOT_USE_MOCK: "${CHATBOT_USE_MOCK:-false}"
       CHATBOT_MAX_NEW_TOKENS: "${CHATBOT_MAX_NEW_TOKENS:-128}"
       CHATBOT_QUANTIZATION: "${CHATBOT_QUANTIZATION:-4bit}"
@@ -90,26 +128,42 @@ services:
       - innovacx-network
 
   transcriber:
-    profiles: ["dev"]
+    profiles: ["live"]
     build: ./backend/services/transcriber
     container_name: innovacx-transcriber
     restart: unless-stopped
+    environment:
+      WHISPER_MODEL_PATH: "${WHISPER_MODEL_PATH:-/app/model}"
+      WHISPER_MODEL_NAME: "${WHISPER_MODEL_NAME:-base}"
+      HF_TOKEN: "${HF_TOKEN:-}"
+    volumes:
+      - transcriber_model:/app/model
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:3001/health', timeout=5)\""]
+      interval: 20s
+      timeout: 7s
+      retries: 5
+      start_period: 30s
     ports:
       - "3001:3001"
     networks:
       - innovacx-network
 
   orchestrator:
-    profiles: ["pipeline", "dev"]
+    profiles: ["pipeline", "live"]
     build:
       context: .
       dockerfile: ai-models/MultiAgentPipeline/Orchestrator/Dockerfile
+    image: innova-cx-orchestrator:latest
+    pull_policy: never
     container_name: innovacx-orchestrator
     restart: unless-stopped
     environment:
       PYTHONPATH: /app
-      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-customer1@innovacx.net}"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-innovacx_admin}:${POSTGRES_PASSWORD:-changeme123}@postgres:5432/${POSTGRES_DB:-complaints_db}
+      SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-}"
+      # Runtime DB connection uses innovacx_app (least-privilege role),
+      # NOT the superuser innovacx_admin.
+      DATABASE_URL: postgresql://${APP_DB_USER:-innovacx_app}:${APP_DB_PASSWORD:?APP_DB_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-complaints_db}
       SENTIMENT_MODEL_DIR: "${SENTIMENT_MODEL_DIR:-/app/agents/step04_sentimentanalysis/model}"
       CLASSIFIER_MODEL_DIR: "${CLASSIFIER_MODEL_DIR:-/app/agents/step03_classifier/model}"
       CLASSIFIER_MODEL_PATH: "${CLASSIFIER_MODEL_PATH:-}"
@@ -119,6 +173,7 @@ services:
       SUGGESTED_RESOLUTION_MODEL_NAME: "${SUGGESTED_RESOLUTION_MODEL_NAME:-google/flan-t5-small}"
       SUGGESTED_RESOLUTION_MODEL_PATH: "${SUGGESTED_RESOLUTION_MODEL_PATH:-}"
       SUGGESTED_RESOLUTION_AUTO_DOWNLOAD: "${SUGGESTED_RESOLUTION_AUTO_DOWNLOAD:-false}"
+      CHATBOT_STARTUP_TIMEOUT_SECONDS: "${CHATBOT_STARTUP_TIMEOUT_SECONDS:-0}"
       FEATURE_LABELER_MODEL_PATH: "${FEATURE_LABELER_MODEL_PATH:-/app/agents/step08_featureengineering/model}"
       FEATURE_LABELER_MODEL_NAME: "${FEATURE_LABELER_MODEL_NAME:-MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli}"
       FEATURE_LABELER_AUTO_DOWNLOAD: "${FEATURE_LABELER_AUTO_DOWNLOAD:-false}"
@@ -128,22 +183,20 @@ services:
       DEPARTMENT_ROUTER_MODEL_NAME: "${DEPARTMENT_ROUTER_MODEL_NAME:-MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli}"
       DEPARTMENT_ROUTER_AUTO_DOWNLOAD: "${DEPARTMENT_ROUTER_AUTO_DOWNLOAD:-false}"
       DEPARTMENT_ROUTER_FORCE_CPU: "${DEPARTMENT_ROUTER_FORCE_CPU:-false}"
-      DEPARTMENT_ROUTING_THRESHOLD: "${DEPARTMENT_ROUTING_THRESHOLD:-0.7}"
       DEPARTMENT_ROUTER_CALIBRATION_WEIGHT: "${DEPARTMENT_ROUTER_CALIBRATION_WEIGHT:-0.12}"
       SUBJECT_GENERATOR_MODEL_PATH: "${SUBJECT_GENERATOR_MODEL_PATH:-/app/agents/step01_subjectgeneration/model}"
       SUBJECT_GENERATOR_MODEL_NAME: "${SUBJECT_GENERATOR_MODEL_NAME:-google/flan-t5-small}"
       SUBJECT_GENERATOR_AUTO_DOWNLOAD: "${SUBJECT_GENERATOR_AUTO_DOWNLOAD:-false}"
+      RECURRENCE_ENCODER_MODEL: "${RECURRENCE_ENCODER_MODEL:-/app/agents/step01_recurrence/model}"
+      RECURRENCE_SIMILARITY_THRESHOLD: "${RECURRENCE_SIMILARITY_THRESHOLD:-0.75}"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-}"
     depends_on:
       postgres:
         condition: service_healthy
       backend:
         condition: service_started
-      chatbot:
-        condition: service_healthy
     ports:
       - "8004:8004"
-    volumes:
-      - ./ai-models/MultiAgentPipeline/Orchestrator/agents:/app/agents
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8004/health', timeout=5)\""]
       interval: 20s
@@ -154,7 +207,7 @@ services:
       - innovacx-network
 
   frontend:
-    profiles: ["frontend", "pipeline", "dev"]
+    profiles: ["frontend", "pipeline", "live"]
     build: ./frontend
     container_name: innovacx-frontend
     entrypoint:
@@ -165,7 +218,7 @@ services:
       VITE_API_BASE_URL: "${VITE_API_BASE_URL:-}"
       VITE_ORCHESTRATOR_URL: "${VITE_ORCHESTRATOR_URL:-}"
       CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: "250"
+      CHOKIDAR_INTERVAL: "3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -176,11 +229,45 @@ services:
     networks:
       - innovacx-network
 
+  backup:
+    profiles: ["backup", "frontend", "pipeline", "live"]
+    build: ./database/backup
+    container_name: innovacx-backup
+    restart: unless-stopped
+    environment:
+      # Superuser — used ONLY by restore_test.sh for CREATE/DROP DATABASE
+      # and pg_restore. Allowed from Docker network by pg_hba.conf rule 3
+      # (172.16.0.0/12, md5). Port 5432 is not mapped to host so this
+      # access is strictly internal to the Docker network.
+      POSTGRES_USER: ${POSTGRES_USER:-innovacx_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      # Runtime role — used by backup.sh (pg_dump) and integrity check query
+      APP_DB_USER: ${APP_DB_USER:-innovacx_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-complaints_db}
+      # Backup encryption passphrase — MUST be set in .env, never use default in production
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?BACKUP_PASSPHRASE must be set in .env}
+      # How many days of backup files to retain (default: 14)
+      BACKUP_RETAIN_DAYS: ${BACKUP_RETAIN_DAYS:-14}
+      # Postgres host on the shared network
+      PG_HOST: postgres
+      PG_PORT: "5432"
+    volumes:
+      # Named volume for encrypted backup files
+      - backup_data:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - innovacx-network
+
 volumes:
   postgres_data:
   hf_cache:
   chatbot_models:
+  transcriber_model:
   uploads_data:
+  backup_data:
 
 networks:
   innovacx-network:

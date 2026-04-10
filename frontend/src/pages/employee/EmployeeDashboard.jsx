@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, Navigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
+import { sanitizeText, sanitizeId, sanitizePriority } from "./EmployeeSanitize";
 import "./EmployeeDashboard.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 
@@ -14,21 +15,12 @@ function monthKeyToReportId(monthKey) {
   if (!match) return "";
 
   const year = match[1];
-  const mm = match[2];
+  const mm   = match[2];
 
   const map = {
-    "01": "jan",
-    "02": "feb",
-    "03": "mar",
-    "04": "apr",
-    "05": "may",
-    "06": "jun",
-    "07": "jul",
-    "08": "aug",
-    "09": "sep",
-    "10": "oct",
-    "11": "nov",
-    "12": "dec",
+    "01": "jan", "02": "feb", "03": "mar", "04": "apr",
+    "05": "may", "06": "jun", "07": "jul", "08": "aug",
+    "09": "sep", "10": "oct", "11": "nov", "12": "dec",
   };
 
   const abbr = map[mm];
@@ -38,8 +30,8 @@ function monthKeyToReportId(monthKey) {
 function getStoredToken() {
   const direct =
     localStorage.getItem("access_token") ||
-    localStorage.getItem("token") ||
-    localStorage.getItem("jwt") ||
+    localStorage.getItem("token")        ||
+    localStorage.getItem("jwt")          ||
     localStorage.getItem("authToken");
 
   if (direct) return direct;
@@ -56,15 +48,14 @@ function getStoredToken() {
 
 export default function EmployeeDashboard() {
   const revealRef = useScrollReveal();
-  const [employee, setEmployee] = useState(null);
-  const [kpis, setKpis] = useState({});
-  const [tickets, setTickets] = useState([]);
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [employee,  setEmployee]  = useState(null);
+  const [kpis,      setKpis]      = useState({});
+  const [tickets,   setTickets]   = useState([]);
+  const [reports,   setReports]   = useState([]);
+  const [loading,   setLoading]   = useState(true);
   const [authError, setAuthError] = useState("");
 
-  // 🔐 MFA + Auth Enforcement
-  const token = getStoredToken();
+  const token    = getStoredToken();
   const mfaToken = sessionStorage.getItem("mfa_token");
 
   useEffect(() => {
@@ -89,30 +80,28 @@ export default function EmployeeDashboard() {
         }
 
         if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`Dashboard fetch failed (${res.status}): ${text}`);
+          // Never expose raw server response text — throw a generic internal error
+          throw new Error("dashboard_fetch_failed");
         }
 
         const data = await res.json();
-
         if (cancelled) return;
 
         setEmployee(data.employee || null);
         setKpis(data.kpis || {});
         setTickets(Array.isArray(data.tickets) ? data.tickets : []);
         setReports(Array.isArray(data.reports) ? data.reports : []);
-      } catch (err) {
-        console.error("Error loading dashboard data:", err);
-
+      } catch {
+        // Catch-all uses safe fallback values — raw error.message is never rendered
         if (!cancelled) {
           setEmployee({ name: "Employee" });
           setKpis({
-            ticketsAssigned: 0,
-            inProgress: 0,
-            resolvedThisMonth: 0,
-            critical: 0,
-            overdue: 0,
-            newToday: 0,
+            ticketsAssigned:     0,
+            inProgress:          0,
+            resolvedThisMonth:   0,
+            critical:            0,
+            overdue:             0,
+            newToday:            0,
           });
           setTickets([]);
           setReports([]);
@@ -123,19 +112,19 @@ export default function EmployeeDashboard() {
     }
 
     load();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [token]);
 
-  // 🔐 MFA + Auth Enforcement (after hooks)
-  if (!token && mfaToken) {
-    return <Navigate to="/verify" replace />;
-  }
-  if (!token && !mfaToken) {
-    return <Navigate to="/" replace />;
-  }
+  // Hooks must be called before any early returns — Rules of Hooks.
+  const displayName = sanitizeText(employee?.name || "Employee", 100);
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    const tod = h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening";
+    return `${tod}, ${displayName}`;
+  }, [displayName]);
+
+  if (!token && mfaToken)  return <Navigate to="/verify" replace />;
+  if (!token && !mfaToken) return <Navigate to="/"       replace />;
 
   if (loading)
     return (
@@ -173,17 +162,17 @@ export default function EmployeeDashboard() {
     <Layout role="employee">
       <div className="empDash" ref={revealRef}>
         <PageHeader
-          title={`Good Morning, ${employee?.name || "Employee"}`}
-          subtitle="Here’s your activity and assigned workload."
+          title={greeting}
+          subtitle="Here's your activity and assigned workload."
         />
 
         <section className="empDash__kpis">
-          <KpiCard label="Tickets Assigned" value={kpis.ticketsAssigned} />
-          <KpiCard label="In Progress" value={kpis.inProgress} />
+          <KpiCard label="Tickets Assigned"    value={kpis.ticketsAssigned}   />
+          <KpiCard label="In Progress"         value={kpis.inProgress}        />
           <KpiCard label="Resolved This Month" value={kpis.resolvedThisMonth} />
-          <KpiCard label="Critical" value={kpis.critical} />
-          <KpiCard label="Overdue" value={kpis.overdue} />
-          <KpiCard label="New Today" value={kpis.newToday} />
+          <KpiCard label="Critical"            value={kpis.critical}          />
+          <KpiCard label="Overdue"             value={kpis.overdue}           />
+          <KpiCard label="New Today"           value={kpis.newToday}          />
         </section>
 
         <section className="empDash__grid">
@@ -204,16 +193,22 @@ export default function EmployeeDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {tickets.map((t) => (
-                    <tr key={t.ticketId}>
-                      <td>{t.ticketId}</td>
-                      <td>{t.subject}</td>
-                      <td>
-                        <PriorityPill priority={t.priority} />
-                      </td>
-                      <td>{t.status}</td>
-                    </tr>
-                  ))}
+                  {tickets.map((t) => {
+                    // Sanitize every API-supplied field before rendering
+                    const ticketId = sanitizeId(t.ticketId, 48);
+                    const subject  = sanitizeText(t.subject, 200);
+                    const priority = sanitizePriority(t.priority);
+                    const status   = sanitizeText(t.status, 40);
+
+                    return (
+                      <tr key={ticketId}>
+                        <td>{ticketId}</td>
+                        <td>{subject}</td>
+                        <td><PriorityPill priority={priority} /></td>
+                        <td>{status}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -231,13 +226,19 @@ export default function EmployeeDashboard() {
               Monthly summaries auto-generated for you.
             </p>
 
-            {reports.map((r) => (
-              <ReportItem
-                key={r.month || r.label}
-                month={r.label}
-                reportId={monthKeyToReportId(r.month)}
-              />
-            ))}
+            {reports.map((r) => {
+              // Sanitize report label and derive reportId safely
+              const safeLabel    = sanitizeText(r.label, 40);
+              const safeReportId = monthKeyToReportId(r.month);
+
+              return (
+                <ReportItem
+                  key={r.month || r.label}
+                  month={safeLabel}
+                  reportId={safeReportId}
+                />
+              );
+            })}
           </aside>
         </section>
       </div>
@@ -248,6 +249,7 @@ export default function EmployeeDashboard() {
 function ReportItem({ month, reportId }) {
   return (
     <div className="empReportCard">
+      {/* month and reportId are sanitized by the parent before being passed as props */}
       <div className="empReportCard__month">{month}</div>
       <div className="empReportCard__desc">Performance Summary</div>
 

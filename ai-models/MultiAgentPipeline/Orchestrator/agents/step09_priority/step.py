@@ -81,7 +81,7 @@ async def score_priority(state: dict) -> dict:
             issue_urgency_val=issue_urgency,
             business_impact_val=business_impact,
             safety_concern=safety_concern,
-            is_recurring=is_recurring,
+            is_recurring=False,  # recurrence handled via Branch B — never influence the model
             ticket_type=ticket_type,
         )
         final_priority = str(result["final_priority"]).strip().lower()

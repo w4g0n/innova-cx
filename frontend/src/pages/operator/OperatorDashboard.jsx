@@ -62,7 +62,6 @@ function ModuleCard({ tag, title, desc, to, rows, loading }) {
   );
 }
 
-
 export default function OperatorDashboard() {
   const revealRef = useScrollReveal();
 
@@ -76,6 +75,8 @@ export default function OperatorDashboard() {
   const [qcRescoreLoading, setQcRescoreLoading] = useState(true);
   const [users,            setUsers]            = useState(null);
   const [usersLoading,     setUsersLoading]     = useState(true);
+  const [queueStats,       setQueueStats]       = useState(null);
+  const [queueStatsLoading,setQueueStatsLoading]= useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,7 +91,14 @@ export default function OperatorDashboard() {
     load("/operator/analytics/qc/acceptance?timeRange=last30days",          setQcAccept,  setQcAcceptLoading);
     load("/operator/analytics/qc/rescoring?timeRange=last30days",           setQcRescore, setQcRescoreLoading);
     load("/operator/users",                                                  setUsers,     setUsersLoading);
+    load("/operator/pipeline-queue/stats",                                   setQueueStats,setQueueStatsLoading);
     return () => { cancelled = true; };
+  }, []);
+
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    const tod = h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening";
+    return `${tod}, Operator`;
   }, []);
 
   const userStats = useMemo(() => {
@@ -140,13 +148,24 @@ export default function OperatorDashboard() {
         { label: "Inactive",    value: userStats?.inactive ?? "—", ok: userStats ? userStats.inactive === 0 : undefined },
       ],
     },
+    {
+      tag: "Pipeline", title: "Pipeline Queue",
+      desc: "Live ticket processing queue. Held tickets require operator correction before continuing.",
+      to: "/operator/pipeline-queue", loading: queueStatsLoading,
+      rows: [
+        { label: "Queued",     value: queueStats?.queued     ?? "—" },
+        { label: "Processing", value: queueStats?.processing ?? "—" },
+        { label: "Held",       value: queueStats?.held       ?? "—", ok: queueStats ? queueStats.held === 0 : undefined },
+        { label: "Done (24h)", value: queueStats?.completed  ?? "—" },
+      ],
+    },
   ];
 
   return (
     <Layout role="operator">
       <div className="opDash" ref={revealRef}>
         <PageHeader
-          title="Operator Dashboard"
+          title={greeting}
           subtitle="Metrics shown are from the last 30 days. Use each module's filters for deeper analysis."
         />
 

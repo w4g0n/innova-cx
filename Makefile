@@ -1,12 +1,11 @@
-# Make sure command-style targets always run (even when files/folders share names)
 .PHONY: \
 	frontend frontend-build \
 	frontend-logs \
 	pipeline pipeline-build \
 	pipeline-logs \
 	ticket-flow-logs \
-	dev dev-build \
-	dev-logs \
+	live live-build \
+	live-logs \
 	down
 
 # =========================
@@ -41,19 +40,20 @@ pipeline-logs:
 ticket-flow-logs:
 	bash scripts/ticket_flow_logs.sh
 
+
 # =========================
-# PROFILE 3: DEV
+# PROFILE 3: LIVE
 # (Frontend + Backend + DB + Orchestrator + Chatbot + Transcriber)
 # =========================
 
-dev:
-	docker compose --profile dev up -d
+live:
+	docker compose --profile live up -d
 
-dev-build:
-	docker compose --profile dev up --build -d
+live-build:
+	docker compose --profile live up --build -d
 
-dev-logs:
-	docker compose --profile dev logs -f
+live-logs:
+	docker compose --profile live logs -f
 
 
 # =========================
@@ -61,4 +61,4 @@ dev-logs:
 # =========================
 
 down:
-	COMPOSE_PROFILES=frontend,pipeline,dev docker compose down --remove-orphans
+	COMPOSE_PROFILES=frontend,pipeline,live docker compose down --remove-orphans

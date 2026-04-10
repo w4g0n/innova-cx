@@ -1,6 +1,4 @@
-/* =====================================================
-   empNotifs — shared by Employee, Manager, Operator
-   ===================================================== */
+/* empNotifs — shared by Employee, Manager, Operator */
 
 .empNotifs {
   display: flex;
@@ -115,13 +113,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 340px;   /* ← add this so title doesn't push pill off */
+  max-width: 340px; 
 }
 
 .empNotifs__message {
   font-size: 13px;
   color: rgba(17, 17, 17, 0.62);
-  margin-top: 2px;   /* ← was 4px */
+  margin-top: 2px;
   line-height: 1.5;
 }
 
@@ -162,4 +160,24 @@
 /* Action button (Mark all read / Show Unread) */
 .empNotifs__actionBtn {
   font-weight: 700;
+}
+
+/* Dismiss (X) button */
+.empNotifs__dismiss {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(17, 17, 17, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.empNotifs__dismiss:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
 }

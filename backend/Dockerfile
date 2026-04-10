@@ -30,8 +30,13 @@ COPY . .
 # Create directories
 RUN mkdir -p /app/uploads /app/logs
 
+# Copy entrypoint to /entrypoint.sh (outside /app so the volume mount cannot overwrite it)
+COPY entrypoint.sh /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
+
 # Expose port
 EXPOSE 8000
 
-# Run the application
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Run via entrypoint (runs migrations + backfill, then starts uvicorn)
+WORKDIR /app/api
+ENTRYPOINT ["/entrypoint.sh"]

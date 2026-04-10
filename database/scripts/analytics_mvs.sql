@@ -15,7 +15,7 @@
 --   1. mv_ticket_base          → base tables (tickets, departments, user_profiles)
 --   2. mv_daily_volume         → mv_ticket_base
 --   3. mv_employee_daily       → mv_ticket_base
---   4. mv_acceptance_daily     → ticket_resolution_feedback + tickets (base)
+--   4. mv_acceptance_daily     → suggested_resolution_usage + tickets (base)
 --   5. mv_operator_qc_daily    → tickets + approval_requests (base)
 --   6. mv_chatbot_daily        → sessions + user_chat_logs (base)
 --   7. mv_sentiment_daily      → sentiment_outputs + tickets + departments (base)
@@ -208,10 +208,10 @@ CREATE INDEX IF NOT EXISTS idx_tickets_resolve_breached
 CREATE INDEX IF NOT EXISTS idx_tickets_model_priority
     ON tickets (model_priority)
     WHERE model_priority IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_trf_employee_decision
-    ON ticket_resolution_feedback (employee_user_id, decision);
-CREATE INDEX IF NOT EXISTS idx_trf_ticket_created
-    ON ticket_resolution_feedback (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_sru_employee_decision
+    ON suggested_resolution_usage (employee_user_id, decision);
+CREATE INDEX IF NOT EXISTS idx_sru_ticket_created
+    ON suggested_resolution_usage (ticket_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_approval_requests_type_submitted
     ON approval_requests (request_type, submitted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sessions_escalated
@@ -404,22 +404,23 @@ CREATE INDEX IF NOT EXISTS mv_employee_daily_month ON mv_employee_daily (created
 -- =============================================================================
 -- MV 4: mv_acceptance_daily
 -- Daily per-employee resolution acceptance. Powers manager employee analytics.
--- Source: ticket_resolution_feedback + tickets (base tables).
+-- Source: suggested_resolution_usage + tickets.
 -- =============================================================================
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_acceptance_daily AS
 SELECT
-    trf.employee_user_id                                     AS employee_id,
+    sru.employee_user_id                                     AS employee_id,
     up.full_name                                             AS employee_name,
     date_trunc('day',   t.created_at)::date                  AS created_day,
     date_trunc('month', t.created_at)::date                  AS created_month,
     COUNT(*)                                                 AS total,
-    COUNT(*) FILTER (WHERE trf.decision = 'accepted')        AS accepted,
-    COUNT(*) FILTER (WHERE trf.decision = 'declined_custom') AS declined
-FROM ticket_resolution_feedback trf
-JOIN tickets       t  ON t.id       = trf.ticket_id
-JOIN user_profiles up ON up.user_id = trf.employee_user_id
-GROUP BY trf.employee_user_id, up.full_name,
+    COUNT(*) FILTER (WHERE sru.decision = 'accepted')        AS accepted,
+    COUNT(*) FILTER (WHERE sru.decision = 'declined_custom') AS declined
+FROM suggested_resolution_usage sru
+JOIN tickets       t  ON t.id       = sru.ticket_id
+JOIN user_profiles up ON up.user_id = sru.employee_user_id
+WHERE sru.employee_user_id IS NOT NULL AND sru.decision IS NOT NULL
+GROUP BY sru.employee_user_id, up.full_name,
          date_trunc('day',   t.created_at)::date,
          date_trunc('month', t.created_at)::date
 ;

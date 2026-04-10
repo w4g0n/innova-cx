@@ -4,68 +4,80 @@ import novaLogo from "../assets/nova-logo.png";
 import "./PublicLanding.css";
 
 const AGENTS_DATA = [
-  { name: "Transcriber", role: "Audio → Text", model: "Whisper", color: "#818cf8", icon: "mic",
-    details: "Transcribes voice submissions into editable text before the ticket enters the pipeline." },
-  { name: "Chatbot", role: "Ticket Intake", model: "Qwen", color: "#c084fc", icon: "inbox",
-    details: "Nova - the front-line chatbot. Handles inquiries using a knowledge base and initiates formal ticketing when escalation is needed." },
-  { name: "Classifier", role: "Complaint vs Inquiry", model: "DeBERTa NLI", color: "#a78bfa", icon: "tag",
-    details: "Classifies the ticket as a Complaint or Inquiry, so the correct workflow can continue." },
-  { name: "Sentiment", role: "Emotion Detection", model: "RoBERTa + Librosa", color: "#e879f9", icon: "heart",
-    details: "RoBERTa reads the ticket text for tone and frustration; Librosa extracts emotional cues from the audio waveform." },
-  { name: "Features", role: "Urgency & Impact", model: "DeBERTa NLI", color: "#f0abfc", icon: "settings",
-    details: "Extracts safety concern, severity, urgency, business impact, and recurrence from ticket content and history." },
-  { name: "Prioritizer", role: "Priority Scoring", model: "XGBoost", color: "#c026d3", icon: "scale",
-    details: "Assigns Low, Medium, High, or Critical priority using engineered ticket signals and learned scoring patterns." },
-  { name: "Router", role: "Department Assignment", model: "DeBERTa", color: "#d946ef", icon: "building",
-    details: "Routes tickets to the best-fit department and sends low-confidence cases for manager approval." },
-  { name: "Resolver", role: "Suggested Resolution", model: "Qwen", color: "#a855f7", icon: "lightbulb",
-    details: "Generates a suggested resolution for the employee to approve, edit, or reject, and retrains on every correction." },
+  { name: "Recurrence",            role: "History Detection",       model: "DB Lookup",         color: "#f472b6", icon: "settings",
+    details: "Cross-references incoming tickets against historical records to detect repeated issues and flag recurring complaints." },
+  { name: "Subject Generation",    role: "Topic Extraction",        model: "DeBERTa NLI",       color: "#4fc3f7", icon: "tag",
+    details: "Determines the core subject of the ticket so the system can follow the correct downstream workflow." },
+  { name: "Suggested Resolution",  role: "Resolution Draft",        model: "Qwen",              color: "#a855f7", icon: "lightbulb",
+    details: "Generates a suggested resolution for the assigned employee to approve, edit, or reject — and retrains on every correction." },
+  { name: "Classification",        role: "Complaint / Inquiry",     model: "DeBERTa NLI",       color: "#fbbf24", icon: "tag",
+    details: "Classifies the ticket as a Complaint or Inquiry so the correct workflow path is followed. Bypassed when type is already known." },
+  { name: "Sentiment Analysis",    role: "Emotion Detection",       model: "RoBERTa",           color: "#e879f9", icon: "heart",
+    details: "Reads ticket text and produces a continuous sentiment score from −1 to +1, capturing tone, frustration, and urgency cues." },
+  { name: "Audio Analysis",        role: "Voice Sentiment",         model: "Librosa",           color: "#34d399", icon: "mic",
+    details: "Processes raw audio waveforms to extract emotional tone directly from speech — pitch, energy, and zero-crossing rate." },
+  { name: "Feature Engineering",   role: "Urgency & Impact",        model: "DeBERTa NLI",       color: "#e8b87a", icon: "settings",
+    details: "Infers five operational labels in parallel — safety concern, severity, urgency, business impact, and recurrence — from ticket text." },
+  { name: "Prioritization Engine", role: "Priority Scoring",        model: "XGBoost",           color: "#d4b96a", icon: "scale",
+    details: "Assigns Critical, High, Medium, or Low priority using engineered ticket signals. Relearns from every employee rescore." },
+  { name: "Department Routing",    role: "Department Assignment",   model: "DeBERTa NLI",       color: "#7de8e8", icon: "building",
+    details: "Assigns a confidence score across all departments. Above 0.7 the ticket is auto-routed; below that it goes for manager approval." },
+  { name: "Review",                role: "Quality Check",           model: "Qwen",              color: "#f87171", icon: "clock",
+    details: "Validates the completed ticket payload — checking SLA targets, routing decisions, and priority — before final handoff to the employee." },
+  { name: "Sentiment Combiner",    role: "Signal Fusion",           model: "Fusion module",     color: "#a3e635", icon: "heart",
+    details: "Fuses text and audio sentiment into a single score. With audio: (Audio × 0.5) + (Text × 0.5). Without audio: text sentiment is used directly." },
 ];
 
 
 const PIPELINE = [
-
-{ icon: "mic", label: "Transcribe", sub: "Whisper (if audio)", color: "#818cf8" },
-{ icon: "inbox", label: "Create Ticket", sub: "Qwen chatbot or form", color: "#c084fc" },
-{ icon: "tag", label: "Classify", sub: "Complaint / Inquiry", color: "#a78bfa" },
-{ icon: "heart", label: "Sentiment", sub: "RoBERTa + Librosa", color: "#e879f9" },
-{ icon: "settings", label: "Feature Eng.", sub: "Urgency · Impact · Risk", color: "#f0abfc" },
-{ icon: "scale", label: "Prioritise", sub: "XGBoost scoring", color: "#c026d3" },
-{ icon: "clock", label: "SLA", sub: "Auto-escalation", color: "#d946ef" },
-{ icon: "building", label: "Route", sub: "DeBERTa department routing",color: "#a855f7" },
-{ icon: "lightbulb", label: "Resolution", sub: "Qwen suggested resolution", color: "#c084fc" },
-
+{ icon: "inbox",    label: "Chatbot",           sub: "Qwen · Nova",                      color: "#c084fc" },
+{ icon: "tag",      label: "Create Ticket",     sub: "Qwen chatbot or form",             color: "#a78bfa" },
+{ icon: "question", label: "Recurrence Check",  sub: "Transformer · DB lookup",          color: "#f472b6" },
+{ icon: "tag",      label: "Classify",          sub: "Complaint / Inquiry",              color: "#fbbf24" },
+{ icon: "heart",    label: "Sentiment",         sub: "RoBERTa + Librosa",                color: "#e879f9" },
+{ icon: "settings", label: "Feature Eng.",      sub: "Urgency · Impact · Risk",          color: "#e8b87a" },
+{ icon: "scale",    label: "Prioritise",        sub: "XGBoost scoring",                  color: "#d4b96a" },
+{ icon: "clock",    label: "SLA",               sub: "Auto-escalation",                  color: "#d946ef" },
+{ icon: "building", label: "Route",             sub: "Qwen department routing",          color: "#7de8e8" },
+{ icon: "lightbulb",label: "Resolution",        sub: "Qwen suggested resolution",        color: "#a855f7" },
 ];
 
-/* ── Orbit config — each planet has a distinct visual personality ── */
 const PLANET_3D = [
-  // 0: Transcriber — Mercury-like: small, grey, heavily cratered, close orbit
-  { color: "#818cf8", radius: 0.42, orbitR: 3.4,  speed: 0.011,  tiltX: 0.20,  tiltZ:  0.08, startAngle: 0.0,
-    personality: 'mercury' },
-  // 1: Chatbot — Venus-like: creamy orange-yellow, thick cloud swirls, bright
-  { color: "#f5c842", radius: 0.58, orbitR: 5.2,  speed: 0.008,  tiltX:-0.18,  tiltZ: -0.10, startAngle: 0.9,
-    personality: 'venus' },
-  // 2: Classifier — Earth-like: blue oceans, green/brown continents, white clouds, polar caps
-  { color: "#4fc3f7", radius: 0.60, orbitR: 7.1,  speed: 0.007,  tiltX: 0.28,  tiltZ:  0.12, startAngle: 1.8,
-    personality: 'earth' },
-  // 3: Sentiment — Mars-like: rust red, dark canyons, thin polar ice
-  { color: "#e85d26", radius: 0.50, orbitR: 9.1,  speed: 0.006,  tiltX:-0.12,  tiltZ: -0.07, startAngle: 2.7,
+  // 0: Recurrence — Mars-like: rust-pink, history scars
+  { color: "#f472b6", radius: 0.42, orbitR: 3.0,  speed: 0.011,  tiltX:-0.12,  tiltZ: -0.06, startAngle: 0.0,
     personality: 'mars' },
-  // 4: Features — Jupiter-like: large, amber/cream bands, great red storm
-  { color: "#e8b87a", radius: 0.95, orbitR: 11.4, speed: 0.005,  tiltX: 0.22,  tiltZ:  0.15, startAngle: 3.6,
-    personality: 'jupiter' },
-  // 5: Prioritizer — Saturn-like: pale gold, prominent rings
-  { color: "#d4b96a", radius: 0.80, orbitR: 13.8, speed: 0.004,  tiltX:-0.30,  tiltZ: -0.12, startAngle: 4.4,
-    personality: 'saturn' },
-  // 6: Router — Uranus-like: cyan-teal, smooth icy, subtle bands
-  { color: "#7de8e8", radius: 0.70, orbitR: 16.4, speed: 0.0034, tiltX: 0.17,  tiltZ:  0.09, startAngle: 5.2,
+  // 1: Subject Generation — Mercury-like: small, precise
+  { color: "#4fc3f7", radius: 0.46, orbitR: 4.4,  speed: 0.009,  tiltX: 0.20,  tiltZ:  0.08, startAngle: 1.1,
+    personality: 'mercury' },
+  // 2: Suggested Resolution — Venus-like: bright, warm
+  { color: "#a855f7", radius: 0.56, orbitR: 5.8,  speed: 0.008,  tiltX: 0.18,  tiltZ: -0.10, startAngle: 2.0,
+    personality: 'venus' },
+  // 3: Classification — Earth-like: structured, analytical
+  { color: "#fbbf24", radius: 0.54, orbitR: 7.2,  speed: 0.007,  tiltX: 0.28,  tiltZ:  0.12, startAngle: 2.9,
+    personality: 'earth' },
+  // 4: Sentiment Analysis — Uranus-like: smooth emotional cyan
+  { color: "#e879f9", radius: 0.58, orbitR: 8.6,  speed: 0.006,  tiltX:-0.30,  tiltZ: -0.11, startAngle: 3.8,
     personality: 'uranus' },
-  // 7: Resolver — Neptune-like: deep blue, violent storm swirls, white cloud streaks
-  { color: "#4169e1", radius: 0.68, orbitR: 19.0, speed: 0.0028, tiltX:-0.24,  tiltZ: -0.14, startAngle: 6.1,
+  // 5: Audio Analysis — Mercury-like: small, signal processing
+  { color: "#34d399", radius: 0.40, orbitR: 10.0, speed: 0.0055, tiltX: 0.16,  tiltZ:  0.09, startAngle: 4.6,
+    personality: 'mercury' },
+  // 6: Feature Engineering — Jupiter-like: large, complex, banded
+  { color: "#e8b87a", radius: 0.85, orbitR: 11.5, speed: 0.005,  tiltX: 0.22,  tiltZ:  0.15, startAngle: 5.3,
+    personality: 'jupiter' },
+  // 7: Prioritization Engine — Saturn-like: pale gold, prominent rings
+  { color: "#d4b96a", radius: 0.72, orbitR: 13.2, speed: 0.0042, tiltX:-0.30,  tiltZ: -0.12, startAngle: 0.5,
+    personality: 'saturn' },
+  // 8: Department Routing — Neptune-like: deep blue, directed
+  { color: "#7de8e8", radius: 0.62, orbitR: 14.8, speed: 0.0035, tiltX: 0.17,  tiltZ:  0.09, startAngle: 1.4,
     personality: 'neptune' },
+  // 9: Review — Mars-like: warm final check
+  { color: "#f87171", radius: 0.46, orbitR: 16.2, speed: 0.003,  tiltX:-0.18,  tiltZ: -0.08, startAngle: 2.3,
+    personality: 'mars' },
+  // 10: Sentiment Combiner — Earth-like: fusion of signals
+  { color: "#a3e635", radius: 0.52, orbitR: 17.5, speed: 0.0028, tiltX: 0.24,  tiltZ:  0.13, startAngle: 3.2,
+    personality: 'earth' },
 ];
 
-/* ── SVG Icons ── */
 function Icon({ name, size = 20 }) {
   const s = { width: size, height: size };
   const p = { fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" };
@@ -79,6 +91,7 @@ function Icon({ name, size = 20 }) {
     clock:     <svg {...s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
     building:  <svg {...s} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h18M3 15h18M15 3v18"/></svg>,
     lightbulb: <svg {...s} viewBox="0 0 24 24" {...p}><path d="M9 21h6M12 3a6 6 0 016 6c0 2.22-1.21 4.16-3 5.2V17H9v-2.8A6.002 6.002 0 0112 3z"/></svg>,
+    question:  <svg {...s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   };
   return icons[name] || null;
 }
@@ -151,7 +164,7 @@ function Starfield() {
   return <canvas ref={ref} className="pl-starfield" />;
 }
 
-/* ══ SOLAR SYSTEM ══ */
+/*  SOLAR SYSTEM  */
 function SolarSystem({ onReady }) {
   const mountRef  = useRef(null);
   const labelsRef = useRef(null);
@@ -216,17 +229,16 @@ function SolarSystem({ onReady }) {
       raycaster = new THREE.Raycaster();
       mouse     = new THREE.Vector2(-9999, -9999);
 
-      /* ── Lighting — sun illuminates planets, does NOT shade itself ── */
       const sunLight = new THREE.PointLight(0xfff4d6, 6.5, 320);
       scene.add(sunLight);
       /* Raised ambient — deep space scatter, keeps dark sides visible */
       scene.add(new THREE.AmbientLight(0x8866aa, 0.45));
 
-      /* ══ SUN — self-luminous fire shader ══
+      /* SUN — self-luminous fire shader 
          Key principle: the sun emits light, it is NOT lit by anything.
          Uses ShaderMaterial with no lighting, pure emission.
          All detail sampled in 3-D sphere space — zero UV banding.
-      ══════════════════════════════════════ */
+       */
       const sunVS = `
         varying vec3 vPos;
         void main(){
@@ -238,7 +250,6 @@ function SolarSystem({ onReady }) {
         uniform float uTime;
         varying vec3 vPos;
 
-        /* ── Hash & noise ── */
         float hash(vec3 p){
           p = fract(p * vec3(443.897, 441.423, 437.195));
           p += dot(p, p.yzx + 19.19);
@@ -302,13 +313,11 @@ function SolarSystem({ onReady }) {
           float fire2 = fireFbm(fc2);
           float fire  = fire1*0.65 + fire2*0.35;
 
-          /* ── Granulation cells (convection) ── */
           vec3 gp = sp*5.5 + vec3(uTime*0.015, uTime*0.011, uTime*0.009);
           float gran = voronoi(gp);
           /* Cell borders bright (rising hot plasma), centres slightly darker */
           gran = 1.0 - smoothstep(0.04, 0.40, gran)*0.25;
 
-          /* ── Sunspots (3-D arc distance) — much smaller, subtle ── */
           vec3 sc1=normalize(vec3(sin(uTime*0.05),      sin(uTime*0.03)*0.55,  cos(uTime*0.05)));
           vec3 sc2=normalize(vec3(sin(uTime*0.04+2.09), sin(uTime*0.035)*0.50, cos(uTime*0.04+2.09)));
           float a1=acos(clamp(dot(sp,sc1),-1.0,1.0));
@@ -330,7 +339,6 @@ function SolarSystem({ onReady }) {
           vec3 col = mix(cOrange, cYellow, smoothstep(0.25, 0.60, f));
           col       = mix(col,    cWhite,  smoothstep(0.55, 0.90, f));
 
-          /* ── Compose ── */
           /* Gran as luminance-only — don't let it pull colours toward grey */
           float granLum = 0.82 + gran * 0.18;
           col *= granLum;
@@ -367,7 +375,21 @@ function SolarSystem({ onReady }) {
       );
       scene.add(sun);
 
-      /* ── Corona — single smooth radial glow shader, no harsh sphere layers ── */
+      // Orchestrator label — always centered on the sun
+      const sunLabelEl = document.createElement("div");
+      sunLabelEl.className = "pl-planet-label";
+      sunLabelEl.textContent = "Orchestrator";
+      sunLabelEl.style.fontSize = "11px";
+      sunLabelEl.style.padding = "3px 9px";
+      sunLabelEl.style.borderRadius = "5px";
+      sunLabelEl.style.background = "rgba(30, 10, 0, 0.90)";
+      sunLabelEl.style.border = "1px solid rgba(255, 180, 50, 0.70)";
+      sunLabelEl.style.boxShadow = "0 0 12px rgba(255, 160, 30, 0.40)";
+      sunLabelEl.style.color = "#ffd580";
+      sunLabelEl.style.fontWeight = "700";
+      sunLabelEl.style.letterSpacing = "0.05em";
+      labelDiv.appendChild(sunLabelEl);
+
       const coronaVS = `
         varying vec3 vPos;
         void main(){ vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }
@@ -399,11 +421,11 @@ function SolarSystem({ onReady }) {
       );
       scene.add(coronaMesh);
 
-      /* ══ PLANET TEXTURE ENGINE ══
+      /*  PLANET TEXTURE ENGINE 
          Each planet has a handcrafted personality matching a real solar system body.
          Uses 3D sphere-mapped FBM noise — no axis-aligned banding ever.
          Contrast is kept subtle so surfaces look painterly, not noisy.
-      ══════════════════════════════ */
+       */
 
       function h21(x, y, s) {
         // deterministic hash → [0,1]
@@ -448,7 +470,6 @@ function SolarSystem({ onReady }) {
           let r,g,b;
 
           if(personality==='mercury') {
-            // ── Mercury: grey-tan, heavy cratering, no atmosphere ──
             const terrain = fbm(lat,lon,5,3.0,seed);
             const detail  = fbm(lat,lon,3,7.0,seed+50);
             const h = terrain*0.6+detail*0.4;
@@ -463,7 +484,6 @@ function SolarSystem({ onReady }) {
             if(ray>0.80) { const e=(ray-0.80)/0.20; r=sm(r,0.85,e*0.5); g=sm(g,0.80,e*0.5); b=sm(b,0.72,e*0.5); }
 
           } else if(personality==='venus') {
-            // ── Venus: thick creamy sulfuric clouds, yellow-orange swirls ──
             const c1 = fbm(lat,lon*0.9+lat*0.3,5,2.0,seed);
             const c2 = fbm(lat+c1*0.5,lon,4,4.0,seed+80);
             const cloud = c1*0.55+c2*0.45;
@@ -475,7 +495,6 @@ function SolarSystem({ onReady }) {
             if(absLat>0.72) { const p=(absLat-0.72)/0.28; r=sm(r,0.95,p); g=sm(g,0.88,p); b=sm(b,0.55,p); }
 
           } else if(personality==='earth') {
-            // ── Earth: blue oceans, green/brown land, white clouds, polar ice ──
             const cont = fbm(lat,lon,6,2.2,seed);      // continent mask
             const cld  = fbm(lat,lon,4,3.5,seed+400);  // cloud layer
             const isLand = cont > 0.52;
@@ -494,7 +513,6 @@ function SolarSystem({ onReady }) {
             if(absLat>0.76) { const ic=fbm(lat,lon,3,4,seed+600); const p=(absLat-0.76)/0.24*(0.7+ic*0.3); r=sm(r,0.92,p); g=sm(g,0.95,p); b=sm(b,1.0,p); }
 
           } else if(personality==='mars') {
-            // ── Mars: rusty red-orange, dark basalt lowlands, dust-covered highlands ──
             const terrain = fbm(lat,lon,5,2.5,seed);
             const detail  = fbm(lat,lon,4,6.0,seed+60);
             const h = terrain*0.65+detail*0.35;
@@ -512,7 +530,6 @@ function SolarSystem({ onReady }) {
             if(absLat>0.82) { const p=(absLat-0.82)/0.18; r=sm(r,0.88,p); g=sm(g,0.82,p); b=sm(b,0.78,p); }
 
           } else if(personality==='jupiter') {
-            // ── Jupiter: amber/cream/brown bands, organic warping, great red storm ──
             // Warp latitude with FBM for organic band edges
             const warp = fbm(lat,lon,3,1.5,seed+10)*1.2-0.6;
             const wlat = lat+warp*0.55;
@@ -532,7 +549,6 @@ function SolarSystem({ onReady }) {
             if(grs<0.20) { const gi=(0.20-grs)/0.20; r=sm(r,0.82,gi*0.9); g=sm(g,0.28,gi*0.7); b=sm(b,0.18,gi*0.5); }
 
           } else if(personality==='saturn') {
-            // ── Saturn: pale gold/beige, softer bands than Jupiter ──
             const warp = fbm(lat,lon,3,1.2,seed+15)*0.8-0.4;
             const wlat = lat+warp*0.4;
             const band = Math.sin(wlat*3.5)*0.5+0.5;
@@ -546,7 +562,6 @@ function SolarSystem({ onReady }) {
             if(absLat>0.85) { const p=(absLat-0.85)/0.15; r*=1-p*0.15; g*=1-p*0.18; }
 
           } else if(personality==='uranus') {
-            // ── Uranus: smooth pale cyan-teal, almost featureless, faint banding ──
             const smooth = fbm(lat,lon,3,1.5,seed)*0.18; // very low contrast
             const faint  = Math.sin(lat*3.0)*0.08;       // barely visible bands
             const h = 0.50+smooth+faint;
@@ -558,7 +573,6 @@ function SolarSystem({ onReady }) {
             if(absLat>0.70) { const p=(absLat-0.70)/0.30; r=sm(r,0.72,p*0.4); g=sm(g,0.95,p*0.3); b=sm(b,1.0,p*0.3); }
 
           } else { // neptune
-            // ── Neptune: deep royal blue, violent white cloud streaks, dark storm ──
             const turb = fbm(lat,lon,5,2.8,seed);
             const streak = fbm(lat,lon*1.4,3,5.0,seed+200);
             // Deep blue base
@@ -598,7 +612,7 @@ function SolarSystem({ onReady }) {
         return {tex,bump};
       }
 
-      /* ══ PLANETS ══ */
+      /*  PLANETS  */
       PLANET_3D.forEach((cfg, i) => {
         const hex = cfg.color;
         const r   = parseInt(hex.slice(1,3),16)/255;
@@ -655,8 +669,8 @@ function SolarSystem({ onReady }) {
         mesh.position.set(cfg.orbitR, 0, 0);
         innerPivot.add(mesh);
 
-        // Saturn-style rings on planet index 5 (saturn personality)
-        if (i === 5) {
+        // Saturn-style rings on planet index 7 (Prioritization Engine — saturn personality)
+        if (i === 7) {
           const ringMat = new THREE.MeshBasicMaterial({
             color: new THREE.Color(0.72, 0.60, 0.35),
             transparent: true, opacity: 0.55, side: THREE.DoubleSide,
@@ -699,10 +713,10 @@ function SolarSystem({ onReady }) {
         planetObjects.push({ mesh, labelAnchor, orbitPivot, innerPivot, cfg, idx: i, mat, r, g, b });
       });
 
-      /* ══ REALISTIC ASTEROIDS ══
+      /* REALISTIC ASTEROIDS
          Uses deformed geometry (perturbed vertices) + a rocky material.
          Each asteroid is a unique irregular chunk, not a smooth sphere.
-      ══════════════════════════════ */
+       */
 
       // Seeded pseudo-random
       function srand(seed) {
@@ -743,8 +757,8 @@ function SolarSystem({ onReady }) {
       for (let ai = 0; ai < NUM_ASTEROIDS; ai++) {
         const rand = srand(ai * 7919 + 1337);
 
-        // Belt occupies the space around orbits 4–6 (roughly 10–15 units)
-        const beltR = 10.5 + rand() * 4.5;
+        // Belt occupies the space between orbits 6 and 7 (roughly 12.0–13.0 units)
+        const beltR = 12.0 + rand() * 1.0;
         const angle = rand() * Math.PI * 2;
         const yOff  = (rand() - 0.5) * 1.8;  // slight vertical spread
 
@@ -784,7 +798,6 @@ function SolarSystem({ onReady }) {
         });
       }
 
-      /* ── Animation ── */
       let last = performance.now();
       let readyCalled = false;
       function animate() {
@@ -851,10 +864,13 @@ function SolarSystem({ onReady }) {
             el.style.transform = `translate(-50%,-100%) translate(${s.x.toFixed(1)}px,${s.y.toFixed(1)}px)`;
           }
         });
+
+        // Project Orchestrator (sun) label — sun is at scene origin
+        const sunS = toScreen(new THREE.Vector3(0, 2.6, 0), CW, CH);
+        sunLabelEl.style.transform = `translate(-50%,-100%) translate(${sunS.x.toFixed(1)}px,${sunS.y.toFixed(1)}px)`;
       }
       animate();
 
-      /* ── Input ── */
       const onMouseMove = (e) => {
         const rect = mount.getBoundingClientRect();
         mouse.x =  ((e.clientX-rect.left)/rect.width)*2-1;
@@ -896,6 +912,7 @@ function SolarSystem({ onReady }) {
         cancelAnimationFrame(raf); renderer.dispose();
         if (renderer.domElement.parentNode===mount) mount.removeChild(renderer.domElement);
         labelEls.forEach(el => { if (el.parentNode) el.parentNode.removeChild(el); });
+        if (sunLabelEl && sunLabelEl.parentNode) sunLabelEl.parentNode.removeChild(sunLabelEl);
         mount.removeEventListener("mousemove", onMouseMove);
         mount.removeEventListener("mousedown", onMouseDown);
         mount.removeEventListener("touchstart",onTouchStart);
@@ -906,10 +923,19 @@ function SolarSystem({ onReady }) {
       };
     }
 
-    if (window.THREE) { init(); }
-    else {
+    const THREE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+
+    if (window.THREE) {
+      init();
+    } else {
+      const existing = document.querySelector(`script[src="${THREE_CDN}"]`);
+      if (existing) {
+        // Script already in DOM (React Strict Mode double-invoke) — reuse it
+        existing.addEventListener("load", init, { once: true });
+        return () => { if (mount._cleanup) mount._cleanup(); };
+      }
       const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+      script.src = THREE_CDN;
       script.onload = init;
       document.head.appendChild(script);
       return () => { if (mount._cleanup) mount._cleanup(); if (script.parentNode) script.parentNode.removeChild(script); };
@@ -966,7 +992,7 @@ function useReveal(threshold = 0.1) {
   return [ref, vis];
 }
 
-/* ══ PIPELINE ══ */
+/* PIPELINE */
 function PipelineFlow() {
   const [ref, vis] = useReveal(0.05);
   const [active, setActive] = useState(0);
@@ -976,7 +1002,7 @@ function PipelineFlow() {
 
   useEffect(() => {
     if (!vis || paused) return;
-    const id = setInterval(() => setActive(a => (a + 1) % PIPELINE.length), 1100);
+    const id = setInterval(() => setActive(a => (a + 1) % PIPELINE.length), 3000);
     return () => clearInterval(id);
   }, [vis, paused]);
 
@@ -1028,7 +1054,7 @@ function PipelineFlow() {
   );
 }
 
-/* ══ MAIN ══ */
+/* MAIN */
 export default function PublicLanding() {
   const navigate = useNavigate();
   const [scrollY, setScrollY] = useState(0);
@@ -1058,10 +1084,10 @@ export default function PublicLanding() {
 
   return (
     <>
-      {/* ══ WELCOME SPLASH ══
+      {/* WELCOME SPLASH 
           Sequence: black → text fades in (0.9s) → holds → fades out with page (0.8s)
           The landing beneath fades in simultaneously as splash fades out.
-      ══════════════════════ */}
+       */}
       <div style={{
         position: "fixed", inset: 0, zIndex: 9999,
         background: "#06010f",
@@ -1177,7 +1203,6 @@ export default function PublicLanding() {
         `}</style>
       </div>
 
-      {/* ── Main page ── */}
       <div className="pl-root" style={{
         opacity: ready ? 1 : 0,
         transition: ready ? "opacity 1.0s cubic-bezier(0.4,0,0.2,1) 0.3s" : "none",
@@ -1216,14 +1241,6 @@ export default function PublicLanding() {
               Chat with Nova AI
               <span className="pl-nova-arrow">Try Now →</span>
             </button>
-            <div className="pl-hero-stats">
-              {[["98%","Triage Accuracy"],["40%","Faster Resolution"],["3×","Throughput"]].map(([v,l]) => (
-                <div key={l} className="pl-hstat">
-                  <span className="pl-hstat-v">{v}</span>
-                  <span className="pl-hstat-l">{l}</span>
-                </div>
-              ))}
-            </div>
           </div>
           <div className="pl-hero-right"><SolarSystem onReady={handleReady} /></div>
         </div>
@@ -1233,8 +1250,11 @@ export default function PublicLanding() {
       <div className="pl-marquee">
         <div className="pl-marquee-track">
           {[...Array(4)].map((_,r) =>
-            ["Whisper Transcription","Qwen Chatbot","RoBERTa Sentiment","DeBERTa Routing",
-              "XGBoost Priority","Qwen Suggested Resolution","SLA Automation"].map((x,i)=>(
+            ["Chatbot by Qwen","Transcriber by FasterWhisper","Orchestrator by LangChain",
+              "Recurrence by Transformer","Subject Generation by Qwen","Suggested Resolution by Qwen",
+              "Classification by DeBERTa","Sentiment Analysis by RoBERTa","Audio Analysis by Librosa",
+              "Feature Engineering by DeBERTa","Prioritization Engine by XGBoost",
+              "Department Routing by Qwen","Review by Qwen"].map((x,i)=>(
               <span key={`${r}-${i}`} className="pl-marquee-item">✦ {x}</span>
             ))
           )}
@@ -1270,11 +1290,7 @@ export default function PublicLanding() {
       {/* FOOTER */}
       <footer className="pl-footer">
         <img src={novaLogo} alt="InnovaCX" className="pl-footer-logo"/>
-        <div className="pl-footer-links">
-          <button className="pl-footer-link" onClick={() => navigate("/about")}>About</button>
-          <button className="pl-footer-link" onClick={() => navigate("/login")}>Log In</button>
-        </div>
-        <div className="pl-footer-socials">
+        <div className="pl-footer-socials" style={{display:"none"}}>
           <a href="https://www.instagram.com/innovacx.ai?igsh=bzVxOTNuMXUzODEz&utm_source=qr" target="_blank" rel="noopener noreferrer" className="pl-social-link" aria-label="Instagram">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <rect x="2" y="2" width="20" height="20" rx="5.5" ry="5.5" stroke="currentColor" strokeWidth="1.8" fill="none"/>
@@ -1294,9 +1310,29 @@ export default function PublicLanding() {
             </svg>
           </a>
         </div>
-        <p className="pl-footer-copy">© 2026 InnovaAI · All rights reserved.</p>
-        <p className="pl-footer-copy">Sponsored By Dubai CommerCity</p>
+        <p className="pl-footer-copy">© 2026 InnovaAI · All rights reserved. &nbsp;·&nbsp; Sponsored By Dubai CommerCity</p>
       </footer>
+    </div>
+
+    <div className="pl-social-dock" aria-label="Follow us on social media">
+      <a href="https://www.instagram.com/innovacx.ai?igsh=bzVxOTNuMXUzODEz&utm_source=qr" target="_blank" rel="noopener noreferrer" className="pl-social-link" aria-label="Instagram">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="5.5" ry="5.5" stroke="currentColor" strokeWidth="1.8" fill="none"/>
+          <circle cx="12" cy="12" r="4.5" stroke="currentColor" strokeWidth="1.8" fill="none"/>
+          <circle cx="17.5" cy="6.5" r="1.1" fill="currentColor"/>
+        </svg>
+      </a>
+      <a href="https://www.tiktok.com/@innovacx" target="_blank" rel="noopener noreferrer" className="pl-social-link" aria-label="TikTok">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.34 6.34 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.75a8.28 8.28 0 004.84 1.54V6.84a4.85 4.85 0 01-1.07-.15z"/>
+        </svg>
+      </a>
+      <a href="https://www.linkedin.com/in/innovacx-ai-7b55853a2?utm_source=share_via&utm_content=profile&utm_medium=member_ios" target="_blank" rel="noopener noreferrer" className="pl-social-link" aria-label="LinkedIn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="4" stroke="currentColor" strokeWidth="1.8" fill="none"/>
+          <path d="M7 10v7M7 7v.01M11 17v-4a2 2 0 014 0v4M11 10v7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </a>
     </div>
     </>
   );

@@ -42,7 +42,7 @@ ON CONFLICT (email) DO UPDATE
 
 -- Operator
 INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secret)
-VALUES ('operator@innova.cx', crypt('Innova@2025', gen_salt('bf', 12)), 'operator', TRUE, FALSE, NULL)
+VALUES ('operator@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'operator', TRUE, FALSE, NULL)
 ON CONFLICT (email) DO UPDATE
   SET role='operator', is_active=TRUE, mfa_enabled=FALSE, totp_secret=NULL,
       password_hash=crypt('Innova@2025', gen_salt('bf', 12));
@@ -81,7 +81,7 @@ ON CONFLICT (email) DO UPDATE
 
 -- Operator
 INSERT INTO user_profiles (user_id, full_name, job_title)
-SELECT id, 'System Operator', 'System Operator' FROM users WHERE email='operator@innova.cx'
+SELECT id, 'System Operator', 'System Operator' FROM users WHERE email='operator@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
 -- Manager profiles
@@ -198,47 +198,52 @@ WHERE assigned_to_user_id IN (
 -- STEP 5: Reassign resolution_feedback from old employees to new employees.
 -- employee_user_id has ON DELETE RESTRICT so we must update it first.
 -- ---------------------------------------------------------------------------
-UPDATE ticket_resolution_feedback
-SET employee_user_id = (SELECT id FROM users WHERE email='ahmed@innovacx.net')
-WHERE employee_user_id IN (
-  SELECT id FROM users WHERE email IN ('ahmed@innova.cx','fatima@innova.cx')
-);
+DO $$
+BEGIN
+  IF to_regclass('public.ticket_resolution_feedback') IS NOT NULL THEN
+    UPDATE ticket_resolution_feedback
+    SET employee_user_id = (SELECT id FROM users WHERE email='ahmed@innovacx.net')
+    WHERE employee_user_id IN (
+      SELECT id FROM users WHERE email IN ('ahmed@innova.cx','fatima@innova.cx')
+    );
 
-UPDATE ticket_resolution_feedback
-SET employee_user_id = (SELECT id FROM users WHERE email='sarah@innovacx.net')
-WHERE employee_user_id IN (
-  SELECT id FROM users WHERE email IN ('maria@innova.cx','sara@innova.cx','khalid@innova.cx','dina@innova.cx')
-);
+    UPDATE ticket_resolution_feedback
+    SET employee_user_id = (SELECT id FROM users WHERE email='sarah@innovacx.net')
+    WHERE employee_user_id IN (
+      SELECT id FROM users WHERE email IN ('maria@innova.cx','sara@innova.cx','khalid@innova.cx','dina@innova.cx')
+    );
 
-UPDATE ticket_resolution_feedback
-SET employee_user_id = (SELECT id FROM users WHERE email='yousef@innovacx.net')
-WHERE employee_user_id IN (
-  SELECT id FROM users WHERE email IN ('omar@innova.cx','hassan@innova.cx')
-);
+    UPDATE ticket_resolution_feedback
+    SET employee_user_id = (SELECT id FROM users WHERE email='yousef@innovacx.net')
+    WHERE employee_user_id IN (
+      SELECT id FROM users WHERE email IN ('omar@innova.cx','hassan@innova.cx')
+    );
 
-UPDATE ticket_resolution_feedback
-SET employee_user_id = (SELECT id FROM users WHERE email='bilal@innovacx.net')
-WHERE employee_user_id IN (
-  SELECT id FROM users WHERE email IN ('bilal@innova.cx')
-);
+    UPDATE ticket_resolution_feedback
+    SET employee_user_id = (SELECT id FROM users WHERE email='bilal@innovacx.net')
+    WHERE employee_user_id IN (
+      SELECT id FROM users WHERE email IN ('bilal@innova.cx')
+    );
 
-UPDATE ticket_resolution_feedback
-SET employee_user_id = (SELECT id FROM users WHERE email='sameer@innovacx.net')
-WHERE employee_user_id IN (
-  SELECT id FROM users WHERE email IN ('yousef@innova.cx','ziad@innova.cx','tariq@innova.cx')
-);
+    UPDATE ticket_resolution_feedback
+    SET employee_user_id = (SELECT id FROM users WHERE email='sameer@innovacx.net')
+    WHERE employee_user_id IN (
+      SELECT id FROM users WHERE email IN ('yousef@innova.cx','ziad@innova.cx','tariq@innova.cx')
+    );
 
-UPDATE ticket_resolution_feedback
-SET employee_user_id = (SELECT id FROM users WHERE email='lena@innovacx.net')
-WHERE employee_user_id IN (
-  SELECT id FROM users WHERE email IN ('lena@innova.cx','rania@innova.cx')
-);
+    UPDATE ticket_resolution_feedback
+    SET employee_user_id = (SELECT id FROM users WHERE email='lena@innovacx.net')
+    WHERE employee_user_id IN (
+      SELECT id FROM users WHERE email IN ('lena@innova.cx','rania@innova.cx')
+    );
 
-UPDATE ticket_resolution_feedback
-SET employee_user_id = (SELECT id FROM users WHERE email='talya@innovacx.net')
-WHERE employee_user_id IN (
-  SELECT id FROM users WHERE email IN ('noura@innova.cx')
-);
+    UPDATE ticket_resolution_feedback
+    SET employee_user_id = (SELECT id FROM users WHERE email='talya@innovacx.net')
+    WHERE employee_user_id IN (
+      SELECT id FROM users WHERE email IN ('noura@innova.cx')
+    );
+  END IF;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- STEP 6: Reassign employee_reports from old employees to new employees.

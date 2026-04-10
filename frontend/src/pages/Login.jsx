@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import logo from "../assets/nova-logo.png";
 import { apiUrl } from "../config/apiBase";
+import { getCsrfToken } from "../services/api";
 import { isStaffHost } from "../utils/hostUtils";
 import "./Login.css";
 
-/* ── Validation helpers ── */
 const validators = {
   email: (val) => {
     if (!val) return "Email is required.";
@@ -20,7 +20,6 @@ const validators = {
   },
 };
 
-/* ── Starfield ── */
 function Starfield() {
   const ref = useRef(null);
   useEffect(() => {
@@ -117,7 +116,6 @@ function Starfield() {
   return <canvas ref={ref} className="login-starfield" />;
 }
 
-/* ── Staff Background — floating orbs + aurora ribbons ── */
 function StaffBackground() {
   const ref = useRef(null);
   useEffect(() => {
@@ -269,7 +267,6 @@ function StaffBackground() {
   return <canvas ref={ref} className="login-starfield staff-canvas" />;
 }
 
-/* ── Mouse-tracking glow on the card ── */
 function useCardGlow() {
   const cardRef = useRef(null);
   const handleMouseMove = (e) => {
@@ -290,7 +287,6 @@ function useCardGlow() {
   return { cardRef, handleMouseMove, handleMouseLeave };
 }
 
-/* ── Inline field message ── */
 function FieldMessage({ error, success, touched }) {
   if (!touched) return <div className="field-msg-placeholder" />;
   if (error)
@@ -343,6 +339,8 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
   const [loginError, setLoginError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(
@@ -368,9 +366,22 @@ export default function Login() {
     setLoading(true);
 
     try {
+      const csrf = await getCsrfToken();
+
+      // Check for a stored trusted-device token for this email (set after MFA verify)
+      const tdKey    = `td_${email.trim().toLowerCase()}`;
+      const tdStored = (() => { try { return JSON.parse(localStorage.getItem(tdKey) || "null"); } catch { return null; } })();
+      const tdToken  = (tdStored && tdStored.expiresAt > Date.now()) ? tdStored.token : null;
+      if (tdStored && !tdToken) localStorage.removeItem(tdKey); // clear if expired
+
       const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf    ? { "X-CSRF-Token":  csrf    } : {}),
+          ...(tdToken ? { "X-Trust-Token": tdToken } : {}),
+        },
         body: JSON.stringify({ email, password }),
       });
 
@@ -393,7 +404,6 @@ export default function Login() {
 
       const role = data.user?.role;
 
-      // ── Domain enforcement ──
       // null  = localhost / dev → skip enforcement
       // true  = staff.domain.com → staff roles only
       // false = domain.com → customer only
@@ -412,17 +422,23 @@ export default function Login() {
         }
       }
 
+      const userPayload = {
+        id: data.user?.id,
+        email: data.user?.email,
+        role: data.user?.role,
+        full_name: data.user?.full_name,
+        token_type: data.token_type,
+      };
+
+      if (data.token_type === "temporary") {
+        sessionStorage.setItem("mfa_token", data.access_token);
+        sessionStorage.setItem("mfa_user", JSON.stringify(userPayload));
+        navigate("/verify", { replace: true });
+        return;
+      }
+
       localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          id: data.user?.id,
-          email: data.user?.email,
-          role: data.user?.role,
-          full_name: data.user?.full_name,
-          token_type: data.token_type,
-        })
-      );
+      localStorage.setItem("user", JSON.stringify(userPayload));
 
       const rawNext = searchParams.get("next");
       const nextPath =
@@ -460,7 +476,6 @@ export default function Login() {
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
-        {/* ── Left panel ── */}
         <section className="loginLeft">
           <div className="loginOverlay" />
           <div className="loginLeftContent">
@@ -472,8 +487,14 @@ export default function Login() {
           </div>
         </section>
 
-        {/* ── Right panel ── */}
         <section className="loginRight">
+          <button
+            className="backBtn"
+            onClick={() => navigate(-1)}
+          >
+            ← Back
+          </button>
+
           <div className="loginHeader">
             <div className="login-header-tag">InnovaCX · Dubai CommerCity</div>
             <h2 className="loginTitle">Log In</h2>
@@ -536,6 +557,7 @@ export default function Login() {
               <div className="input-wrap">
                 <input
                   id="login-email"
+                  name="email"
                   className="input"
                   type="email"
                   placeholder="you@company.com"
@@ -544,12 +566,18 @@ export default function Login() {
                     setEmail(e.target.value);
                     if (loginError) setLoginError("");
                   }}
-                  onBlur={() => markTouched("email")}
+                  onBlur={() => { markTouched("email"); setFocusedField(null); }}
+                  onFocus={(e) => { setFocusedField("email"); setCapsLock(e.getModifierState("CapsLock")); }}
+                  onKeyDown={(e) => setCapsLock(e.getModifierState("CapsLock"))}
+                  onKeyUp={(e) => setCapsLock(e.getModifierState("CapsLock"))}
                   autoComplete="email"
                   aria-invalid={touched.email && !!emailError}
                   aria-describedby="email-msg"
                 />
                 <span className="input-icon" aria-hidden="true">
+                  {capsLock && focusedField === "email" && emailInputState !== "error" && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="7 11 12 6 17 11"/><line x1="12" y1="6" x2="12" y2="18"/><rect x="5" y="18" width="14" height="3" rx="1"/></svg>
+                  )}
                   {emailInputState === "error" && (
                     <svg
                       width="16"
@@ -581,7 +609,8 @@ export default function Login() {
               <div className="input-wrap passwordField">
                 <input
                   id="login-password"
-                  className="input passwordInput"
+                  name="password"
+                  className={`input passwordInput${capsLock ? " has-capslock" : ""}`}
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={password}
@@ -589,11 +618,19 @@ export default function Login() {
                     setPassword(e.target.value);
                     if (loginError) setLoginError("");
                   }}
-                  onBlur={() => markTouched("password")}
+                  onFocus={(e) => { setFocusedField("password"); if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
+                  onKeyDown={(e) => { if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
+                  onKeyUp={(e) => { if (e.getModifierState) setCapsLock(e.getModifierState("CapsLock")); }}
+                  onBlur={() => { markTouched("password"); setFocusedField(null); setCapsLock(false); }}
                   autoComplete="current-password"
                   aria-invalid={touched.password && !!passwordError}
                   aria-describedby="password-msg"
                 />
+                {capsLock && focusedField === "password" && (
+                  <span className="login-capslock-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="7 11 12 6 17 11"/><line x1="12" y1="6" x2="12" y2="18"/><rect x="5" y="18" width="14" height="3" rx="1"/></svg>
+                  </span>
+                )}
                 <button
                   type="button"
                   className="passwordToggleBtn"
@@ -675,6 +712,18 @@ export default function Login() {
               {loading ? "Signing in…" : "Sign In →"}
             </button>
           </form>
+
+          {/* Sign-up link */}
+          <p className="loginSignupRow">
+            New to InnovaCX?{" "}
+            <button
+              type="button"
+              className="loginSignupLink"
+              onClick={() => navigate("/signup")}
+            >
+              Create an account
+            </button>
+          </p>
         </section>
       </div>
     </div>

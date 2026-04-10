@@ -10,7 +10,18 @@ import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
 import { fireNotifRefresh } from "../../utils/notifRefresh";
+import {
+  sanitizeText,
+  sanitizeId,
+  sanitizeSearchQuery,
+  sanitizePriority,
+  ALLOWED_STATUS_FILTERS,
+  ALLOWED_PRIORITY_FILTERS,
+  ALLOWED_SORT_KEYS,
+  MAX_SEARCH_LEN,
+} from "./ManagerSanitize";
 import { apiUrl } from "../../config/apiBase";
+import { getCsrfToken } from "../../services/api";
 import useScrollReveal from "../../utils/useScrollReveal";
 
 function getAuthToken() {
@@ -29,7 +40,6 @@ function formatTicketSource(value) {
 
 const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3, "": 4 };
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ toasts }) {
   return (
     <div className="mv-toastStack">
@@ -55,7 +65,6 @@ function useToast() {
   return { toasts, push };
 }
 
-// ── Sortable header ────────────────────────────────────────────────────────────
 function SortableHeader({ label, col, sortCol, sortDir, onSort, className }) {
   const active = sortCol === col;
   const arrow = active ? (sortDir === "asc" ? " ▲" : " ▼") : " ⇅";
@@ -72,7 +81,6 @@ function SortableHeader({ label, col, sortCol, sortDir, onSort, className }) {
   );
 }
 
-// ── Status pill colours ────────────────────────────────────────────────────────
 const STATUS_CLASS = {
   Submitted:  "mv-statusPill--submitted",
   Assigned:   "mv-statusPill--assigned",
@@ -82,7 +90,6 @@ const STATUS_CLASS = {
   Overdue:    "mv-statusPill--overdue",
 };
 
-// ── KPI quick-filter map ───────────────────────────────────────────────────────
 // Maps KPI label → { statusFilter, priorityFilter }
 const KPI_FILTER = {
   "Open Tickets":     { statusFilter: null,       priorityFilter: null,       kpiKey: "openTickets" },
@@ -101,6 +108,10 @@ export default function ManagerViewComplaints() {
   const [rows, setRows]           = useState([]);
   const [employees, setEmployees] = useState([]);
   const [search, setSearch]       = useState("");
+  const handleSearchChange = (v) => {
+    const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
+    setSearch(sanitizeSearchQuery(raw));
+  };
   const [statusFilter, setStatusFilter]     = useState("Hide Resolved");
   const [priorityFilter, setPriorityFilter] = useState("All Priorities");
   const [activeKpi, setActiveKpi] = useState(null); // label of active KPI filter
@@ -121,7 +132,21 @@ export default function ManagerViewComplaints() {
 
     fetch(apiUrl("/api/manager/complaints"), { headers })
       .then((res) => { if (res.status === 401) return null; return res.json(); })
-      .then((data) => data && setRows(data || []))
+      .then((data) => data && setRows(
+        (data || []).map((r) => ({
+          ...r,
+          ticket_code:  sanitizeId(r.ticket_code),
+          subject:      sanitizeText(r.subject, 300),
+          status:       sanitizeText(r.status, 50),
+          priorityText: sanitizePriority(r.priorityText || r.priority),
+          priority:     sanitizeText(r.priority, 50),
+          assignee:     sanitizeText(r.assignee, 100),
+          reroutedTo:   sanitizeText(r.reroutedTo, 100),
+          issueDate:    sanitizeText(r.issueDate, 50),
+          respondTime:  sanitizeText(r.respondTime, 50),
+          resolveTime:  sanitizeText(r.resolveTime, 50),
+        }))
+      ))
       .catch((err) => { console.error("Failed to fetch tickets:", err); setRows([]); });
 
     fetch(apiUrl("/api/manager/departments"), { headers })
@@ -135,7 +160,6 @@ export default function ManagerViewComplaints() {
       .catch((err) => { console.error("Failed to fetch employees:", err); setEmployees([]); });
   }, [token]);
 
-  // ── KPI click-to-filter ──────────────────────────────────────────────────────
   const handleKpiClick = (label) => {
     if (activeKpi === label) {
       // toggle off
@@ -152,17 +176,16 @@ export default function ManagerViewComplaints() {
     setSearch("");
   };
 
-  // ── Sort ─────────────────────────────────────────────────────────────────────
   const handleSort = (col) => {
-  if (sortCol === col) {
-    setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-  } else {
-    setSortCol(col);
-    setSortDir("asc");
-  }
+    if (!ALLOWED_SORT_KEYS.includes(col)) return;
+    if (sortCol === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
   };
 
-  // ── Menu / Modal handlers ─────────────────────────────────────────────────────
   const toggleMenu = (ticketId) => setOpenMenuFor((prev) => (prev === ticketId ? null : ticketId));
   const closeMenu  = () => setOpenMenuFor(null);
 
@@ -187,9 +210,10 @@ export default function ManagerViewComplaints() {
   const confirmAssignment = async () => {
     if (!activeTicketId) return;
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/complaints/${activeTicketId}/assign`), {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify({ employee_name: selectedEmployee || null }),
       });
       if (!res.ok) {
@@ -220,9 +244,10 @@ export default function ManagerViewComplaints() {
 
   const handleReroute = async (ticketId, dept) => {
     try {
+      const csrf = await getCsrfToken();
       const res = await fetch(apiUrl(`/api/manager/complaints/${ticketId}/department`), {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify({ department: dept }),
       });
       if (!res.ok) {
@@ -242,7 +267,6 @@ export default function ManagerViewComplaints() {
     closeMenu();
   };
 
-  // ── Filtering / KPIs / Sorting ────────────────────────────────────────────────
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
@@ -310,7 +334,6 @@ export default function ManagerViewComplaints() {
 
   const shProps = { sortCol, sortDir, onSort: handleSort };
 
-  // ── JSX ───────────────────────────────────────────────────────────────────────
   return (
     <Layout role="manager">
       <Toast toasts={toasts} />
@@ -344,7 +367,7 @@ export default function ManagerViewComplaints() {
         </section>
 
         <section className="mv-searchSection">
-          <PillSearch value={search} onChange={setSearch} placeholder="Search tickets by ID or summary..." />
+          <PillSearch value={search} onChange={handleSearchChange} placeholder="Search tickets by ID or summary..." maxLength={MAX_SEARCH_LEN} />
         </section>
 
         <section className="mv-filtersRow">
@@ -352,7 +375,7 @@ export default function ManagerViewComplaints() {
             <div className="mv-select">
               <PillSelect
                 value={statusFilter}
-                onChange={(v) => { setStatusFilter(v); setActiveKpi(null); }}
+                onChange={(v) => { if (ALLOWED_STATUS_FILTERS.includes(v)) { setStatusFilter(v); setActiveKpi(null); } }}
                 ariaLabel="Filter by status"
                 options={[
                   { label: "Hide Resolved", value: "Hide Resolved" },
@@ -369,7 +392,7 @@ export default function ManagerViewComplaints() {
             <div className="mv-select">
               <PillSelect
                 value={priorityFilter}
-                onChange={(v) => { setPriorityFilter(v); setActiveKpi(null); }}
+                onChange={(v) => { if (ALLOWED_PRIORITY_FILTERS.includes(v)) { setPriorityFilter(v); setActiveKpi(null); } }}
                 ariaLabel="Filter by priority"
                 options={[
                   { label: "All Priorities", value: "All Priorities" },

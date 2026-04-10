@@ -304,7 +304,7 @@
   }
 }
 
-/* ── Nav badge (notifications / approvals count) ─────────── */
+/* Nav badge (notifications / approvals count) */
 .sidebar__badge {
   display: inline-flex;
   align-items: center;
@@ -341,4 +341,15 @@
 .sidebar:not(.sidebar--expanded) .sidebar__badge--rrq {
   top: 2px;
   right: -10px; /* offset so it doesn't overlap the red badge */
+}
+
+/* Held badge — amber, shown on Pipeline Queue when tickets are held */
+.sidebar__badge--held {
+  background: #f59e0b;
+  color: #1a1a2e;
+}
+
+.sidebar:not(.sidebar--expanded) .sidebar__badge--held {
+  top: 2px;
+  right: 2px;
 }

@@ -3,7 +3,7 @@ import re
 from .llm import generate_response, llm_available
 
 
-# ── Parsing helpers ───────────────────────────────────────────────────────────
+# Parsing helpers
 
 def _extract_label(text: str, valid: set[str]) -> str:
     cleaned = text.strip().lower()
@@ -33,7 +33,7 @@ def _extract_aggression(text: str) -> tuple[bool, float]:
     return (label == "YES" and score >= 0.75), score
 
 
-# ── Keyword-based classifiers (fast, no LLM needed) ─────────────────────────
+# Keyword-based classifiers (fast, no LLM needed)
 
 _FOLLOW_UP_SIGNALS = [
     "follow up", "follow-up", "followup", "existing ticket", "ticket status",
@@ -167,7 +167,7 @@ def _keyword_aggression(user_text: str) -> tuple[bool, float]:
     return (score >= 0.75), round(score, 4)
 
 
-# ── LLM-based classifiers (used when LLM is available) ──────────────────────
+# LLM-based classifiers (used when LLM is available)
 
 def _llm_classify_primary(user_text: str, history: list) -> str:
     system = (
@@ -238,16 +238,7 @@ def _llm_detect_aggression(user_text: str, history: list) -> tuple[bool, float]:
     return _extract_aggression(raw)
 
 
-# ── Public API (auto-selects keyword or LLM) ─────────────────────────────────
-
-# Short greetings that must never reach the LLM.  Qwen 0.5B misclassifies
-# them as follow_up; intercept here and return "unknown" so the controller
-# asks the user to state their actual intent.
-_GREETING_WORDS = {
-    "hello", "hi", "hey", "greetings", "howdy", "hiya", "yo", "sup",
-    "good morning", "good afternoon", "good evening", "good day",
-}
-
+# Public API (auto-selects keyword or LLM)
 
 def classify_primary_intent(user_text: str, history: list) -> str:
     """
@@ -257,10 +248,6 @@ def classify_primary_intent(user_text: str, history: list) -> str:
     result = _keyword_primary_intent(user_text)
     if result != "unknown":
         return result
-    # Greetings must not reach the LLM — the small model misclassifies them.
-    normalized = user_text.strip().lower().rstrip("!.,?")
-    if normalized in _GREETING_WORDS:
-        return "unknown"
     # Keywords inconclusive — try LLM if available
     if llm_available():
         return _llm_classify_primary(user_text, history)

@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from backend_client import internal_backend_headers
 
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
 REVIEW_AGENT_TIMEOUT_SECONDS = 45.0
@@ -1292,6 +1293,7 @@ async def _call_review_verdict(
                     "routing_sent_to_review": routing_sent_to_review,
                     "review_decision_id":    review_decision_id,
                 },
+                headers=internal_backend_headers(),
             )
     except Exception as exc:
         logger.error("review_agent | review-verdict call failed ticket=%s: %s", ticket_code, exc)
@@ -1312,6 +1314,7 @@ async def _notify_operator_hold(ticket_id: str, ticket_code: str, reason: str) -
                         f"Reason: {reason}"
                     ),
                 },
+                headers=internal_backend_headers(),
             )
     except Exception as exc:
         logger.warning("review_agent | operator notify failed: %s", exc)
@@ -1332,6 +1335,7 @@ async def _notify_operator_override(ticket_id: str, ticket_code: str, reason: st
                         f"Operator verification recommended. Reason: {reason}"
                     ),
                 },
+                headers=internal_backend_headers(),
             )
     except Exception as exc:
         logger.warning("review_agent | operator override notify failed: %s", exc)

@@ -1,6 +1,4 @@
-/* ============================================================
-   InnovaCX Login — Galaxy Theme v2
-   ============================================================ */
+/* InnovaCX Login — Galaxy Theme */
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap');
 
 :root {
@@ -14,7 +12,7 @@
   --ease:    cubic-bezier(0.22,1,0.36,1);
 }
 
-/* ── Page shell ── */
+/* Page shell */
 .loginBg {
   min-height: 100vh;
   display: grid;
@@ -35,6 +33,24 @@
   height: 100%;
   z-index: 0;
   pointer-events: none;
+}
+
+.backBtn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.6);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s, transform 0.2s;
+}
+
+.backBtn:hover {
+  color: #c084fc;
+  transform: translateX(-2px);
 }
 
 /* Nebula blobs */
@@ -74,7 +90,7 @@
   filter: blur(40px);
 }
 
-/* ── Card wrapper ── */
+/* Card wrapper */
 .loginWrapper {
   position: relative;
   z-index: 10;
@@ -96,7 +112,7 @@
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
-/* ── Left panel ── */
+/* Left panel */
 .loginLeft {
   width: 46%;
   position: relative;
@@ -191,10 +207,11 @@
 
 
 
-/* ── Right panel ── */
+/* Right panel */
 .loginRight {
   flex: 1;
   background: rgba(5, 1, 14, 0.98);
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   display: flex;
   flex-direction: column;
@@ -236,7 +253,7 @@
   line-height: 1.1;
 }
 
-/* ── Form ── */
+/* Form */
 .loginForm {
   width: 100%;
   max-width: 360px;
@@ -355,6 +372,24 @@
 }
 .forgotLink:hover { opacity: 1; text-decoration: underline; }
 
+/* Sign-up row */
+.loginSignupRow {
+  margin: 18px 0 0;
+  font-size: 13px;
+  color: rgba(255,255,255,.3);
+  text-align: center;
+}
+.loginSignupLink {
+  background: none; border: none; padding: 0;
+  font-family: "Outfit", sans-serif;
+  font-size: 13px; font-weight: 700;
+  color: var(--orchid); cursor: pointer;
+  transition: opacity .2s;
+}
+.loginSignupLink:hover { opacity: .8; text-decoration: underline; }
+.loginBg--staff .loginSignupRow  { color: rgba(17,24,39,.35); }
+.loginBg--staff .loginSignupLink { color: #5924b4; }
+
 /* Submit button */
 .loginBtn {
   width: 100%;
@@ -403,7 +438,7 @@
 }
 @keyframes btnShimmer { to { left: 160%; } }
 
-/* ── Session expired banner ── */
+/* Session expired banner */
 @keyframes bannerSlideIn {
   from { opacity: 0; transform: translateY(-8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -468,13 +503,13 @@
   color: #fbbf24;
 }
 
-/* ── Shared keyframes ── */
+/* Shared keyframes */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(20px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Responsive ── */
+/* Responsive */
 @media (max-width: 800px) {
   .loginWrapper {
     flex-direction: column;
@@ -498,11 +533,9 @@
   .loginRight { padding: 28px 20px 36px; }
 }
 
-/* ============================================================
-   LOGIN VALIDATION — append these rules to Login.css
-   ============================================================ */
+/* Login Validation */
 
-/* ── Input wrapper (positions the state icon) ── */
+/* Input wrapper (positions the state icon) */
 .input-wrap {
   position: relative;
 }
@@ -527,7 +560,7 @@
   display: none;
 }
 
-/* ── Field state: error ── */
+/* Field state: error */
 .field--error .input {
   border-color: rgba(248, 113, 113, .55) !important;
   background: rgba(248, 113, 113, .04) !important;
@@ -544,7 +577,7 @@
   40%, 60% { transform: translateX(3px); }
 }
 
-/* ── Inline field messages ── */
+/* Inline field messages */
 .field-msg-placeholder {
   height: 20px;
 }
@@ -573,7 +606,7 @@
   flex-shrink: 0;
 }
 
-/* ── Server-side error banner ── */
+/* Server-side error banner */
 .loginError {
   display: flex;
   align-items: center;
@@ -589,13 +622,9 @@
   animation: msgReveal .25s ease both;
 }
 .loginError::before { content: none; }
-/* ============================================================
-   STAFF THEME — staff.innovacx.net  ·  Luxury Edition
-   Rich, premium feel with animated accents & no grid.
-   All overrides scoped to .loginBg--staff
-   ============================================================ */
+/* STAFF THEME — staff.innovacx.net */
 
-/* ── Page shell ── */
+/* Page shell */
 .loginBg--staff {
   background: #f0ebff;
   position: relative;
@@ -632,7 +661,7 @@
   /* override galaxy halo blur */
 }
 
-/* ── Card wrapper — luxury shadow ── */
+/* Card wrapper — luxury shadow */
 .loginBg--staff .loginWrapper {
   box-shadow:
     0 0 0 1px rgba(89, 36, 180, 0.14),
@@ -642,7 +671,7 @@
     0 80px 160px rgba(0, 0, 0, 0.12);
 }
 
-/* ── Left panel — deep rich purple with shimmer ── */
+/* Left panel — deep rich purple with shimmer */
 .loginBg--staff .loginLeft {
   background: linear-gradient(145deg, #1e0a4a 0%, #3b1286 35%, #5924b4 65%, #3a0f8e 100%);
   overflow: hidden;
@@ -723,9 +752,10 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
-/* ── Right panel — clean white, NO grid ── */
+/* Right panel */
 .loginBg--staff .loginRight {
   background: #ffffff;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   border-left: 1px solid rgba(89, 36, 180, 0.08);
   position: relative;
@@ -766,7 +796,7 @@
   z-index: 1;
 }
 
-/* ── Header tag — premium pill ── */
+/* Header tag */
 .loginBg--staff .login-header-tag {
   color: #5924b4;
   background: linear-gradient(135deg, rgba(89, 36, 180, 0.08), rgba(124, 58, 237, 0.06));
@@ -780,20 +810,20 @@
   box-shadow: 0 1px 8px rgba(89, 36, 180, 0.08);
 }
 
-/* ── Login title ── */
+/* Login title */
 .loginBg--staff .loginTitle {
   color: #0f0520;
   font-size: clamp(24px, 2.8vw, 32px);
   letter-spacing: -0.04em;
 }
 
-/* ── Labels ── */
+/* Labels */
 .loginBg--staff .label {
   color: #6b7280;
   letter-spacing: 0.1em;
 }
 
-/* ── Inputs — elevated with inner shadow ── */
+/* Inputs — elevated with inner shadow */
 .loginBg--staff .input {
   background: #faf8ff;
   border: 1.5px solid #e4d9f7;
@@ -819,7 +849,7 @@
   border-color: rgba(89, 36, 180, 0.35);
 }
 
-/* ── Password toggle ── */
+/* Password toggle */
 .loginBg--staff .passwordToggleBtn {
   color: #b0a0cc;
 }
@@ -829,14 +859,14 @@
   background: rgba(89, 36, 180, 0.07);
 }
 
-/* ── Field error ── */
+/* Field error */
 .loginBg--staff .field--error .input {
   border-color: rgba(220, 38, 38, 0.5) !important;
   background: rgba(220, 38, 38, 0.02) !important;
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.08) !important;
 }
 
-/* ── Forgot link ── */
+/* Forgot link */
 .loginBg--staff .forgotLink {
   color: #5924b4;
   font-weight: 700;
@@ -847,7 +877,7 @@
   opacity: 1;
 }
 
-/* ── Submit button — glossy gradient ── */
+/* Submit button — glossy gradient */
 .loginBg--staff .loginBtn {
   background: linear-gradient(135deg, #2d0f72 0%, #5924b4 45%, #7c3aed 100%);
   background-size: 200% auto;
@@ -872,14 +902,14 @@
   box-shadow: 0 4px 16px rgba(89, 36, 180, 0.35);
 }
 
-/* ── Server error banner ── */
+/* Server error banner */
 .loginBg--staff .loginError {
   background: rgba(220, 38, 38, 0.04);
   border: 1.5px solid rgba(220, 38, 38, 0.18);
   color: #b91c1c;
 }
 
-/* ── Session expired banner ── */
+/* Session expired banner */
 .loginBg--staff .login-session-banner {
   background: rgba(245, 158, 11, 0.05);
   border: 1.5px solid rgba(245, 158, 11, 0.18);
@@ -889,7 +919,7 @@
   background: rgba(245, 158, 11, 0.1);
 }
 
-/* ── Hide customer-only decorations ── */
+/* Hide customer-only decorations */
 .loginBg--staff .login-neb,
 .loginBg--staff .login-starfield {
   display: none;
@@ -902,10 +932,22 @@
   mix-blend-mode: multiply;
 }
 
-/* ── Responsive ── */
+/* Responsive */
 @media (max-width: 800px) {
   .loginBg--staff .loginRight {
     border-left: none;
     border-top: 1px solid rgba(89, 36, 180, 0.08);
   }
 }
+/* Caps Lock indicator */
+.login-capslock-icon {
+  position: absolute;
+  top: 50%;
+  right: 48px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.passwordInput.has-capslock { padding-right: 80px; }

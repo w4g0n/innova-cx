@@ -9,6 +9,7 @@ Endpoints:
     GET  /health         — liveness probe
 """
 
+import asyncio
 import logging
 import json
 import uuid
@@ -19,17 +20,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from pipeline import pipeline
+from backend_client import internal_backend_headers
+from queue_manager import (
+    enqueue_ticket,
+    ensure_pipeline_control_table,
+    get_pipeline_control_state,
+    pause_pipeline_globally,
+    queue_worker_loop,
+    release_held_ticket,
+    rerun_failed_stage,
+    rerun_queue_item,
+    resume_pipeline_globally,
+)
 from agents.step04_sentimentanalysis.step import get_sentiment_diagnostics
 from agents.step03_classifier.step import get_classifier_diagnostics
 from agents.step08_featureengineering.step import get_feature_engineering_diagnostics
 from agents.step01_subjectgeneration.step import get_subject_generation_diagnostics
-from agents.step02_suggestedresolution.step import (
-    get_suggested_resolution_diagnostics,
-    retrain_resolution_examples_from_db,
-)
+from agents.step02_suggestedresolution.step import get_suggested_resolution_diagnostics
 from agents.step10_router.step import get_router_diagnostics
 from agents.step05_audioanalysis.step import get_audio_analysis_diagnostics
 from agents.step09_priority.step import record_manager_feedback_from_state, get_priority_diagnostics
+from agents.step11_reviewagent.step import review_pipeline, get_review_agent_diagnostics
+from shared_model_service import get_shared_qwen
 
 try:
     from db import ensure_log_tables, db_connect
@@ -50,10 +62,6 @@ for noisy_logger in ("httpx", "httpcore", "urllib3", "uvicorn.access"):
 app = FastAPI(title="InnovaCX Orchestrator", version="1.0.0")
 
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
-CHATBOT_URL = os.getenv("CHATBOT_URL", "http://chatbot:8000").rstrip("/")
-CHATBOT_URL_LOCAL = os.getenv("CHATBOT_URL_LOCAL", "http://localhost:8001").rstrip("/")
-CHATBOT_STARTUP_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_STARTUP_TIMEOUT_SECONDS", "240"))
-CHATBOT_STARTUP_POLL_INTERVAL_SECONDS = float(os.getenv("CHATBOT_STARTUP_POLL_INTERVAL_SECONDS", "5"))
 
 app.add_middleware(
     CORSMiddleware,
@@ -68,68 +76,27 @@ class PriorityRelearnRequest(BaseModel):
     retrain_now: bool = False
 
 
-class SuggestedResolutionRelearnRequest(BaseModel):
-    max_examples: int = 12
-
-
 # ---------------------------------------------------------------------------
 # Startup — ensure logging tables exist (if db module is available)
 # ---------------------------------------------------------------------------
 
 @app.on_event("startup")
 async def _startup():
-    await _wait_for_chatbot_health()
     if ensure_log_tables:
         ensure_log_tables()
+    ensure_pipeline_control_table()
     _log_model_mode_summary()
-
-
-async def _wait_for_chatbot_health() -> None:
-    import time
-
-    if CHATBOT_STARTUP_TIMEOUT_SECONDS <= 0:
-        logger.info("startup | chatbot health gate disabled")
-        return
-
-    timeout = httpx.Timeout(10.0)
-    last_error = None
-    started_at = time.monotonic()
-    health_urls = [f"{CHATBOT_URL}/health"]
-    if CHATBOT_URL_LOCAL and CHATBOT_URL_LOCAL != CHATBOT_URL:
-        health_urls.append(f"{CHATBOT_URL_LOCAL}/health")
-
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        while True:
-            for health_url in health_urls:
-                try:
-                    response = await client.get(health_url)
-                    response.raise_for_status()
-                    payload = response.json() or {}
-                    if str(payload.get("status") or "").lower() == "healthy":
-                        logger.info("startup | chatbot dependency ready url=%s", health_url)
-                        return
-                    last_error = RuntimeError(f"unhealthy response from {health_url}: {payload}")
-                except Exception as exc:
-                    last_error = exc
-
-            if (time.monotonic() - started_at) >= CHATBOT_STARTUP_TIMEOUT_SECONDS:
-                break
-
-            logger.info(
-                "startup | waiting for chatbot dependency timeout=%ss poll=%ss err=%s",
-                CHATBOT_STARTUP_TIMEOUT_SECONDS,
-                CHATBOT_STARTUP_POLL_INTERVAL_SECONDS,
-                last_error,
-            )
-            await _sleep_for_chatbot_poll()
-
-    raise RuntimeError(f"chatbot dependency did not become healthy before startup deadline: {last_error}")
-
-
-async def _sleep_for_chatbot_poll() -> None:
-    import asyncio
-
-    await asyncio.sleep(max(1.0, CHATBOT_STARTUP_POLL_INTERVAL_SECONDS))
+    # Warm the shared Qwen model at startup so the first live ticket does not
+    # spend its stage timeout budget on model load.
+    # Wrapped in try/except: warmup is an optimization, not a requirement.
+    # If the model is unavailable (CI, first boot), startup must still complete
+    # so the health endpoint becomes reachable.
+    try:
+        await asyncio.to_thread(get_shared_qwen)
+    except Exception as _qwen_err:
+        logger.warning('startup | shared Qwen warmup skipped: %s', _qwen_err)
+    # Start the persistent queue background worker
+    asyncio.create_task(queue_worker_loop())
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +108,7 @@ async def health():
     return {
         "status": "healthy",
         "service": "orchestrator",
+        "pipeline_control": get_pipeline_control_state(),
         **get_subject_generation_diagnostics(),
         **get_suggested_resolution_diagnostics(),
         **get_sentiment_diagnostics(),
@@ -149,6 +117,7 @@ async def health():
         **get_feature_engineering_diagnostics(),
         **get_router_diagnostics(),
         **get_priority_diagnostics(),
+        **get_review_agent_diagnostics(),
     }
 
 
@@ -234,6 +203,15 @@ def _log_model_mode_summary() -> None:
                 "router model artifact present"
                 if router_diag.get("department_router_local_model_exists")
                 else f"model artifact missing at {router_diag.get('department_router_model_path') or '(not configured)'}"
+            ),
+        ),
+        (
+            "ReviewAgent",
+            get_review_agent_diagnostics().get("review_agent_mode", "unavailable"),
+            (
+                "review agent model artifact present"
+                if get_review_agent_diagnostics().get("review_agent_model_exists")
+                else "review agent unavailable (no Qwen artifact)"
             ),
         ),
     ]
@@ -363,14 +341,145 @@ async def priority_relearn_from_manager_approval(body: PriorityRelearnRequest):
     }
 
 
-@app.post("/suggested-resolution/relearn")
-async def suggested_resolution_relearn(body: SuggestedResolutionRelearnRequest):
-    try:
-        result = retrain_resolution_examples_from_db(max_examples=body.max_examples)
-    except Exception as exc:
-        logger.error("suggested_resolution_relearn | failed err=%s", exc)
-        raise HTTPException(status_code=500, detail=f"Failed to rebuild suggested resolution examples: {exc}")
+class QueueReleaseRequest(BaseModel):
+    queue_id: str
+    corrections: dict = {}
+
+
+class QueueRerunStageRequest(BaseModel):
+    queue_id: str
+
+
+class QueueRerunRequest(BaseModel):
+    queue_id: str
+
+
+@app.post("/queue/release")
+async def queue_release(body: QueueReleaseRequest):
+    """
+    Called by the backend operator API when the operator releases a held ticket.
+    Applies corrections and re-enqueues the ticket at the bottom of the queue.
+    """
+    ok = release_held_ticket(body.queue_id, body.corrections)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail="Release failed — ticket may not be held or max retries exceeded",
+        )
+    return {"ok": True, "queue_id": body.queue_id}
+
+
+@app.post("/queue/rerun")
+async def queue_rerun(body: QueueRerunRequest):
+    """
+    Reset a queue item and enqueue a full rerun from the start of the pipeline.
+    """
+    ok = rerun_queue_item(body.queue_id)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail="Full rerun failed — ticket may be completed, missing, or out of retries",
+        )
+    return {"ok": True, "queue_id": body.queue_id}
+
+
+@app.get("/queue/control")
+async def queue_control():
+    return get_pipeline_control_state()
+
+
+@app.post("/queue/control/pause")
+async def queue_pause():
+    return pause_pipeline_globally()
+
+
+@app.post("/queue/control/resume")
+async def queue_resume():
+    return resume_pipeline_globally()
+
+
+@app.post("/queue/rerun-stage")
+async def queue_rerun_stage(body: QueueRerunStageRequest):
+    """
+    Re-run only the failed stage through the AI model without operator corrections.
+    If it succeeds, the stage output is stored and the pipeline resumes from the next stage.
+    If it fails again, the ticket remains held with an updated failure record.
+    """
+    result = await rerun_failed_stage(body.queue_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Rerun failed"))
     return result
+
+
+class ReviewTriggerRequest(BaseModel):
+    ticket_id: str
+
+
+@app.post("/api/review")
+async def trigger_review(body: ReviewTriggerRequest):
+    """
+    Re-run the Review Agent on a completed ticket's latest pipeline state.
+    Fetches the DepartmentRoutingAgent output from pipeline_stage_events
+    and re-runs review_pipeline(). Useful for re-reviewing after manual corrections.
+    """
+    ticket_id = str(body.ticket_id or "").strip()
+    if not ticket_id:
+        raise HTTPException(status_code=422, detail="ticket_id is required")
+
+    state = _fetch_latest_routing_state(ticket_id)
+    if not state:
+        raise HTTPException(
+            status_code=404,
+            detail="No DepartmentRoutingAgent output found for this ticket",
+        )
+
+    try:
+        result = await asyncio.wait_for(review_pipeline(state), timeout=60.0)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Review Agent timed out")
+    except Exception as exc:
+        logger.error("api_review | failed ticket=%s err=%s", ticket_id, exc)
+        raise HTTPException(status_code=500, detail=f"Review Agent failed: {exc}")
+
+    return {
+        "ok": True,
+        "ticket_id": ticket_id,
+        "verdict": result.get("review_agent_verdict"),
+        "verdict_reason": result.get("review_agent_verdict_reason"),
+        "decision_id": result.get("review_agent_decision_id"),
+    }
+
+
+def _fetch_latest_routing_state(ticket_id: str) -> dict | None:
+    """Fetch the last DepartmentRoutingAgent output for the given ticket."""
+    if not db_connect:
+        return None
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT input_state, output_state
+                    FROM pipeline_stage_events
+                    WHERE ticket_id::text = %s
+                      AND stage_name = 'DepartmentRoutingAgent'
+                      AND status = 'success'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    (ticket_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                input_state = _json_to_dict(row[0])
+                output_state = _json_to_dict(row[1])
+                merged = dict(input_state)
+                merged.update(output_state)
+                return merged
+    except Exception as exc:
+        logger.warning("api_review | failed fetching routing state ticket=%s err=%s", ticket_id, exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -408,14 +517,12 @@ async def process_text(
     audio_features: str | None = Form(default=None),
 ):
     """
-    Accepts submitted ticket details text and runs full pipeline.
-    If this ticket came from audio flow, pass has_audio=true and optional
-    audio_features JSON string from transcriber service.
+    Accepts submitted ticket details and enqueues them for processing.
+    The pipeline_queue worker picks the ticket up and runs it stage by stage.
+    Returns immediately with queue_id and ticket_id.
     """
     if not text or not text.strip():
         raise HTTPException(status_code=422, detail="Text cannot be empty")
-
-    logger.info("Processing text input: %s...", text[:80])
 
     parsed_audio_features = {}
     if audio_features:
@@ -426,44 +533,27 @@ async def process_text(
         except json.JSONDecodeError:
             raise HTTPException(status_code=422, detail="audio_features must be valid JSON object")
 
+    # Create the initial open ticket in the backend first
     initial_payload = {
         "transcript": text.strip(),
         "ticket_id": ticket_id.strip() if ticket_id else None,
         "subject": subject.strip() if subject else None,
-        "label": "complaint",
+        "label": None,
         "status": "Open",
         "created_by_user_id": created_by_user_id.strip() if created_by_user_id else None,
         "ticket_source": ticket_source.strip() if ticket_source else None,
     }
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(f"{BACKEND_URL}/api/complaints", json=initial_payload)
+            response = await client.post(
+                f"{BACKEND_URL}/api/complaints",
+                json=initial_payload,
+                headers=internal_backend_headers(),
+            )
             response.raise_for_status()
             open_ticket = response.json()
             ticket_id = open_ticket.get("ticket_id")
-            logger.info(
-                "ticket_status_update | ticket_id=%s status=%s department=%s priority=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
-                ticket_id,
-                open_ticket.get("status", "Open"),
-                open_ticket.get("department"),
-                open_ticket.get("priority"),
-                open_ticket.get("priority_assigned_at"),
-                open_ticket.get("respond_due_at"),
-                open_ticket.get("resolve_due_at"),
-            )
-            _log_application_event(
-                event_key="ticket_status_update",
-                ticket_id=ticket_id,
-                ticket_code=ticket_id if _coerce_uuid_or_none(ticket_id) is None else None,
-                payload={
-                    "status": open_ticket.get("status", "Open"),
-                    "department": open_ticket.get("department"),
-                    "priority": open_ticket.get("priority"),
-                    "priority_assigned_at": open_ticket.get("priority_assigned_at"),
-                    "respond_due_at": open_ticket.get("respond_due_at"),
-                    "resolve_due_at": open_ticket.get("resolve_due_at"),
-                },
-            )
+            ticket_code = open_ticket.get("ticket_code") or ticket_id
     except Exception as exc:
         logger.error("failed to create initial open ticket: %s", exc)
         raise HTTPException(status_code=503, detail=f"Failed to create initial ticket: {exc}")
@@ -471,92 +561,36 @@ async def process_text(
     if not ticket_id:
         raise HTTPException(status_code=503, detail="Failed to create initial ticket: missing ticket_id")
 
-    state = {
-        "text": text.strip(),
-        "ticket_id": ticket_id,
-        "subject": subject.strip() if subject else None,
-        "has_audio": bool(has_audio),
-        "audio_features": parsed_audio_features,
-        "_execution_id": str(execution_id or "").strip() or str(uuid.uuid4()),
-        "_pipeline_total_steps": 11,
-    }
-
-    execution_id = state["_execution_id"]
-    _log_application_event(
-        event_key="pipeline_start",
-        ticket_id=ticket_id,
-        ticket_code=ticket_id if _coerce_uuid_or_none(ticket_id) is None else None,
-        execution_id=execution_id,
-        payload={"has_audio": bool(has_audio)},
-    )
+    # Enqueue for background processing
     try:
-        result = await pipeline.ainvoke(state)
-    except Exception as exc:
-        logger.exception("pipeline_failed | ticket_id=%s err=%s", ticket_id, exc)
-        _log_application_event(
-            event_key="pipeline_failed",
-            level="ERROR",
+        queue_id = enqueue_ticket(
             ticket_id=ticket_id,
-            ticket_code=ticket_id if _coerce_uuid_or_none(ticket_id) is None else None,
-            execution_id=execution_id,
-            payload={"error": str(exc)},
+            ticket_code=ticket_code,
+            text=text.strip(),
+            subject=subject.strip() if subject else None,
+            has_audio=bool(has_audio),
+            audio_features=parsed_audio_features,
+            created_by_user_id=created_by_user_id.strip() if created_by_user_id else None,
+            ticket_source=ticket_source.strip() if ticket_source else None,
         )
-        raise HTTPException(status_code=503, detail=f"Pipeline failed for ticket {ticket_id}: {exc}")
-    if result.get("label") == "inquiry":
-        logger.info(
-            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f "
-            "priority=%s/%s ticket_id=%s status=%s department=%s "
-            "priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
-            result.get("label"),
-            float(result.get("class_confidence", 0.0) or 0.0),
-            float(result.get("text_sentiment", 0.0) or 0.0),
-            float(result.get("audio_sentiment", 0.0) or 0.0),
-            float(result.get("sentiment_score_numeric", 0.0) or 0.0),
-            result.get("priority_label"),
-            result.get("priority_score"),
-            result.get("ticket_id"),
-            result.get("status"),
-            result.get("department"),
-            result.get("priority_assigned_at"),
-            result.get("respond_due_at"),
-            result.get("resolve_due_at"),
-        )
-    else:
-        logger.info(
-            "pipeline_done | type=%s class_conf=%.3f text_sent=%.3f audio_sent=%.3f combined_sent=%.3f "
-            "impact=%s safety=%s severity=%s urgency=%s priority=%s/%s ticket_id=%s "
-            "status=%s department=%s priority_assigned_at=%s respond_due_at=%s resolve_due_at=%s",
-            result.get("label"),
-            float(result.get("class_confidence", 0.0) or 0.0),
-            float(result.get("text_sentiment", 0.0) or 0.0),
-            float(result.get("audio_sentiment", 0.0) or 0.0),
-            float(result.get("sentiment_score_numeric", 0.0) or 0.0),
-            result.get("business_impact"),
-            result.get("safety_concern"),
-            result.get("issue_severity"),
-            result.get("issue_urgency"),
-            result.get("priority_label"),
-            result.get("priority_score"),
-            result.get("ticket_id"),
-            result.get("status"),
-            result.get("department"),
-            result.get("priority_assigned_at"),
-            result.get("respond_due_at"),
-            result.get("resolve_due_at"),
-        )
+    except Exception as exc:
+        logger.error("failed to enqueue ticket_id=%s err=%s", ticket_id, exc)
+        raise HTTPException(status_code=503, detail=f"Failed to enqueue ticket: {exc}")
+
     _log_application_event(
-        event_key="pipeline_done",
-        ticket_id=result.get("ticket_id"),
-        ticket_code=result.get("ticket_id") if _coerce_uuid_or_none(result.get("ticket_id")) is None else None,
-        execution_id=execution_id,
-        payload={
-            "label": result.get("label"),
-            "status": result.get("status"),
-            "department": result.get("department"),
-            "priority": result.get("priority_label"),
-        },
+        event_key="pipeline_queued",
+        ticket_id=ticket_id,
+        ticket_code=ticket_code if _coerce_uuid_or_none(ticket_code) is None else None,
+        payload={"queue_id": queue_id, "has_audio": bool(has_audio)},
     )
-    return _build_response(result, execution_id)
+    logger.info("process_text | enqueued ticket_id=%s queue_id=%s", ticket_id, queue_id)
+
+    return {
+        "queued": True,
+        "ticket_id": ticket_id,
+        "ticket_code": ticket_code,
+        "queue_id": queue_id,
+    }
 
 
 # ---------------------------------------------------------------------------

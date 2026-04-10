@@ -8,6 +8,10 @@ node_modules/
 __pycache__/
 *.pyc
 
+# Local venv and model weights
+whisper-env/
+model/
+
 # Runtime artifacts
 uploads/
 transcripts/
