@@ -550,6 +550,163 @@
 
 
 /* ═══════════════════════════════════════════════════════════════
+   MODE TOGGLE (Authenticator App / Email Code)
+   ═══════════════════════════════════════════════════════════════ */
+
+.auth-mode-toggle {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
+  animation: fadeUp .6s .22s var(--ease) both;
+}
+
+.auth-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  font-family: "Outfit", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s, border-color .2s, color .2s, box-shadow .2s;
+}
+
+/* Customer theme */
+.auth-page--customer .auth-mode-btn {
+  background: rgba(255,255,255,.05);
+  border-color: rgba(255,255,255,.1);
+  color: rgba(255,255,255,.5);
+}
+.auth-page--customer .auth-mode-btn:hover {
+  background: rgba(255,255,255,.09);
+  border-color: rgba(168,85,247,.35);
+  color: rgba(255,255,255,.8);
+}
+.auth-page--customer .auth-mode-btn.active {
+  background: rgba(147,51,234,.18);
+  border-color: rgba(168,85,247,.55);
+  color: #e9d5ff;
+  box-shadow: 0 0 14px rgba(147,51,234,.25);
+}
+
+/* Staff theme */
+.auth-page--staff .auth-mode-btn {
+  background: rgba(89,36,180,.06);
+  border-color: rgba(89,36,180,.15);
+  color: rgba(15,5,32,.5);
+}
+.auth-page--staff .auth-mode-btn:hover {
+  background: rgba(89,36,180,.1);
+  border-color: rgba(89,36,180,.35);
+  color: #0f0520;
+}
+.auth-page--staff .auth-mode-btn.active {
+  background: rgba(89,36,180,.14);
+  border-color: rgba(89,36,180,.5);
+  color: #3b0764;
+  box-shadow: 0 0 10px rgba(89,36,180,.12);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   TRUST DEVICE CHECKBOX
+   ═══════════════════════════════════════════════════════════════ */
+
+.auth-trust-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  animation: fadeUp .6s .38s var(--ease) both;
+}
+
+.auth-trust-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #a855f7;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.auth-page--staff .auth-trust-checkbox {
+  accent-color: #5924b4;
+}
+
+.auth-trust-text {
+  font-size: 13px;
+  font-weight: 500;
+  user-select: none;
+}
+
+.auth-page--customer .auth-trust-text { color: rgba(255,255,255,.45); }
+.auth-page--staff    .auth-trust-text { color: rgba(15,5,32,.5); }
+
+.auth-trust-label:hover .auth-trust-text {
+  color: inherit;
+  opacity: 1;
+}
+.auth-page--customer .auth-trust-label:hover .auth-trust-text { color: rgba(255,255,255,.75); }
+.auth-page--staff    .auth-trust-label:hover .auth-trust-text { color: #0f0520; }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   RESEND ROW (email OTP)
+   ═══════════════════════════════════════════════════════════════ */
+
+.auth-resend-row {
+  margin-top: 14px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  animation: fadeUp .6s .45s var(--ease) both;
+}
+
+.auth-resend-btn {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: "Outfit", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color .2s, background .2s;
+}
+
+.auth-page--customer .auth-resend-btn {
+  color: #a855f7;
+}
+.auth-page--customer .auth-resend-btn:hover:not(:disabled) {
+  color: #c084fc;
+  background: rgba(168,85,247,.08);
+}
+.auth-page--customer .auth-resend-btn:disabled {
+  color: rgba(255,255,255,.25);
+  cursor: not-allowed;
+}
+
+.auth-page--staff .auth-resend-btn {
+  color: #5924b4;
+}
+.auth-page--staff .auth-resend-btn:hover:not(:disabled) {
+  color: #3b0764;
+  background: rgba(89,36,180,.08);
+}
+.auth-page--staff .auth-resend-btn:disabled {
+  color: rgba(15,5,32,.3);
+  cursor: not-allowed;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════════════════════ */
 
