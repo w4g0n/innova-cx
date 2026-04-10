@@ -1,22 +1,14 @@
 -- =========================================================
 -- InnovaCX
 -- =========================================================
--- Ensure APP_DB_PASSWORD is available to psql-driven init execution.
-\getenv APP_DB_PASSWORD APP_DB_PASSWORD
-\if :{?APP_DB_PASSWORD}
-\else
-\echo 'APP_DB_PASSWORD environment variable was not provided to init.sql'
-\quit 1
-\endif
-
 -- Create the application role if it doesn't exist
+-- Note: password is set by zzz_least_privilege.sh via shell variable expansion
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'innovacx_app') THEN
     CREATE ROLE innovacx_app WITH LOGIN;
   END IF;
 END $$;
-ALTER ROLE innovacx_app PASSWORD :'APP_DB_PASSWORD';
 
 -- Grant necessary permissions
 GRANT CONNECT ON DATABASE complaints_db TO innovacx_app;
