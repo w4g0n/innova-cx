@@ -1,0 +1,86 @@
+{
+  "safety_keywords": [
+    "fire",
+    "smoke",
+    "gas leak",
+    "electrical",
+    "electric shock",
+    "shock",
+    "sparking",
+    "short circuit",
+    "flood",
+    "water leak",
+    "leak",
+    "hazard",
+    "unsafe",
+    "emergency",
+    "alarm",
+    "chemical",
+    "toxic"
+  ],
+  "label_configs": {
+    "issue_severity": {
+      "low": [
+        "the issue is minor and mostly cosmetic with no impact on operations",
+        "the complaint describes a small inconvenience that does not affect work",
+        "core building systems are fully functional and unaffected"
+      ],
+      "medium": [
+        "the issue partially disrupts operations but work can continue",
+        "some systems are degraded but not completely failed",
+        "the complaint describes a moderate problem requiring attention"
+      ],
+      "high": [
+        "core building systems have completely failed",
+        "the issue has made the premises unusable or unsafe",
+        "operations have been fully halted due to this problem"
+      ]
+    },
+    "issue_urgency": {
+      "low": [
+        "the issue is minor and can wait for a scheduled maintenance visit",
+        "there is no time pressure mentioned in this complaint",
+        "the problem has existed for a while without major consequence"
+      ],
+      "medium": [
+        "the issue needs to be resolved within the next few days",
+        "the complaint implies growing frustration but no immediate crisis",
+        "action is needed soon but the situation is not yet critical"
+      ],
+      "high": [
+        "the complaint explicitly demands same-day or immediate resolution",
+        "the situation is described as an emergency requiring instant response",
+        "every hour of delay causes direct measurable harm to operations"
+      ]
+    },
+    "safety_concern": {
+      "true": [
+        "the complaint explicitly describes a physical danger or injury risk",
+        "someone could be directly harmed by this issue if left unresolved",
+        "the problem involves fire, flooding, electrical hazard, or structural danger"
+      ],
+      "false": [
+        "the complaint is about a service, billing, or administrative issue",
+        "the issue is an inconvenience or operational problem with no physical danger",
+        "there is no mention of injury risk, hazardous conditions, or physical harm"
+      ]
+    },
+    "business_impact": {
+      "low": [
+        "the issue is a minor annoyance that does not affect productivity",
+        "staff can work normally and the complaint has negligible business impact",
+        "the problem affects a small cosmetic or non-essential aspect of the office"
+      ],
+      "medium": [
+        "the issue is reducing team productivity but work is still happening",
+        "some workflows are disrupted but the business is partially operational",
+        "the complaint describes a meaningful but not critical operational disruption"
+      ],
+      "high": [
+        "the complaint states that business operations have stopped or cannot continue",
+        "staff are unable to work due to this issue",
+        "the problem is causing significant financial loss or client-facing disruption"
+      ]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+# CI override — use with: docker compose -f docker-compose.yml -f docker-compose.ci.yml
+#
+# PURPOSE:
+#   Overrides container_name and port mappings so the CI merge-gate stack
+#   can run on the same VM as the live production stack without conflicts.
+#
+#   Container names become: innovacx-ci-db, innovacx-ci-backend, etc.
+#   Volumes use the COMPOSE_PROJECT_NAME prefix (innovacx-ci_postgres_data).
+#   Port mappings are removed — services communicate via the Docker network
+#   by service name, so external port bindings are not needed for CI checks.
+#
+# USAGE:
+#   Always set COMPOSE_PROJECT_NAME=innovacx-ci when using this file.
+#   The CI workflow (post-merge-docker-db-check.yml) sets this automatically.
+
+services:
+  postgres:
+    container_name: innovacx-ci-db
+    ports: []
+
+  backend:
+    container_name: innovacx-ci-backend
+    ports: []
+
+  chatbot:
+    container_name: innovacx-ci-chatbot
+    ports: []
+
+  transcriber:
+    container_name: innovacx-ci-transcriber
+    ports: []
+
+  orchestrator:
+    container_name: innovacx-ci-orchestrator
+    ports: []
+
+  frontend:
+    container_name: innovacx-ci-frontend
+    ports: []
+
+  backup:
+    container_name: innovacx-ci-backup

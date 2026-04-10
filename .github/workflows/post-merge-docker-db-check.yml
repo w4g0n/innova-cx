@@ -1,0 +1,309 @@
+name: Merge Gate Docker + DB Sweep
+
+on:
+  pull_request:
+    branches: ["**"]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  docker-db-profile-sweep:
+    runs-on: self-hosted
+    timeout-minutes: 90
+
+    steps:
+      - name: Reset runner workspace
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE":/workspace alpine:3.20 \
+            sh -lc 'find /workspace -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Sweep all compose profiles
+        env:
+          # Isolate CI from the live production stack.
+          # Using a different project name means Docker creates separate named
+          # volumes (innovacx-ci_postgres_data vs innova-cx_postgres_data) and
+          # separate container names, so CI teardown never touches live data.
+          COMPOSE_PROJECT_NAME: innovacx-ci
+          BACKUP_PASSPHRASE: ci-merge-gate-passphrase
+          # Match the committed bootstrap defaults so CI does not fight the
+          # seeded role passwords created during docker-entrypoint init.
+          POSTGRES_PASSWORD: changeme123
+          APP_DB_PASSWORD: changeme123
+          READONLY_DB_PASSWORD: innovacx123
+          TEST_DB_PASSWORD: innovacx123
+          JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min
+          CSRF_SECRET: ci-csrf-secret-placeholder-32-chars-min
+          INTERNAL_API_KEY: ci-internal-api-key-placeholder-value
+          RESEND_API_KEY: re_placeholder_ci_key_not_used_in_tests
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          wait_health() {
+            local container="$1"
+            local max_attempts="${2:-50}"
+            for i in $(seq 1 "$max_attempts"); do
+              status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null || echo 'missing')"
+              if [ "$status" = "healthy" ]; then
+                echo "$container is healthy"
+                return 0
+              fi
+              echo "Waiting for $container health... attempt $i/$max_attempts (status=$status)"
+              sleep 5
+            done
+            echo "::error::$container did not become healthy in time"
+            return 1
+          }
+
+          wait_http_inside() {
+            local container="$1"
+            local url="$2"
+            local max_attempts="${3:-60}"
+            for i in $(seq 1 "$max_attempts"); do
+              if docker exec "$container" python -c "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('$url', timeout=10).status==200 else 1)" >/dev/null 2>&1; then
+                echo "$container endpoint healthy: $url"
+                return 0
+              fi
+              echo "Waiting for $container endpoint $url ... attempt $i/$max_attempts"
+              sleep 5
+            done
+            echo "::error::$container endpoint not healthy: $url"
+            return 1
+          }
+
+          wait_db_bootstrap() {
+            local container="$1"
+            local max_attempts="${2:-60}"
+            echo "Waiting for $container bootstrap roles/tables to exist..."
+            for i in $(seq 1 "$max_attempts"); do
+              role_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
+                "select count(*) from pg_roles where rolname='innovacx_app';" 2>/dev/null || true)"
+              tables_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
+                "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" 2>/dev/null || true)"
+              if [ "$role_ready" = "1" ] && [ "$tables_ready" = "4" ]; then
+                echo "$container bootstrap complete"
+                return 0
+              fi
+              echo "  bootstrap not complete yet... attempt $i/$max_attempts (role=${role_ready:-missing} tables=${tables_ready:-missing})"
+              sleep 5
+            done
+            echo "::error::$container bootstrap did not complete in time"
+            return 1
+          }
+
+          bootstrap_ready() {
+            local container="$1"
+            local role_ready
+            local tables_ready
+            role_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
+              "select count(*) from pg_roles where rolname='innovacx_app';" 2>/dev/null || true)"
+            tables_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
+              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" 2>/dev/null || true)"
+            [ "$role_ready" = "1" ] && [ "$tables_ready" = "4" ]
+          }
+
+          apply_bootstrap_fallback() {
+            local container="$1"
+            echo "Applying CI bootstrap fallback inside $container ..."
+            docker exec "$container" sh -lc '
+              set -e
+              for file in /docker-entrypoint-initdb.d/*; do
+                [ -f "$file" ] || continue
+                case "$file" in
+                  *.sql)
+                    echo "==> [ci-fallback] psql -f ${file##*/}"
+                    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$file"
+                    ;;
+                  *.sh)
+                    echo "==> [ci-fallback] sh ${file##*/}"
+                    "$file"
+                    ;;
+                  *)
+                    echo "==> [ci-fallback] skipping ${file##*/}"
+                    ;;
+                esac
+              done
+            '
+          }
+
+          wait_db_app_auth() {
+            local profile="$1"
+            local max_attempts="${2:-60}"
+            echo "Waiting for app-role TCP authentication to succeed..."
+            for i in $(seq 1 "$max_attempts"); do
+              if docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile "$profile" run --rm --no-deps backup \
+                sh -lc 'export PGPASSWORD="$APP_DB_PASSWORD"; psql -h postgres -U "$APP_DB_USER" -d "$POSTGRES_DB" -tAc "select 1"' \
+                2>/dev/null | grep -q "^1$"; then
+                echo "App-role TCP authentication is ready"
+                return 0
+              fi
+              echo "  app-role auth not ready yet... attempt $i/$max_attempts"
+              sleep 5
+            done
+            echo "::error::App-role TCP authentication did not become ready in time"
+            return 1
+          }
+
+          check_running() {
+            local container="$1"
+            local status
+            status="$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null || echo 'missing')"
+            [ "$status" = "running" ] || { echo "::error::$container is not running (status=$status)"; return 1; }
+          }
+
+          run_profile() {
+            local profile="$1"
+            local services=""
+            echo "=== Running profile: $profile ==="
+
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+
+            # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
+            export CHATBOT_USE_MOCK=true
+            export CHATBOT_AUTO_DOWNLOAD=false
+            export SHARED_QWEN_MODEL_PATH=/tmp/nonexistent-shared-qwen
+            export SHARED_QWEN_AUTO_DOWNLOAD=false
+            export CLASSIFIER_MODEL_PATH=/tmp/nonexistent-classifier/model.pkl
+            export CLASSIFIER_MODEL_DIR=/tmp/nonexistent-classifier
+            export SENTIMENT_MODEL_DIR=/tmp/nonexistent-sentiment-model
+            export FEATURE_LABELER_MODEL_PATH=/tmp/nonexistent-feature-model
+            export FEATURE_LABELER_AUTO_DOWNLOAD=false
+            export DEPARTMENT_ROUTER_MODEL_PATH=/tmp/nonexistent-router-model
+            export DEPARTMENT_ROUTER_AUTO_DOWNLOAD=false
+            export SUBJECT_GENERATOR_MODEL_PATH=/tmp/nonexistent-subject-model
+            export SUBJECT_GENERATOR_AUTO_DOWNLOAD=false
+            export SUGGESTED_RESOLUTION_MODEL_PATH=/tmp/nonexistent-suggested-model
+            export SUGGESTED_RESOLUTION_USE_MOCK=true
+            export SUGGESTED_RESOLUTION_AUTO_DOWNLOAD=false
+            export PRIORITY_USE_MOCK=true
+            export PRIORITY_MODEL_DIR=/tmp/nonexistent-priority-model
+
+            # Compose on the self-hosted runner occasionally fails while resolving
+            # depends_on: service_healthy during `up`, reporting "No such container"
+            # for a freshly-created postgres container. Build first, then start
+            # postgres alone, wait for it to finish init, and finally start the
+            # remaining services without dependency resolution.
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile "$profile" build
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile "$profile" up -d postgres
+            wait_health innovacx-ci-db
+
+            # Docker marks Postgres healthy as soon as pg_isready passes, which
+            # can happen before docker-entrypoint-initdb.d finishes. Instead of
+            # scraping a fragile log line, wait for the actual bootstrap outputs
+            # we depend on: the app role and core seeded tables.
+            if ! wait_db_bootstrap innovacx-ci-db 12; then
+              # The self-hosted runner intermittently comes up with a fresh but
+              # otherwise empty database cluster. When that happens, apply the
+              # same init files explicitly so the gate validates the app rather
+              # than failing on runner-specific Postgres bootstrap drift.
+              apply_bootstrap_fallback innovacx-ci-db
+            fi
+            bootstrap_ready innovacx-ci-db || wait_db_bootstrap innovacx-ci-db 60
+
+            wait_db_app_auth "$profile" 60
+
+            services="backend frontend"
+            if [ "$profile" = "pipeline" ]; then
+              services="$services orchestrator"
+            elif [ "$profile" = "live" ]; then
+              services="$services orchestrator chatbot transcriber"
+            fi
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile "$profile" up -d --no-deps $services
+
+            # Database wiring sanity checks
+            docker exec innovacx-ci-db psql -U innovacx_admin -d complaints_db -tAc \
+              "select rolname from pg_roles where rolname='innovacx_app';" | grep -q "^innovacx_app$"
+            docker exec innovacx-ci-db psql -U innovacx_admin -d complaints_db -tAc \
+              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" | grep -q "^4$"
+
+            # Core services must be up for every profile
+            check_running innovacx-ci-backend
+            check_running innovacx-ci-frontend
+            wait_http_inside innovacx-ci-backend "http://localhost:8000/api/health" 50
+
+            if [ "$profile" = "pipeline" ] || [ "$profile" = "live" ]; then
+              wait_health innovacx-ci-orchestrator 80
+              wait_http_inside innovacx-ci-orchestrator "http://localhost:8004/health" 80
+
+              # Pipeline must still work when models are unavailable.
+              payload_out="$(curl -sS -X POST http://localhost:8004/process/text \
+                --form-string 'text=Repeated network outage in Tower B for the third time this week. Staff cannot login and operations are blocked.' \
+                --form-string 'ticket_type=complaint' \
+                --form-string 'subject=')"
+              echo "pipeline submit response: $payload_out"
+              ticket_code="$(echo "$payload_out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ticket_code",""))')"
+              [ -n "$ticket_code" ] || { echo "::error::Pipeline submit did not return ticket_code"; return 1; }
+
+              # Wait for terminal success status in DB.
+              done_status=""
+              for i in $(seq 1 80); do
+                done_status="$(docker exec innovacx-ci-db psql -U innovacx_admin -d complaints_db -tAc \
+                  "select status from pipeline_executions where ticket_code='${ticket_code}' order by started_at desc limit 1;")"
+                if [ "$done_status" = "success" ]; then
+                  break
+                fi
+                echo "Waiting for pipeline success ($ticket_code) ... attempt $i/80 status=${done_status:-missing}"
+                sleep 5
+              done
+              [ "$done_status" = "success" ] || { echo "::error::Pipeline did not finish with success for $ticket_code"; return 1; }
+            fi
+
+            if [ "$profile" = "live" ]; then
+              wait_health innovacx-ci-chatbot 80
+              wait_http_inside innovacx-ci-chatbot "http://localhost:8000/health" 80
+              check_running innovacx-ci-transcriber
+            fi
+
+            docker ps -a --format 'table {{.Names}}\t{{.Status}}'
+          }
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "Manual full sweep mode: running frontend, pipeline, and live profiles."
+            run_profile frontend
+            run_profile pipeline
+            run_profile live
+          else
+            echo "Pull request gate mode: running frontend, pipeline, and live profiles."
+            run_profile frontend
+            run_profile pipeline
+            run_profile live
+          fi
+
+      - name: Show container status
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: docker ps -a --format 'table {{.Names}}\t{{.Status}}'
+
+      - name: Tail logs on failure
+        if: failure()
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker logs --tail 300 innovacx-ci-db || true
+          docker logs --tail 300 innovacx-ci-backend || true
+          docker logs --tail 300 innovacx-ci-frontend || true
+          docker logs --tail 300 innovacx-ci-orchestrator || true
+          docker logs --tail 300 innovacx-ci-chatbot || true
+          docker logs --tail 300 innovacx-ci-transcriber || true
+
+      - name: Cleanup
+        if: always()
+        env:
+          COMPOSE_PROJECT_NAME: innovacx-ci
+          BACKUP_PASSPHRASE: ci-merge-gate-passphrase
+          POSTGRES_PASSWORD: changeme123
+          APP_DB_PASSWORD: changeme123
+          READONLY_DB_PASSWORD: innovacx123
+          TEST_DB_PASSWORD: innovacx123
+          JWT_SECRET: ci-jwt-secret-placeholder-32-chars-min
+          CSRF_SECRET: ci-csrf-secret-placeholder-32-chars-min
+          INTERNAL_API_KEY: ci-internal-api-key-placeholder-value
+          RESEND_API_KEY: re_placeholder_ci_key_not_used_in_tests
+        working-directory: ${{ github.workspace }}
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
