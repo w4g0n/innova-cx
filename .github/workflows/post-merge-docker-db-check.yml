@@ -167,6 +167,16 @@ jobs:
             [ "$status" = "running" ] || { echo "::error::$container is not running (status=$status)"; return 1; }
           }
 
+          assert_postgres_runtime_config() {
+            local cmd_json
+            cmd_json="$(docker inspect -f '{{json .Config.Cmd}}' innovacx-db 2>/dev/null || echo 'missing')"
+            echo "postgres runtime cmd: $cmd_json"
+            echo "$cmd_json" | grep -q '/docker-entrypoint-initdb.d/pg_hba.conf' || {
+              echo "::error::Postgres container is not using the expected hba_file runtime command"
+              return 1
+            }
+          }
+
           run_profile() {
             local profile="$1"
             local services=""
@@ -207,12 +217,14 @@ jobs:
             # postgres alone, wait for it to finish init, and finally start the
             # remaining services without dependency resolution.
             docker_compose --profile "$profile" build
-            docker_compose --profile "$profile" up -d postgres
+            docker_compose --profile "$profile" up -d --force-recreate postgres
 
             echo "--- Postgres container command ---"
             docker inspect -f '{{json .Config.Cmd}}' innovacx-db || true
             echo "--- Postgres mounts ---"
             docker inspect -f '{{range .Mounts}}{{println .Source "->" .Destination "type=" .Type}}{{end}}' innovacx-db || true
+
+            assert_postgres_runtime_config
 
             wait_health innovacx-db
 
