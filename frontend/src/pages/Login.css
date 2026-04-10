@@ -540,22 +540,24 @@
     flex-direction: column;
     border-radius: 22px;
   }
+  /* Hide decorative left panel on tablets/phones — keeps modal compact */
   .loginLeft {
-    width: 100%;
-    padding: 44px 32px 36px;
+    display: none;
   }
-  .loginLeft::before, .loginLeft::after { display: none; }
   .loginRight {
-    padding: 36px 28px 44px;
+    padding: 36px 28px 40px;
     border-left: none;
-    border-top: 1px solid rgba(168,85,247,.1);
+    border-radius: 22px;
   }
   .login-chips { flex-direction: row; justify-content: center; flex-wrap: wrap; }
 }
 
 @media (max-width: 480px) {
-  .loginBg { padding: 16px 10px; }
-  .loginRight { padding: 28px 20px 36px; }
+  .loginBg { padding: 12px 10px; }
+  .loginRight { padding: 24px 20px 30px; }
+  .loginHeader { margin-bottom: 16px; }
+  .loginForm .field { margin-bottom: 13px; }
+  .loginTitle { font-size: 22px; }
 }
 
 /* Login Validation */
