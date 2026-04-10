@@ -232,12 +232,24 @@ jobs:
               wait_http_inside innovacx-ci-orchestrator "http://localhost:8004/health" 80
 
               # Pipeline must still work when models are unavailable.
-              payload_out="$(curl -sS -X POST http://localhost:8004/process/text \
-                --form-string 'text=Repeated network outage in Tower B for the third time this week. Staff cannot login and operations are blocked.' \
-                --form-string 'ticket_type=complaint' \
-                --form-string 'subject=')"
+              # Use Python urllib inside the container — ports: !reset [] removes all host mappings
+              # in CI so the runner host cannot reach orchestrator directly, and the orchestrator
+              # image (python:3.11-slim) has no curl.
+              payload_out="$(docker exec innovacx-ci-orchestrator python -c "
+import urllib.request, urllib.parse
+data = urllib.parse.urlencode({
+  'text': 'Repeated network outage in Tower B for the third time this week. Staff cannot login and operations are blocked.',
+  'ticket_type': 'complaint',
+  'subject': ''
+}).encode()
+req = urllib.request.Request('http://localhost:8004/process/text', data=data,
+  headers={'Content-Type': 'application/x-www-form-urlencoded'})
+resp = urllib.request.urlopen(req, timeout=30)
+print(resp.read().decode())
+")"
               echo "pipeline submit response: $payload_out"
-              ticket_code="$(echo "$payload_out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ticket_code",""))')"
+              ticket_code="$(echo "$payload_out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ticket_code",""))' 2>/dev/null \
+                || echo "$payload_out" | python -c 'import json,sys; print(json.load(sys.stdin).get("ticket_code",""))')"
               [ -n "$ticket_code" ] || { echo "::error::Pipeline submit did not return ticket_code"; return 1; }
 
               # Wait for terminal success status in DB.
