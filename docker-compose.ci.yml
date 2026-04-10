@@ -2,24 +2,27 @@
 # Adds -ci- prefix to all container names and removes host port mappings so
 # CI containers never conflict with the live production stack on the same VM.
 # Usage: docker compose -f docker-compose.yml -f docker-compose.ci.yml ...
+#
+# ports: !reset [] uses the Compose v2 YAML merge reset tag to fully clear
+# the base list rather than appending to it (plain ports: [] just appends nothing).
 services:
   postgres:
     container_name: innovacx-ci-db
-    ports: []
+    ports: !reset []
   backend:
     container_name: innovacx-ci-backend
-    ports: []
+    ports: !reset []
   chatbot:
     container_name: innovacx-ci-chatbot
-    ports: []
+    ports: !reset []
   transcriber:
     container_name: innovacx-ci-transcriber
-    ports: []
+    ports: !reset []
   orchestrator:
     container_name: innovacx-ci-orchestrator
-    ports: []
+    ports: !reset []
   frontend:
     container_name: innovacx-ci-frontend
-    ports: []
+    ports: !reset []
   backup:
     container_name: innovacx-ci-backup
