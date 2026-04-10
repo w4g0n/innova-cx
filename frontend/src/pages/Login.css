@@ -516,8 +516,7 @@
     border-radius: 22px;
   }
   .loginLeft {
-    width: 100%;
-    padding: 44px 32px 36px;
+    display: none; /* Hide decorative left panel on phones — keeps modal compact */
   }
   .loginLeft::before, .loginLeft::after { display: none; }
   .loginRight {

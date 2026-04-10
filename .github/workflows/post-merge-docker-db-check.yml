@@ -27,6 +27,7 @@ jobs:
 
       - name: Sweep all compose profiles
         env:
+          COMPOSE_PROJECT_NAME: innovacx-ci
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
           # Match the committed bootstrap defaults so CI does not fight the
           # seeded role passwords created during docker-entrypoint init.
@@ -133,7 +134,7 @@ jobs:
             local max_attempts="${2:-60}"
             echo "Waiting for app-role TCP authentication to succeed..."
             for i in $(seq 1 "$max_attempts"); do
-              if docker compose --profile "$profile" run --rm --no-deps backup \
+              if docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile "$profile" run --rm --no-deps backup \
                 sh -lc 'export PGPASSWORD="$APP_DB_PASSWORD"; psql -h postgres -U "$APP_DB_USER" -d "$POSTGRES_DB" -tAc "select 1"' \
                 2>/dev/null | grep -q "^1$"; then
                 echo "App-role TCP authentication is ready"
@@ -158,10 +159,10 @@ jobs:
             local services=""
             echo "=== Running profile: $profile ==="
 
-            # Force-remove any lingering named containers and volumes from a previous run
-            docker rm -f innovacx-db innovacx-backend innovacx-frontend innovacx-backup innovacx-orchestrator innovacx-chatbot innovacx-transcriber 2>/dev/null || true
-            docker volume rm innova-cx_postgres_data innova-cx_uploads_data innova-cx_backup_data 2>/dev/null || true
-            docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+            # Force-remove any lingering named CI containers and volumes from a previous run
+            docker rm -f innovacx-ci-db innovacx-ci-backend innovacx-ci-frontend innovacx-ci-backup innovacx-ci-orchestrator innovacx-ci-chatbot innovacx-ci-transcriber 2>/dev/null || true
+            docker volume rm innovacx-ci_postgres_data innovacx-ci_uploads_data innovacx-ci_backup_data 2>/dev/null || true
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
 
             # Force model-unavailable mode so pipeline must rely on fallbacks/mocks.
             export CHATBOT_USE_MOCK=true
@@ -188,22 +189,22 @@ jobs:
             # for a freshly-created postgres container. Build first, then start
             # postgres alone, wait for it to finish init, and finally start the
             # remaining services without dependency resolution.
-            docker compose --profile "$profile" build
-            docker compose --profile "$profile" up -d postgres
-            wait_health innovacx-db
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile "$profile" build --no-cache
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile "$profile" up -d postgres
+            wait_health innovacx-ci-db
 
             # Docker marks Postgres healthy as soon as pg_isready passes, which
             # can happen before docker-entrypoint-initdb.d finishes. Instead of
             # scraping a fragile log line, wait for the actual bootstrap outputs
             # we depend on: the app role and core seeded tables.
-            if ! wait_db_bootstrap innovacx-db 12; then
+            if ! wait_db_bootstrap innovacx-ci-db 12; then
               # The self-hosted runner intermittently comes up with a fresh but
               # otherwise empty database cluster. When that happens, apply the
               # same init files explicitly so the gate validates the app rather
               # than failing on runner-specific Postgres bootstrap drift.
-              apply_bootstrap_fallback innovacx-db
+              apply_bootstrap_fallback innovacx-ci-db
             fi
-            bootstrap_ready innovacx-db || wait_db_bootstrap innovacx-db 60
+            bootstrap_ready innovacx-ci-db || wait_db_bootstrap innovacx-ci-db 60
 
             wait_db_app_auth "$profile" 60
 
@@ -213,22 +214,22 @@ jobs:
             elif [ "$profile" = "live" ]; then
               services="$services orchestrator chatbot transcriber"
             fi
-            docker compose --profile "$profile" up -d --no-deps $services
+            docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile "$profile" up -d --no-deps $services
 
             # Database wiring sanity checks
-            docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
+            docker exec innovacx-ci-db psql -U innovacx_admin -d complaints_db -tAc \
               "select rolname from pg_roles where rolname='innovacx_app';" | grep -q "^innovacx_app$"
-            docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
+            docker exec innovacx-ci-db psql -U innovacx_admin -d complaints_db -tAc \
               "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" | grep -q "^4$"
 
             # Core services must be up for every profile
-            check_running innovacx-backend
-            check_running innovacx-frontend
-            wait_http_inside innovacx-backend "http://localhost:8000/api/health" 50
+            check_running innovacx-ci-backend
+            check_running innovacx-ci-frontend
+            wait_http_inside innovacx-ci-backend "http://localhost:8000/api/health" 50
 
             if [ "$profile" = "pipeline" ] || [ "$profile" = "live" ]; then
-              wait_health innovacx-orchestrator 80
-              wait_http_inside innovacx-orchestrator "http://localhost:8004/health" 80
+              wait_health innovacx-ci-orchestrator 80
+              wait_http_inside innovacx-ci-orchestrator "http://localhost:8004/health" 80
 
               # Pipeline must still work when models are unavailable.
               payload_out="$(curl -sS -X POST http://localhost:8004/process/text \
@@ -242,7 +243,7 @@ jobs:
               # Wait for terminal success status in DB.
               done_status=""
               for i in $(seq 1 80); do
-                done_status="$(docker exec innovacx-db psql -U innovacx_admin -d complaints_db -tAc \
+                done_status="$(docker exec innovacx-ci-db psql -U innovacx_admin -d complaints_db -tAc \
                   "select status from pipeline_executions where ticket_code='${ticket_code}' order by started_at desc limit 1;")"
                 if [ "$done_status" = "success" ]; then
                   break
@@ -254,9 +255,9 @@ jobs:
             fi
 
             if [ "$profile" = "live" ]; then
-              wait_health innovacx-chatbot 80
-              wait_http_inside innovacx-chatbot "http://localhost:8000/health" 80
-              check_running innovacx-transcriber
+              wait_health innovacx-ci-chatbot 80
+              wait_http_inside innovacx-ci-chatbot "http://localhost:8000/health" 80
+              check_running innovacx-ci-transcriber
             fi
 
             docker ps -a --format 'table {{.Names}}\t{{.Status}}'
@@ -283,16 +284,17 @@ jobs:
         if: failure()
         working-directory: ${{ github.workspace }}
         run: |
-          docker logs --tail 300 innovacx-db || true
-          docker logs --tail 300 innovacx-backend || true
-          docker logs --tail 300 innovacx-frontend || true
-          docker logs --tail 300 innovacx-orchestrator || true
-          docker logs --tail 300 innovacx-chatbot || true
-          docker logs --tail 300 innovacx-transcriber || true
+          docker logs --tail 300 innovacx-ci-db || true
+          docker logs --tail 300 innovacx-ci-backend || true
+          docker logs --tail 300 innovacx-ci-frontend || true
+          docker logs --tail 300 innovacx-ci-orchestrator || true
+          docker logs --tail 300 innovacx-ci-chatbot || true
+          docker logs --tail 300 innovacx-ci-transcriber || true
 
       - name: Cleanup
         if: always()
         env:
+          COMPOSE_PROJECT_NAME: innovacx-ci
           BACKUP_PASSPHRASE: ci-merge-gate-passphrase
           POSTGRES_PASSWORD: changeme123
           APP_DB_PASSWORD: changeme123
@@ -304,5 +306,5 @@ jobs:
           RESEND_API_KEY: re_placeholder_ci_key_not_used_in_tests
         working-directory: ${{ github.workspace }}
         run: |
-          docker rm -f innovacx-db innovacx-backend innovacx-frontend innovacx-backup 2>/dev/null || true
-          docker compose --profile live --profile pipeline --profile frontend down -v --remove-orphans || true
+          docker rm -f innovacx-ci-db innovacx-ci-backend innovacx-ci-frontend innovacx-ci-backup innovacx-ci-orchestrator innovacx-ci-chatbot innovacx-ci-transcriber 2>/dev/null || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile live --profile pipeline --profile frontend down -v --remove-orphans || true

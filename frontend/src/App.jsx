@@ -7,6 +7,7 @@ const PublicLanding = lazy(() => import("./pages/PublicLanding"));
 const Login = lazy(() => import("./pages/Login"));
 const ForgotPassword    = lazy(() => import("./pages/ForgotPassword"));
 const ConfirmMfaReset   = lazy(() => import("./pages/ConfirmMfaReset"));
+const MfaSetup          = lazy(() => import("./pages/MfaSetup"));
 const SignUp            = lazy(() => import("./pages/SignUp"));
 const OAuthCallback     = lazy(() => import("./pages/OAuthCallback"));
 
@@ -146,6 +147,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password"    element={<ForgotPassword />} />
           <Route path="/confirm-mfa-reset"  element={<ConfirmMfaReset />} />
+          <Route path="/mfa-setup"          element={<MfaSetup />} />
           <Route path="/signup"             element={<SignUp />} />
           <Route path="/auth/callback"      element={<OAuthCallback />} />
 

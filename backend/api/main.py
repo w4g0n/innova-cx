@@ -1424,6 +1424,24 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     return resp
 
 
+# ── Email routing helper ──────────────────────────────────────────────────────
+
+def _resolve_email_recipient(user_email: str, password_hash: str) -> str:
+    """
+    Determine where to send transactional emails for a given user.
+
+    - Google-OAuth-only accounts (no password) with an @innovacx.net address
+      send to the shared ops inbox, because Google Workspace accounts cannot
+      receive external mail at the OAuth identity address directly.
+    - All other accounts receive email at their own registered address.
+    """
+    is_oauth_only    = (password_hash or "") == "OAUTH_NO_PASSWORD"
+    is_innovacx_domain = user_email.lower().endswith("@innovacx.net")
+    if is_oauth_only and is_innovacx_domain:
+        return "innovacx.reset@gmail.com"
+    return user_email
+
+
 # ── Email OTP (alternative 2FA) ───────────────────────────────────────────────
 
 EMAIL_OTP_HTML = """\
@@ -1486,7 +1504,7 @@ def email_otp_send(request: Request, body: EmailOTPSendRequest, _csrf: None = De
     client_ip = request.client.host if request and request.client else None
 
     user = fetch_one(
-        "SELECT id, email FROM users WHERE id = %s AND is_active = TRUE",
+        "SELECT id, email, password_hash FROM users WHERE id = %s AND is_active = TRUE",
         (payload.get("sub"),),
     )
     if not user:
@@ -1508,10 +1526,11 @@ def email_otp_send(request: Request, body: EmailOTPSendRequest, _csrf: None = De
         (user["id"], otp_hash),
     )
 
+    recipient = _resolve_email_recipient(user["email"], user.get("password_hash", ""))
     try:
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": "innovacx.reset@gmail.com",
+            "to": recipient,
             "subject": "Your InnovaCX verification code",
             "html": EMAIL_OTP_HTML.format(
                 email=user["email"],
@@ -1601,135 +1620,57 @@ RESET_EMAIL_HTML = """\
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
-  <title>Reset Your Password</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&display=swap');
-    body,table,td,a{{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}}
-    table,td{{mso-table-lspace:0pt;mso-table-rspace:0pt}}
-    body{{margin:0;padding:0;background:#0c0520;font-family:'Outfit',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}}
-    .ew{{width:100%;background:#0c0520;padding:40px 0}}
-    .ec{{max-width:560px;margin:0 auto;border-radius:16px;overflow:hidden;border:1px solid rgba(168,85,247,.25);box-shadow:0 0 0 1px rgba(168,85,247,.1),0 8px 40px rgba(0,0,0,.6),0 0 80px rgba(147,51,234,.15)}}
-    /* Header */
-    .hd{{background:linear-gradient(160deg,#0e0525 0%,#1a0840 50%,#0c0320 100%);padding:52px 44px 44px;text-align:center;position:relative;overflow:hidden}}
-    /* Nebula blobs */
-    .nb1{{position:absolute;width:280px;height:280px;top:-80px;left:-60px;border-radius:50%;background:radial-gradient(circle,rgba(147,51,234,.28),transparent 70%);pointer-events:none}}
-    .nb2{{position:absolute;width:200px;height:200px;bottom:-60px;right:-40px;border-radius:50%;background:radial-gradient(circle,rgba(232,121,249,.16),transparent 70%);pointer-events:none}}
-    /* Orbital rings */
-    .r1{{position:absolute;width:220px;height:220px;top:50%;left:50%;margin:-110px 0 0 -110px;border-radius:50%;border:1px solid rgba(168,85,247,.18);animation:rp 4s ease-in-out infinite}}
-    .r2{{position:absolute;width:310px;height:310px;top:50%;left:50%;margin:-155px 0 0 -155px;border-radius:50%;border:1px solid rgba(147,51,234,.08);animation:rp 4s ease-in-out 1s infinite}}
-    @keyframes rp{{0%,100%{{transform:scale(1);opacity:.6}}50%{{transform:scale(1.06);opacity:.2}}}}
-    /* Star dots */
-    .s{{position:absolute;border-radius:50%;background:#fff;animation:tw var(--d,3s) ease-in-out infinite}}
-    @keyframes tw{{0%,100%{{opacity:.08}}50%{{opacity:var(--op,.5)}}}}
-    /* Logo float */
-    .lg{{display:block;margin:0 auto 14px;animation:lf 5s ease-in-out infinite;position:relative;z-index:2}}
-    @keyframes lf{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-6px)}}}}
-    .brand{{font-size:24px;font-weight:900;color:#fff;letter-spacing:-.04em;position:relative;z-index:2;margin:0 0 4px}}
-    .brand span{{opacity:.55;font-weight:400}}
-    .ht{{font-size:22px;font-weight:800;color:#fff;letter-spacing:-.03em;line-height:1.15;position:relative;z-index:2;margin:0 0 6px}}
-    .hs{{font-size:12px;color:rgba(196,181,253,.6);position:relative;z-index:2;letter-spacing:.05em;margin:0}}
-    /* Body */
-    .bd{{padding:36px 44px 28px;background:#05010e}}
-    .gr{{font-size:14.5px;color:rgba(255,255,255,.6);margin:0 0 14px;line-height:1.6}}
-    .de{{font-size:14.5px;color:rgba(255,255,255,.55);line-height:1.7;margin:0 0 28px}}
-    .de strong{{color:rgba(255,255,255,.85)}}
-    .bw{{text-align:center;margin:0 0 36px}}
-    .btn{{display:inline-block;padding:15px 44px;background:linear-gradient(135deg,#6d28d9,#9333ea,#a855f7);color:#fff!important;text-decoration:none;border-radius:12px;font-size:15px;font-weight:700;letter-spacing:.01em;box-shadow:0 6px 28px rgba(147,51,234,.5);animation:bp 3s ease-in-out infinite}}
-    @keyframes bp{{0%,100%{{box-shadow:0 6px 28px rgba(147,51,234,.45)}}50%{{box-shadow:0 6px 40px rgba(147,51,234,.75),0 0 60px rgba(147,51,234,.2)}}}}
-    .dv{{border:none;border-top:1px solid rgba(168,85,247,.12);margin:0 0 22px}}
-    .fl{{font-size:10px;color:rgba(255,255,255,.3);margin:0 0 8px;text-transform:uppercase;letter-spacing:.15em;font-weight:600}}
-    .fkw{{background:rgba(147,51,234,.07);border:1px solid rgba(168,85,247,.2);border-radius:10px;padding:12px 16px;margin:0 0 28px}}
-    .fk{{font-size:12px;color:#a855f7;word-break:break-all;line-height:1.5;margin:0;font-family:monospace}}
-    .wb{{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:14px 16px}}
-    .wt{{font-size:13px;color:rgba(251,191,36,.7);line-height:1.55;margin:0}}
-    .wt strong{{color:#fbbf24}}
-    /* Footer */
-    .ft{{background:rgba(255,255,255,.015);border-top:1px solid rgba(168,85,247,.1);padding:24px 44px;text-align:center}}
-    .fn{{font-size:13px;font-weight:800;color:rgba(255,255,255,.45);letter-spacing:-.02em;margin:0 0 10px}}
-    .fn span{{font-weight:400;opacity:.6}}
-    .fx{{font-size:11.5px;color:rgba(255,255,255,.2);line-height:1.7;margin:0 0 4px}}
-    .fx a{{color:rgba(255,255,255,.2);text-decoration:underline}}
-    .fc{{font-size:11px;color:rgba(168,85,247,.4);margin:8px 0 0}}
-    @media only screen and (max-width:600px){{
-      .ec{{border-radius:0}}
-      .hd,.bd,.ft{{padding-left:24px;padding-right:24px}}
-    }}
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Reset Your InnovaCX Password</title>
+<style>
+  body{{margin:0;padding:0;background:#0d0d1a;font-family:'Segoe UI',Arial,sans-serif;}}
+  .wrap{{max-width:520px;margin:40px auto;background:#13132a;border-radius:16px;overflow:hidden;border:1px solid rgba(139,92,246,.25);}}
+  .hdr{{background:linear-gradient(135deg,#1e1040 0%,#2d1b69 50%,#1a0f35 100%);padding:36px 40px 28px;text-align:center;}}
+  .logo{{font-size:22px;font-weight:700;color:#e9d5ff;letter-spacing:.5px;}}
+  .logo span{{color:#a855f7;}}
+  .body{{padding:32px 40px;}}
+  h2{{margin:0 0 12px;font-size:20px;color:#f3e8ff;}}
+  p{{margin:0 0 16px;font-size:15px;color:#c4b5fd;line-height:1.6;}}
+  .btn-wrap{{text-align:center;margin:20px 0 24px;}}
+  .btn{{display:inline-block;padding:14px 40px;background:linear-gradient(135deg,#6d28d9,#9333ea,#a855f7);color:#fff!important;text-decoration:none;border-radius:12px;font-size:15px;font-weight:700;box-shadow:0 4px 20px rgba(147,51,234,.45);}}
+  .divider{{border:none;border-top:1px solid rgba(139,92,246,.15);margin:0 0 20px;}}
+  .link-label{{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.12em;margin:0 0 8px;}}
+  .link-box{{background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:10px;padding:10px 14px;margin:0 0 24px;}}
+  .link-text{{font-family:'Courier New',monospace;font-size:12px;color:#a855f7;word-break:break-all;line-height:1.5;margin:0;}}
+  .warning{{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:14px 16px;}}
+  .warning p{{margin:0;font-size:13px;color:rgba(251,191,36,.8);line-height:1.55;}}
+  .warning strong{{color:#fbbf24;}}
+  .footer{{padding:20px 40px 28px;text-align:center;border-top:1px solid rgba(139,92,246,.15);}}
+  .fc{{font-size:12px;color:#6b7280;margin:4px 0;}}
+  @media only screen and (max-width:600px){{
+    .wrap{{border-radius:0;margin:0;}}
+    .hdr,.body,.footer{{padding-left:24px;padding-right:24px;}}
+  }}
+</style>
 </head>
 <body>
-<div class="ew">
-  <table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td align="center">
-  <div class="ec">
-
-    <div class="hd">
-      <!-- Nebula -->
-      <div class="nb1"></div>
-      <div class="nb2"></div>
-      <!-- Rings -->
-      <div class="r1"></div>
-      <div class="r2"></div>
-      <!-- Stars -->
-      <div class="s" style="width:2px;height:2px;top:12%;left:18%;--d:2.8s;--op:.6"></div>
-      <div class="s" style="width:1px;height:1px;top:22%;left:72%;--d:3.4s;--op:.4"></div>
-      <div class="s" style="width:2px;height:2px;top:8%;left:55%;--d:2.1s;--op:.7;background:#c4b5fd"></div>
-      <div class="s" style="width:1px;height:1px;top:65%;left:12%;--d:4s;--op:.5"></div>
-      <div class="s" style="width:2px;height:2px;top:70%;left:82%;--d:2.5s;--op:.45;background:#e9d5ff"></div>
-      <div class="s" style="width:1px;height:1px;top:38%;left:88%;--d:3.1s;--op:.35"></div>
-      <div class="s" style="width:2px;height:2px;top:80%;left:40%;--d:3.8s;--op:.55;background:#c4b5fd"></div>
-      <div class="s" style="width:1px;height:1px;top:15%;left:38%;--d:2.3s;--op:.4"></div>
-      <div class="s" style="width:2px;height:2px;top:55%;left:65%;--d:4.2s;--op:.5"></div>
-      <div class="s" style="width:1px;height:1px;top:90%;left:25%;--d:3.6s;--op:.3"></div>
-      <div class="s" style="width:2px;height:2px;top:30%;left:8%;--d:2.7s;--op:.6;background:#e9d5ff"></div>
-      <div class="s" style="width:1px;height:1px;top:48%;left:92%;--d:3.3s;--op:.4"></div>
-      <!-- Logo SVG -->
-      <img src="/nova-logo.png" class="lg" width="56" height="56" alt="Logo"/>
-      <p class="brand">Innova<span>CX</span></p>
-      <p class="ht">Reset your password</p>
-      <p class="hs">Secure account recovery</p>
+<div class="wrap">
+  <div class="hdr"><div class="logo">Innova<span>CX</span></div></div>
+  <div class="body">
+    <h2>Reset your password</h2>
+    <p>Hi <strong style="color:#e9d5ff">{email}</strong>,</p>
+    <p>We received a request to reset the password for your InnovaCX account.
+       Click the button below to choose a new password.
+       This link will expire in <strong style="color:#e9d5ff">30 minutes</strong>.</p>
+    <div class="btn-wrap">
+      <a href="{reset_link}" class="btn" target="_blank">Reset Password &rarr;</a>
     </div>
-
-    <div class="bd">
-      <p class="gr">Hi,</p>
-      <p class="de">
-        We received a request to reset the password for the account associated with
-        <strong>{email}</strong>. Click the button below to choose a new password.
-        This link will expire in <strong>30 minutes</strong>.
-      </p>
-      <div class="bw">
-        <!--[if mso]>
-        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
-          href="{reset_link}" style="height:50px;v-text-anchor:middle;width:220px;"
-          arcsize="12%" fillcolor="#9333ea" strokecolor="#9333ea">
-          <w:anchorlock/>
-          <center style="color:#fff;font-family:sans-serif;font-size:15px;font-weight:700;">Reset Password</center>
-        </v:roundrect>
-        <![endif]-->
-        <!--[if !mso]><!-->
-        <a href="{reset_link}" class="btn" target="_blank">Reset Password &rarr;</a>
-        <!--<![endif]-->
-      </div>
-      <hr class="dv"/>
-      <p class="fl">Or copy this link</p>
-      <div class="fkw"><p class="fk">{reset_link}</p></div>
-      <div class="wb">
-        <p class="wt"><strong>Didn't request this?</strong> Your password will not change unless you click the button above. If you're concerned about your account security, please contact support.</p>
-      </div>
+    <hr class="divider"/>
+    <p class="link-label">Or copy this link</p>
+    <div class="link-box"><p class="link-text">{reset_link}</p></div>
+    <div class="warning">
+      <p><strong>Didn't request this?</strong> Your password will not change unless you click the button above.
+         If you're concerned about your account security, please contact support immediately.</p>
     </div>
-
-    <div class="ft">
-      <p class="fn">Innova<span>CX</span></p>
-      <p class="fx">
-        This email was sent by InnovaCX &mdash; innovacx.net<br/>
-        This is an automated message, please do not reply to this email.
-      </p>
-      <p class="fc">&copy; {year} InnovaCX. All rights reserved.</p>
-    </div>
-
+    <p style="font-size:13px;color:#9ca3af;margin-top:20px;">This is an automated security email. Please do not reply.</p>
   </div>
-  </td></tr></table>
+  <div class="footer"><p class="fc">&copy; {year} InnovaCX. All rights reserved.</p></div>
 </div>
 </body>
 </html>"""
@@ -1784,7 +1725,7 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
     email = sanitize_email(body.email)
     client_ip = request.client.host if request and request.client else None
     user = fetch_one(
-        "SELECT id FROM users WHERE email = %s AND is_active = TRUE",
+        "SELECT id, password_hash FROM users WHERE email = %s AND is_active = TRUE",
         (email,),
     )
 
@@ -1815,9 +1756,10 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
         # a valid 30-minute account-takeover credential from leaking into log files.
         reset_link = f"https://innovacx.net/forgot-password#token={raw_token}"
 
+        recipient = _resolve_email_recipient(email, user.get("password_hash", ""))
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": "innovacx.reset@gmail.com",   # hardcoded until domain email is set up
+            "to": recipient,
             "subject": "Reset your InnovaCX password",
             "html": RESET_EMAIL_HTML.format(
                 email=email,
@@ -1897,10 +1839,12 @@ def reset_password(request: Request, body: ResetPasswordRequest, _csrf: None = D
     log_auth_event("password_reset_complete", user_id=str(row["user_id"]), ip=client_ip)
 
     # Notify the user that their password was changed
+    _pw_row = fetch_one("SELECT password_hash FROM users WHERE id = %s", (row["user_id"],))
+    _reset_recipient = _resolve_email_recipient(row["email"], (_pw_row or {}).get("password_hash", ""))
     try:
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": "innovacx.reset@gmail.com",
+            "to": _reset_recipient,
             "subject": "Your InnovaCX password has been changed",
             "html": PASSWORD_CHANGED_EMAIL_HTML.format(
                 email=row["email"],
@@ -1937,10 +1881,16 @@ def change_password(
     log_auth_event("password_changed", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
 
     # Notify the user that their password was changed
+    # After the UPDATE, fetch the new hash to determine the correct recipient
+    _new_hash_row = fetch_one("SELECT password_hash FROM users WHERE id = %s", (user["id"],))
+    _change_recipient = _resolve_email_recipient(
+        user.get("email", ""),
+        (_new_hash_row or {}).get("password_hash", ""),
+    )
     try:
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": "innovacx.reset@gmail.com",
+            "to": _change_recipient,
             "subject": "Your InnovaCX password has been changed",
             "html": PASSWORD_CHANGED_EMAIL_HTML.format(
                 email=user.get("email", ""),
@@ -2169,23 +2119,44 @@ def oauth_google_callback(request: Request, body: OAuthCallbackRequest, _csrf: N
     if not email:
         raise HTTPException(status_code=400, detail="Google account has no email address.")
 
-    user         = _upsert_oauth_user(email, name, "google")
-    access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
-    profile      = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
-    log_auth_event("oauth_login", user_id=str(user["id"]), email=email, ip=client_ip, extra={"provider": "google"})
+    user    = _upsert_oauth_user(email, name, "google")
+    profile = fetch_one(
+        "SELECT full_name, totp_secret, mfa_enabled FROM user_profiles UP "
+        "JOIN users U ON U.id = UP.user_id WHERE U.id = %s",
+        (user["id"],),
+    )
+    # Fetch full user row so we can check / set totp_secret
+    full_user = fetch_one(
+        "SELECT id, email, role, totp_secret, mfa_enabled FROM users WHERE id = %s",
+        (user["id"],),
+    )
+    # Generate TOTP secret if missing (required for MFA setup after first Google sign-in)
+    if not full_user.get("totp_secret"):
+        secret = pyotp.random_base32()
+        execute("UPDATE users SET totp_secret = %s WHERE id = %s", (secret, full_user["id"]))
 
-    resp = JSONResponse(content={
-        "access_token": access_token,
-        "token_type":   "bearer",
+    requires_setup = not full_user.get("mfa_enabled", False)
+
+    # Issue a temporary token — frontend will route to /mfa-setup (first time) or /verify
+    temp_token = create_jwt(
+        {"sub": str(full_user["id"]), "type": "mfa_temp"},
+        ttl_seconds=MFA_TEMP_TTL_SECONDS,
+    )
+    log_auth_event("oauth_login", user_id=str(full_user["id"]), email=email, ip=client_ip,
+                   extra={"provider": "google", "requires_setup": bool(requires_setup), "temporary_token": True})
+
+    full_name = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (full_user["id"],))
+    return {
+        "access_token":  temp_token,
+        "token_type":    "temporary",
+        "requiresSetup": requires_setup,
         "user": {
-            "id":        str(user["id"]),
-            "email":     user["email"],
-            "role":      user["role"],
-            "full_name": (profile or {}).get("full_name") or name or email,
+            "id":        str(full_user["id"]),
+            "email":     full_user["email"],
+            "role":      full_user["role"],
+            "full_name": (full_name or {}).get("full_name") or name or email,
         },
-    })
-    _set_auth_cookie(resp, access_token)
-    return resp
+    }
 
 
 @api.post("/auth/oauth/microsoft/callback")

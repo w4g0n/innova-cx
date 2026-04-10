@@ -923,20 +923,26 @@ function SolarSystem({ onReady }) {
       };
     }
 
-    const THREE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+    const THREE_CDN = "/three.min.js"; // served locally — no CDN dependency
+
+    const handleWebGLError = (err) => {
+      console.warn("[SolarSystem] WebGL unavailable, using CSS fallback:", err?.message || err);
+      if (mount) mount.classList.add("pl-solar-fallback");
+      onReady && onReady();
+    };
 
     if (window.THREE) {
-      init();
+      try { init(); } catch (err) { handleWebGLError(err); }
     } else {
       const existing = document.querySelector(`script[src="${THREE_CDN}"]`);
       if (existing) {
-        // Script already in DOM (React Strict Mode double-invoke) — reuse it
-        existing.addEventListener("load", init, { once: true });
+        existing.addEventListener("load", () => { try { init(); } catch (err) { handleWebGLError(err); } }, { once: true });
         return () => { if (mount._cleanup) mount._cleanup(); };
       }
       const script = document.createElement("script");
       script.src = THREE_CDN;
-      script.onload = init;
+      script.onload = () => { try { init(); } catch (err) { handleWebGLError(err); } };
+      script.onerror = () => { console.warn("[SolarSystem] Failed to load three.min.js, using CSS fallback"); if (mount) mount.classList.add("pl-solar-fallback"); onReady && onReady(); };
       document.head.appendChild(script);
       return () => { if (mount._cleanup) mount._cleanup(); if (script.parentNode) script.parentNode.removeChild(script); };
     }
@@ -1062,13 +1068,19 @@ export default function PublicLanding() {
   const readyRef = useRef(false);
   const splashDoneRef = useRef(false);
 
-  // Minimum hold: 2.8s so text animations finish before fade-out
+  // Minimum hold: 2.8s so text animations finish before fade-out.
+  // Hard fallback at 6s in case WebGL/Three.js never fires onReady.
   useEffect(() => {
     const t = setTimeout(() => {
       splashDoneRef.current = true;
       if (readyRef.current) setReady(true);
     }, 2800);
-    return () => clearTimeout(t);
+    const fallback = setTimeout(() => {
+      readyRef.current = true;
+      splashDoneRef.current = true;
+      setReady(true);
+    }, 6000);
+    return () => { clearTimeout(t); clearTimeout(fallback); };
   }, []);
 
   const handleReady = () => {
