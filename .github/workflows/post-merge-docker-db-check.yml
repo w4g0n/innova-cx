@@ -82,7 +82,7 @@ jobs:
               role_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
                 "select count(*) from pg_roles where rolname='innovacx_app';" 2>/dev/null || true)"
               tables_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
-                "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" 2>/dev/null || true)"
+                "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','departments','user_profiles');" 2>/dev/null || true)"
               if [ "$role_ready" = "1" ] && [ "$tables_ready" = "4" ]; then
                 echo "$container bootstrap complete"
                 return 0
@@ -101,7 +101,7 @@ jobs:
             role_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
               "select count(*) from pg_roles where rolname='innovacx_app';" 2>/dev/null || true)"
             tables_ready="$(docker exec "$container" psql -U innovacx_admin -d complaints_db -tAc \
-              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" 2>/dev/null || true)"
+              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','departments','user_profiles');" 2>/dev/null || true)"
             [ "$role_ready" = "1" ] && [ "$tables_ready" = "4" ]
           }
 
@@ -220,7 +220,7 @@ jobs:
             docker exec innovacx-ci-db psql -U innovacx_admin -d complaints_db -tAc \
               "select rolname from pg_roles where rolname='innovacx_app';" | grep -q "^innovacx_app$"
             docker exec innovacx-ci-db psql -U innovacx_admin -d complaints_db -tAc \
-              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','pipeline_executions','pipeline_stage_events');" | grep -q "^4$"
+              "select count(*) from information_schema.tables where table_schema='public' and table_name in ('users','tickets','departments','user_profiles');" | grep -q "^4$"
 
             # Core services must be up for every profile
             check_running innovacx-ci-backend
