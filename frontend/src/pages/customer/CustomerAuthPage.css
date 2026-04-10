@@ -561,6 +561,23 @@
   .otp-input  { width: 40px; height: 50px; font-size: 18px; }
 }
 
+/* Rate-limit cooldown message */
+.auth-cooldown-msg {
+  font-size: 12.5px;
+  color: rgba(251,146,60,.85);
+  background: rgba(251,146,60,.07);
+  border: 1px solid rgba(251,146,60,.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 10px 0 0;
+  text-align: center;
+  line-height: 1.5;
+}
+.auth-cooldown-msg strong {
+  color: #fb923c;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Shake animation for wrong OTP */
 @keyframes authCardShake {
   0%,100% { transform: translateX(0); }

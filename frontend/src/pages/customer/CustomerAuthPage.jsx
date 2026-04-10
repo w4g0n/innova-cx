@@ -255,7 +255,8 @@ export default function CustomerAuthPage() {
   const [otpMode,       setOtpMode]       = useState("totp");
   const [emailOtpSent,  setEmailOtpSent]  = useState(false);
   const [emailOtpBusy,  setEmailOtpBusy]  = useState(false);
-  const [resendCooldown,setResendCooldown]= useState(0);
+  const [resendCooldown,  setResendCooldown]  = useState(0);
+  const [verifyCooldown,  setVerifyCooldown]  = useState(0);
 
   const inputsRef = useRef([]);
 
@@ -297,12 +298,18 @@ export default function CustomerAuthPage() {
     checkTOTPStatus();
   }, [loginToken, role, navigate]);
 
-  // ── Resend cooldown ticker ─────────────────────────────────────────────────
+  // ── Cooldown tickers ───────────────────────────────────────────────────────
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const id = setInterval(() => setResendCooldown((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(id);
   }, [resendCooldown]);
+
+  useEffect(() => {
+    if (verifyCooldown <= 0) return;
+    const id = setInterval(() => setVerifyCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [verifyCooldown]);
 
   // ── OTP input handlers ─────────────────────────────────────────────────────
   const handleChange = (value, index) => {
@@ -386,7 +393,7 @@ export default function CustomerAuthPage() {
         throw new Error(err.detail || "Failed to send code");
       }
       setEmailOtpSent(true);
-      setResendCooldown(60);
+      setResendCooldown(120);
       setOtp(["", "", "", "", "", ""]);
       setTimeout(() => inputsRef.current[0]?.focus(), 100);
     } catch (err) {
@@ -462,6 +469,7 @@ export default function CustomerAuthPage() {
         : err.message || "Invalid or expired code. Please try again.");
       setShake(true);
       setTimeout(() => setShake(false), 500);
+      setVerifyCooldown(120);
       setOtp(["", "", "", "", "", ""]);
       inputsRef.current[0]?.focus();
     }
@@ -605,13 +613,18 @@ export default function CustomerAuthPage() {
                   </span>
                 </label>
 
+                {verifyCooldown > 0 && (
+                  <p className="auth-cooldown-msg" role="status">
+                    Too many attempts — wait <strong>{verifyCooldown}s</strong> before trying again.
+                  </p>
+                )}
                 <button
                   className="auth-primary-btn"
                   type="submit"
-                  disabled={otp.some((d) => d === "")}
+                  disabled={otp.some((d) => d === "") || verifyCooldown > 0}
                   style={{ marginTop: "16px" }}
                 >
-                  Continue
+                  {verifyCooldown > 0 ? `Try again in ${verifyCooldown}s` : "Continue"}
                 </button>
 
                 {/* Resend / retry link for email mode */}
