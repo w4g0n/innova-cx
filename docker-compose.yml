@@ -1,7 +1,9 @@
 services:
   postgres:
     profiles: ["frontend", "pipeline", "live"]
-    image: postgres:14.22-alpine
+    build:
+      context: ./database
+      dockerfile: Dockerfile
     container_name: innovacx-db
     restart: unless-stopped
     environment:
@@ -20,6 +22,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database:/docker-entrypoint-initdb.d
+      - ./database/pg_hba.conf:/etc/postgresql/pg_hba.conf
     expose:
       # Port is available to containers on innovacx-network only.
       # Not mapped to the host — no external or localhost access possible.
@@ -32,7 +35,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 90s
-    command: postgres -c hba_file=/var/lib/postgresql/data/pg_hba.conf
+    command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
 
   backend:
     profiles: ["frontend", "pipeline", "live"]
