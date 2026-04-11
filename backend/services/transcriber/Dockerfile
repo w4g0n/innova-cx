@@ -22,6 +22,8 @@ RUN set -eux; \
         exit 1; \
       fi; \
       echo "apt install attempt ${i} failed; retrying in 5s..."; \
+      apt-get clean || true; \
+      rm -rf /var/lib/apt/lists/* || true; \
       sleep 5; \
     done; \
     rm -rf /var/lib/apt/lists/*

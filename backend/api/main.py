@@ -4228,12 +4228,13 @@ def create_customer_ticket(
         if str(body.type or "").strip().lower() == "inquiry"
         else "Complaint"
     )
-
-    is_recurring = predict_is_recurring(
-        user_id=user["id"],
-        subject="",
-        details=body.details,
+    subject = (
+        (body.subject or "").strip()
+        or (body.details or "").strip()[:120]
+        or f"Automated {normalized_ticket_type.lower()}"
     )
+
+    is_recurring = predict_is_recurring(user_id=user["id"], subject=subject, details=body.details)
     model_suggestion = json.dumps({"is_recurring": is_recurring})
 
     # Insert ticket into database through centralized gate.
@@ -4246,7 +4247,7 @@ def create_customer_ticket(
                 cur,
                 created_by_user_id=user["id"],
                 ticket_type=normalized_ticket_type,
-                subject="",
+                subject=subject,
                 details=body.details,
                 priority=None,
                 status="Open",
