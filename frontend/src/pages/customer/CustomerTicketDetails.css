@@ -123,12 +123,23 @@
 
 
 /* Card */
+@keyframes ctdFadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .ctd-card {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: 20px; padding: 24px;
   transition: background .3s, border-color .3s, box-shadow .3s;
+  animation: ctdFadeUp .45s cubic-bezier(.4,0,.2,1) both;
 }
+.ctd-left-col .ctd-card:nth-child(1) { animation-delay: .05s; }
+.ctd-left-col .ctd-card:nth-child(2) { animation-delay: .12s; }
+.ctd-left-col .ctd-card:nth-child(3) { animation-delay: .19s; }
+.ctd-right-col .ctd-card:nth-child(1) { animation-delay: .1s; }
+.ctd-right-col .ctd-card:nth-child(2) { animation-delay: .17s; }
 [data-theme="dark"]  .ctd-card { box-shadow: 0 8px 40px rgba(0,0,0,.25); }
 [data-theme="light"] .ctd-card { box-shadow: 0 4px 24px rgba(109,40,217,.1); }
 
