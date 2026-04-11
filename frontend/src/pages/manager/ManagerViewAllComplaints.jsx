@@ -112,7 +112,7 @@ export default function ManagerViewComplaints() {
     const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
     setSearch(sanitizeSearchQuery(raw));
   };
-  const [statusFilter, setStatusFilter]     = useState("Hide Resolved");
+  const [statusFilter, setStatusFilter]     = useState("All Status");
   const [priorityFilter, setPriorityFilter] = useState("All Priorities");
   const [activeKpi, setActiveKpi] = useState(null); // label of active KPI filter
 
@@ -273,8 +273,6 @@ export default function ManagerViewComplaints() {
       const matchesSearch   = q === "" || r.id.toLowerCase().includes(q) || r.ticket_code?.toLowerCase().includes(q) || r.subject.toLowerCase().includes(q);
       const matchesStatus = statusFilter === "All Status"
         ? true
-        : statusFilter === "Hide Resolved"
-        ? r.status !== "Resolved"
         : r.status === statusFilter;
       const matchesPriority = priorityFilter === "All Priorities" || r.priorityText === priorityFilter;
       // "In Progress" KPI = not resolved and not unassigned
@@ -323,11 +321,9 @@ export default function ManagerViewComplaints() {
     };
   }, [rows]);
 
-  const allResolved = rows.length > 0 && kpis.openTickets === 0 && !activeKpi && statusFilter === "Hide Resolved";
-
   const handleReset = () => {
     setSearch("");
-    setStatusFilter("Hide Resolved");
+    setStatusFilter("All Status");
     setPriorityFilter("All Priorities");
     setActiveKpi(null);
   };
@@ -378,7 +374,6 @@ export default function ManagerViewComplaints() {
                 onChange={(v) => { if (ALLOWED_STATUS_FILTERS.includes(v)) { setStatusFilter(v); setActiveKpi(null); } }}
                 ariaLabel="Filter by status"
                 options={[
-                  { label: "Hide Resolved", value: "Hide Resolved" },
                   { label: "All Status",  value: "All Status" },
                   { label: "Submitted",   value: "Submitted" },
                   { label: "Assigned",    value: "Assigned" },
@@ -419,35 +414,6 @@ export default function ManagerViewComplaints() {
           </span>
         </section>
 
-        {allResolved ? (
-          <section className="ev-all-resolved">
-            <div className="ev-all-resolved__rings">
-              <div className="ev-all-resolved__ring ev-all-resolved__ring--3" />
-              <div className="ev-all-resolved__ring ev-all-resolved__ring--2" />
-              <div className="ev-all-resolved__ring ev-all-resolved__ring--1" />
-              <div className="ev-all-resolved__iconwrap">
-                <svg className="ev-all-resolved__svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="32" cy="32" r="30" stroke="url(#mvGrad)" strokeWidth="2.5" />
-                  <polyline className="ev-all-resolved__checkpath" points="18,33 27,42 46,22" stroke="url(#mvGrad)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                  <defs>
-                    <linearGradient id="mvGrad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-                      <stop offset="0%" stopColor="#16a34a" />
-                      <stop offset="100%" stopColor="#4ade80" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-            </div>
-            <h2 className="ev-all-resolved__title">All Caught Up!</h2>
-            <p className="ev-all-resolved__sub">Every ticket has been resolved. Your team is on top of it.</p>
-            <button
-              className="ev-all-resolved__btn"
-              onClick={() => setStatusFilter("All Status")}
-            >
-              View all tickets including resolved
-            </button>
-          </section>
-        ) : (
         <section className="mv-tableWrapper">
           <table className="mv-table">
             <thead>
@@ -534,7 +500,6 @@ export default function ManagerViewComplaints() {
             </tbody>
           </table>
         </section>
-        )} {/* end allResolved ternary */}
 
         {isAssignOpen && (
           <div className="mv-modalOverlay" onClick={closeAssignModal} role="presentation">

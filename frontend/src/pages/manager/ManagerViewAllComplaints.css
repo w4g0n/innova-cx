@@ -2,8 +2,12 @@
   flex: 1;
   padding: 0;
   width: 100%;
-  overflow-x: hidden;
+  min-width: 0;
+  overflow-x: visible;
 }
+
+
+
 
 .mv-header {
   margin-bottom: 14px;

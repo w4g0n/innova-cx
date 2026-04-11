@@ -1,6 +1,6 @@
 """
 Tier 2 — E2E Conversation Smoke Suite
-=======================================
+
 Runs on the VM host (not inside the container). Drives real HTTP conversations
 through the chatbot service, covering all major state-machine paths.
 
@@ -39,9 +39,9 @@ log = logging.getLogger(__name__)
 BENCHMARK_MARKER = "[benchmark]"
 
 
-# ---------------------------------------------------------------------------
+
 # HTTP helpers
-# ---------------------------------------------------------------------------
+
 
 def _parse_base_url(base_url: str):
     """Return (host, port, is_https) from a base URL like http://localhost:8001."""
