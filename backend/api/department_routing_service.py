@@ -315,7 +315,8 @@ def decide_routing_review(
             if dept_row:
                 cur.execute(
                     """
-                    SELECT t.ticket_code, d.name AS current_department
+                    SELECT t.ticket_code, d.name AS current_department,
+                           t.assigned_to_user_id
                     FROM tickets t
                     LEFT JOIN departments d ON d.id = t.department_id
                     WHERE t.id = %s
@@ -356,12 +357,30 @@ def decide_routing_review(
                             ),
                         ),
                     )
+                    existing_assignee = before_row.get("assigned_to_user_id")
                     with conn.cursor() as assign_cur:
-                        auto_assign_ticket_if_needed(
+                        newly_assigned = auto_assign_ticket_if_needed(
                             assign_cur,
                             ticket_code=ticket_row["ticket_code"],
                             status=ticket_row["status"],
                             department_id=dept_row["id"],
+                            priority=ticket_row["priority"],
+                        )
+
+                    # If the ticket already had an assignee and wasn't re-assigned,
+                    # notify them that their ticket's department changed.
+                    if existing_assignee and not newly_assigned:
+                        insert_notification(
+                            cur,
+                            user_id=str(existing_assignee),
+                            notif_type="status_change",
+                            title=f"Ticket Rerouted: {ticket_row['ticket_code']}",
+                            message=(
+                                f"Your ticket {ticket_row['ticket_code']} has been rerouted "
+                                f"from {old_dept} to the {final_dept} department "
+                                f"by a manager routing review."
+                            ),
+                            ticket_id=str(rrq["ticket_id"]),
                             priority=ticket_row["priority"],
                         )
 
