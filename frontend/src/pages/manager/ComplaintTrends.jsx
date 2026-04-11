@@ -197,7 +197,7 @@ function GaugeKpi({ value, target, label, prevValue, unit = "%" }) {
       </div>
       <div className="ct-gauge__row">
         <span className="ct-gauge__value">{value}{unit}</span>
-        <span className="ct-gauge__target-label">target: {target}{unit}</span>
+
         {delta != null && (
           <span className={`ct-gauge__delta ${delta <= 0 ? "pos" : "neg"}`}>
             {delta > 0 ? "+" : ""}{delta.toFixed(1)}{unit} vs prev
@@ -315,8 +315,6 @@ export default function ComplaintTrends() {
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState(null);
 
-  // Dynamic department list from /api/manager/departments
-  const [deptOptions, setDeptOptions] = useState([]);
   // The logged-in manager's own department — used as the default filter
   const [myDepartment, setMyDepartment] = useState("");
 
@@ -340,15 +338,6 @@ export default function ComplaintTrends() {
         setDepartment("All Departments");
       });
 
-    // Fetch real department list from DB
-    fetch(apiUrl("/api/manager/departments"), { headers })
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setDeptOptions(data);
-        }
-      })
-      .catch(() => {});
   }, [navigate]); 
 
   const fetchData = useCallback(async () => {
@@ -403,13 +392,6 @@ export default function ComplaintTrends() {
         {(() => {
           const ALLOWED_TIME_RANGES = ["Last 7 Days", "Last 30 Days", "This Month", "Last 3 Months", "Last 6 Months", "Last 12 Months"];
           const ALLOWED_PRIORITIES_TREND = ["All Priorities", "Critical", "High", "Medium", "Low"];
-          const allDeptOptions = [
-            "All Departments",
-            ...(deptOptions.length > 0
-              ? deptOptions
-              : ["Safety & Security", "HR", "IT", "Leasing", "Maintenance", "Legal & Compliance", "Facilities Management"]
-            ),
-          ];
           return (
             <section className="filtersRow">
               <div className="filtersLeft">
@@ -418,11 +400,6 @@ export default function ComplaintTrends() {
                     onChange={(v) => { if (ALLOWED_TIME_RANGES.includes(v)) setTimeRange(v); }}
                     ariaLabel="Time range"
                     options={ALLOWED_TIME_RANGES.map((r) => ({ value: r, label: r }))}
-                  />
-                  <PillSelect value={department}
-                    onChange={(v) => { if (allDeptOptions.includes(v)) setDepartment(v); }}
-                    ariaLabel="Department"
-                    options={allDeptOptions.map((d) => ({ value: d, label: d }))}
                   />
                   <PillSelect value={priority}
                     onChange={(v) => { if (ALLOWED_PRIORITIES_TREND.includes(v)) setPriority(v); }}
@@ -450,12 +427,11 @@ export default function ComplaintTrends() {
         {tab === 0 && (
           <div className="ct-section">
             {/* A — KPI row */}
-            <section className="kpiRow">
+            <section className="kpiRow kpiRow--4">
               <KpiCard label="Total Tickets" value={apiData.kpis.complaints} />
               <KpiCard label="SLA Compliance" value={apiData.kpis.sla} />
               <KpiCard label="Avg Response" value={apiData.kpis.response} />
               <KpiCard label="Avg Resolve" value={apiData.kpis.resolve} />
-              <KpiCard label="Top Department" value={apiData.kpis.topCategory} />
             </section>
 
             {/* A1 — Complaint vs Inquiry */}
@@ -504,7 +480,7 @@ export default function ComplaintTrends() {
                   <div className="trendLabels">
                     {labeledBars.map((b, i) => {
                       const prevYear = i > 0 ? labeledBars[i - 1].year : null;
-                      const showYear = i === 0 || b.year !== prevYear;
+                      const showYear = prevYear !== null && b.year !== prevYear;
                       return (
                         <div key={b.label + b.year} className="trendLabelCol">
                           <span className="trendLabelMonth">{b.label?.trim().slice(0, 3)}</span>
