@@ -1,4 +1,3 @@
--- =============================================================================
 -- InnovaCX — Role Separation & Least-Privilege Grants
 -- File: database/zzz_least_privilege.sql
 --
@@ -24,11 +23,8 @@
 --   zzz_analytics_mvs.sh    — analytics MVs
 --   zzz_least_privilege.sh  — role creation + passwords
 --   zzz_least_privilege.sql — THIS FILE: grants/revokes
--- =============================================================================
 
--- =========================================================================
 -- 1. Database-level privileges
--- =========================================================================
 
 -- Remove PUBLIC's implicit database access on the application database.
 REVOKE ALL ON DATABASE complaints_db FROM PUBLIC;
@@ -49,9 +45,7 @@ GRANT CONNECT, TEMPORARY ON DATABASE complaints_db TO innovacx_app;
 GRANT CONNECT            ON DATABASE complaints_db TO innovacx_readonly;
 GRANT CONNECT, TEMPORARY ON DATABASE complaints_db TO innovacx_test;
 
--- =========================================================================
 -- 2. Schema-level privileges
--- =========================================================================
 
 -- Revoke PUBLIC's default CREATE on the public schema (PostgreSQL 14 default).
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
@@ -75,9 +69,7 @@ GRANT USAGE ON SCHEMA public TO innovacx_readonly;
 -- innovacx_test: USAGE only — mirrors innovacx_app, no CREATE.
 GRANT USAGE ON SCHEMA public TO innovacx_test;
 
--- =========================================================================
 -- 3. Table-level DML privileges
--- =========================================================================
 
 -- innovacx_app: full DML — proven from main.py:
 --   SELECT  — all read endpoints
@@ -93,9 +85,7 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO innovacx_readonly;
 -- innovacx_test: same DML as innovacx_app.
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO innovacx_test;
 
--- =========================================================================
 -- 4. Sequence privileges
--- =========================================================================
 
 -- innovacx_app: USAGE (nextval) + SELECT (currval) for BIGSERIAL columns
 --   (e.g. analytics_refresh_log.id).
@@ -108,9 +98,7 @@ GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO innovacx_readonly;
 -- innovacx_test: same as innovacx_app.
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO innovacx_test;
 
--- =========================================================================
 -- 5. Function EXECUTE privileges
--- =========================================================================
 
 -- innovacx_app: EXECUTE needed for (proven from main.py):
 --   apply_ticket_sla_policies()       — SLA heartbeat loop
@@ -126,34 +114,28 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO innovacx_app;
 -- innovacx_test: same as innovacx_app.
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO innovacx_test;
 
--- =========================================================================
 -- 6. SECURITY DEFINER on refresh_analytics_mvs()
 --
 --    REFRESH MATERIALIZED VIEW requires the caller to be the MV owner.
 --    innovacx_admin owns all MVs. SECURITY DEFINER makes the function run
 --    as innovacx_admin (its owner) regardless of the calling role, so
 --    innovacx_app can call it successfully.
--- =========================================================================
 ALTER FUNCTION refresh_analytics_mvs() SECURITY DEFINER;
 
--- =========================================================================
 -- 7. Ensure password_changed_at column exists on users
 --
 --    Used by get_current_user() (main.py) for stale-session detection.
 --    Added here by innovacx_admin (table owner). The backend's
 --    _ensure_runtime_schema_compatibility() skips this DDL because
 --    innovacx_app does not own the table, so this is the reliable path.
--- =========================================================================
 ALTER TABLE public.users
     ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
 
--- =========================================================================
 -- 8. Default privileges
 --
 --    Any object created in the future by innovacx_admin (new migrations,
 --    tables, functions, MVs) is automatically accessible to all runtime
 --    roles. Prevents privilege drift as new migrations are applied.
--- =========================================================================
 
 -- innovacx_app defaults
 ALTER DEFAULT PRIVILEGES FOR ROLE innovacx_admin IN SCHEMA public

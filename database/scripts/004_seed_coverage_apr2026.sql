@@ -1,14 +1,11 @@
--- =============================================================================
 -- InnovaCX — Coverage Gap Fix
 -- File: database/scripts/004_seed_coverage_apr2026.sql
 --
 -- PURPOSE
--- -------
 -- Fills the real MV coverage gaps identified for 2026 so that every active
 -- employee has at least one ticket row in every month Jan–Apr 2026.
 --
 -- GAPS FILLED
--- -----------
 --   ahmed  → 2026-04   (CX-CV001)
 --   bilal  → 2026-01   (CX-CV002)
 --   bilal  → 2026-04   (CX-CV003)
@@ -19,20 +16,15 @@
 -- SAFE TO RE-RUN: uses ON CONFLICT (ticket_code) DO NOTHING.
 --
 -- APPLY ORDER
--- -----------
 -- After: init.sql, 000–003 scripts, zzz_seedV2.sql
 --
 -- Command (apply while containers are running):
 --   docker exec -i innovacx-db psql -U innovacx_admin -d complaints_db \
 --     < database/scripts/004_seed_coverage_apr2026.sql
--- =============================================================================
 
 BEGIN;
 
-
--- =============================================================================
 -- STEP 1 — Insert 6 targeted coverage tickets
--- =============================================================================
 
 INSERT INTO tickets (
     ticket_code, subject, details, ticket_type, status, priority,
@@ -169,17 +161,11 @@ VALUES
 
 ON CONFLICT (ticket_code) DO NOTHING;
 
-
--- =============================================================================
 -- STEP 2 — Refresh analytics materialized views
--- =============================================================================
 
 SELECT refresh_analytics_mvs();
 
-
--- =============================================================================
 -- STEP 3 — Verification: no employee×month gap should remain in 2026
--- =============================================================================
 
 DO $$
 DECLARE
@@ -223,6 +209,5 @@ BEGIN
 
     RAISE NOTICE 'Verification PASSED — all employees have Jan–Apr 2026 MV coverage.';
 END $$;
-
 
 COMMIT;

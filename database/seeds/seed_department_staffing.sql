@@ -1,9 +1,7 @@
--- =============================================================================
 -- Department Staffing Seed
 -- EXACT users: 7 departments x 1 manager + 1 employee each = 14 dept users
 -- No generated/bulk users. All emails use @innovacx.net domain.
 -- Password for all: Innova@2025
--- =============================================================================
 
 -- Ensure all required departments exist.
 INSERT INTO departments (name)
@@ -17,9 +15,7 @@ VALUES
   ('IT')
 ON CONFLICT (name) DO NOTHING;
 
--- =============================================================================
 -- MANAGERS (1 per department)
--- =============================================================================
 INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secret)
 VALUES
   ('hamad@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'manager', TRUE, FALSE, NULL),
@@ -32,9 +28,7 @@ VALUES
 ON CONFLICT (email) DO UPDATE
   SET role = 'manager', is_active = TRUE, mfa_enabled = FALSE, totp_secret = NULL;
 
--- =============================================================================
 -- EMPLOYEES (1 per department)
--- =============================================================================
 INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secret)
 VALUES
   ('ahmed@innovacx.net',  crypt('Innova@2025', gen_salt('bf', 12)), 'employee', TRUE, FALSE, NULL),
@@ -47,9 +41,7 @@ VALUES
 ON CONFLICT (email) DO UPDATE
   SET role = 'employee', is_active = TRUE, mfa_enabled = FALSE, totp_secret = NULL;
 
--- =============================================================================
 -- MANAGER PROFILES
--- =============================================================================
 INSERT INTO user_profiles (user_id, full_name, department_id, employee_code, job_title)
 SELECT u.id,
        m.full_name,
@@ -72,9 +64,7 @@ ON CONFLICT (user_id) DO UPDATE
       employee_code = EXCLUDED.employee_code,
       job_title     = EXCLUDED.job_title;
 
--- =============================================================================
 -- EMPLOYEE PROFILES
--- =============================================================================
 INSERT INTO user_profiles (user_id, full_name, department_id, employee_code, job_title)
 SELECT u.id,
        e.full_name,
@@ -97,9 +87,7 @@ ON CONFLICT (user_id) DO UPDATE
       employee_code = EXCLUDED.employee_code,
       job_title     = EXCLUDED.job_title;
 
--- =============================================================================
 -- VERIFICATION
--- =============================================================================
 SELECT
   d.name AS department,
   COUNT(*) FILTER (WHERE u.role = 'manager') AS managers,

@@ -1,4 +1,3 @@
--- =============================================================================
 -- InnovaCX — Presentation Seed
 -- File: database/seeds/seed_presentation.sql
 --
@@ -38,17 +37,14 @@
 --     original_priority TEXT, corrected_priority TEXT,
 --     actor_role TEXT NOT NULL,   <- 'employee' | 'manager' | 'operator'
 --     source_type TEXT
--- =============================================================================
 
 BEGIN;
 
--- =============================================================================
 -- SECTION 1: reroute_reference
 -- Feeds: GET /operator/learning/reroute
 -- actor_role NOT NULL: 'employee' | 'manager' | 'operator'
 -- source_type matches SOURCE_LABEL map in QualityControl.jsx:
 --   'manager_routing_review' | 'approval_rerouting' | 'operator_correction'
--- =============================================================================
 
 INSERT INTO reroute_reference (
     ticket_id,
@@ -147,14 +143,11 @@ WHERE NOT EXISTS (
       AND rr.corrected_dept = v.corr
 );
 
-
--- =============================================================================
 -- SECTION 2: rescore_reference
 -- Feeds: GET /operator/learning/rescore
 -- actor_role NOT NULL: 'employee' | 'manager' | 'operator'
 -- source_type matches SOURCE_LABEL map in QualityControl.jsx:
 --   'approval_rescoring' | 'manager_review' | 'operator_correction'
--- =============================================================================
 
 INSERT INTO rescore_reference (
     ticket_id,
@@ -244,21 +237,15 @@ WHERE NOT EXISTS (
       AND rsc.corrected_priority = v.corr_p
 );
 
-
--- =============================================================================
 -- SECTION 3: Ensure priority_assigned_at is set for ALL tickets
 -- mv_ticket_base uses COALESCE(priority_assigned_at, assigned_at, created_at)
 -- for response_time_mins. NULL here produces NULL response times.
--- =============================================================================
 UPDATE tickets
 SET priority_assigned_at = created_at
 WHERE priority_assigned_at IS NULL;
 
-
--- =============================================================================
 -- SECTION 4: Backfill tickets.is_recurring from feature_outputs.raw_features
 -- mv_feature_daily counts tickets.is_recurring = TRUE for recurring_count.
--- =============================================================================
 UPDATE tickets t
 SET is_recurring = TRUE
 FROM feature_outputs fo
@@ -267,12 +254,9 @@ WHERE fo.ticket_id  = t.id
   AND (fo.raw_features->>'is_recurring')::boolean = TRUE
   AND t.is_recurring = FALSE;
 
-
--- =============================================================================
 -- SECTION 5: Ensure model_priority is set for all seeded tickets
 -- QC Section B counts WHERE model_priority IS NOT NULL for total_with_model.
 -- Guard against partial seed runs leaving model_priority NULL.
--- =============================================================================
 UPDATE tickets t
 SET model_priority = t.priority::ticket_priority
 WHERE t.model_priority IS NULL
@@ -288,12 +272,9 @@ WHERE t.model_priority IS NULL
     'CX-L001','CX-E001','CX-M001','CX-P001'
   );
 
-
--- =============================================================================
 -- SECTION 6: Add positive/neutral sessions and chat logs
 -- Adds variety to Chatbot -> Sentiment at Escalation bar chart so all
 -- three buckets (Negative, Neutral, Positive) render with bars.
--- =============================================================================
 INSERT INTO sessions (
     user_id, current_state, context, history,
     created_at, updated_at,
@@ -398,13 +379,10 @@ WHERE NOT EXISTS (
       AND ucl.message  = v.msg
 );
 
-
--- =============================================================================
 -- SECTION 7: Add routing agent execution log rows
 -- QC B "AI Reroute Suggestion Rate" counts model_execution_log WHERE
 -- agent_name = 'routing' AND status = 'success'.
 -- Uses deterministic confidence values derived from created_at to avoid RANDOM().
--- =============================================================================
 INSERT INTO model_execution_log (
     ticket_id, agent_name, model_version, triggered_by,
     started_at, completed_at, status,
@@ -444,12 +422,9 @@ AND NOT EXISTS (
       AND mel.status     = 'success'
 );
 
-
--- =============================================================================
 -- SECTION 8: Add priority agent execution log rows
 -- QC A "Avg Confidence Score" reads model_execution_log WHERE
 -- agent_name = 'priority'. Extend to all remaining seeded tickets.
--- =============================================================================
 INSERT INTO model_execution_log (
     ticket_id, agent_name, model_version, triggered_by,
     started_at, completed_at, status,
@@ -489,13 +464,9 @@ AND NOT EXISTS (
       AND mel.status     = 'success'
 );
 
-
--- =============================================================================
 -- SECTION 9: Refresh all 8 materialized views
 -- Most important step -- without it all charts stay empty.
 -- Function handles first-run (non-CONCURRENT) and re-runs (CONCURRENT).
--- =============================================================================
--- =============================================================================
 -- Fix sentiment scores on escalated session chat logs so mv_chatbot_daily
 -- populates the correct esc_negative / esc_neutral / esc_positive buckets.
 --
@@ -507,7 +478,6 @@ AND NOT EXISTS (
 --
 -- We spread escalated sessions across all three visible buckets so all
 -- three bars render in the Sentiment at Escalation chart.
--- =============================================================================
 
 -- Escalated sessions that should show as NEGATIVE (-0.5 to -0.1):
 -- CX-F002 (HR biometric), CX-F008 (intercom), CX-F009 (AHU),
@@ -545,10 +515,8 @@ WHERE message IN (
 )
 AND sentiment_score < 0.1;
 
-
 -- 10 tickets across all 7 departments, realistic dates 2026-03-03 to 2026-03-27
 -- Ticket codes: CX-MA001 … CX-MA010
--- =============================================================================
 INSERT INTO tickets (
     ticket_code, subject, details, ticket_type, status, priority,
     asset_type, department_id, created_by_user_id, assigned_to_user_id,
@@ -703,11 +671,9 @@ VALUES
 
 ON CONFLICT (ticket_code) DO NOTHING;
 
--- =============================================================================
 -- SECTION 11: April 2026 tickets
 -- 8 tickets across all 7 departments, dates 2026-04-01 to 2026-04-08
 -- Ticket codes: CX-AP001 … CX-AP008
--- =============================================================================
 INSERT INTO tickets (
     ticket_code, subject, details, ticket_type, status, priority,
     asset_type, department_id, created_by_user_id, assigned_to_user_id,
@@ -846,10 +812,8 @@ WHERE ticket_code IN (
 )
 AND resolved_at IS NULL;
 
--- =============================================================================
 -- SECTION 12: model_execution_log for March + April tickets
 -- sentiment, feature, priority, routing agents for all 18 new tickets
--- =============================================================================
 INSERT INTO model_execution_log (
     ticket_id, agent_name, model_version, triggered_by,
     started_at, completed_at, status,
@@ -890,9 +854,7 @@ AND NOT EXISTS (
       AND mel.status     = 'success'
 );
 
--- =============================================================================
 -- SECTION 13: sentiment_outputs for March + April tickets
--- =============================================================================
 INSERT INTO sentiment_outputs (
     execution_id, ticket_id, model_version,
     sentiment_label, sentiment_score, confidence_score,
@@ -932,9 +894,7 @@ WHERE NOT EXISTS (
 )
 ORDER BY mel.ticket_id, mel.started_at;
 
--- =============================================================================
 -- SECTION 14: feature_outputs for March + April tickets
--- =============================================================================
 INSERT INTO feature_outputs (
     execution_id, ticket_id, model_version,
     asset_category, topic_labels, confidence_score, raw_features, is_current
@@ -981,10 +941,8 @@ WHERE fo.ticket_id  = t.id
   AND (fo.raw_features->>'is_recurring')::boolean = TRUE
   AND t.is_recurring = FALSE;
 
--- =============================================================================
 -- SECTION 15: suggested_resolution_usage for March + April tickets
 -- ~83% accepted, ~17% declined_custom — consistent with existing data
--- =============================================================================
 INSERT INTO suggested_resolution_usage (
     ticket_id, employee_user_id, decision, actor_role, department,
     suggested_text, final_text, used
@@ -1059,10 +1017,8 @@ WHERE NOT EXISTS (
       AND sru.employee_user_id = u.id
 );
 
--- =============================================================================
 -- SECTION 16: approval_requests for March + April tickets
 -- Provides data for QC B Rescoring + Rerouting KPIs
--- =============================================================================
 INSERT INTO approval_requests (
     request_code, ticket_id, request_type, current_value, requested_value,
     request_reason, submitted_by_user_id, submitted_at, status,
@@ -1113,9 +1069,7 @@ FROM (VALUES
 JOIN tickets t ON t.ticket_code = r.tc
 ON CONFLICT (request_code) DO NOTHING;
 
--- =============================================================================
 -- SECTION 17: reroute_reference + rescore_reference for March + April
--- =============================================================================
 INSERT INTO reroute_reference (
     ticket_id, department, original_dept, corrected_dept, actor_role, source_type
 )
@@ -1147,10 +1101,8 @@ WHERE NOT EXISTS (
     WHERE rsc.ticket_id = t.id AND rsc.original_priority = v.orig_p AND rsc.corrected_priority = v.corr_p
 );
 
--- =============================================================================
 -- SECTION 18: sessions + user_chat_logs for March + April
 -- Adds chatbot sessions spread across both months
--- =============================================================================
 INSERT INTO sessions (
     user_id, current_state, context, history,
     created_at, updated_at,
@@ -1298,18 +1250,13 @@ WHERE message IN (
 )
 AND sentiment_score < -0.1;
 
--- =============================================================================
 -- Final MV refresh — picks up all new March + April data
--- =============================================================================
 SELECT refresh_analytics_mvs() AS presentation_refresh_result;
 
 COMMIT;
 
-
--- =============================================================================
 -- POST-RUN VERIFICATION QUERIES
 -- Run these after applying to confirm data is populated correctly.
--- =============================================================================
 
 -- 1. MV row counts (all should be > 0)
 SELECT

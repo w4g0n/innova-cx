@@ -1,4 +1,3 @@
--- =============================================================================
 -- MANUAL CLEANUP SQL for EXISTING Docker volumes
 --
 -- FILE NAME: zzz_manual_cleanup_existing_volume.sql
@@ -22,13 +21,10 @@
 --
 -- DO NOT keep this file named cleanup_existing_volume.sql — it would run
 -- BEFORE init.sql alphabetically and fail on a fresh volume.
--- =============================================================================
 
 BEGIN;
 
--- ---------------------------------------------------------------------------
 -- STEP 1: Insert all correct new users (idempotent)
--- ---------------------------------------------------------------------------
 
 -- Customers
 INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secret)
@@ -75,9 +71,7 @@ ON CONFLICT (email) DO UPDATE
   SET role='employee', is_active=TRUE, mfa_enabled=FALSE, totp_secret=NULL,
       password_hash=crypt('Innova@2025', gen_salt('bf', 12));
 
--- ---------------------------------------------------------------------------
 -- STEP 2: Upsert user_profiles for all new users
--- ---------------------------------------------------------------------------
 
 -- Operator
 INSERT INTO user_profiles (user_id, full_name, job_title)
@@ -129,10 +123,8 @@ FROM (VALUES
 JOIN users u ON u.email = c.email
 ON CONFLICT (user_id) DO NOTHING;
 
--- ---------------------------------------------------------------------------
 -- STEP 3: Reassign tickets from old customers to new customer accounts.
 -- (tickets created by old customers are moved to the corresponding new customer)
--- ---------------------------------------------------------------------------
 UPDATE tickets
 SET created_by_user_id = (SELECT id FROM users WHERE email='customer1@innovacx.net')
 WHERE created_by_user_id IN (
@@ -140,11 +132,9 @@ WHERE created_by_user_id IN (
 )
 AND (SELECT id FROM users WHERE email='customer1@innovacx.net') IS NOT NULL;
 
--- ---------------------------------------------------------------------------
 -- STEP 4: Reassign open tickets from old employees to new employees.
 -- Only NULL-able FK (assigned_to_user_id) — safe to update.
 -- Maps by closest department match.
--- ---------------------------------------------------------------------------
 -- Old ahmed/fatima (IT/Maintenance) -> new ahmed (IT)
 UPDATE tickets
 SET assigned_to_user_id = (SELECT id FROM users WHERE email='ahmed@innovacx.net')
@@ -194,10 +184,8 @@ WHERE assigned_to_user_id IN (
   SELECT id FROM users WHERE email IN ('noura@innova.cx')
 );
 
--- ---------------------------------------------------------------------------
 -- STEP 5: Reassign resolution_feedback from old employees to new employees.
 -- employee_user_id has ON DELETE RESTRICT so we must update it first.
--- ---------------------------------------------------------------------------
 DO $$
 BEGIN
   IF to_regclass('public.ticket_resolution_feedback') IS NOT NULL THEN
@@ -245,9 +233,7 @@ BEGIN
   END IF;
 END $$;
 
--- ---------------------------------------------------------------------------
 -- STEP 6: Reassign employee_reports from old employees to new employees.
--- ---------------------------------------------------------------------------
 UPDATE employee_reports
 SET employee_user_id = (SELECT id FROM users WHERE email='ahmed@innovacx.net')
 WHERE employee_user_id IN (
@@ -278,19 +264,15 @@ WHERE employee_user_id IN (
   SELECT id FROM users WHERE email IN ('lena@innova.cx','rania@innova.cx')
 );
 
--- ---------------------------------------------------------------------------
 -- STEP 7: Handle the old manager user — reassign approval_requests references
 -- submitted_by_user_id has ON DELETE RESTRICT
--- ---------------------------------------------------------------------------
 UPDATE approval_requests
 SET submitted_by_user_id = (SELECT id FROM users WHERE email='hamad@innovacx.net')
 WHERE submitted_by_user_id IN (
   SELECT id FROM users WHERE email = 'manager@innova.cx'
 );
 
--- ---------------------------------------------------------------------------
 -- STEP 8: Reassign approval_requests submitted by old employees
--- ---------------------------------------------------------------------------
 UPDATE approval_requests
 SET submitted_by_user_id = (SELECT id FROM users WHERE email='ahmed@innovacx.net')
 WHERE submitted_by_user_id IN (
@@ -323,9 +305,7 @@ UPDATE approval_requests
 SET submitted_by_user_id = (SELECT id FROM users WHERE email='talya@innovacx.net')
 WHERE submitted_by_user_id IN (SELECT id FROM users WHERE email='noura@innova.cx');
 
--- ---------------------------------------------------------------------------
 -- STEP 9: Safely handle old customer RESTRICT FKs — reassign to new customer1
--- ---------------------------------------------------------------------------
 UPDATE tickets
 SET created_by_user_id = (SELECT id FROM users WHERE email='customer1@innovacx.net')
 WHERE created_by_user_id IN (
@@ -333,11 +313,9 @@ WHERE created_by_user_id IN (
   WHERE email IN ('customer1@innova.cx','customer2@innova.cx','customer3@innova.cx')
 );
 
--- ---------------------------------------------------------------------------
 -- STEP 10: Delete generated department employees (employee.*.N@innova.cx pattern)
 -- These were created by seed_department_staffing.sql's generate_series loop.
 -- They have no ticket data (FK constraints would prevent deletion otherwise).
--- ---------------------------------------------------------------------------
 DELETE FROM user_profiles
 WHERE user_id IN (
   SELECT id FROM users WHERE email LIKE 'employee.%.%@innova.cx'
@@ -367,10 +345,8 @@ WHERE user_id IN (
 );
 DELETE FROM users WHERE email LIKE 'manager.%@innova.cx';
 
--- ---------------------------------------------------------------------------
 -- STEP 11: Delete old @innova.cx seed users that are now fully dereferenced.
 -- (Only deletes if no remaining FK RESTRICT constraints block it.)
--- ---------------------------------------------------------------------------
 DO $$
 DECLARE
   old_emails TEXT[] := ARRAY[
@@ -406,9 +382,7 @@ BEGIN
 END;
 $$;
 
--- ---------------------------------------------------------------------------
 -- STEP 12: Verification — confirm final counts
--- ---------------------------------------------------------------------------
 SELECT role, COUNT(*) AS total
 FROM users
 WHERE is_active = TRUE

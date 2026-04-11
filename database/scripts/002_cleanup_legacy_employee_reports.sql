@@ -1,4 +1,3 @@
--- =============================================================================
 -- InnovaCX — Legacy Employee Report Cleanup Migration
 -- File: database/scripts/002_cleanup_legacy_employee_reports.sql
 --
@@ -29,30 +28,30 @@
 -- Command:
 --   docker exec -i innovacx-db psql -U innovacx_admin -d complaints_db \
 --     < database/scripts/002_cleanup_legacy_employee_reports.sql
--- =============================================================================
+
 
 BEGIN;
 
--- ---------------------------------------------------------------------------
+
 -- PRE-FLIGHT (uncomment to preview without deleting):
 -- SELECT id, report_code, month_label FROM employee_reports
 -- WHERE month_label LIKE '%2025'
 --    OR report_code NOT SIMILAR TO '[a-z]{3}-[0-9]{4}-[a-z0-9]+'
 -- ORDER BY created_at;
--- ---------------------------------------------------------------------------
 
 
--- ---------------------------------------------------------------------------
+
+
 -- STEP 1 — Delete all legacy rows
--- ---------------------------------------------------------------------------
+
 DELETE FROM employee_reports
 WHERE month_label LIKE '%2025'
    OR report_code NOT SIMILAR TO '[a-z]{3}-[0-9]{4}-[a-z0-9]+';
 
 
--- ---------------------------------------------------------------------------
+
 -- STEP 2 — Verify. Raises EXCEPTION and rolls back if anything is wrong.
--- ---------------------------------------------------------------------------
+
 DO $$
 DECLARE
     v_legacy_rows    INTEGER;

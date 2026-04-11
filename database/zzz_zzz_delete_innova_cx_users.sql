@@ -1,4 +1,3 @@
--- =============================================================================
 -- zzz_zzz_delete_innova_cx_users.sql
 --
 -- PURPOSE: Hard-delete ALL @innova.cx users after all other seed files have run.
@@ -7,13 +6,10 @@
 --
 -- SAFE:    Fully idempotent. If no innova.cx users exist, it's a no-op.
 --          Reassigns FK references before deleting to avoid constraint violations.
--- =============================================================================
 
 BEGIN;
 
--- ---------------------------------------------------------------------------
 -- Step 1: Reassign tickets created by innova.cx customers → customer1@innovacx.net
--- ---------------------------------------------------------------------------
 UPDATE tickets
 SET created_by_user_id = (SELECT id FROM users WHERE email = 'customer1@innovacx.net')
 WHERE created_by_user_id IN (
@@ -22,11 +18,9 @@ WHERE created_by_user_id IN (
 )
 AND (SELECT id FROM users WHERE email = 'customer1@innovacx.net') IS NOT NULL;
 
--- ---------------------------------------------------------------------------
 -- Step 2: Reassign tickets assigned to innova.cx employees → matching innovacx.net employee
 -- Uses email prefix to find the matching new user (ahmed@innova.cx → ahmed@innovacx.net)
 -- Falls back to first active innovacx.net employee if no match found.
--- ---------------------------------------------------------------------------
 UPDATE tickets
 SET assigned_to_user_id = COALESCE(
     (SELECT new_u.id FROM users new_u
@@ -44,9 +38,7 @@ WHERE assigned_to_user_id IN (
     SELECT id FROM users WHERE email LIKE '%@innova.cx' AND role = 'employee'
 );
 
--- ---------------------------------------------------------------------------
 -- Step 3: Reassign approval_requests submitted by innova.cx users
--- ---------------------------------------------------------------------------
 UPDATE approval_requests
 SET submitted_by_user_id = COALESCE(
     (SELECT new_u.id FROM users new_u
@@ -63,9 +55,7 @@ WHERE submitted_by_user_id IN (
     SELECT id FROM users WHERE email LIKE '%@innova.cx'
 );
 
--- ---------------------------------------------------------------------------
 -- Step 4: Reassign employee_reports owned by innova.cx employees
--- ---------------------------------------------------------------------------
 UPDATE employee_reports
 SET employee_user_id = COALESCE(
     (SELECT new_u.id FROM users new_u
@@ -83,30 +73,22 @@ WHERE employee_user_id IN (
     SELECT id FROM users WHERE email LIKE '%@innova.cx' AND role = 'employee'
 );
 
--- ---------------------------------------------------------------------------
 -- Step 5: Reassign sessions linked to innova.cx users
--- ---------------------------------------------------------------------------
 UPDATE sessions
 SET user_id = (SELECT id FROM users WHERE email = 'customer1@innovacx.net')
 WHERE user_id IN (
     SELECT id FROM users WHERE email LIKE '%@innova.cx'
 );
 
--- ---------------------------------------------------------------------------
 -- Step 6: Reassign notifications for innova.cx users
--- ---------------------------------------------------------------------------
 DELETE FROM notifications
 WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@innova.cx');
 
--- ---------------------------------------------------------------------------
 -- Step 7: Reassign password_reset_tokens
--- ---------------------------------------------------------------------------
 DELETE FROM password_reset_tokens
 WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@innova.cx');
 
--- ---------------------------------------------------------------------------
 -- Step 8: Hard-delete innova.cx users (profiles, preferences, then users)
--- ---------------------------------------------------------------------------
 DELETE FROM user_profiles
 WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@innova.cx');
 
@@ -127,9 +109,7 @@ BEGIN
 END;
 $$;
 
--- ---------------------------------------------------------------------------
 -- Step 9: Verification
--- ---------------------------------------------------------------------------
 DO $$
 DECLARE
     remaining INT;
