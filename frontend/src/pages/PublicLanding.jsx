@@ -168,7 +168,7 @@ function Starfield() {
 function SolarSystem({ onReady }) {
   const mountRef  = useRef(null);
   const labelsRef = useRef(null);
-  const [selected, setSelected] = useState(null);
+  const [hovered, setHovered] = useState(null);
 
   useEffect(() => {
     const mount    = mountRef.current;
@@ -179,8 +179,8 @@ function SolarSystem({ onReady }) {
     let planetObjects = [];
     let orbitMeshes   = [];
     let raycaster, mouse;
-    let selectedIdx = -1;
-    let autoRotY    = 0;
+    let hoveredIdx = -1;
+    let autoRotY   = 0;
     let isDragging = false;
     let prevMouse  = { x: 0, y: 0 };
     let camTheta   = 0.6;
@@ -818,7 +818,7 @@ function SolarSystem({ onReady }) {
           angles[idx] += cfg.speed;
           innerPivot.rotation.y = angles[idx];
           mesh.rotation.y += dt * 0.3;
-          const isH = selectedIdx === idx;
+          const isH = hoveredIdx === idx;
           const hv = isH ? 1 : 0;
           // Gentle hover glow — doesn't distort the planet's natural color
           mat.emissive.setRGB(hv*0.12, hv*0.06, hv*0.18);
@@ -871,24 +871,7 @@ function SolarSystem({ onReady }) {
       }
       animate();
 
-      // Track whether the mouse moved between mousedown and mouseup (to distinguish click vs drag)
-      let mouseMovedSincDown = false;
-
       const onMouseMove = (e) => {
-        // Update cursor based on whether we're over a planet
-        const rect = mount.getBoundingClientRect();
-        mouse.x =  ((e.clientX-rect.left)/rect.width)*2-1;
-        mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
-        if (!isDragging) {
-          raycaster.setFromCamera(mouse, camera);
-          const hits = raycaster.intersectObjects(planetObjects.map(p => p.mesh), true);
-          mount.style.cursor = hits.length ? "pointer" : "grab";
-        }
-        mouseMovedSincDown = true;
-      };
-      const onClick = (e) => {
-        // Only register as click if mouse barely moved (not a drag)
-        if (mouseMovedSincDown && isDragging) return;
         const rect = mount.getBoundingClientRect();
         mouse.x =  ((e.clientX-rect.left)/rect.width)*2-1;
         mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
@@ -896,17 +879,12 @@ function SolarSystem({ onReady }) {
         const hits = raycaster.intersectObjects(planetObjects.map(p => p.mesh), true);
         if (hits.length) {
           const found = planetObjects.find(p => p.mesh===hits[0].object);
-          if (found) {
-            // Toggle off if already selected
-            if (selectedIdx === found.idx) { selectedIdx=-1; setSelected(null); }
-            else { selectedIdx=found.idx; setSelected(AGENTS_DATA[found.idx]); }
-            return;
-          }
+          if (found) { hoveredIdx=found.idx; setHovered(AGENTS_DATA[found.idx]); mount.style.cursor="pointer"; return; }
         }
-        // Clicked empty space — deselect
-        selectedIdx=-1; setSelected(null);
+        hoveredIdx=-1; setHovered(null);
+        mount.style.cursor = isDragging ? "grabbing" : "grab";
       };
-      const onMouseDown = (e) => { isDragging=true; mouseMovedSincDown=false; prevMouse={x:e.clientX,y:e.clientY}; mount.style.cursor="grabbing"; };
+      const onMouseDown = (e) => { isDragging=true; prevMouse={x:e.clientX,y:e.clientY}; mount.style.cursor="grabbing"; };
       const onMouseUp   = ()    => { isDragging=false; mount.style.cursor="grab"; };
       const onDrag      = (e)   => {
         if (!isDragging) return;
@@ -924,7 +902,6 @@ function SolarSystem({ onReady }) {
       };
       mount.addEventListener("mousemove", onMouseMove);
       mount.addEventListener("mousedown", onMouseDown);
-      mount.addEventListener("click",     onClick);
       mount.addEventListener("touchstart",onTouchStart,{passive:true});
       mount.addEventListener("touchmove", onTouchMove, {passive:true});
       window.addEventListener("mouseup",  onMouseUp);
@@ -938,7 +915,6 @@ function SolarSystem({ onReady }) {
         if (sunLabelEl && sunLabelEl.parentNode) sunLabelEl.parentNode.removeChild(sunLabelEl);
         mount.removeEventListener("mousemove", onMouseMove);
         mount.removeEventListener("mousedown", onMouseDown);
-        mount.removeEventListener("click",     onClick);
         mount.removeEventListener("touchstart",onTouchStart);
         mount.removeEventListener("touchmove", onTouchMove);
         window.removeEventListener("mouseup",  onMouseUp);
@@ -947,26 +923,33 @@ function SolarSystem({ onReady }) {
       };
     }
 
-    const THREE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js";
-
-    const handleWebGLError = (err) => {
-      console.warn("[SolarSystem] WebGL unavailable, using CSS fallback:", err?.message || err);
-      if (mount) mount.classList.add("pl-solar-fallback");
-      onReady && onReady();
-    };
+    const THREE_CDN = "/three.min.js"; // served locally — no CDN dependency
 
     if (window.THREE) {
-      try { init(); } catch (err) { handleWebGLError(err); }
+      init();
     } else {
       const existing = document.querySelector(`script[src="${THREE_CDN}"]`);
       if (existing) {
-        existing.addEventListener("load", () => { try { init(); } catch (err) { handleWebGLError(err); } }, { once: true });
+        // Script already in DOM (React Strict Mode double-invoke) — reuse it
+        existing.addEventListener("load", init, { once: true });
         return () => { if (mount._cleanup) mount._cleanup(); };
       }
       const script = document.createElement("script");
       script.src = THREE_CDN;
-      script.onload = () => { try { init(); } catch (err) { handleWebGLError(err); } };
-      script.onerror = () => { console.warn("[SolarSystem] Failed to load three.min.js, using CSS fallback"); if (mount) mount.classList.add("pl-solar-fallback"); onReady && onReady(); };
+      script.onload = () => {
+        try {
+          init();
+        } catch (err) {
+          console.warn('[SolarSystem] WebGL unavailable, using CSS fallback:', err.message);
+          if (mount) mount.classList.add('pl-solar-fallback');
+          onReady && onReady();
+        }
+      };
+      script.onerror = () => {
+        console.warn('[SolarSystem] Failed to load three.min.js, using CSS fallback');
+        if (mount) mount.classList.add('pl-solar-fallback');
+        onReady && onReady();
+      };
       document.head.appendChild(script);
       return () => { if (mount._cleanup) mount._cleanup(); if (script.parentNode) script.parentNode.removeChild(script); };
     }
@@ -978,18 +961,18 @@ function SolarSystem({ onReady }) {
     <div className="pl-solar-wrap" style={{ background: "transparent" }}>
       <div ref={mountRef} className="pl-solar-canvas" style={{ background: "transparent" }} />
       <div ref={labelsRef} className="pl-label-layer" />
-      {selected && (
-        <div className="pl-planet-tooltip" style={{ borderColor: selected.color + "66" }}>
+      {hovered && (
+        <div className="pl-planet-tooltip" style={{ borderColor: hovered.color + "66" }}>
           <div className="pl-pt-icon-row">
-            <Icon name={selected.icon} size={14} />
-            <span className="pl-pt-name" style={{ color: selected.color }}>{selected.name}</span>
-            <span className="pl-pt-role">{selected.role}</span>
+            <Icon name={hovered.icon} size={14} />
+            <span className="pl-pt-name" style={{ color: hovered.color }}>{hovered.name}</span>
+            <span className="pl-pt-role">{hovered.role}</span>
           </div>
-          <p className="pl-pt-desc">{selected.details}</p>
-          <div className="pl-pt-model">{selected.model}</div>
+          <p className="pl-pt-desc">{hovered.details}</p>
+          <div className="pl-pt-model">{hovered.model}</div>
         </div>
       )}
-      <p className="pl-solar-hint">Drag to rotate · click planets</p>
+      <p className="pl-solar-hint">Drag to rotate · hover planets</p>
     </div>
   );
 }
@@ -1093,7 +1076,7 @@ export default function PublicLanding() {
   const splashDoneRef = useRef(false);
 
   // Minimum hold: 2.8s so text animations finish before fade-out.
-  // Hard fallback at 6s in case WebGL/Three.js never fires onReady.
+  // Hard fallback at 6s: if Three.js/WebGL never fires onReady, clear splash anyway.
   useEffect(() => {
     const t = setTimeout(() => {
       splashDoneRef.current = true;
