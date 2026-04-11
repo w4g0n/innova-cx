@@ -1,10 +1,10 @@
-========================================================================
+
   CHATBOT LLM BENCHMARK COMPARISON REPORT
   Generated: 2026-03-04 07:11:29 UTC
-========================================================================
+
   Model A (current): /app/models/falcon3-1b-instruct  [mode=model]
   Model B (qwen2.5-1.5b): /app/hf_cache/qwen2.5-1.5b-instruct  [mode=model]
-========================================================================
+
 
   TIER 1 — LLM CLASSIFICATION BENCHMARK
   Task                 current  qwen2.5-1.5b     Delta
@@ -32,7 +32,7 @@
   secondary_intent/complaint(n=35)       51.4%      100.0%    ++48.6
   secondary_intent/inquiry(n=30)       56.7%       96.7%    ++40.0
   secondary_intent/unknown(n=15)       53.3%       33.3%     -20.0
-========================================================================
+
 
   TIER 2 — E2E CONVERSATION SMOKE SUITE
   Metric                 current  qwen2.5-1.5b     Delta
@@ -57,7 +57,7 @@
   13. aggressive_first_message_complaint_flo  PASS( 61.0s)  PASS( 60.4s)
   14. aggression_in_collecting_complaint_sta  PASS( 69.7s)  PASS( 76.6s)
   15. sanity_baseline_init_and_create         PASS( 15.3s)  PASS( 35.8s)
-========================================================================
+
 
   RECOMMENDATION
   ------------------------------------------------------------
@@ -67,4 +67,3 @@
   >>> SWITCH TO QWEN2.5-1.5B — qwen2.5-1.5b outscores current by 7.5 pts.
 
   Note: This score is computed automatically. Review per-task accuracy deltas and qualitative responses before making a final decision.
-========================================================================

@@ -197,7 +197,7 @@ function GaugeKpi({ value, target, label, prevValue, unit = "%" }) {
       </div>
       <div className="ct-gauge__row">
         <span className="ct-gauge__value">{value}{unit}</span>
-        <span className="ct-gauge__target-label">target: {target}{unit}</span>
+
         {delta != null && (
           <span className={`ct-gauge__delta ${delta <= 0 ? "pos" : "neg"}`}>
             {delta > 0 ? "+" : ""}{delta.toFixed(1)}{unit} vs prev
@@ -419,11 +419,6 @@ export default function ComplaintTrends() {
                     ariaLabel="Time range"
                     options={ALLOWED_TIME_RANGES.map((r) => ({ value: r, label: r }))}
                   />
-                  <PillSelect value={department}
-                    onChange={(v) => { if (allDeptOptions.includes(v)) setDepartment(v); }}
-                    ariaLabel="Department"
-                    options={allDeptOptions.map((d) => ({ value: d, label: d }))}
-                  />
                   <PillSelect value={priority}
                     onChange={(v) => { if (ALLOWED_PRIORITIES_TREND.includes(v)) setPriority(v); }}
                     ariaLabel="Priority"
@@ -450,12 +445,11 @@ export default function ComplaintTrends() {
         {tab === 0 && (
           <div className="ct-section">
             {/* A — KPI row */}
-            <section className="kpiRow">
+            <section className="kpiRow kpiRow--4">
               <KpiCard label="Total Tickets" value={apiData.kpis.complaints} />
               <KpiCard label="SLA Compliance" value={apiData.kpis.sla} />
               <KpiCard label="Avg Response" value={apiData.kpis.response} />
               <KpiCard label="Avg Resolve" value={apiData.kpis.resolve} />
-              <KpiCard label="Top Department" value={apiData.kpis.topCategory} />
             </section>
 
             {/* A1 — Complaint vs Inquiry */}
@@ -504,7 +498,7 @@ export default function ComplaintTrends() {
                   <div className="trendLabels">
                     {labeledBars.map((b, i) => {
                       const prevYear = i > 0 ? labeledBars[i - 1].year : null;
-                      const showYear = i === 0 || b.year !== prevYear;
+                      const showYear = prevYear !== null && b.year !== prevYear;
                       return (
                         <div key={b.label + b.year} className="trendLabelCol">
                           <span className="trendLabelMonth">{b.label?.trim().slice(0, 3)}</span>

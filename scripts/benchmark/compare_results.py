@@ -1,6 +1,6 @@
 """
 Benchmark Comparison Report Generator
-=======================================
+
 Reads Tier 1 (LLM classification) and Tier 2 (E2E smoke) result files for
 two models and prints a side-by-side comparison report.
 
@@ -20,9 +20,9 @@ import sys
 from pathlib import Path
 
 
-# ---------------------------------------------------------------------------
+
 # Helpers
-# ---------------------------------------------------------------------------
+
 
 def _load(path: str) -> dict:
     p = Path(path)
