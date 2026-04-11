@@ -241,8 +241,6 @@ def _ensure_review_agent_schema() -> None:
         from db import db_connect
         with db_connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("ALTER TYPE ticket_status ADD VALUE IF NOT EXISTS 'Review'")
-                cur.execute("ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'review_agent_held'")
                 cur.execute(
                     """
                     CREATE TABLE IF NOT EXISTS review_agent_decisions (
@@ -1307,7 +1305,7 @@ async def _notify_operator_hold(ticket_id: str, ticket_code: str, reason: str) -
                 json={
                     "ticket_id":        ticket_id,
                     "ticket_code":      ticket_code,
-                    "notification_type": "review_agent_held",
+                    "notification_type": "pipeline_held",
                     "title":   f"Review Agent — Ticket Held: {ticket_code}",
                     "message": (
                         f"Review Agent held ticket {ticket_code} for operator review. "

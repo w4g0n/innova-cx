@@ -21,7 +21,7 @@ def create_ticket_via_gate(
     *,
     created_by_user_id: str,
     ticket_type: Optional[str],
-    subject: str,
+    subject: Optional[str],
     details: str,
     priority: Optional[str],
     status: str,

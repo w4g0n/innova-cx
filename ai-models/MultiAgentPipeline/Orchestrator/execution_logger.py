@@ -318,18 +318,17 @@ def _write_stage_event(
                     ON CONFLICT (id) DO UPDATE
                     SET ticket_id = COALESCE(pipeline_executions.ticket_id, EXCLUDED.ticket_id),
                         ticket_code = COALESCE(pipeline_executions.ticket_code, EXCLUDED.ticket_code),
-                        status = CASE
-                                    WHEN EXCLUDED.status = 'failed' THEN 'failed'
-                                    WHEN pipeline_executions.status = 'failed' THEN 'failed'
-                                    ELSE EXCLUDED.status
-                                 END,
-                        completed_at = CASE
-                                         WHEN EXCLUDED.status IN ('success', 'failed') THEN now()
-                                         ELSE pipeline_executions.completed_at
-                                       END,
-                        error_message = COALESCE(EXCLUDED.error_message, pipeline_executions.error_message)
+                        status = pipeline_executions.status,
+                        completed_at = pipeline_executions.completed_at,
+                        error_message = pipeline_executions.error_message
                     """,
-                    (execution_id, ticket_id, ticket_code, status, error_message),
+                    (
+                        execution_id,
+                        ticket_id,
+                        ticket_code,
+                        "running",
+                        None,
+                    ),
                 )
                 cur.execute(
                     """
