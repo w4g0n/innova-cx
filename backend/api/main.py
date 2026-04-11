@@ -6469,16 +6469,29 @@ async def proxy_chatbot_chat(body: ChatbotProxyRequest, _csrf: None = Depends(re
         try:
             async with httpx.AsyncClient(timeout=CHATBOT_PROXY_TIMEOUT_SECONDS) as client:
                 response = await client.post(f"{base}/api/chat", json=payload)
-                response.raise_for_status()
-                data = response.json()
-                return {
-                    "session_id": data.get("session_id"),
-                    "response": data.get("response", ""),
-                    "response_type": data.get("response_type", "unknown"),
-                    "show_buttons": data.get("show_buttons", []),
-                    # Backward-compatible key for older UIs.
-                    "reply": data.get("response", ""),
-                }
+                if response.is_success:
+                    data = response.json()
+                    return {
+                        "session_id": data.get("session_id"),
+                        "response": data.get("response", ""),
+                        "response_type": data.get("response_type", "unknown"),
+                        "show_buttons": data.get("show_buttons", []),
+                        # Backward-compatible key for older UIs.
+                        "reply": data.get("response", ""),
+                    }
+                if 400 <= response.status_code < 500:
+                    # Chatbot returned a client error (4xx).  Forward it directly —
+                    # a different fallback URL won't fix a 4xx, and masking it as 503
+                    # shows "service unavailable" for what is actually a request error.
+                    try:
+                        detail = response.json().get("detail", "Chatbot request error")
+                    except Exception:
+                        detail = "Chatbot request error"
+                    raise HTTPException(status_code=response.status_code, detail=detail)
+                # 5xx from chatbot: service-level error, try the local fallback.
+                last_error = f"chatbot returned HTTP {response.status_code}"
+        except HTTPException:
+            raise  # propagate 4xx client errors directly, don't mask as 503
         except Exception as exc:
             last_error = exc
             continue
