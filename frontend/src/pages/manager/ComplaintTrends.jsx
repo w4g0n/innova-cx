@@ -315,8 +315,6 @@ export default function ComplaintTrends() {
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState(null);
 
-  // Dynamic department list from /api/manager/departments
-  const [deptOptions, setDeptOptions] = useState([]);
   // The logged-in manager's own department — used as the default filter
   const [myDepartment, setMyDepartment] = useState("");
 
@@ -340,15 +338,6 @@ export default function ComplaintTrends() {
         setDepartment("All Departments");
       });
 
-    // Fetch real department list from DB
-    fetch(apiUrl("/api/manager/departments"), { headers })
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setDeptOptions(data);
-        }
-      })
-      .catch(() => {});
   }, [navigate]); 
 
   const fetchData = useCallback(async () => {
