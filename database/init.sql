@@ -1,14 +1,8 @@
--- =========================================================
 -- InnovaCX
--- =========================================================
--- Create the application role if it doesn't exist
--- Note: password is set by zzz_least_privilege.sh via shell variable expansion
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'innovacx_app') THEN
-    CREATE ROLE innovacx_app WITH LOGIN;
-  END IF;
-END $$;
+
+-- NOTE: innovacx_app role + password is created by 000b_app_role.sh
+-- (runs before this file alphabetically) to stay compatible with
+-- PostgreSQL 14, which does not support \getenv.
 
 -- Grant necessary permissions
 GRANT CONNECT ON DATABASE complaints_db TO innovacx_app;
@@ -21,14 +15,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO innovacx_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO innovacx_app;
--- -------------------------
 -- Extensions
--- -------------------------
 CREATE EXTENSION IF NOT EXISTS pgcrypto; -- gen_random_uuid() + crypt()
 CREATE EXTENSION IF NOT EXISTS citext;   -- case-insensitive email
--- -------------------------
 -- Enums (match UI strings exactly)
--- -------------------------
 DO $$ BEGIN
   CREATE TYPE user_role AS ENUM ('customer', 'employee', 'manager', 'operator');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -86,9 +76,7 @@ DO $$ BEGIN
   CREATE TYPE event_severity AS ENUM ('info', 'warning', 'critical');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- -------------------------
 -- Helper functions (must be defined before triggers that reference them)
--- -------------------------
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -97,9 +85,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- =========================================================
 -- AUDIT LOGGING
--- =========================================================
 -- WHY THIS EXISTS:
 --   RIGHT NOW: if someone changes a ticket's status, deletes a user,
 --   or approves a request, there is NO record of it happening beyond
@@ -113,8 +99,6 @@ $$ LANGUAGE plpgsql;
 --     - which table was affected
 --     - what the row looked like BEFORE the change (old_data)
 --     - what the row looks like AFTER the change (new_data)
---     - which DB role made the change (changed_by)
---     - when it happened (changed_at)
 --
 -- HOW TO ENABLE AUDITING ON A TABLE:
 --   After creating any table, attach the trigger like this:
@@ -133,7 +117,6 @@ $$ LANGUAGE plpgsql;
 --   SELECT changed_at, changed_by, old_data->>'email'
 --   FROM audit_log WHERE table_name='users' AND operation='UPDATE'
 --     AND old_data->>'password_hash' IS DISTINCT FROM new_data->>'password_hash';
--- =========================================================
 
 CREATE TABLE IF NOT EXISTS audit_log (
   id          BIGSERIAL    PRIMARY KEY,
@@ -171,21 +154,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- -------------------------
 -- Reference tables
--- -------------------------
 CREATE TABLE IF NOT EXISTS departments (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT NOT NULL UNIQUE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- -------------------------
 -- Users + Profiles (Identity)
--- -------------------------
--- =========================================================
 -- CREDENTIAL ROTATION EXPLAINED
--- =========================================================
 -- RIGHT NOW: Every user has the same static password ('Innova@2025').
 -- It was set once during seeding and never tracked. If someone gets
 -- hold of that password, there is no way to know how long they've had
@@ -200,7 +177,6 @@ CREATE TABLE IF NOT EXISTS departments (
 --      dev token from being inserted into a production database.
 --   4. Token cleanup function — deletes expired/used reset tokens
 --      automatically so they can't pile up and be exploited.
--- =========================================================
 
 CREATE TABLE IF NOT EXISTS users (
   id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -217,9 +193,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_last_rotated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- -------------------------
 -- User Preferences
--- -------------------------
 CREATE TABLE IF NOT EXISTS user_preferences (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   language TEXT NOT NULL DEFAULT 'English',
@@ -231,14 +205,12 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TRIGGER trg_user_preferences_updated_at
+CREATE OR REPLACE TRIGGER trg_user_preferences_updated_at
 BEFORE UPDATE ON user_preferences
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
--- -------------------------
 -- MFA columns (safe for re-runs)
--- -------------------------
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS totp_secret TEXT;
 
@@ -249,9 +221,7 @@ ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS password_last_rotated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
--- =========================================================
 -- CREDENTIAL ROTATION: rotate_user_password()
--- =========================================================
 -- WHY THIS EXISTS:
 --   Before this function, changing a password meant writing raw SQL
 --   like: UPDATE users SET password_hash = crypt(...)
@@ -266,7 +236,6 @@ ADD COLUMN IF NOT EXISTS password_last_rotated_at TIMESTAMPTZ NOT NULL DEFAULT n
 --   - Reject the call if the user doesn't exist or is inactive
 --   - Hash the password with bcrypt cost 12 (current best practice)
 --   - Update password_last_rotated_at to NOW() automatically
--- =========================================================
 CREATE OR REPLACE FUNCTION rotate_user_password(
   p_email  CITEXT,
   p_new_pw TEXT
@@ -285,9 +254,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- =========================================================
 -- CREDENTIAL ROTATION: cleanup_expired_tokens()
--- =========================================================
 -- WHY THIS EXISTS:
 --   RIGHT NOW: expired and already-used password reset tokens stay in
 --   the database forever. They can't be used (expires_at is in the past
@@ -298,7 +265,6 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 --   SELECT cleanup_expired_tokens();
 --   Run this on a schedule (e.g. nightly via pg_cron or a cron job):
 --     SELECT cron.schedule('token-cleanup','0 3 * * *','SELECT cleanup_expired_tokens()');
--- =========================================================
 CREATE OR REPLACE FUNCTION cleanup_expired_tokens()
 RETURNS INTEGER AS $$
 DECLARE
@@ -342,6 +308,7 @@ CREATE TABLE IF NOT EXISTS trusted_devices (
   ip_address  TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Partial index removed: now() is STABLE not IMMUTABLE, illegal in PG14 index predicates
 CREATE INDEX IF NOT EXISTS idx_trusted_devices_token_hash ON trusted_devices(token_hash);
 CREATE INDEX IF NOT EXISTS idx_trusted_devices_user_id    ON trusted_devices(user_id);
 
@@ -364,9 +331,7 @@ CREATE TABLE IF NOT EXISTS mfa_reset_tokens (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- -------------------------
 -- Tickets
--- -------------------------
 CREATE TABLE IF NOT EXISTS tickets (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ticket_code         TEXT NOT NULL UNIQUE,
@@ -400,9 +365,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   resolved_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL
 );
 
--- =============================================================================
 -- Suggested Resolution + Retraining schema
--- =============================================================================
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution TEXT;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_model TEXT;
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_resolution_generated_at TIMESTAMPTZ;
@@ -429,36 +392,31 @@ CREATE INDEX IF NOT EXISTS idx_tickets_created_at  ON tickets(created_at);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee    ON tickets(assigned_to_user_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_creator     ON tickets(created_by_user_id);
 
--- =========================================================
 -- AUDIT TRIGGERS: attach to sensitive tables
--- =========================================================
 -- These fire automatically on every change — you don't need to call
 -- anything. Check audit_log to see a full history of what changed.
--- =========================================================
 
 -- Track all user changes (password rotations, role changes, deactivation)
 DROP TRIGGER IF EXISTS audit_users ON users;
-CREATE TRIGGER audit_users
+CREATE OR REPLACE TRIGGER audit_users
 AFTER INSERT OR UPDATE OR DELETE ON users
 FOR EACH ROW EXECUTE FUNCTION audit_trigger();
 
 -- Track all ticket changes (status, assignment, priority)
 DROP TRIGGER IF EXISTS audit_tickets ON tickets;
-CREATE TRIGGER audit_tickets
+CREATE OR REPLACE TRIGGER audit_tickets
 AFTER INSERT OR UPDATE OR DELETE ON tickets
 FOR EACH ROW EXECUTE FUNCTION audit_trigger();
 
 -- NOTE: audit_approval_requests is attached after approval_requests table is created below
 
 DROP TRIGGER IF EXISTS trg_tickets_updated_at ON tickets;
-CREATE TRIGGER trg_tickets_updated_at
+CREATE OR REPLACE TRIGGER trg_tickets_updated_at
 BEFORE UPDATE ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
--- -------------------------
 -- Ticket status sync rules
--- -------------------------
 CREATE OR REPLACE FUNCTION sync_ticket_status_timestamps()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -493,20 +451,17 @@ BEGIN
     END IF;
   END IF;
 
-
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_tickets_status_timestamps ON tickets;
-CREATE TRIGGER trg_tickets_status_timestamps
+CREATE OR REPLACE TRIGGER trg_tickets_status_timestamps
 BEFORE INSERT OR UPDATE ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION sync_ticket_status_timestamps();
 
--- -------------------------
 -- SLA policy schema + logic
--- -------------------------
 ALTER TABLE tickets
 ADD COLUMN IF NOT EXISTS priority_assigned_at TIMESTAMPTZ;
 
@@ -569,7 +524,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_tickets_priority_sla ON tickets;
-CREATE TRIGGER trg_tickets_priority_sla
+CREATE OR REPLACE TRIGGER trg_tickets_priority_sla
 BEFORE INSERT OR UPDATE ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION sync_ticket_priority_sla();
@@ -642,9 +597,7 @@ SET priority_assigned_at = COALESCE(priority_assigned_at, created_at)
 WHERE priority_assigned_at IS NULL
   AND (respond_due_at IS NOT NULL OR resolve_due_at IS NOT NULL);
 
--- -------------------------
 -- Recurrence classifier helper function
--- -------------------------
 CREATE OR REPLACE FUNCTION compute_is_recurring_ticket(
   p_user_id UUID,
   p_subject TEXT,
@@ -683,9 +636,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE;
 
--- -------------------------
 -- Ticket attachments
--- -------------------------
 CREATE TABLE IF NOT EXISTS ticket_attachments (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ticket_id   UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -697,9 +648,7 @@ CREATE TABLE IF NOT EXISTS ticket_attachments (
 
 CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket ON ticket_attachments(ticket_id);
 
--- -------------------------
 -- Ticket updates
--- -------------------------
 CREATE TABLE IF NOT EXISTS ticket_updates (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ticket_id      UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -715,9 +664,7 @@ CREATE TABLE IF NOT EXISTS ticket_updates (
 CREATE INDEX IF NOT EXISTS idx_ticket_updates_ticket  ON ticket_updates(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_updates_created ON ticket_updates(created_at);
 
--- -------------------------
 -- Steps taken
--- -------------------------
 CREATE TABLE IF NOT EXISTS ticket_work_steps (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ticket_id          UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -728,9 +675,7 @@ CREATE TABLE IF NOT EXISTS ticket_work_steps (
   UNIQUE(ticket_id, step_no)
 );
 
--- -------------------------
 -- Approvals
--- -------------------------
 CREATE TABLE IF NOT EXISTS approval_requests (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_code         TEXT NOT NULL UNIQUE,
@@ -757,7 +702,7 @@ CREATE INDEX IF NOT EXISTS idx_approval_requests_requested_to ON approval_reques
 
 -- Audit trigger for approval_requests (must be after table creation)
 DROP TRIGGER IF EXISTS audit_approval_requests ON approval_requests;
-CREATE TRIGGER audit_approval_requests
+CREATE OR REPLACE TRIGGER audit_approval_requests
 AFTER INSERT OR UPDATE OR DELETE ON approval_requests
 FOR EACH ROW EXECUTE FUNCTION audit_trigger();
 
@@ -799,9 +744,7 @@ CREATE INDEX IF NOT EXISTS idx_department_routing_finalized
 -- Include after both base tables exist to keep fresh-volume init deterministic.
 \ir scripts/learning.sql
 
--- -------------------------
 -- Auto-notify manager on new approval requests
--- -------------------------
 CREATE OR REPLACE FUNCTION notify_manager_on_approval_request()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -903,14 +846,12 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_manager_approval_request ON approval_requests;
-CREATE TRIGGER trg_notify_manager_approval_request
+CREATE OR REPLACE TRIGGER trg_notify_manager_approval_request
 AFTER INSERT ON approval_requests
 FOR EACH ROW
 EXECUTE FUNCTION notify_manager_on_approval_request();
 
--- -------------------------
 -- Auto-notify manager on their own approval decision (confirmation)
--- -------------------------
 CREATE OR REPLACE FUNCTION notify_manager_on_approval_decision()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -950,22 +891,18 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_manager_approval_decision ON approval_requests;
-CREATE TRIGGER trg_notify_manager_approval_decision
+CREATE OR REPLACE TRIGGER trg_notify_manager_approval_decision
 AFTER UPDATE ON approval_requests
 FOR EACH ROW
 EXECUTE FUNCTION notify_manager_on_approval_decision();
 
--- =========================================================
 -- Customer Notifications
 -- Triggers:
 --   1. On ticket INSERT → "Ticket Received" notification
 --   2. On ticket status UPDATE → "Status Changed" notification
 --   3. On ticket resolved (status = 'Resolved') → "Resolved" notification
--- =========================================================
 
--- ─────────────────────────────────────────────────────────
 -- Helper: notify customer on new ticket creation
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_customer_on_ticket_create()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -998,16 +935,13 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_customer_ticket_create ON tickets;
-CREATE TRIGGER trg_notify_customer_ticket_create
+CREATE OR REPLACE TRIGGER trg_notify_customer_ticket_create
 AFTER INSERT ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION notify_customer_on_ticket_create();
 
-
--- ─────────────────────────────────────────────────────────
 -- Helper: notify customer on ticket status change
 -- Fires on any status transition (excluding Resolved — handled separately below)
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_customer_on_status_change()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -1068,14 +1002,12 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_customer_status_change ON tickets;
-CREATE TRIGGER trg_notify_customer_status_change
+CREATE OR REPLACE TRIGGER trg_notify_customer_status_change
 AFTER UPDATE ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION notify_customer_on_status_change();
 
--- -------------------------
 -- Customer notifications for rescore / reroute requests
--- -------------------------
 
 -- 1. Notify customer when they (or staff on their behalf) submit a rescore or reroute request
 CREATE OR REPLACE FUNCTION notify_customer_on_approval_submit()
@@ -1130,11 +1062,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_customer_approval_submit ON approval_requests;
-CREATE TRIGGER trg_notify_customer_approval_submit
+CREATE OR REPLACE TRIGGER trg_notify_customer_approval_submit
 AFTER INSERT ON approval_requests
 FOR EACH ROW
 EXECUTE FUNCTION notify_customer_on_approval_submit();
-
 
 -- 2. Notify customer when their rescore / reroute request is approved or rejected
 CREATE OR REPLACE FUNCTION notify_customer_on_approval_decision()
@@ -1216,14 +1147,12 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_notify_customer_approval_decision ON approval_requests;
-CREATE TRIGGER trg_notify_customer_approval_decision
+CREATE OR REPLACE TRIGGER trg_notify_customer_approval_decision
 AFTER UPDATE ON approval_requests
 FOR EACH ROW
 EXECUTE FUNCTION notify_customer_on_approval_decision();
 
--- -------------------------
 -- Chat tables
--- -------------------------
 CREATE TABLE IF NOT EXISTS chat_conversations (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   customer_user_id  UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -1250,9 +1179,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 CREATE INDEX IF NOT EXISTS idx_chat_messages_convo   ON chat_messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at);
 
--- -------------------------
 -- Chatbot session + analytics
--- -------------------------
 CREATE TABLE IF NOT EXISTS sessions (
   session_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1273,7 +1200,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
 
 DROP TRIGGER IF EXISTS trg_sessions_updated_at ON sessions;
-CREATE TRIGGER trg_sessions_updated_at
+CREATE OR REPLACE TRIGGER trg_sessions_updated_at
 BEFORE UPDATE ON sessions
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
@@ -1320,9 +1247,7 @@ CREATE INDEX IF NOT EXISTS idx_bot_response_logs_session ON bot_response_logs(se
 CREATE INDEX IF NOT EXISTS idx_bot_response_logs_created ON bot_response_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_bot_response_logs_ticket ON bot_response_logs(ticket_id);
 
--- -------------------------
 -- Notifications
--- -------------------------
 CREATE TABLE IF NOT EXISTS notifications (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1339,9 +1264,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
 
--- -------------------------
 -- Ticket Messages (employee <-> customer conversation)
--- -------------------------
 CREATE TABLE IF NOT EXISTS ticket_messages (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   ticket_id   UUID        NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -1357,9 +1280,7 @@ CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket
 CREATE INDEX IF NOT EXISTS idx_ticket_messages_sender
   ON ticket_messages(sender_id);
 
--- -------------------------
 -- Employee Monthly Reports
--- -------------------------
 CREATE TABLE IF NOT EXISTS employee_reports (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   report_code      TEXT NOT NULL UNIQUE,
@@ -1412,9 +1333,7 @@ CREATE TABLE IF NOT EXISTS employee_report_notes (
   note      TEXT NOT NULL
 );
 
--- -------------------------
 -- Operator System Dashboard
--- -------------------------
 CREATE TABLE IF NOT EXISTS system_service_status (
   name       TEXT PRIMARY KEY,
   status     TEXT NOT NULL,
@@ -1458,9 +1377,7 @@ CREATE TABLE IF NOT EXISTS system_config_kv (
   value TEXT NOT NULL
 );
 
--- =========================================================
 -- Pipeline Queue
--- =========================================================
 DO $$ BEGIN
   CREATE TYPE pipeline_queue_status AS ENUM (
     'queued',
@@ -1520,9 +1437,7 @@ CREATE INDEX IF NOT EXISTS idx_pq_entered_at
 \ir migrations/007_ticket_priority_nullable.sql
 \ir migrations/018_pipeline_runtime_control.sql
 
--- =========================================================
 -- Seed data
--- =========================================================
 INSERT INTO user_preferences (
     user_id,
     language,
@@ -1548,7 +1463,6 @@ INSERT INTO departments (name) VALUES
   ('IT')
 ON CONFLICT (name) DO NOTHING;
 
--- ✅ Use real bcrypt-compatible hashes from pgcrypto (fresh volumes work)
 -- mfa_enabled = FALSE and totp_secret = NULL so all users get a proper
 -- bearer token on login (no MFA prompt during development/testing)
 INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
@@ -1577,7 +1491,6 @@ INSERT INTO users (email, password_hash, role, mfa_enabled, totp_secret) VALUES
 ON CONFLICT (email) DO UPDATE
   SET mfa_enabled = FALSE,
       totp_secret = NULL;
-
 
 -- Profiles
 -- Managers
@@ -1688,7 +1601,6 @@ SELECT u.id, 'Customer Three', '+971500000003', 'Sharjah'
 FROM users u WHERE u.email='customer3@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
--- Tickets (fixed assignments seed)
 WITH
   cust    AS (SELECT id FROM users WHERE email='customer1@innovacx.net' LIMIT 1),
   ahmed   AS (SELECT id FROM users WHERE email='ahmed@innovacx.net' LIMIT 1),
@@ -1840,7 +1752,6 @@ VALUES
   'Neutral')
 ON CONFLICT (ticket_code) DO NOTHING;
 
--- ✅ KPI-friendly tickets for Ahmed (FIXED: every row has same number of columns)
 WITH
 cust  AS (SELECT id FROM users WHERE email='customer1@innovacx.net' LIMIT 1),
 ahmed AS (SELECT id FROM users WHERE email='ahmed@innovacx.net' LIMIT 1),
@@ -2033,19 +1944,15 @@ VALUES
 ON CONFLICT (key) DO UPDATE
 SET value=EXCLUDED.value;
 
--- -------------------------
 -- Post-init scripts
--- -------------------------
 \ir scripts/ticket_status.sql
 \ir scripts/sla.sql
 \ir scripts/is_recurring.sql
 \ir services/suggested.sql
 
--- =========================================================
 -- Dev/Test safety: ensure ticket assignments match current
 -- user UUIDs and MFA is disabled for all seed users.
 -- Safe to run on existing volumes (idempotent).
--- =========================================================
 
 -- Re-assign seed tickets to correct employee UUIDs
 -- (guards against UUID drift if users were recreated)
@@ -2090,10 +1997,8 @@ WHERE email IN (
   'sarah@innovacx.net'
 );
 
--- =========================================================
 -- Seed: Employee Monthly Reports for Ahmed Hassan
 -- (nov-2025 through jun-2025, 6 months)
--- =========================================================
 
 INSERT INTO employee_reports (report_code, employee_user_id, month_label, subtitle, kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response)
 SELECT code, ahmed_id, label, sub, rating, resolved, sla, avg_resp
@@ -2237,9 +2142,7 @@ WHERE er.report_code = 'oct-2025'
     SELECT 1 FROM employee_report_notes en WHERE en.report_id = er.id
   );
 
--- =========================================================
 -- Seed: Notifications for Ahmed (unread + mixed types)
--- =========================================================
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
@@ -2321,10 +2224,8 @@ WHERE NOT EXISTS (
     AND n.title = 'Ticket Status Updated: CX-9002'
 );
 
--- =========================================================
 -- Seed: Work steps for CX-9002 (In Progress) and CX-9004 (Overdue)
 -- so their ticket detail pages show Steps Taken section
--- =========================================================
 
 INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, notes, occurred_at)
 SELECT
@@ -2365,12 +2266,10 @@ WHERE NOT EXISTS (
     AND tws.step_no = 1
 );
 
--- =========================================================
 -- ANALYTICS SEED DATA
 -- Covers the full 12-month window (Mar 2025 → Feb 2026)
 -- across all 8 employees, 4 departments, all priorities.
 -- Provides live data for Section A, B, and C analytics.
--- =========================================================
 
 WITH
   cust   AS (SELECT id FROM users WHERE email='customer1@innovacx.net' LIMIT 1),
@@ -2396,9 +2295,7 @@ INSERT INTO tickets (
   final_resolution, resolved_by_user_id
 ) VALUES
 
--- ═══════════════════════════════════
 -- MARCH 2025
--- ═══════════════════════════════════
 ('CX-M01','HVAC unit failure in Block A','Complete breakdown of HVAC unit. Office temperature unmanageable.',
  'Complaint','Critical','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM ahmed),
@@ -2439,9 +2336,7 @@ INSERT INTO tickets (
  FALSE,FALSE,
  'Low',65.0,'Printer IP reassigned and driver reinstalled on affected PCs.',(SELECT id FROM ahmed)),
 
--- ═══════════════════════════════════
 -- APRIL 2025
--- ═══════════════════════════════════
 ('CX-M06','Electrical fault – Lab corridor','Repeated circuit breaker tripping in lab wing.',
  'Complaint','Critical','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sameer),
@@ -2482,9 +2377,7 @@ INSERT INTO tickets (
  FALSE,FALSE,
  'Medium',82.0,'New access point installed; signal verified across all rooms.',(SELECT id FROM ahmed)),
 
--- ═══════════════════════════════════
 -- MAY 2025
--- ═══════════════════════════════════
 ('CX-M11','Flooding – basement car park','Heavy rain caused water ingress, risk to vehicles.',
  'Complaint','Critical','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM ahmed),
@@ -2525,9 +2418,7 @@ INSERT INTO tickets (
  FALSE,FALSE,
  'Critical',96.0,'Backup cooling unit activated; primary unit serviced.',(SELECT id FROM ahmed)),
 
--- ═══════════════════════════════════
 -- JUNE 2025
--- ═══════════════════════════════════
 ('CX-M16','Generator fuel low – Building C','Standby generator at 12% fuel capacity.',
  'Complaint','High','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sameer),
@@ -2560,9 +2451,7 @@ INSERT INTO tickets (
  TRUE,FALSE,
  'Medium',69.0,'Cleaning frequency increased to 3x daily for lobby.',(SELECT id FROM sameer)),
 
--- ═══════════════════════════════════
 -- JULY 2025
--- ═══════════════════════════════════
 ('CX-M20','Air handling unit vibration – Roof','Loud vibration from AHU on rooftop.',
  'Complaint','High','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM ahmed),
@@ -2595,9 +2484,7 @@ INSERT INTO tickets (
  FALSE,FALSE,
  'Medium',76.0,'Affected tiles replaced and source leak repaired.',(SELECT id FROM yousef)),
 
--- ═══════════════════════════════════
 -- AUGUST 2025
--- ═══════════════════════════════════
 ('CX-M24','Blocked drainage – outdoor plaza','Plaza drains backing up after rain.',
  'Complaint','Medium','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sameer),
@@ -2630,9 +2517,7 @@ INSERT INTO tickets (
  FALSE,FALSE,
  'Critical',96.0,'Tripped MCB reset; UPS bypass engaged for continuity.',(SELECT id FROM ahmed)),
 
--- ═══════════════════════════════════
 -- SEPTEMBER 2025
--- ═══════════════════════════════════
 ('CX-M28','Roof waterproofing breach','Rainwater seeping through roof membrane into top-floor offices.',
  'Complaint','High','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM yousef),
@@ -2657,9 +2542,7 @@ INSERT INTO tickets (
  FALSE,FALSE,
  'High',88.0,'Heating element replaced in main boiler.',(SELECT id FROM sameer)),
 
--- ═══════════════════════════════════
 -- OCTOBER 2025
--- ═══════════════════════════════════
 ('CX-M31','Chiller plant failure','Building-wide cooling failure due to chiller breakdown.',
  'Complaint','Critical','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM ahmed),
@@ -2700,9 +2583,7 @@ INSERT INTO tickets (
  FALSE,FALSE,
  'High',85.0,'Handrail re-secured with heavy-duty anchors.',(SELECT id FROM yousef)),
 
--- ═══════════════════════════════════
 -- NOVEMBER 2025
--- ═══════════════════════════════════
 ('CX-M36','Gas leak alarm triggered – Kitchen','Gas leak sensor alarm in building kitchen area.',
  'Complaint','Critical','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM ahmed),
@@ -2743,9 +2624,7 @@ INSERT INTO tickets (
  FALSE,FALSE,
  'Low',70.0,'QoS settings updated; noise eliminated after router firmware patch.',(SELECT id FROM ahmed)),
 
--- ═══════════════════════════════════
 -- DECEMBER 2025
--- ═══════════════════════════════════
 ('CX-M41','Boiler failure – Building A heating','Entire building without heating during cold snap.',
  'Complaint','Critical','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM ahmed),
@@ -2786,9 +2665,7 @@ INSERT INTO tickets (
  FALSE,FALSE,
  'High',89.0,'Faulty LED drivers replaced; emergency battery backup tested.',(SELECT id FROM sameer)),
 
--- ═══════════════════════════════════
 -- JANUARY 2026
--- ═══════════════════════════════════
 ('CX-M46','Fire suppression system test failure','Annual suppression test failed in server room.',
  'Complaint','Critical','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM ahmed),
@@ -2829,9 +2706,7 @@ INSERT INTO tickets (
  FALSE,FALSE,
  'High',88.0,'Inspection completed; conductor tested and new certificate issued.',(SELECT id FROM yousef)),
 
--- ═══════════════════════════════════
 -- FEBRUARY 2026
--- ═══════════════════════════════════
 ('CX-M51','Electrical trip – main distribution board','Main DB tripped cutting power to two floors.',
  'Complaint','Critical','Resolved',
  (SELECT id FROM fac),(SELECT id FROM cust),(SELECT id FROM sameer),
@@ -2874,12 +2749,10 @@ INSERT INTO tickets (
 
 ON CONFLICT (ticket_code) DO NOTHING;
 
--- =========================================================
 -- SUGGESTED RESOLUTION USAGE SEED
 -- Provides data for Section C: AI acceptance rate analytics
 -- decision: 'accepted' = employee accepted AI suggestion
 --           'declined_custom' = employee wrote their own resolution
--- =========================================================
 INSERT INTO suggested_resolution_usage (
   ticket_id, employee_user_id, decision, department,
   suggested_text, final_text, used
@@ -2967,8 +2840,6 @@ WHERE NOT EXISTS (
     AND sru.final_text = fb.final
 );
 
-
--- =========================================================
 -- EXTENDED SEED DATA
 -- Populates:
 --   • Approvals page — more Pending/Approved/Rejected requests
@@ -2978,12 +2849,9 @@ WHERE NOT EXISTS (
 --   • March 2026 tickets so the current month has live data
 -- Every INSERT uses ON CONFLICT / WHERE NOT EXISTS so re-runs
 -- are fully safe (idempotent).
--- =========================================================
 
--- ─────────────────────────────────────────────────────────
 -- 1. MORE APPROVAL REQUESTS
 --    Mix of Pending, Approved, Rejected across employees/tickets
--- ─────────────────────────────────────────────────────────
 
 INSERT INTO approval_requests (
   request_code, ticket_id, request_type, current_value, requested_value,
@@ -3081,11 +2949,9 @@ SELECT 'REQ-3175', t.id, 'Rescoring',
 FROM tickets t WHERE t.ticket_code='CX-M54'
 ON CONFLICT (request_code) DO NOTHING;
 
--- ─────────────────────────────────────────────────────────
 -- 2. MARCH 2026 OPEN/IN-PROGRESS TICKETS
 --    These give the complaints list live active data and
 --    populate the manager dashboard KPIs (Open, In Progress)
--- ─────────────────────────────────────────────────────────
 
 WITH
   cust   AS (SELECT id FROM users WHERE email='customer1@innovacx.net'  LIMIT 1),
@@ -3212,11 +3078,9 @@ INSERT INTO tickets (
 
 ON CONFLICT (ticket_code) DO NOTHING;
 
--- ─────────────────────────────────────────────────────────
 -- 3. MANAGER NOTIFICATIONS
 --    Covers: pending approvals, SLA breaches, escalations
 --    Uses tickets from both historical and March 2026 data
--- ─────────────────────────────────────────────────────────
 
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
@@ -3338,12 +3202,10 @@ WHERE NOT EXISTS (
     AND title='SLA Breached — CX-1122'
 );
 
--- ─────────────────────────────────────────────────────────
 -- 4. EMPLOYEE NOTIFICATIONS
 --    All 6 types: ticket_assignment, sla_warning, status_change,
 --    customer_reply, report_ready, system
 --    Spread across: ahmed, maria, omar, sara, bilal, fatima, yousef, khalid
--- ─────────────────────────────────────────────────────────
 
 -- Ahmed
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
@@ -3528,7 +3390,6 @@ SELECT (SELECT id FROM users WHERE email='sameer@innovacx.net'),
   NULL,NULL,TRUE,'2026-02-28 06:00:00+00'
 WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM users WHERE email='sameer@innovacx.net') AND title='System Update Completed');
 
--- ─────────────────────────────────────────────────────────────────────────────
 -- FINAL BACKFILL: set priority_assigned_at = created_at for any historical
 -- tickets inserted above that didn't include priority_assigned_at.
 -- This must run AFTER all INSERT blocks so it catches every seeded row.
@@ -3536,7 +3397,6 @@ WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=(SELECT id FROM user
 --   response_time_mins = first_response_at - priority_assigned_at
 -- and priority_assigned_at ends up NULL → falls back to created_at which
 -- may be after first_response_at for some seed timestamps.
--- ─────────────────────────────────────────────────────────────────────────────
 UPDATE tickets
 SET priority_assigned_at = created_at
 WHERE priority_assigned_at IS NULL;
@@ -3550,7 +3410,6 @@ WHERE priority_assigned_at IS NOT NULL
   AND first_response_at IS NOT NULL
   AND first_response_at < priority_assigned_at;
 
--- =============================================================================
 -- InnovaCX — Extended Seed Inserts
 -- Covers: model_execution_log, all agent output tables, sentiment/priority/
 --         routing/sla/resolution/feature outputs, chat_conversations,
@@ -3563,17 +3422,14 @@ WHERE priority_assigned_at IS NOT NULL
 --                 tickets CX-R01…CX-R10 and CX-M01…CX-M55 must exist).
 --
 -- Safe to re-run: all statements use ON CONFLICT / WHERE NOT EXISTS.
--- =============================================================================
 
 -- NOTE: ML pipeline seed data (model_execution_log, sentiment_outputs,
 -- priority_outputs, routing_outputs, sla_outputs, resolution_outputs,
 -- feature_outputs) moved to zzz_seedV2.sql, which runs after
 -- zzz_analytics_mvs.sh creates those tables.
 
--- ---------------------------------------------------------------------------
 -- 8. CHAT CONVERSATIONS & MESSAGES
 --    3 conversations: one resolved→ticket, one escalated, one bot-only
--- ---------------------------------------------------------------------------
 
 -- Conv 1: Customer → Bot → Escalated to Operator → Linked to CX-R01
 INSERT INTO public.chat_conversations (id, customer_user_id, channel, created_at, ended_at, status)
@@ -3678,9 +3534,7 @@ WHERE NOT EXISTS (
   LIMIT 1
 );
 
--- ---------------------------------------------------------------------------
 -- 9. SESSIONS (chatbot state machine entries)
--- ---------------------------------------------------------------------------
 
 INSERT INTO public.sessions (
   user_id, current_state, context, history,
@@ -3724,9 +3578,7 @@ WHERE NOT EXISTS (
     AND s.created_at='2026-02-28 10:00:00+00'
 );
 
--- ---------------------------------------------------------------------------
 -- 10. USER CHAT LOGS  (flagged aggression + normal entries)
--- ---------------------------------------------------------------------------
 
 INSERT INTO public.user_chat_logs (
   user_id, message, intent_detected,
@@ -3757,9 +3609,7 @@ WHERE NOT EXISTS (
   LIMIT 1
 );
 
--- ---------------------------------------------------------------------------
 -- 11. BOT RESPONSE LOGS
--- ---------------------------------------------------------------------------
 
 INSERT INTO public.bot_response_logs (
   response, response_type, state_at_time,
@@ -3780,9 +3630,7 @@ VALUES
    '2026-03-01 09:25:25+00',
    (SELECT id FROM tickets WHERE ticket_code='CX-R06'));
 
--- ---------------------------------------------------------------------------
 -- 12. TICKET ATTACHMENTS  (realistic enterprise file uploads)
--- ---------------------------------------------------------------------------
 
 INSERT INTO public.ticket_attachments (ticket_id, file_name, file_url, uploaded_by, uploaded_at)
 SELECT t.id, v.fname, v.furl,
@@ -3811,9 +3659,7 @@ WHERE NOT EXISTS (
   WHERE ta.ticket_id = t.id AND ta.file_name = v.fname
 );
 
--- ---------------------------------------------------------------------------
 -- 13. TICKET UPDATES  (status transitions + internal notes)
--- ---------------------------------------------------------------------------
 
 INSERT INTO public.ticket_updates (
   ticket_id, author_user_id, update_type, message,
@@ -3864,9 +3710,7 @@ WHERE NOT EXISTS (
     AND tu.created_at=v.ts::timestamptz
 );
 
--- ---------------------------------------------------------------------------
 -- 14. ADDITIONAL TICKET WORK STEPS  (for March 2026 tickets)
--- ---------------------------------------------------------------------------
 
 INSERT INTO public.ticket_work_steps (ticket_id, step_no, technician_user_id, notes, occurred_at)
 SELECT
@@ -3898,9 +3742,7 @@ WHERE NOT EXISTS (
     AND tws.step_no=v.step_no
 );
 
--- ---------------------------------------------------------------------------
 -- 15. APPROVAL REQUEST DECISIONS  (update Approved/Rejected rows with decider)
--- ---------------------------------------------------------------------------
 
 UPDATE public.approval_requests
 SET
@@ -3934,10 +3776,8 @@ SET
 WHERE request_code = 'REQ-3175'
   AND decided_by_user_id IS NULL;
 
--- ---------------------------------------------------------------------------
 -- 16. EMPLOYEE REPORTS for remaining employees (Maria, Bilal, Yousef, Khalid)
 --     Mirrors the pattern used for Ahmed, covering Nov–Oct 2025 two months.
--- ---------------------------------------------------------------------------
 
 INSERT INTO public.employee_reports (
   report_code, employee_user_id, month_label, subtitle,
@@ -4079,10 +3919,8 @@ WHERE NOT EXISTS (
   SELECT 1 FROM public.employee_report_notes en WHERE en.report_id = er.id
 );
 
--- ---------------------------------------------------------------------------
 -- 17. ADDITIONAL SYSTEM EVENT FEED ENTRIES
 --     Tests the operator dashboard event log view
--- ---------------------------------------------------------------------------
 
 INSERT INTO public.system_event_feed (severity, title, description, event_time)
 VALUES
@@ -4103,9 +3941,7 @@ VALUES
    '2026-02-22 09:06:00+00')
 ON CONFLICT DO NOTHING;
 
--- ---------------------------------------------------------------------------
 -- 18. SYSTEM CONFIG & VERSION UPDATES
--- ---------------------------------------------------------------------------
 
 INSERT INTO public.system_config_kv (key, value)
 VALUES
@@ -4127,13 +3963,10 @@ VALUES
 ON CONFLICT (component) DO UPDATE
   SET version=EXCLUDED.version, deployed_at=EXCLUDED.deployed_at;
 
--- ---------------------------------------------------------------------------
 -- 19. PASSWORD RESET TOKEN  (for testing the auth / reset-password views)
--- ---------------------------------------------------------------------------
 -- SECURITY: This token is known and must only be seeded in dev/test/local DBs.
 -- Non-dev databases skip this seed so fresh-volume initialization can continue
 -- without creating a publicly-known reset token.
--- ---------------------------------------------------------------------------
 INSERT INTO public.password_reset_tokens (user_id, token_hash, expires_at)
 SELECT
   (SELECT id FROM users WHERE email='customer1@innovacx.net'),
@@ -4150,11 +3983,9 @@ WHERE (
       AND prt.used_at IS NULL
   );
 
--- ---------------------------------------------------------------------------
 -- 20. SUGGESTED RESOLUTION USAGE for March 2026 tickets that were resolved
 --     (CX-R01 not yet resolved — only feedback for already-closed CX-M tickets
 --      not yet covered in the original seed)
--- ---------------------------------------------------------------------------
 
 INSERT INTO public.suggested_resolution_usage (
   ticket_id, employee_user_id, decision, department,
@@ -4186,10 +4017,7 @@ WHERE NOT EXISTS (
     AND sru.final_text = fb.final
 );
 
-
--- ---------------------------------------------------------------------------
 -- Department routing demo data (AI Routing Review Queue)
--- ---------------------------------------------------------------------------
 
 -- Clear any pre-assigned department on tickets that are meant to be
 -- "unrouted" (awaiting AI routing review), so they show no previous dept.
@@ -4233,14 +4061,10 @@ END $$;
 
 \ir scripts/learning_seed.sql
 
--- ---------------------------------------------------------------------------
 -- NOTE: Analytics materialized views are created and refreshed by
 -- zzz_analytics_mvs.sh, which runs after this file in the Docker init
 -- sequence. No refresh call needed here.
--- ---------------------------------------------------------------------------
 
--- ---------------------------------------------------------------------------
 -- Department staffing seed (7 departments, each 1 manager + 10 employees)
--- ---------------------------------------------------------------------------
 \ir scripts/AI_Explainability.sql
 \ir seeds/seed_department_staffing.sql

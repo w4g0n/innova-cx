@@ -176,6 +176,16 @@
   75%      { transform: translateX(4px); }
 }
 
+/* Mode panel fade-in when switching Text/Audio */
+@keyframes custPanelIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.custVoiceWrap,
+.custTextArea {
+  animation: custPanelIn .25s ease both;
+}
+
 /* Voice input */
 .custVoiceWrap {
   display: flex;

@@ -1,5 +1,5 @@
 #!/bin/bash
-# =============================================================================
+
 # Install custom pg_hba.conf into PGDATA
 #
 # PURPOSE:
@@ -15,7 +15,7 @@
 # EXECUTION ORDER:
 #   Runs first (000 prefix) so the custom pg_hba.conf is in place before any
 #   subsequent init script triggers a postgres config reload.
-# =============================================================================
+
 set -e
 
 SRC="/docker-entrypoint-initdb.d/pg_hba.conf"

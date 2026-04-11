@@ -1,4 +1,3 @@
--- =============================================================================
 -- InnovaCX — Analytics MV Seed Data Extension
 -- Appends to seedV2.sql output — run AFTER seedV2.sql and analytics_mvs.sql
 --
@@ -13,15 +12,12 @@
 --   mv_feature_daily        → sourced from feature_outputs
 --
 -- All inserts use ON CONFLICT … DO NOTHING so safe to re-run.
--- =============================================================================
 
 BEGIN;
 
--- =============================================================================
 -- EXTEND TICKETS: Add more tickets across more dates/departments/employees
 -- so the trend charts in ComplaintTrends and ModelHealth have volume to show.
 -- These span the last 12 months and cover all departments.
--- =============================================================================
 
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, status, priority,
@@ -36,7 +32,8 @@ INSERT INTO tickets (
 )
 VALUES
 
--- ── February 2026 (dense month for QC data) ──────────────────────────────────
+-- February 2026 (dense month for QC data)
+
 ('CX-F001', 'Lift motor overheating – Tower 1',
  'Lift motor in Tower 1 reaching dangerous temperatures. Passengers reporting smell of burning.',
  'Complaint', 'Resolved', 'Critical',
@@ -177,7 +174,8 @@ VALUES
  'Renew expired SSL certificate; flush CDN cache and verify portal access.',
  FALSE, FALSE),
 
--- ── January 2026 ──────────────────────────────────────────────────────────────
+-- January 2026
+
 ('CX-J001', 'Fluorescent lights flickering – corridor B2',
  'Flickering lights in B2 corridor causing migraines for staff. Ballast fault suspected.',
  'Complaint', 'Resolved', 'Medium',
@@ -539,9 +537,7 @@ VALUES
 
 ON CONFLICT (ticket_code) DO NOTHING;
 
--- =============================================================================
 -- SET resolved_at for all new tickets that are Resolved
--- =============================================================================
 UPDATE tickets
 SET
   resolved_at         = created_at + interval '9 hours',
@@ -559,10 +555,8 @@ WHERE ticket_code IN (
 )
 AND resolved_at IS NULL;
 
--- =============================================================================
 -- SUGGESTED_RESOLUTION_USAGE for new tickets
 -- 80% accepted, 20% declined_custom — matches the QC dashboard display
--- =============================================================================
 INSERT INTO suggested_resolution_usage (
   ticket_id, employee_user_id, decision, department,
   suggested_text, final_text, used
@@ -690,10 +684,8 @@ WHERE NOT EXISTS (
     AND sru.final_text = fb.final
 );
 
--- =============================================================================
 -- APPROVAL_REQUESTS for new tickets (to populate mv_operator_qc_daily)
 -- These create rerouting data visible in Quality Control → C — Rerouting
--- =============================================================================
 INSERT INTO approval_requests (
   request_code, ticket_id, request_type, current_value, requested_value,
   request_reason, submitted_by_user_id, submitted_at, status,
@@ -758,11 +750,9 @@ FROM (VALUES
 JOIN tickets t ON t.ticket_code = r.tc
 ON CONFLICT (request_code) DO NOTHING;
 
--- =============================================================================
 -- MODEL_EXECUTION_LOG for new tickets
 -- Covers sentiment + feature agents for all new tickets.
 -- Other agents (priority/routing/sla/resolution) also added for key tickets.
--- =============================================================================
 INSERT INTO public.model_execution_log (
   ticket_id, agent_name, model_version, triggered_by,
   started_at, completed_at, status,
@@ -882,9 +872,7 @@ FROM (VALUES
        in_tok, out_tok, inf_ms, conf_score, infra)
 JOIN public.tickets t ON t.ticket_code = v.tc;
 
--- =============================================================================
 -- SENTIMENT_OUTPUTS for all new tickets (powers mv_sentiment_daily)
--- =============================================================================
 INSERT INTO public.sentiment_outputs (
   execution_id, ticket_id, model_version,
   sentiment_label, sentiment_score, confidence_score,
@@ -940,11 +928,9 @@ WHERE NOT EXISTS (
 )
 ORDER BY mel.ticket_id, mel.started_at;
 
--- =============================================================================
 -- FEATURE_OUTPUTS for all new tickets (powers mv_feature_daily)
 -- raw_features JSON includes: business_impact, safety_concern,
 -- issue_severity, issue_urgency (used by mv_feature_daily aggregation)
--- =============================================================================
 INSERT INTO public.feature_outputs (
   execution_id, ticket_id, model_version,
   asset_category, topic_labels, confidence_score, raw_features, is_current
@@ -999,10 +985,8 @@ WHERE NOT EXISTS (
 )
 ORDER BY mel.ticket_id, mel.started_at;
 
--- =============================================================================
 -- BACKFILL is_recurring on tickets table from feature_outputs
 -- (mv_feature_daily reads tickets.is_recurring, not raw_features)
--- =============================================================================
 UPDATE tickets t
 SET is_recurring = TRUE
 FROM public.feature_outputs fo
@@ -1011,10 +995,8 @@ WHERE fo.ticket_id = t.id
   AND (fo.raw_features->>'is_recurring')::boolean = TRUE
   AND t.is_recurring = FALSE;
 
--- =============================================================================
 -- ADDITIONAL SESSIONS for chatbot MV data
 -- These sessions span multiple months to give mv_chatbot_daily trend data
--- =============================================================================
 INSERT INTO sessions (user_id, current_state, context, history, created_at, updated_at, bot_model_version, escalated_to_human, escalated_at, linked_ticket_id)
 VALUES
   -- Feb 2026 escalated sessions
@@ -1113,9 +1095,7 @@ VALUES
    FALSE,NULL,NULL)
 ;
 
--- =============================================================================
 -- USER_CHAT_LOGS for new sessions — adds sentiment data to mv_chatbot_daily
--- =============================================================================
 INSERT INTO user_chat_logs (user_id, session_id, message, intent_detected, aggression_flag, aggression_score, created_at, sentiment_score, category, response_time_ms, ticket_id)
 SELECT
   (SELECT id FROM users WHERE email = v.email),
@@ -1154,9 +1134,7 @@ WHERE NOT EXISTS (
   LIMIT 1
 );
 
--- =============================================================================
 -- BACKFILL: Ensure all priority_assigned_at are set for new tickets
--- =============================================================================
 UPDATE tickets
 SET priority_assigned_at = created_at
 WHERE priority_assigned_at IS NULL;

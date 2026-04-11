@@ -1,5 +1,3 @@
-   Original styles — preserved exactly as provided
-
 .mgrTrends {
   width: 100%;
   max-width: none;
@@ -728,6 +726,10 @@
 
 .kpiRow--6 {
   grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.kpiRow--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 /* Section C only - 4 KPI cards fill full width */

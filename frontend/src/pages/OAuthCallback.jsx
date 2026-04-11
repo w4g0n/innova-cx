@@ -60,11 +60,27 @@ export default function OAuthCallback() {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.detail || "Authentication failed.");
 
-        const { access_token, user } = data;
+        const { access_token, token_type, user, requiresSetup } = data;
         if (!access_token || !user) throw new Error("Invalid response from server.");
 
+        const userPayload = {
+          id:         user.id,
+          email:      user.email,
+          role:       user.role,
+          full_name:  user.full_name,
+          token_type: token_type,
+        };
+
+        if (token_type === "temporary") {
+          // Google sign-in requires app-level MFA step
+          sessionStorage.setItem("mfa_token", access_token);
+          sessionStorage.setItem("mfa_user",  JSON.stringify(userPayload));
+          navigate(requiresSetup ? "/mfa-setup" : "/verify", { replace: true });
+          return;
+        }
+
         localStorage.setItem("access_token", access_token);
-        localStorage.setItem("user", JSON.stringify(user));
+        localStorage.setItem("user", JSON.stringify(userPayload));
 
         const role = user.role || "customer";
         navigate(role === "customer" ? "/customer/dashboard" : `/${role}`, { replace: true });

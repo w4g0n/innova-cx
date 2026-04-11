@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# =============================================================================
+
 # run_benchmark.sh — Chatbot LLM Benchmark Orchestrator
-# =============================================================================
+
 # Runs on the GCP VM at /opt/innova-cx.
 # Tests the current LLM model (Tier 1 + Tier 2), then downloads and tests
 # Qwen2.5-1.5B-Instruct, generates a comparison report, restores the original
@@ -16,7 +16,7 @@
 #   - innovacx-db container must be running
 #   - At least 4GB free disk space for Qwen model download
 #   - Qwen model must already exist locally at /app/hf_cache/qwen2.5-1.5b-instruct
-# =============================================================================
+
 
 set -euo pipefail
 
@@ -40,9 +40,9 @@ warn()  { echo -e "${YELLOW}[$(date '+%H:%M:%S')] WARN:${NC} $*"; }
 error() { echo -e "${RED}[$(date '+%H:%M:%S')] ERROR:${NC} $*" >&2; }
 die()   { error "$*"; exit 1; }
 
-# =============================================================================
+
 # Step 0 — Preflight checks
-# =============================================================================
+
 log "=== PREFLIGHT CHECKS ==="
 
 # Confirm we are in the right directory

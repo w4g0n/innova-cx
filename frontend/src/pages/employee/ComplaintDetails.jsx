@@ -895,6 +895,15 @@ export default function ComplaintDetails() {
     setResolveReviewAction(preGenerated ? "accepted" : "declined_custom");
   }, [modalType, ticket]);
 
+  // Stable reference — only recreated if localStorage token changes, NOT on every keystroke.
+  // Without this, every modal textarea onChange creates a new authHeader arrow function,
+  // which invalidates fetchMessages inside TicketChat, which restarts polling and
+  // re-fetches messages, which calls setMessages, which triggers the scroll effect → flicker.
+  const stableAuthHeader = useCallback(
+    () => ({ Authorization: `Bearer ${getAuthToken()}` }),
+    []
+  );
+
   const loadTicket = useCallback(async () => {
     const token = getAuthToken();
     if (!token) {
@@ -1137,7 +1146,7 @@ export default function ComplaintDetails() {
           <TicketChat
             ticketId={ticket.ticketId}
             role="employee"
-            authHeader={() => ({ Authorization: `Bearer ${authToken}` })}
+            authHeader={stableAuthHeader}
             disabled={isResolved}
             paused={!!modalType}
           />

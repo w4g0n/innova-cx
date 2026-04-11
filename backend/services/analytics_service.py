@@ -1357,6 +1357,24 @@ def get_operator_qc_data(
     # (mv_operator_qc_daily not yet materialized; use base tables directly)
     # ALL departments shown even when avg = 0
     # ─────────────────────────────────────────────────────────────────────────
+    # ── Canonical department name normalization ───────────────────────────
+    # The departments table may contain variant spellings (e.g. "Legal and Compliance"
+    # vs "Legal & Compliance"). Normalize all to canonical names here.
+    CANONICAL_DEPTS = [
+        "Facilities Management", "HR", "IT", "Legal & Compliance",
+        "Leasing", "Maintenance", "Safety & Security",
+    ]
+    DEPT_ALIAS = {
+        "legal and compliance": "Legal & Compliance",
+        "legal & compliance":   "Legal & Compliance",
+        "facilities management": "Facilities Management",
+        "safety & security":    "Safety & Security",
+        "safety and security":  "Safety & Security",
+    }
+
+    def _canon_dept(name: str) -> str:
+        return DEPT_ALIAS.get((name or "").strip().lower(), (name or "").strip())
+
     reroute_raw = _fetch_all(
         f"""
         SELECT
@@ -1381,24 +1399,6 @@ def get_operator_qc_data(
         """,
         t_dept_params,
     )
-
-    # ── Canonical department name normalization ───────────────────────────
-    # The departments table may contain variant spellings (e.g. "Legal and Compliance"
-    # vs "Legal & Compliance"). Normalize all to canonical names here.
-    CANONICAL_DEPTS = [
-        "Facilities Management", "HR", "IT", "Legal & Compliance",
-        "Leasing", "Maintenance", "Safety & Security",
-    ]
-    DEPT_ALIAS = {
-        "legal and compliance": "Legal & Compliance",
-        "legal & compliance":   "Legal & Compliance",
-        "facilities management": "Facilities Management",
-        "safety & security":    "Safety & Security",
-        "safety and security":  "Safety & Security",
-    }
-
-    def _canon_dept(name: str) -> str:
-        return DEPT_ALIAS.get((name or "").strip().lower(), (name or "").strip())
 
     # Build reroute_map from query results, normalizing dept names
     reroute_map: Dict[str, dict] = {}
@@ -1431,6 +1431,19 @@ def get_operator_qc_data(
     ]
 
     # ── Rerouting KPIs ────────────────────────────────────────────────────
+    ticket_count_raw = _fetch_one(
+        f"""
+        SELECT COUNT(DISTINCT t.id) AS total
+        FROM tickets t
+        LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.created_at::date >= %s::date
+          AND t.created_at::date <  %s::date
+          {t_dept_filter}
+        """,
+        t_dept_params,
+    ) or {}
+    ticket_count_for_rate = int(ticket_count_raw.get("total") or 0)
+
     # Manager AI Acceptance Rate: % of Rerouting approval_requests decided by manager
     # that were Approved (manager kept the AI routing suggestion).
     # Uses approval_requests (submitted_at column).
@@ -1469,18 +1482,6 @@ def get_operator_qc_data(
     employee_ai_acceptance_rate = round(emp_arr_accepted / emp_arr_total * 100, 1) if emp_arr_total else 0
 
     # Employee Reroute Request Rate: rerouting approval_requests / total distinct tickets
-    ticket_count_raw = _fetch_one(
-        f"""
-        SELECT COUNT(DISTINCT t.id) AS total
-        FROM tickets t
-        LEFT JOIN departments d ON d.id = t.department_id
-        WHERE t.created_at::date >= %s::date
-          AND t.created_at::date <  %s::date
-          {t_dept_filter}
-        """,
-        t_dept_params,
-    ) or {}
-    ticket_count_for_rate = int(ticket_count_raw.get("total") or 0)
     employee_reroute_request_rate = (
         round(emp_arr_total / ticket_count_for_rate * 100, 1)
         if ticket_count_for_rate else 0

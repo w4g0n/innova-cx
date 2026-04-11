@@ -1,8 +1,8 @@
--- ============================================================
+
 -- Migration 003: routing_review_queue
 -- Stores tickets where the AI routing confidence is below
 -- the threshold, pending manual department assignment.
--- ============================================================
+
 
 DO $$ BEGIN
   CREATE TYPE routing_review_status AS ENUM ('Pending', 'Approved', 'Overridden');

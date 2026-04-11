@@ -1,5 +1,5 @@
 -- Benchmark Test Data Cleanup
--- ===========================
+
 -- Removes all rows created by the E2E smoke suite.
 -- Safe to re-run (DELETE with NOT EXISTS clauses not needed — simple deletes are idempotent
 -- because the session IDs are unique UUIDs that only exist once).

@@ -1,4 +1,3 @@
--- =============================================================================
 -- Migration 018: pipeline_runtime_control table
 --
 -- PURPOSE:
@@ -17,7 +16,7 @@
 -- RUN MANUALLY (existing volume):
 --   docker exec -i innovacx-db psql -U innovacx_admin -d complaints_db \
 --     < database/migrations/018_pipeline_runtime_control.sql
--- =============================================================================
+
 
 CREATE TABLE IF NOT EXISTS public.pipeline_runtime_control (
     singleton  BOOLEAN      PRIMARY KEY DEFAULT TRUE CHECK (singleton = TRUE),

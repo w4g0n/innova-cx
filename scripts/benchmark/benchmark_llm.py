@@ -1,6 +1,6 @@
 """
 Tier 1 — LLM Classification Benchmark
-=======================================
+
 Runs inside the chatbot Docker container via docker exec.
 Tests intent classification and aggression detection accuracy with 200 labeled cases.
 Zero DB writes — calls intent functions directly, no sessions or logs created.
@@ -33,9 +33,9 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
+
 # Helpers
-# ---------------------------------------------------------------------------
+
 
 def _percentile(values: list[float], pct: float) -> float:
     if not values:

@@ -1,7 +1,6 @@
--- =============================================================================
 -- InnovaCX  –  Analytics Materialized Views
+
 -- File: database/scripts/analytics_mvs.sql
--- =============================================================================
 -- SAFE TO RE-RUN: every CREATE uses IF NOT EXISTS / OR REPLACE.
 --
 -- FIRST-RUN (fresh DB):
@@ -24,14 +23,11 @@
 -- MVs 4-8 read base tables directly (not via mv_ticket_base) because they
 -- join tables that mv_ticket_base does not include.
 -- The refresh function handles all 8 in the correct order.
--- =============================================================================
 
 
--- ---------------------------------------------------------------------------
 -- CLEANUP: drop any incorrectly-schemed views created by a previous migration
 -- attempt that placed mv_chatbot_daily in the analytics schema instead of public.
 -- These DROPs are safe (IF EXISTS = no error if they were never created).
--- ---------------------------------------------------------------------------
 DO $$
 BEGIN
     -- Drop the wrongly-schemed chatbot MV if it exists
@@ -63,20 +59,15 @@ BEGIN
     END IF;
 END $$;
 
-
--- =============================================================================
 -- PREREQUISITE COLUMNS — safe to re-run (all IF NOT EXISTS)
 -- Ensures this file can be applied to existing volumes that never ran
 -- 000_analytics_prerequisites.sql, without requiring that file first.
--- =============================================================================
 
--- tickets: analytics columns (added by 000_analytics_prerequisites.sql)
 ALTER TABLE public.tickets
     ADD COLUMN IF NOT EXISTS human_overridden BOOLEAN     NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS override_reason  TEXT,
     ADD COLUMN IF NOT EXISTS is_recurring     BOOLEAN     NOT NULL DEFAULT FALSE;
 
--- sessions: chatbot tracking columns (added by 000_analytics_prerequisites.sql)
 ALTER TABLE public.sessions
     ADD COLUMN IF NOT EXISTS bot_model_version  TEXT,
     ADD COLUMN IF NOT EXISTS escalated_to_human BOOLEAN     NOT NULL DEFAULT FALSE,
@@ -91,13 +82,11 @@ CREATE INDEX IF NOT EXISTS idx_sessions_linked_ticket
     ON public.sessions (linked_ticket_id)
     WHERE linked_ticket_id IS NOT NULL;
 
--- user_chat_logs: sentiment columns (added by 000_analytics_prerequisites.sql)
 ALTER TABLE public.user_chat_logs
     ADD COLUMN IF NOT EXISTS sentiment_score  NUMERIC(4,3),
     ADD COLUMN IF NOT EXISTS category         TEXT,
     ADD COLUMN IF NOT EXISTS response_time_ms INTEGER;
 
--- bot_response_logs: extra columns (added by 000_analytics_prerequisites.sql)
 ALTER TABLE public.bot_response_logs
     ADD COLUMN IF NOT EXISTS kb_match_score NUMERIC(5,4),
     ADD COLUMN IF NOT EXISTS response_type  TEXT,
@@ -106,7 +95,6 @@ ALTER TABLE public.bot_response_logs
 CREATE INDEX IF NOT EXISTS idx_brl_ticket_id
     ON public.bot_response_logs (ticket_id);
 
--- employee_reports: extra columns (added by 000_analytics_prerequisites.sql)
 ALTER TABLE public.employee_reports
     ADD COLUMN IF NOT EXISTS model_version TEXT NOT NULL DEFAULT 'report-gen-v1.0',
     ADD COLUMN IF NOT EXISTS generated_by  TEXT NOT NULL DEFAULT 'system',
@@ -189,11 +177,7 @@ CREATE TABLE IF NOT EXISTS public.feature_outputs (
 CREATE INDEX IF NOT EXISTS idx_fo_ticket_id_mv  ON public.feature_outputs (ticket_id);
 CREATE INDEX IF NOT EXISTS idx_fo_is_current_mv ON public.feature_outputs (ticket_id, is_current) WHERE is_current = TRUE;
 
-
-
--- =============================================================================
 -- EXTRA INDEXES ON BASE TABLES (safe to re-run — all IF NOT EXISTS)
--- =============================================================================
 
 CREATE INDEX IF NOT EXISTS idx_tickets_type
     ON tickets (ticket_type);
@@ -224,11 +208,8 @@ CREATE INDEX IF NOT EXISTS idx_fo_created_at
     ON feature_outputs (created_at DESC)
     WHERE is_current = TRUE;
 
-
--- =============================================================================
 -- MV 1: mv_ticket_base
 -- Central denormalised ticket snapshot. All manager analytics derive from here.
--- =============================================================================
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_ticket_base AS
 SELECT
@@ -329,11 +310,8 @@ CREATE INDEX        IF NOT EXISTS mv_ticket_base_emp_created
     ON mv_ticket_base (employee_id, created_at)
     WHERE employee_id IS NOT NULL;
 
-
--- =============================================================================
 -- MV 2: mv_daily_volume
 -- Daily aggregate by dept / type / priority. Powers manager trend charts.
--- =============================================================================
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_daily_volume AS
 SELECT
@@ -361,11 +339,8 @@ CREATE INDEX IF NOT EXISTS mv_daily_volume_day   ON mv_daily_volume (created_day
 CREATE INDEX IF NOT EXISTS mv_daily_volume_month ON mv_daily_volume (created_month);
 CREATE INDEX IF NOT EXISTS mv_daily_volume_dept  ON mv_daily_volume (department_name);
 
-
--- =============================================================================
 -- MV 3: mv_employee_daily
 -- Daily per-employee performance. Powers manager employee analytics.
--- =============================================================================
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_employee_daily AS
 SELECT
@@ -400,12 +375,9 @@ CREATE INDEX IF NOT EXISTS mv_employee_daily_emp   ON mv_employee_daily (employe
 CREATE INDEX IF NOT EXISTS mv_employee_daily_day   ON mv_employee_daily (created_day);
 CREATE INDEX IF NOT EXISTS mv_employee_daily_month ON mv_employee_daily (created_month);
 
-
--- =============================================================================
 -- MV 4: mv_acceptance_daily
 -- Daily per-employee resolution acceptance. Powers manager employee analytics.
 -- Source: suggested_resolution_usage + tickets.
--- =============================================================================
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_acceptance_daily AS
 SELECT
@@ -431,12 +403,9 @@ CREATE INDEX IF NOT EXISTS mv_acceptance_daily_emp   ON mv_acceptance_daily (emp
 CREATE INDEX IF NOT EXISTS mv_acceptance_daily_month ON mv_acceptance_daily (created_month);
 CREATE INDEX IF NOT EXISTS mv_acceptance_daily_day   ON mv_acceptance_daily (created_day);
 
-
--- =============================================================================
 -- MV 5: mv_operator_qc_daily
 -- Daily QC aggregates for Operator / Quality Control (rescoring + rerouting).
 -- Source: tickets + approval_requests (base tables).
--- =============================================================================
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_operator_qc_daily AS
 SELECT
@@ -488,8 +457,6 @@ CREATE INDEX IF NOT EXISTS mv_operator_qc_daily_day   ON mv_operator_qc_daily (c
 CREATE INDEX IF NOT EXISTS mv_operator_qc_daily_month ON mv_operator_qc_daily (created_month);
 CREATE INDEX IF NOT EXISTS mv_operator_qc_daily_dept  ON mv_operator_qc_daily (department_name);
 
-
--- =============================================================================
 -- MV 6: mv_chatbot_daily
 -- Daily chatbot session aggregates. Powers ModelHealth Chatbot Agent tab.
 -- Source: sessions + user_chat_logs (base tables).
@@ -497,7 +464,6 @@ CREATE INDEX IF NOT EXISTS mv_operator_qc_daily_dept  ON mv_operator_qc_daily (d
 -- Containment = session did not escalate AND did not create a ticket.
 -- Sentiment at escalation = avg sentiment score of chat messages in sessions
 --   that escalated to human (from user_chat_logs.sentiment_score).
--- =============================================================================
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_chatbot_daily AS
 SELECT
@@ -553,15 +519,12 @@ GROUP BY
 CREATE UNIQUE INDEX IF NOT EXISTS mv_chatbot_daily_uid   ON mv_chatbot_daily (created_day);
 CREATE INDEX        IF NOT EXISTS mv_chatbot_daily_month ON mv_chatbot_daily (created_month);
 
-
--- =============================================================================
 -- MV 7: mv_sentiment_daily
 -- Daily sentiment agent analytics. Powers ModelHealth Sentiment Agent tab.
 -- Source: sentiment_outputs + tickets + departments (base tables).
 --
 -- Reads only is_current = TRUE rows from sentiment_outputs so we always
 -- get the latest scoring per ticket, not historical reruns.
--- =============================================================================
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_sentiment_daily AS
 SELECT
@@ -595,8 +558,6 @@ CREATE INDEX IF NOT EXISTS mv_sentiment_daily_day   ON mv_sentiment_daily (creat
 CREATE INDEX IF NOT EXISTS mv_sentiment_daily_month ON mv_sentiment_daily (created_month);
 CREATE INDEX IF NOT EXISTS mv_sentiment_daily_dept  ON mv_sentiment_daily (department_name);
 
-
--- =============================================================================
 -- MV 8: mv_feature_daily
 -- Daily feature engineering agent analytics. Powers ModelHealth Feature tab.
 -- Source: feature_outputs + tickets + departments (base tables).
@@ -604,7 +565,6 @@ CREATE INDEX IF NOT EXISTS mv_sentiment_daily_dept  ON mv_sentiment_daily (depar
 -- business_impact, safety_concern, issue_severity, issue_urgency are stored
 -- as keys inside feature_outputs.raw_features JSONB — extracted here.
 -- NULL raw_features → all JSONB extractions return NULL → counted as absent.
--- =============================================================================
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_feature_daily AS
 SELECT
@@ -670,10 +630,7 @@ CREATE INDEX IF NOT EXISTS mv_feature_daily_day   ON mv_feature_daily (created_d
 CREATE INDEX IF NOT EXISTS mv_feature_daily_month ON mv_feature_daily (created_month);
 CREATE INDEX IF NOT EXISTS mv_feature_daily_dept  ON mv_feature_daily (department_name);
 
-
--- =============================================================================
 -- PERSISTENT REFRESH HISTORY LOG
--- =============================================================================
 
 CREATE TABLE IF NOT EXISTS analytics_refresh_log (
     id                  BIGSERIAL    PRIMARY KEY,
@@ -694,13 +651,10 @@ CREATE TABLE IF NOT EXISTS analytics_refresh_log (
 CREATE INDEX IF NOT EXISTS idx_analytics_refresh_log_at
     ON analytics_refresh_log (refreshed_at DESC);
 
-
--- =============================================================================
 -- REFRESH FUNCTION — all 8 MVs in dependency order
 -- Uses CONCURRENT refresh (requires unique indexes created above).
 -- On first-run the indexes are always present because they were created earlier
 -- in this same script. The function is safe to call any number of times.
--- =============================================================================
 
 CREATE OR REPLACE FUNCTION refresh_analytics_mvs()
 RETURNS JSONB AS $$
@@ -796,22 +750,16 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$ LANGUAGE plpgsql;
 
-
--- =============================================================================
 -- INITIAL POPULATE
 -- Called only when this file is first applied. The SELECT refresh_analytics_mvs()
 -- call handles both first-run (non-CONCURRENT) and re-run (CONCURRENT) cases
 -- automatically via the v_has_data check inside the function.
--- =============================================================================
 
 SELECT refresh_analytics_mvs() AS initial_populate_result;
 
-
--- =============================================================================
 -- SCHEDULED AUTO-REFRESH via pg_cron (every 12 hours) — optional
 -- Not available in stock postgres:14-alpine.
 -- Backend refresh loop handles this when pg_cron is absent.
--- =============================================================================
 
 DO $$
 BEGIN

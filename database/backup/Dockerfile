@@ -1,6 +1,6 @@
-# =============================================================================
+
 # InnovaCX — Backup Service Container
-# =============================================================================
+
 # Minimal Alpine image with:
 #   - postgresql14-client : pg_dump, pg_restore, psql
 #   - gnupg               : gpg symmetric encryption
@@ -9,7 +9,7 @@
 # NO cron daemon — scheduling is handled by a pure shell sleep loop
 # in entrypoint.sh. This avoids the setpgid permission error that
 # dcron triggers in unprivileged Docker containers.
-# =============================================================================
+
 
 FROM alpine:3.19
 

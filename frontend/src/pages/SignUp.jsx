@@ -20,25 +20,6 @@ function initiateGoogleOAuth() {
   window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
-// ─── Microsoft OAuth redirect ─────────────────────────────────────────────────
-function initiateMicrosoftOAuth() {
-  const clientId    = import.meta.env.VITE_MICROSOFT_CLIENT_ID;
-  const redirectUri = `${window.location.origin}/auth/callback`;
-  const state       = btoa(JSON.stringify({ provider: "microsoft", nonce: crypto.randomUUID() }));
-  sessionStorage.setItem("oauth_state", state);
-
-  const params = new URLSearchParams({
-    client_id:     clientId,
-    redirect_uri:  redirectUri,
-    response_type: "code",
-    scope:         "openid email profile User.Read",
-    state,
-    response_mode: "query",
-    prompt:        "select_account",
-  });
-  window.location.href = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`;
-}
-
 // ─── Starfield canvas ─────────────────────────────────────────────────────────
 function Starfield() {
   const ref = useRef(null);
@@ -168,7 +149,7 @@ export default function SignUp() {
         </h1>
 
         <p style={{ fontSize: 13.5, color: "rgba(255,255,255,.38)", margin: "0 0 36px", lineHeight: 1.65 }}>
-          Sign up with your Google or Microsoft account.<br />
+          Sign up with your Google account.<br />
           No password required.
         </p>
 
@@ -182,7 +163,7 @@ export default function SignUp() {
             border: "1.5px solid rgba(255,255,255,.12)",
             borderRadius: 13, cursor: "pointer",
             color: "#fff", fontSize: 15, fontWeight: 600,
-            marginBottom: 12,
+            marginBottom: 28,
             transition: "background .2s, border-color .2s",
           }}
           onMouseEnter={(e) => {
@@ -203,38 +184,6 @@ export default function SignUp() {
             <path fill="none" d="M0 0h48v48H0z"/>
           </svg>
           Continue with Google
-        </button>
-
-        {/* Microsoft button */}
-        <button
-          onClick={initiateMicrosoftOAuth}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
-            width: "100%", padding: "14px 20px",
-            background: "rgba(255,255,255,.04)",
-            border: "1.5px solid rgba(255,255,255,.12)",
-            borderRadius: 13, cursor: "pointer",
-            color: "#fff", fontSize: 15, fontWeight: 600,
-            marginBottom: 28,
-            transition: "background .2s, border-color .2s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(255,255,255,.08)";
-            e.currentTarget.style.borderColor = "rgba(255,255,255,.22)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "rgba(255,255,255,.04)";
-            e.currentTarget.style.borderColor = "rgba(255,255,255,.12)";
-          }}
-        >
-          {/* Microsoft SVG logo */}
-          <svg width="20" height="20" viewBox="0 0 23 23">
-            <rect x="1"  y="1"  width="10" height="10" fill="#F25022"/>
-            <rect x="12" y="1"  width="10" height="10" fill="#7FBA00"/>
-            <rect x="1"  y="12" width="10" height="10" fill="#00A4EF"/>
-            <rect x="12" y="12" width="10" height="10" fill="#FFB900"/>
-          </svg>
-          Continue with Microsoft
         </button>
 
         {/* Divider + login link */}

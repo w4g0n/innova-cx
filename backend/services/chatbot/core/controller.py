@@ -154,6 +154,24 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
 
     # AWAIT TICKET ID
     if state == "await_ticket_id":
+        # User may change their mind (e.g., "No, I want to create a new ticket").
+        # Detect a create_ticket intent before attempting ticket ID extraction.
+        if classify_primary_intent(user_text, history) == "create_ticket":
+            secondary = classify_secondary_intent(user_text, history)
+            if secondary == "complaint":
+                transition(session, "complaint")
+                return _handle_complaint(session, user_id, user_text)
+            if secondary == "inquiry":
+                transition(session, "inquiry")
+                return _handle_inquiry(session, user_text)
+            transition(session, "await_secondary_intent")
+            response = (
+                "Of course. To help you better, is this an inquiry (you have a question) "
+                "or a complaint (you are reporting a problem or fault)?"
+            )
+            _log_and_save(session, response, "prompt_ticket_type")
+            return _result(response, "prompt_ticket_type", session_id)
+
         tid = _extract_ticket_id(user_text)
 
         if tid:

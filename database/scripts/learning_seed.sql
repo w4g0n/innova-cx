@@ -1,12 +1,11 @@
--- =============================================================================
 -- Learning Loop Demo Seed Data
 -- Seeds explicit reroute_reference and rescore_reference rows so the learning
 -- tables and record views have realistic data on fresh setup.
--- =============================================================================
 
--- -------------------------------------------------------------------------
+
+
 -- reroute_reference demo rows
--- -------------------------------------------------------------------------
+
 INSERT INTO reroute_reference (
     ticket_id,
     department,
@@ -46,9 +45,9 @@ WHERE NOT EXISTS (
       AND rr.source_type = s.source_type
 );
 
--- -------------------------------------------------------------------------
+
 -- rescore_reference demo rows
--- -------------------------------------------------------------------------
+
 INSERT INTO rescore_reference (
     ticket_id,
     department,

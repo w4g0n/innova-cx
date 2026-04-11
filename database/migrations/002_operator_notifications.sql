@@ -1,15 +1,12 @@
--- =========================================================
 -- Operator Notifications — SQL Triggers & Functions
 -- Categories: Model & AI Health, Ticket Pipeline,
 --             System & Infrastructure, User & Security,
 --             Reports & Operations
--- =========================================================
+
 
 BEGIN;
 
--- ─────────────────────────────────────────────────────────
 -- HELPER: insert a notification for every active operator
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_all_operators(
   p_type      notification_type,
   p_title     TEXT,
@@ -31,16 +28,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
--- =========================================================
 -- 1. MODEL & AI HEALTH
--- =========================================================
 
--- ─────────────────────────────────────────────────────────
 -- 1a. Acceptance rate drops below 70%
 --     Fires on INSERT into ticket_resolution_feedback.
 --     Looks at the last 20 decisions to get a rolling rate.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_acceptance_rate()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -88,12 +80,9 @@ BEGIN
   END IF;
 END $$;
 
-
--- ─────────────────────────────────────────────────────────
 -- 1b. Chatbot escalation rate spikes
 --     Fires on INSERT into sessions.
 --     If >50% of the last 10 sessions were escalated, alert.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_escalation_spike()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -136,13 +125,10 @@ AFTER INSERT ON sessions
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_escalation_spike();
 
-
--- ─────────────────────────────────────────────────────────
 -- 1c. Model confidence drops significantly
 --     Fires on INSERT/UPDATE of tickets when model_confidence
 --     is set. Alerts if the rolling average of the last 10
 --     tickets drops below 65%.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_model_confidence()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -182,15 +168,10 @@ AFTER INSERT OR UPDATE OF model_confidence ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_model_confidence();
 
-
--- =========================================================
 -- 2. TICKET PIPELINE
--- =========================================================
 
--- ─────────────────────────────────────────────────────────
 -- 2a. Open backlog exceeds 10 tickets
 --     Fires on INSERT or when status changes to Open.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_unassigned_backlog()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -225,13 +206,10 @@ AFTER INSERT OR UPDATE OF status ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_unassigned_backlog();
 
-
--- ─────────────────────────────────────────────────────────
 -- 2b. Critical open ticket for too long
 --     Fires on UPDATE — if a Critical ticket remains
 --     Open for more than 15 minutes after creation.
 --     Checked on any ticket update as a lightweight poll.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_critical_unassigned()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -273,13 +251,10 @@ AFTER UPDATE ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_critical_unassigned();
 
-
--- ─────────────────────────────────────────────────────────
 -- 2c. SLA breach rate spikes
 --     Fires on ticket UPDATE when respond_breached or
 --     resolve_breached flips to TRUE.
 --     Alerts if >30% of tickets in the last 24 hours breached.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_sla_breach_rate()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -322,12 +297,9 @@ AFTER UPDATE OF respond_breached, resolve_breached ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_sla_breach_rate();
 
-
--- ─────────────────────────────────────────────────────────
 -- 2d. Ticket volume surge
 --     Fires on INSERT. If more than 10 tickets are created
 --     in the last 2 hours, alert once per hour.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_ticket_volume_surge()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -365,15 +337,10 @@ AFTER INSERT ON tickets
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_ticket_volume_surge();
 
-
--- =========================================================
 -- 3. SYSTEM & INFRASTRUCTURE
--- =========================================================
 
--- ─────────────────────────────────────────────────────────
 -- 3a. Core service flips to warning or critical
 --     Fires on INSERT OR UPDATE of system_service_status.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_service_status()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -401,11 +368,8 @@ AFTER INSERT OR UPDATE ON system_service_status
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_service_status();
 
-
--- ─────────────────────────────────────────────────────────
 -- 3b. Integration goes down
 --     Fires on INSERT OR UPDATE of system_integration_status.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_integration_status()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -432,11 +396,8 @@ AFTER INSERT OR UPDATE ON system_integration_status
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_integration_status();
 
-
--- ─────────────────────────────────────────────────────────
 -- 3c. Queue backlog grows beyond threshold
 --     Fires on INSERT OR UPDATE of system_queue_metrics.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_queue_backlog()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -463,15 +424,10 @@ AFTER INSERT OR UPDATE ON system_queue_metrics
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_queue_backlog();
 
-
--- =========================================================
 -- 4. USER & SECURITY
--- =========================================================
 
--- ─────────────────────────────────────────────────────────
 -- 4a. New user created
 --     Fires on INSERT into users.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_user_created()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -491,11 +447,8 @@ AFTER INSERT ON users
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_user_created();
 
-
--- ─────────────────────────────────────────────────────────
 -- 4b. User deactivated
 --     Fires on UPDATE when is_active flips from TRUE to FALSE.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_user_deactivated()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -517,11 +470,8 @@ AFTER UPDATE OF is_active ON users
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_user_deactivated();
 
-
--- ─────────────────────────────────────────────────────────
 -- 4c. Password reset requested
 --     Fires on INSERT into password_reset_tokens.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_password_reset()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -552,15 +502,10 @@ AFTER INSERT ON password_reset_tokens
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_password_reset();
 
-
--- =========================================================
 -- 5. REPORTS & OPERATIONS
--- =========================================================
 
--- ─────────────────────────────────────────────────────────
 -- 5a. Monthly performance report generated
 --     Fires on INSERT into employee_reports.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_report_ready()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -587,12 +532,9 @@ AFTER INSERT ON employee_reports
 FOR EACH ROW
 EXECUTE FUNCTION notify_operator_report_ready();
 
-
--- ─────────────────────────────────────────────────────────
 -- 5b. Approval request pending too long (> 24 hours)
 --     Fires on UPDATE of approval_requests.
 --     If still Pending after 24h, alert once.
--- ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION notify_operator_approval_overdue()
 RETURNS TRIGGER AS $$
 BEGIN
