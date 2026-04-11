@@ -138,7 +138,7 @@ export default function UserAccountManagement() {
     if (!form.location.trim()) e.location = "Location is required.";
     if (form.role !== "customer" && !form.department.trim()) e.department = "Department is required for non-customer roles.";
     if (!form.password) e.password = "Password is required.";
-    if (form.password && form.password.length < 8) e.password = "Min 8 characters.";
+    if (form.password && form.password.length < 12) e.password = "Min 12 characters.";
     if (form.confirmPassword !== form.password) e.confirmPassword = "Passwords do not match.";
     return e;
   };
@@ -278,7 +278,7 @@ export default function UserAccountManagement() {
                   name="password"
                   value={form.password}
                   onChange={onChange}
-                  placeholder="Minimum 8 characters"
+                  placeholder="Minimum 12 characters"
                 />
                 <button type="button" className="uamEyeBtn" onClick={() => setShowPwd(v => !v)} tabIndex={-1}>
                   {showPwd
