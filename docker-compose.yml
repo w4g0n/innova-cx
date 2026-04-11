@@ -64,6 +64,8 @@ services:
       SUGGESTED_RESOLUTION_USE_MOCK: "${SUGGESTED_RESOLUTION_USE_MOCK:-true}"
       SUGGESTED_RESOLUTION_PIPELINE_ONLY: "${SUGGESTED_RESOLUTION_PIPELINE_ONLY:-true}"
       WATCHFILES_FORCE_POLLING: "false"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
       # DEV_SEED_USERS: default false in production.
       # Set DEV_SEED_USERS=true in .env only for local dev if you need
       # the hardcoded demo accounts auto-created/reset on every startup.
@@ -215,8 +217,10 @@ services:
       - -c
       - sed -i 's/\r$//' /app/docker-entrypoint.sh && exec /bin/sh /app/docker-entrypoint.sh
     environment:
+      FRONTEND_MODE: "preview"
       VITE_API_BASE_URL: "${VITE_API_BASE_URL:-}"
       VITE_ORCHESTRATOR_URL: "${VITE_ORCHESTRATOR_URL:-}"
+      VITE_GOOGLE_CLIENT_ID: "${VITE_GOOGLE_CLIENT_ID:-}"
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "3000"
     volumes:
