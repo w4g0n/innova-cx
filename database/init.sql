@@ -1,13 +1,8 @@
 -- InnovaCX
 
--- Create the application role if it doesn't exist
--- Note: password is set by zzz_least_privilege.sh via shell variable expansion
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'innovacx_app') THEN
-    CREATE ROLE innovacx_app WITH LOGIN;
-  END IF;
-END $$;
+-- NOTE: innovacx_app role + password is created by 000b_app_role.sh
+-- (runs before this file alphabetically) to stay compatible with
+-- PostgreSQL 14, which does not support \getenv.
 
 -- Grant necessary permissions
 GRANT CONNECT ON DATABASE complaints_db TO innovacx_app;
