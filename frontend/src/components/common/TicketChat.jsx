@@ -1,18 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { apiUrl } from "../../config/apiBase";
 import { getCsrfToken } from "../../services/api";
 import { sanitizeText } from "../../pages/customer/sanitize";
 import "./TicketChat.css";
-
-/**
- * TicketChat — shared by CustomerTicketDetails & ComplaintDetails
- *
- * Props:
- *   ticketId   — the ticket ID string
- *   role       — "customer" | "employee"
- *   authHeader — function that returns the fetch headers object
- *   disabled   — (optional) bool — lock input when ticket is resolved
- */
 
 const QUICK_REPLIES_EMPLOYEE = [
   "We have received your complaint and will resolve the issue within 24–48 hours.",
@@ -49,7 +39,7 @@ function Avatar({ role, initials }) {
   );
 }
 
-export default function TicketChat({ ticketId, role, authHeader, disabled, paused = false }) {
+const TicketChat = memo(function TicketChat({ ticketId, role, authHeader, disabled, paused = false }) {
   const [messages, setMessages]       = useState([]);
   const [text, setText]               = useState("");
   const [sending, setSending]         = useState(false);
@@ -57,9 +47,15 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
   const [showQuick, setShowQuick]     = useState(false);
   const [loadingMsgs, setLoadingMsgs] = useState(true);
 
-  const listRef    = useRef(null);
-  const inputRef   = useRef(null);
-  const pollRef    = useRef(null);
+  const listRef       = useRef(null);
+  const inputRef      = useRef(null);
+  const pollRef       = useRef(null);
+  // Store authHeader in a ref so fetchMessages never needs it as a useCallback dep.
+  // Without this, every parent re-render (e.g. modal textarea keystroke) produces a
+  // new authHeader arrow function -> new fetchMessages ref -> useEffect re-fires ->
+  // setLoadingMsgs(true) -> spinner flashes -> flicker on every keypress.
+  const authHeaderRef = useRef(authHeader);
+  useEffect(() => { authHeaderRef.current = authHeader; });
 
   const fetchMessages = useCallback(async (silent = false) => {
     if (!silent) setLoadingMsgs(true);
@@ -67,7 +63,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
       const base = role === "employee" ? "/api/employee/tickets" : "/api/customer/tickets";
       const res = await fetch(
         apiUrl(`${base}/${encodeURIComponent(ticketId)}/messages`),
-        { headers: authHeader() }
+        { headers: authHeaderRef.current() }
       );
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
@@ -77,14 +73,14 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
     } finally {
       if (!silent) setLoadingMsgs(false);
     }
-  }, [ticketId, role, authHeader]);
+  }, [ticketId, role]); // authHeader intentionally omitted - read via authHeaderRef
 
   // Initial load
   useEffect(() => {
     fetchMessages(false);
   }, [fetchMessages]);
 
-  // Polling — pauses while a modal is open so the background doesn't flicker
+  // Polling - pauses while a modal is open
   useEffect(() => {
     if (paused) return;
     pollRef.current = setInterval(() => fetchMessages(true), 5000);
@@ -103,12 +99,11 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
     setSending(true);
     setShowQuick(false);
 
-    // Optimistic update
     const optimistic = {
-      _id:       `opt-${Date.now()}`,
+      _id:        `opt-${Date.now()}`,
       senderRole: role,
-      body:      content,
-      createdAt: new Date().toISOString(),
+      body:       content,
+      createdAt:  new Date().toISOString(),
       _optimistic: true,
     };
     setMessages(prev => [...prev, optimistic]);
@@ -122,7 +117,7 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
         {
           method: "POST",
           headers: {
-            ...authHeader(),
+            ...authHeaderRef.current(),
             "Content-Type": "application/json",
             ...(csrf ? { "X-CSRF-Token": csrf } : {}),
           },
@@ -133,7 +128,6 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
       await fetchMessages(true);
     } catch (e) {
       setError(e.message || "Could not send message.");
-      // Remove optimistic bubble on failure
       setMessages(prev => prev.filter(m => !m._optimistic));
     } finally {
       setSending(false);
@@ -154,7 +148,6 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
 
   return (
     <div className="tc-root">
-      {/* Header */}
       <div className="tc-header">
         <div className="tc-header-left">
           <div className="tc-header-icon">
@@ -167,12 +160,11 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
         </div>
       </div>
 
-      {/* Message list */}
       <div className="tc-list" ref={listRef}>
         {loadingMsgs ? (
           <div className="tc-state-center">
             <div className="tc-spinner"/>
-            <span>Loading conversation…</span>
+            <span>Loading conversation...</span>
           </div>
         ) : messages.length === 0 ? (
           <div className="tc-state-center">
@@ -189,7 +181,6 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
             const isEmp = run[0].senderRole === "employee";
             return (
               <div key={ri} className={`tc-run ${isOwn ? "tc-run--own" : "tc-run--other"}`}>
-
                 <div className="tc-bubbles">
                   {!isOwn && (
                     <span className="tc-sender-label">
@@ -205,7 +196,6 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
                   ))}
                   <span className="tc-time">{formatTime(run[run.length - 1].createdAt)}</span>
                 </div>
-
               </div>
             );
           })
@@ -222,18 +212,12 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
         )}
       </div>
 
-      {/* Quick-reply chips (employee only) */}
       {role === "employee" && showQuick && (
         <div className="tc-quick-tray">
           <div className="tc-quick-label">Quick replies</div>
           <div className="tc-quick-chips">
             {QUICK_REPLIES_EMPLOYEE.map((qr, i) => (
-              <button
-                key={i}
-                type="button"
-                className="tc-quick-chip"
-                onClick={() => send(qr)}
-              >
+              <button key={i} type="button" className="tc-quick-chip" onClick={() => send(qr)}>
                 {qr}
               </button>
             ))}
@@ -241,7 +225,6 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div className="tc-error">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
@@ -253,7 +236,6 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
         </div>
       )}
 
-      {/* Input bar */}
       <div className={`tc-input-bar ${disabled ? "tc-input-bar--disabled" : ""}`}>
         {role === "employee" && !disabled && (
           <button
@@ -277,8 +259,8 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
             disabled
               ? "This ticket is resolved — conversation is closed."
               : role === "customer"
-              ? "Send a follow-up message…"
-              : "Respond to customer…"
+              ? "Send a follow-up message..."
+              : "Respond to customer..."
           }
           value={text}
           disabled={disabled || sending}
@@ -302,4 +284,6 @@ export default function TicketChat({ ticketId, role, authHeader, disabled, pause
       </div>
     </div>
   );
-}
+});
+
+export default TicketChat;

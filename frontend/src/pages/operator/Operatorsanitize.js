@@ -29,7 +29,7 @@ export const ALLOWED_DEPARTMENTS = [
   "IT",
 ];
 
-export const ALLOWED_QC_SECTIONS = ["acceptance", "rescoring", "rerouting"];
+export const ALLOWED_QC_SECTIONS = ["acceptance", "rescoring", "learning"];
 
 export const ALLOWED_MODEL_AGENTS = ["chatbot", "sentiment", "feature"];
 
