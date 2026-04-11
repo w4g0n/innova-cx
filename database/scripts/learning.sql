@@ -1,4 +1,3 @@
--- =============================================================================
 -- Learning Loop Schema
 -- Canonical fresh-setup definitions for:
 --   - reroute_reference
@@ -6,15 +5,13 @@
 --   - suggested_resolution_usage
 --
 -- Existing databases should still apply migrations under database/migrations/.
--- =============================================================================
 
--- -------------------------------------------------------------------------
 -- reroute_reference
 -- Populated from:
 --   1. Manager routing review decisions
 --   2. Manager approval of rerouting requests
 --   3. Operator pipeline-queue department corrections
--- -------------------------------------------------------------------------
+
 CREATE TABLE IF NOT EXISTS reroute_reference (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ticket_id       UUID REFERENCES tickets(id) ON DELETE CASCADE,
@@ -31,12 +28,11 @@ CREATE TABLE IF NOT EXISTS reroute_reference (
 CREATE INDEX IF NOT EXISTS idx_reroute_ref_dept_created
     ON reroute_reference(department, created_at DESC);
 
--- -------------------------------------------------------------------------
 -- rescore_reference
 -- Populated from:
 --   1. Manager approval of rescoring requests
 --   2. Operator pipeline-queue priority corrections
--- -------------------------------------------------------------------------
+
 CREATE TABLE IF NOT EXISTS rescore_reference (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ticket_id           UUID REFERENCES tickets(id) ON DELETE CASCADE,
@@ -71,11 +67,10 @@ FROM reroute_reference rr
 LEFT JOIN tickets t ON t.id = rr.ticket_id
 LEFT JOIN users u ON u.id = rr.decided_by;
 
--- -------------------------------------------------------------------------
 -- suggested_resolution_usage
 -- Populated from employee accept/decline usage of suggested resolutions.
 -- Used by orchestrator and chatbot prompt-learning paths.
--- -------------------------------------------------------------------------
+
 CREATE TABLE IF NOT EXISTS suggested_resolution_usage (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ticket_id        UUID REFERENCES tickets(id) ON DELETE CASCADE,
@@ -112,9 +107,7 @@ FROM rescore_reference rs
 LEFT JOIN tickets t ON t.id = rs.ticket_id
 LEFT JOIN users u ON u.id = rs.decided_by;
 
--- =========================================================================
 -- Trigger 1: department_routing -> reroute_reference
--- =========================================================================
 CREATE OR REPLACE FUNCTION trg_dept_routing_to_reroute_ref()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
@@ -148,9 +141,7 @@ CREATE TRIGGER trg_dept_routing_reroute_ref
     FOR EACH ROW
     EXECUTE FUNCTION trg_dept_routing_to_reroute_ref();
 
--- =========================================================================
 -- Trigger 2: approval_requests -> reroute_reference
--- =========================================================================
 CREATE OR REPLACE FUNCTION trg_approval_rerouting_to_reroute_ref()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
@@ -194,9 +185,7 @@ CREATE TRIGGER trg_approval_rerouting_ref
     FOR EACH ROW
     EXECUTE FUNCTION trg_approval_rerouting_to_reroute_ref();
 
--- =========================================================================
 -- Trigger 3: approval_requests -> rescore_reference
--- =========================================================================
 CREATE OR REPLACE FUNCTION trg_approval_rescoring_to_rescore_ref()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE

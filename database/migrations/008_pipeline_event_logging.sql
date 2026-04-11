@@ -1,11 +1,9 @@
--- =========================================================
 -- Migration 008: Pipeline + Application Event Logging
--- =========================================================
+
 -- Adds:
 --   1) pipeline_executions     (one row per orchestrator run)
 --   2) pipeline_stage_events   (one row per stage event: start/output/error)
 --   3) application_event_log   (backend/orchestrator operational events)
--- =========================================================
 
 CREATE TABLE IF NOT EXISTS pipeline_executions (
     id             UUID PRIMARY KEY,

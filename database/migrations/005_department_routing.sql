@@ -1,8 +1,6 @@
--- ============================================================
 -- Migration 005: department_routing
 -- Logs every routing decision (confident and non-confident)
 -- Also creates department_routing_feedback for model training
--- ============================================================
 
 CREATE TABLE IF NOT EXISTS department_routing (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,11 +1,10 @@
--- =========================================================
 -- Migration 009: Pipeline Queue Management
--- =========================================================
+
 -- Adds:
 --   1) pipeline_queue_status enum
 --   2) pipeline_queue table (persisted queue with retry/hold logic)
 --   3) pipeline_held notification_type value
--- =========================================================
+
 
 -- Add pipeline_held to the notification_type enum
 ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'pipeline_held';

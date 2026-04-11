@@ -1,6 +1,5 @@
--- =========================================================
 -- Migration 001: Agent Execution Logging Tables
--- =========================================================
+
 -- Fully idempotent — safe to re-run on any database.
 --
 -- Updated schema: matches what init.sql seed inserts expect.
@@ -9,11 +8,11 @@
 --                infra_metadata
 -- ENUMs are created here so they exist before init.sql seeds
 -- try to cast values to them.
--- =========================================================
 
--- ---------------------------------------------------------
+
+
 -- ENUMs (idempotent)
--- ---------------------------------------------------------
+
 DO $$ BEGIN
     CREATE TYPE agent_name_type AS ENUM (
         'sentiment', 'priority', 'routing', 'sla', 'resolution', 'feature'
@@ -32,11 +31,11 @@ DO $$ BEGIN
     );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- ---------------------------------------------------------
+
 -- model_execution_log
 -- One row per agent step per pipeline execution.
 -- Used by analytics materialized views for Model Health.
--- ---------------------------------------------------------
+
 CREATE TABLE IF NOT EXISTS model_execution_log (
     id                  UUID             PRIMARY KEY DEFAULT gen_random_uuid(),
     execution_id        UUID             NOT NULL DEFAULT gen_random_uuid(),
@@ -65,10 +64,10 @@ CREATE INDEX IF NOT EXISTS idx_mel_created_at   ON model_execution_log(created_a
 CREATE INDEX IF NOT EXISTS idx_mel_status       ON model_execution_log(status);
 CREATE INDEX IF NOT EXISTS idx_mel_started_at   ON model_execution_log(started_at DESC);
 
--- ---------------------------------------------------------
+
 -- agent_output_log
 -- Full JSON capture of each agent's input/output state.
--- ---------------------------------------------------------
+
 CREATE TABLE IF NOT EXISTS agent_output_log (
     id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     execution_id      UUID        NOT NULL,
@@ -87,14 +86,14 @@ CREATE INDEX IF NOT EXISTS idx_aol_execution_id ON agent_output_log(execution_id
 CREATE INDEX IF NOT EXISTS idx_aol_ticket_id    ON agent_output_log(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_aol_agent_name   ON agent_output_log(agent_name);
 CREATE INDEX IF NOT EXISTS idx_aol_created_at   ON agent_output_log(created_at);
--- ---------------------------------------------------------
+
 -- Agent-specific output tables
 -- Created here (inside init.sql via \ir) so they exist
 -- before the extended seed inserts in init.sql run.
 -- Column names match exactly what the seed INSERTs expect.
 -- 000_analytics_prerequisites.sql uses IF NOT EXISTS so
 -- it is safe to re-run and will be a no-op on these tables.
--- ---------------------------------------------------------
+
 
 -- ticket_resolution_feedback columns: add model_version + confidence_at_time
 -- Some clean setups do not create ticket_resolution_feedback anymore, so guard

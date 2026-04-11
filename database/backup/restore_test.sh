@@ -1,7 +1,7 @@
 #!/bin/sh
-# =============================================================================
+
 # InnovaCX — Restore Test (Weekly)
-# =============================================================================
+
 # Purpose:
 #   Verify that the most recent encrypted backup can actually be decrypted
 #   and restored without errors. Uses an ISOLATED test database that is
@@ -26,13 +26,13 @@
 #
 # IMPORTANT:
 #   This script NEVER touches the production database (complaints_db).
-# =============================================================================
+
 
 set -e
 
-# ---------------------------------------------------------------------------
+
 # 1. Validate required env vars
-# ---------------------------------------------------------------------------
+
 : "${POSTGRES_USER:?POSTGRES_USER must be set}"
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
 : "${APP_DB_USER:?APP_DB_USER must be set}"
@@ -74,9 +74,9 @@ trap cleanup EXIT
 log "========================================================"
 log "Restore test starting"
 
-# ---------------------------------------------------------------------------
+
 # 2. Find the most recent backup file
-# ---------------------------------------------------------------------------
+
 LATEST_BACKUP=$(find "${BACKUP_DIR}" -name "*.dump.gz.gpg" -type f | sort | tail -1)
 
 if [ -z "${LATEST_BACKUP}" ]; then
@@ -86,9 +86,9 @@ fi
 
 log "using backup file: ${LATEST_BACKUP}"
 
-# ---------------------------------------------------------------------------
+
 # 3. Decrypt and decompress to a temp file
-# ---------------------------------------------------------------------------
+
 log "decrypting and decompressing..."
 
 gpg \
@@ -109,9 +109,9 @@ fi
 
 log "decryption successful. Temp dump size: $(du -sh "${TEMP_DUMP}" | cut -f1)"
 
-# ---------------------------------------------------------------------------
+
 # 4. Create the isolated test database (requires superuser)
-# ---------------------------------------------------------------------------
+
 log "creating isolated test database '${TEST_DB}'..."
 
 export PGPASSWORD="${POSTGRES_PASSWORD}"
@@ -136,12 +136,12 @@ psql \
 
 log "test database created."
 
-# ---------------------------------------------------------------------------
+
 # 5. Restore into the isolated test database (requires superuser)
 #    --no-privileges: skip GRANT/REVOKE (innovacx_app role may not exist here)
 #    --no-owner: skip SET ROLE
 #    --exit-on-error: fail fast on any restore error
-# ---------------------------------------------------------------------------
+
 log "running pg_restore into '${TEST_DB}'..."
 
 pg_restore \
@@ -159,13 +159,13 @@ unset PGPASSWORD
 
 log "pg_restore completed without errors."
 
-# ---------------------------------------------------------------------------
+
 # 6. Structural integrity verification
 #    Runs as POSTGRES_USER (superuser/owner of restored tables).
 #    Using APP_DB_USER here would fail with "permission denied" because
 #    --no-privileges on pg_restore means no GRANTs were applied to the
 #    test database — only the owner (innovacx_admin) can SELECT.
-# ---------------------------------------------------------------------------
+
 log "running integrity verification query..."
 
 export PGPASSWORD="${POSTGRES_PASSWORD}"

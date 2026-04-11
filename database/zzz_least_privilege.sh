@@ -1,5 +1,5 @@
 #!/bin/bash
-# =============================================================================
+
 # InnovaCX — Role Creation with Password Injection
 # File: database/zzz_least_privilege.sh
 #
@@ -32,13 +32,13 @@
 # IDEMPOTENT:
 #   Uses CREATE ROLE IF NOT EXISTS logic via DO $$ guards.
 #   Safe to re-run on an already-initialised volume.
-# =============================================================================
+
 
 set -e
 
 echo "==> [zzz_least_privilege.sh] Validating role password environment variables..."
 
-# ── Validate all required passwords are set ──────────────────────────────────
+# Validate all required passwords are set
 fail=0
 for varname in APP_DB_PASSWORD READONLY_DB_PASSWORD TEST_DB_PASSWORD; do
     if [ -z "${!varname}" ]; then
@@ -57,12 +57,12 @@ fi
 
 echo "==> [zzz_least_privilege.sh] All passwords present. Creating roles..."
 
-# ── Helper: run a SQL statement as the superuser ─────────────────────────────
+# Helper: run a SQL statement as the superuser 
 run_sql() {
     psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"
 }
 
-# ── 1. innovacx_app — runtime application role ───────────────────────────────
+# 1. innovacx_app — runtime application role
 run_sql "
 DO \$\$
 BEGIN
@@ -83,7 +83,7 @@ run_sql "ALTER ROLE innovacx_app PASSWORD '${APP_PW_ESCAPED}';"
 
 echo "==> [zzz_least_privilege.sh] innovacx_app: OK"
 
-# ── 2. innovacx_readonly — read-only reporting role ──────────────────────────
+# 2. innovacx_readonly — read-only reporting role
 run_sql "
 DO \$\$
 BEGIN
@@ -102,7 +102,7 @@ run_sql "ALTER ROLE innovacx_readonly PASSWORD '${READONLY_PW_ESCAPED}';"
 
 echo "==> [zzz_least_privilege.sh] innovacx_readonly: OK"
 
-# ── 3. innovacx_test — test environment role ─────────────────────────────────
+# 3. innovacx_test — test environment role
 run_sql "
 DO \$\$
 BEGIN

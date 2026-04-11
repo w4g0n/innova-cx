@@ -18,13 +18,13 @@ done
 
 echo "==> Postgres is ready."
 
-# ---------------------------------------------------------------------------
+
 # Step 0: All numbered migrations in order.
 #         init.sql covers the base schema; migrations add tables/columns that
 #         analytics_mvs.sql depends on (e.g. suggested_resolution_usage,
 #         pipeline_executions, pipeline_stage_events).
 #         Safe to re-run — every file uses CREATE TABLE/INDEX IF NOT EXISTS.
-# ---------------------------------------------------------------------------
+
 for migration in \
     001_agent_execution_logs \
     002_ticket_messages \
@@ -52,25 +52,25 @@ for migration in \
     fi
 done
 
-# ---------------------------------------------------------------------------
+
 # Step 1: Prerequisites (ENUMs, missing columns, agent output tables).
 #         Safe to re-run — all statements use IF NOT EXISTS / DO $$ guards.
-# ---------------------------------------------------------------------------
+
 run_sql \
     "analytics prerequisites (ENUMs, missing columns, agent output tables)" \
     "/docker-entrypoint-initdb.d/scripts/000_analytics_prerequisites.sql"
 
-# ---------------------------------------------------------------------------
+
 # Step 2: Materialized views + refresh function.
 #         Safe to re-run — every CREATE uses IF NOT EXISTS / OR REPLACE.
-# ---------------------------------------------------------------------------
+
 run_sql \
     "analytics materialized views" \
     "/docker-entrypoint-initdb.d/scripts/analytics_mvs.sql"
 
-# ---------------------------------------------------------------------------
+
 # Step 3: Refresh all materialized views with the full seed data.
-# ---------------------------------------------------------------------------
+
 echo "==> Refreshing analytics materialized views..."
 psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT refresh_analytics_mvs();" \
   || { echo "ERROR: MV refresh failed"; exit 1; }
