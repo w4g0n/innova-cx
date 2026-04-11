@@ -279,7 +279,32 @@ def _db_set_processing(queue_id: str, execution_id: str) -> None:
             )
 
 
-def _db_set_completed(queue_id: str) -> None:
+def _db_finalize_execution(
+    execution_id: str | None,
+    *,
+    status: str,
+    error_message: str | None = None,
+) -> None:
+    if not execution_id:
+        return
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE pipeline_executions
+                SET status = %s,
+                    completed_at = now(),
+                    error_message = CASE
+                        WHEN %s IS NULL OR %s = '' THEN error_message
+                        ELSE %s
+                    END
+                WHERE id = %s::uuid
+                """,
+                (status, error_message, error_message, error_message, execution_id),
+            )
+
+
+def _db_set_completed(queue_id: str, execution_id: str | None) -> None:
     with db_connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -299,6 +324,7 @@ def _db_set_completed(queue_id: str) -> None:
                 """,
                 (queue_id,),
             )
+    _db_finalize_execution(execution_id, status="success")
 
 
 def _db_execution_is_current(queue_id: str, execution_id: str) -> bool:
@@ -364,6 +390,7 @@ def _categorise_failure(reason: str) -> str:
 
 def _db_set_held(
     queue_id: str,
+    execution_id: str | None,
     failed_stage: str,
     failed_at_step: int,
     failure_reason: str,
@@ -403,6 +430,7 @@ def _db_set_held(
                     queue_id,
                 ),
             )
+    _db_finalize_execution(execution_id, status="held", error_message=failure_reason)
 
 
 def _db_retry_to_bottom(queue_id: str) -> None:
@@ -759,16 +787,19 @@ def _db_requeue_orphaned_processing_items() -> int:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id::text
+                SELECT id::text, execution_id::text
                 FROM pipeline_queue
                 WHERE status = 'processing'
                 ORDER BY started_at ASC NULLS LAST, entered_at ASC
                 FOR UPDATE
                 """
             )
-            rows = [queue_id for (queue_id,) in (cur.fetchall() or [])]
+            rows = cur.fetchall() or []
             if not rows:
                 return 0
+
+            queue_ids = [queue_id for (queue_id, _execution_id) in rows]
+            execution_ids = [execution_id for (_queue_id, execution_id) in rows if execution_id]
 
             # Clear the recovered rows out of the active ordering first so they
             # do not count themselves when we assign fresh queue positions.
@@ -785,10 +816,25 @@ def _db_requeue_orphaned_processing_items() -> int:
                     failure_reason = 'Recovered after orchestrator restart'
                 WHERE id = ANY(%s::uuid[])
                 """,
-                (rows,),
+                (queue_ids,),
             )
 
-            for queue_id in rows:
+            if execution_ids:
+                cur.execute(
+                    """
+                    UPDATE pipeline_executions
+                    SET status = 'interrupted',
+                        completed_at = COALESCE(completed_at, now()),
+                        error_message = COALESCE(
+                            error_message,
+                            'Recovered after orchestrator restart'
+                        )
+                    WHERE id = ANY(%s::uuid[])
+                    """,
+                    (execution_ids,),
+                )
+
+            for queue_id, _execution_id in rows:
                 new_pos = _next_queue_position(cur)
                 cur.execute(
                     """
@@ -1101,7 +1147,7 @@ def release_held_ticket(queue_id: str, corrections: dict) -> bool:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT status, retry_count, failed_stage, failed_at_step, ticket_id
+                    SELECT status, retry_count, failed_stage, failed_at_step, ticket_id, execution_id::text
                     FROM pipeline_queue
                     WHERE id = %s::uuid
                     """,
@@ -1110,7 +1156,7 @@ def release_held_ticket(queue_id: str, corrections: dict) -> bool:
                 row = cur.fetchone()
                 if not row:
                     return False
-                status, retry_count, failed_stage, failed_at_step, ticket_id = row
+                status, retry_count, failed_stage, failed_at_step, ticket_id, execution_id = row
                 if status != "held":
                     return False
 
@@ -1219,6 +1265,10 @@ def release_held_ticket(queue_id: str, corrections: dict) -> bool:
                         "queue | operator_release_completed queue_id=%s stage=%s retries=%d",
                         queue_id, failed_stage, retry_count,
                     )
+                    _db_finalize_execution(
+                        execution_id,
+                        status="success",
+                    )
                     return True
 
         if retry_count >= MAX_RETRIES:
@@ -1303,6 +1353,11 @@ def rerun_queue_item(queue_id: str) -> bool:
                     """,
                     (new_pos, queue_id),
                 )
+        _db_finalize_execution(
+            old_exec_id,
+            status="cancelled",
+            error_message="Execution superseded by operator rerun",
+        )
         logger.info("queue | rerun queued queue_id=%s", queue_id)
         return True
     except Exception as exc:
@@ -1372,6 +1427,11 @@ async def _process_queue_item(item: dict) -> None:
     )
 
     if fail_stage == "__cancelled__":
+        _db_finalize_execution(
+            execution_id,
+            status="cancelled",
+            error_message="Execution superseded by rerun",
+        )
         logger.info(
             "queue_worker | cancelled queue_id=%s ticket=%s exec=%s",
             queue_id, ticket_code or ticket_id, execution_id,
@@ -1389,12 +1449,18 @@ async def _process_queue_item(item: dict) -> None:
                 queue_id,
                 f"Permanently held after {MAX_RETRIES} retries. Last failure: {fail_reason}",
             )
+            _db_finalize_execution(
+                execution_id,
+                status="held",
+                error_message=fail_reason,
+            )
             _notify_operator(ticket_id, ticket_code, fail_stage, queue_id)
         else:
             # Save checkpoint (state as it was just entering the failed stage)
             # We re-build checkpoint from the state at the failure point minus mock outputs
             _db_set_held(
                 queue_id,
+                execution_id,
                 fail_stage,
                 fail_step,
                 fail_reason,
@@ -1417,6 +1483,7 @@ async def _process_queue_item(item: dict) -> None:
             )
             _db_set_held(
                 queue_id,
+                execution_id,
                 "ReviewAgent",
                 12,
                 review_reason,
@@ -1427,7 +1494,7 @@ async def _process_queue_item(item: dict) -> None:
                 queue_id, ticket_code or ticket_id, execution_id,
             )
         else:
-            _db_set_completed(queue_id)
+            _db_set_completed(queue_id, execution_id)
             logger.info(
                 "queue_worker | completed queue_id=%s ticket=%s exec=%s",
                 queue_id, ticket_code or ticket_id, execution_id,
@@ -1514,7 +1581,14 @@ async def rerun_failed_stage(queue_id: str) -> dict:
         return {"ok": True, "queue_id": queue_id, "stage": failed_stage, "succeeded": True}
     else:
         # Still failing — update failure history, keep held
-        _db_set_held(queue_id, failed_stage, failed_at_step, reason, checkpoint_state)
+        _db_set_held(
+            queue_id,
+            execution_id,
+            failed_stage,
+            failed_at_step,
+            reason,
+            checkpoint_state,
+        )
         logger.warning("queue | rerun_stage still failing stage=%s queue_id=%s", failed_stage, queue_id)
         return {"ok": True, "queue_id": queue_id, "stage": failed_stage, "succeeded": False, "reason": reason}
 
