@@ -4993,7 +4993,13 @@ def get_manager_kpis(user: Dict[str, Any] = Depends(require_manager)):
 
 @api.get("/manager/approvals")
 def get_approvals(user: Dict[str, Any] = Depends(require_manager)):
-    dept_id = user.get("department_id")
+    dept_id   = user.get("department_id")
+    manager_id = user.get("id")
+
+    # Match on either:
+    #   1. The request was explicitly addressed to this manager (requested_to_user_id), OR
+    #   2. The ticket currently lives in this manager's department
+    # This ensures requests don't disappear when a ticket has no dept or was rerouted.
     if dept_id:
         approvals = fetch_all("""
 SELECT
@@ -5015,9 +5021,9 @@ FROM approval_requests ar
 LEFT JOIN tickets t ON ar.ticket_id = t.id
 LEFT JOIN user_profiles up ON ar.submitted_by_user_id = up.user_id
 LEFT JOIN user_profiles du ON ar.decided_by_user_id = du.user_id
-WHERE t.department_id = %s
+WHERE (ar.requested_to_user_id = %s OR t.department_id = %s)
 ORDER BY ar.submitted_at DESC;
-""", (dept_id,))
+""", (manager_id, dept_id))
     else:
         approvals = fetch_all("""
 SELECT
@@ -5039,8 +5045,9 @@ FROM approval_requests ar
 LEFT JOIN tickets t ON ar.ticket_id = t.id
 LEFT JOIN user_profiles up ON ar.submitted_by_user_id = up.user_id
 LEFT JOIN user_profiles du ON ar.decided_by_user_id = du.user_id
+WHERE ar.requested_to_user_id = %s
 ORDER BY ar.submitted_at DESC;
-""")
+""", (manager_id,))
 
     result = []
 
