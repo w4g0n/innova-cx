@@ -403,13 +403,6 @@ export default function ComplaintTrends() {
         {(() => {
           const ALLOWED_TIME_RANGES = ["Last 7 Days", "Last 30 Days", "This Month", "Last 3 Months", "Last 6 Months", "Last 12 Months"];
           const ALLOWED_PRIORITIES_TREND = ["All Priorities", "Critical", "High", "Medium", "Low"];
-          const allDeptOptions = [
-            "All Departments",
-            ...(deptOptions.length > 0
-              ? deptOptions
-              : ["Safety & Security", "HR", "IT", "Leasing", "Maintenance", "Legal & Compliance", "Facilities Management"]
-            ),
-          ];
           return (
             <section className="filtersRow">
               <div className="filtersLeft">
