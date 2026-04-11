@@ -7283,7 +7283,7 @@ def get_operator_complaint_detail(
 # Operator – User Management
 _VALID_ROLES    = {"customer", "employee", "manager", "operator"}
 _VALID_STATUSES = {"active", "inactive"}
-_SAFE_TEXT_RE   = _re.compile(r'^[\w\s\-\.,\'\+\(\)@/]+$', _re.UNICODE)
+_SAFE_TEXT_RE   = _re.compile(r'^[\w\s\-\.,\'\+\(\)@/&]+$', _re.UNICODE)
 
 
 def _sanitize_text(value: str, field: str, max_len: int = 120) -> str:

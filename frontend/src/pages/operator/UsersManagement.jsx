@@ -554,8 +554,8 @@ export default function UsersManagement() {
     }
 
     if (!create.password) e.password = "Password is required.";
-    if (create.password && create.password.length < 8) {
-      e.password = "Min 8 characters.";
+    if (create.password && create.password.length < 12) {
+      e.password = "Min 12 characters.";
     }
     if (create.confirmPassword !== create.password) {
       e.confirmPassword = "Passwords do not match.";
@@ -1116,7 +1116,7 @@ export default function UsersManagement() {
                     name="password"
                     value={create.password}
                     onChange={onCreateChange}
-                    placeholder="Minimum 8 characters"
+                    placeholder="Minimum 12 characters"
                   />
                   <button
                     type="button"
