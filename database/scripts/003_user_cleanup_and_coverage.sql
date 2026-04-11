@@ -1,4 +1,3 @@
--- =============================================================================
 -- InnovaCX — User Cleanup & Coverage Migration
 -- File: database/scripts/003_user_cleanup_and_coverage.sql
 --
@@ -12,14 +11,14 @@
 -- Command:
 --   docker exec -i innovacx-db psql -U innovacx_admin -d complaints_db \
 --     < database/scripts/003_user_cleanup_and_coverage.sql
--- =============================================================================
+
 
 BEGIN;
 
 
--- =============================================================================
+
 -- STEP 1 — Rename operator email domain
--- =============================================================================
+
 
 UPDATE users
 SET email = 'operator@innovacx.net'
@@ -33,9 +32,9 @@ SET message = REPLACE(message, 'operator@innova.cx', 'operator@innovacx.net')
 WHERE message LIKE '%operator@innova.cx%';
 
 
--- =============================================================================
+
 -- STEP 2 — Delete orphan innova.cx duplicate users (no tickets attached)
--- =============================================================================
+
 
 DELETE FROM users
 WHERE email LIKE '%@innova.cx'
@@ -46,10 +45,10 @@ WHERE email LIKE '%@innova.cx'
   );
 
 
--- =============================================================================
+
 -- STEP 3 — Lena & Talya coverage tickets
 -- Uses the exact same column list as seed_analytics_extra.sql (27 columns).
--- =============================================================================
+
 
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, status, priority,
@@ -147,16 +146,16 @@ VALUES
 ON CONFLICT (ticket_code) DO NOTHING;
 
 
--- =============================================================================
+
 -- STEP 4 — Refresh analytics MVs
--- =============================================================================
+
 
 SELECT refresh_analytics_mvs();
 
 
--- =============================================================================
+
 -- VERIFICATION
--- =============================================================================
+
 
 DO $$
 DECLARE

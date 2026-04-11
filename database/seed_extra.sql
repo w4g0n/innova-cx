@@ -1,18 +1,15 @@
--- =============================================================================
 -- seed_extra.sql  — 5-10 extra rows per table
 -- Run AFTER init.sql (alphabetically between init.sql and zzz_analytics_mvs.sh).
 -- Only inserts into tables created by init.sql. ML pipeline seed data (sections
 -- 28-35: model_execution_log, *_outputs, agent_output_log) is in
 -- zzz_seed_analytics.sql, which runs after zzz_analytics_mvs.sh creates those tables.
 -- Idempotent: uses DO blocks + ON CONFLICT DO NOTHING where possible.
--- =============================================================================
 
 BEGIN;
 
--- =============================================================================
 -- 1. DEPARTMENTS  (reference table — 7 rows already in init.sql seed;
 --    we add extra to give routing_outputs & tickets more variety)
--- =============================================================================
+
 INSERT INTO departments (name) VALUES
   ('Facilities Management'),
   ('Legal and Compliance'),
@@ -23,9 +20,8 @@ INSERT INTO departments (name) VALUES
   ('IT')
 ON CONFLICT (name) DO NOTHING;
 
--- =============================================================================
 -- 2. USERS  (18 seed users: 3 customers, 1 operator, 7 managers, 7 employees)
--- =============================================================================
+
 INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secret) VALUES
   ('customer1@innovacx.net',  crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
   ('customer2@innovacx.net',  crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
@@ -47,9 +43,8 @@ INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secr
   ('sarah@innovacx.net',      crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL)
 ON CONFLICT (email) DO UPDATE SET mfa_enabled = FALSE, totp_secret = NULL;
 
--- =============================================================================
 -- 3. USER_PROFILES
--- =============================================================================
+
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
 SELECT u.id, 'Dr. Farhad Al-Rashidi', '+97155000001', 'Dubai',
        (SELECT id FROM departments WHERE name='Facilities Management'), NULL, 'Department Manager'
@@ -168,9 +163,8 @@ SELECT u.id, 'Customer Three', '+971500000003', 'Sharjah'
 FROM users u WHERE u.email='customer3@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
--- =============================================================================
 -- 4. USER_PREFERENCES
--- =============================================================================
+
 INSERT INTO user_preferences (user_id, language, dark_mode, default_complaint_type, email_notifications, in_app_notifications, status_alerts)
 SELECT u.id, 'English', FALSE, 'General', TRUE, TRUE, TRUE
 FROM users u
@@ -186,9 +180,8 @@ WHERE user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net');
 UPDATE user_preferences SET email_notifications = FALSE
 WHERE user_id = (SELECT id FROM users WHERE email = 'yousef@innovacx.net');
 
--- =============================================================================
 -- 5. PASSWORD_RESET_TOKENS
--- =============================================================================
+
 INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
 SELECT (SELECT id FROM users WHERE email='customer1@innovacx.net'),
        crypt('reset-token-cust1-abc123', gen_salt('bf', 10)),
@@ -214,12 +207,10 @@ WHERE NOT EXISTS (
   SELECT 1 FROM password_reset_tokens WHERE user_id=(SELECT id FROM users WHERE email='sarah@innovacx.net') AND used_at IS NULL
 );
 
--- =============================================================================
 -- 6. TICKETS  (20+ rows spanning all statuses, priorities, departments)
--- =============================================================================
 -- All tickets inserted with ON CONFLICT (ticket_code) DO NOTHING so safe to re-run.
 
--- ── Active / open tickets (current month, March 2026) ──────────────────────
+-- Active / open tickets (current month, March 2026)
 INSERT INTO tickets (
   ticket_code, subject, details, ticket_type, status, priority,
   asset_type, department_id, created_by_user_id, assigned_to_user_id,
@@ -383,7 +374,7 @@ VALUES
  'Review CCTV footage and issue formal removal notice; increase patrol frequency.',
  FALSE, FALSE),
 
--- ── Historical resolved tickets (past 12 months for analytics) ────────────
+-- Historical resolved tickets (past 12 months for analytics)
 -- 11
 ('CX-H001', 'Gas leak alarm – Main kitchen',
  'Gas sensor triggered in building kitchen. Evacuated area as precaution.',
@@ -610,14 +601,12 @@ VALUES
  FALSE, TRUE)
 ,
 
--- ---------------------------------------------------------------------------
 -- CX-LT001 to CX-LT005: Lena & Talya coverage tickets
 -- Gives Lena: Jan 2026, Apr 2026 real MV data
 -- Gives Talya: Jan 2026, Mar 2026, Apr 2026 real MV data
 -- These ensure the demo months have actual ticket activity rather than
 -- zero-activity reports for these employees.
 -- ON CONFLICT (ticket_code) DO NOTHING makes this safe to re-run.
--- ---------------------------------------------------------------------------
 
 -- CX-LT001: Lena — January 2026
 ('CX-LT001', 'Network switch intermittent failures – HR floor',
@@ -705,9 +694,7 @@ WHERE ticket_code IN ('CX-H001','CX-H002','CX-H003','CX-H004','CX-H005',
                       'CX-LT001','CX-LT002','CX-LT003','CX-LT004','CX-LT005')
   AND resolved_at IS NULL;
 
--- =============================================================================
 -- 7. TICKET_ATTACHMENTS
--- =============================================================================
 INSERT INTO ticket_attachments (ticket_id, file_name, file_url, uploaded_by, uploaded_at)
 SELECT t.id, v.fname, v.furl,
   (SELECT id FROM users WHERE email = v.email),
@@ -779,9 +766,7 @@ WHERE NOT EXISTS (
   SELECT 1 FROM ticket_attachments ta WHERE ta.ticket_id = t.id AND ta.file_name = v.fname
 );
 
--- =============================================================================
 -- 8. TICKET_UPDATES  (status transitions, notes, escalations)
--- =============================================================================
 INSERT INTO ticket_updates (ticket_id, author_user_id, update_type, message, from_status, to_status, meta, created_at)
 SELECT
   (SELECT id FROM tickets WHERE ticket_code = v.tc),
@@ -899,9 +884,7 @@ WHERE NOT EXISTS (
     AND tu.created_at = v.ts::timestamptz
 );
 
--- =============================================================================
 -- 9. TICKET_WORK_STEPS
--- =============================================================================
 INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, notes, occurred_at)
 SELECT
   (SELECT id FROM tickets WHERE ticket_code = v.tc),
@@ -982,9 +965,7 @@ WHERE NOT EXISTS (
     AND tws.step_no = v.step_no
 );
 
--- =============================================================================
 -- 10. SUGGESTED_RESOLUTION_USAGE
--- =============================================================================
 INSERT INTO suggested_resolution_usage (
   ticket_id, employee_user_id, decision, department,
   suggested_text, final_text, used
@@ -1052,9 +1033,7 @@ WHERE NOT EXISTS (
     AND sru.final_text = fb.final
 );
 
--- =============================================================================
 -- 11. APPROVAL_REQUESTS
--- =============================================================================
 INSERT INTO approval_requests (
   request_code, ticket_id, request_type, current_value, requested_value,
   request_reason, submitted_by_user_id, submitted_at, status,
@@ -1111,9 +1090,7 @@ FROM (VALUES
 JOIN tickets t ON t.ticket_code = r.tc
 ON CONFLICT (request_code) DO NOTHING;
 
--- =============================================================================
 -- 12. CHAT_CONVERSATIONS
--- =============================================================================
 INSERT INTO chat_conversations (id, customer_user_id, channel, created_at, ended_at, status)
 VALUES
   ('aaaaaaaa-0001-0001-0001-000000000001'::uuid,
@@ -1178,9 +1155,7 @@ VALUES
    'web','2025-05-22 10:00:00+00','2025-05-22 10:30:00+00','closed')
 ON CONFLICT (id) DO NOTHING;
 
--- =============================================================================
 -- 13. CHAT_MESSAGES
--- =============================================================================
 INSERT INTO chat_messages (conversation_id, sender_type, sender_user_id, message_text, created_at, intent, category, sentiment_score, escalation_flag, linked_ticket_id)
 VALUES
   -- Conv 1: CX-A001 escalation
@@ -1298,9 +1273,7 @@ VALUES
 
 ON CONFLICT DO NOTHING;
 
--- =============================================================================
 -- 14. SESSIONS
--- =============================================================================
 -- Backfill the 2 sessions inserted by init.sql (analytics cols weren't available yet)
 UPDATE public.sessions SET
     bot_model_version  = 'chatbot-v2.1',
@@ -1468,9 +1441,7 @@ VALUES
 
 ON CONFLICT DO NOTHING;
 
--- =============================================================================
 -- 15. USER_CHAT_LOGS
--- =============================================================================
 INSERT INTO user_chat_logs (user_id, session_id, message, intent_detected, aggression_flag, aggression_score, created_at, sentiment_score, category, response_time_ms, ticket_id)
 SELECT
   (SELECT id FROM users WHERE email = v.email),
@@ -1554,9 +1525,7 @@ WHERE NOT EXISTS (
   LIMIT 1
 );
 
--- =============================================================================
 -- 16. BOT_RESPONSE_LOGS
--- =============================================================================
 INSERT INTO bot_response_logs (response, response_type, state_at_time, sql_query_used, kb_match_score, created_at, ticket_id)
 VALUES
   ('This sounds critical. I am escalating to an operator immediately.',
@@ -1630,9 +1599,7 @@ VALUES
 
 ON CONFLICT DO NOTHING;
 
--- =============================================================================
 -- 17. NOTIFICATIONS
--- =============================================================================
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
   (SELECT id FROM users WHERE email = v.email),
@@ -1777,9 +1744,7 @@ WHERE NOT EXISTS (
     AND n.title = v.title
 );
 
--- =============================================================================
 -- 18-22. EMPLOYEE REPORTS (for Ahmed, Maria, Bilal, Yousef, Khalid, Sara, Omar, Fatima)
--- =============================================================================
 INSERT INTO employee_reports (report_code, employee_user_id, month_label, subtitle, kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response, model_version, generated_by, period_start, period_end)
 SELECT code, emp_id, label, sub, rating, resolved, sla, avg_resp, 'report-gen-v1.0', 'system', ps::date, pe::date
 FROM (
@@ -2092,9 +2057,7 @@ JOIN (VALUES
 ) AS d(report_code, note) ON d.report_code = er.report_code
 WHERE NOT EXISTS (SELECT 1 FROM employee_report_notes en WHERE en.report_id = er.id);
 
--- =============================================================================
 -- 23. SYSTEM_SERVICE_STATUS
--- =============================================================================
 INSERT INTO system_service_status (name, status, severity, note, checked_at)
 VALUES
   ('API Gateway',         'Healthy',   'ok',       'Normal latency — p99 under 120ms',          now()),
@@ -2120,9 +2083,7 @@ VALUES
 ON CONFLICT (name) DO UPDATE
   SET status=EXCLUDED.status, severity=EXCLUDED.severity, note=EXCLUDED.note, checked_at=now();
 
--- =============================================================================
 -- 24. SYSTEM_INTEGRATION_STATUS
--- =============================================================================
 INSERT INTO system_integration_status (name, status, severity, note, checked_at)
 VALUES
   ('Email (SES)',          'Healthy',   'ok',      'Delivery normal — bounce rate under 0.1%',    now()),
@@ -2148,9 +2109,7 @@ VALUES
 ON CONFLICT (name) DO UPDATE
   SET status=EXCLUDED.status, severity=EXCLUDED.severity, note=EXCLUDED.note, checked_at=now();
 
--- =============================================================================
 -- 25. SYSTEM_QUEUE_METRICS
--- =============================================================================
 INSERT INTO system_queue_metrics (name, value, severity, note, measured_at)
 VALUES
   ('Ticket Queue',            '18',  'ok',      'Normal throughput — processing at 22 tickets/hour',  now()),
@@ -2176,9 +2135,7 @@ VALUES
 ON CONFLICT (name) DO UPDATE
   SET value=EXCLUDED.value, severity=EXCLUDED.severity, note=EXCLUDED.note, measured_at=now();
 
--- =============================================================================
 -- 26. SYSTEM_EVENT_FEED
--- =============================================================================
 INSERT INTO system_event_feed (severity, title, description, event_time)
 VALUES
   ('critical', 'Search service degraded',
@@ -2243,9 +2200,7 @@ VALUES
    '2026-01-10 12:00:00+00')
 ON CONFLICT DO NOTHING;
 
--- =============================================================================
 -- 27. SYSTEM_VERSIONS
--- =============================================================================
 INSERT INTO system_versions (component, version, deployed_at)
 VALUES
   ('API',                 'v2.4.2',  '2026-02-28'),
@@ -2271,9 +2226,7 @@ VALUES
 ON CONFLICT (component) DO UPDATE
   SET version=EXCLUDED.version, deployed_at=EXCLUDED.deployed_at;
 
--- =============================================================================
 -- 28. SYSTEM_CONFIG_KV
--- =============================================================================
 INSERT INTO system_config_kv (key, value)
 VALUES
   ('maintenance_mode',             'false'),
@@ -2312,9 +2265,7 @@ COMMIT;
 -- NOTE: ML pipeline seed data (sections 28-35) moved to zzz_seed_analytics.sql,
 -- which runs after zzz_analytics_mvs.sh creates those tables.
 
--- =============================================================================
 -- PASSWORD RESET TOKENS (a few for testing)
--- =============================================================================
 BEGIN;
 INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, used_at)
 SELECT
@@ -2343,17 +2294,13 @@ WHERE EXISTS (SELECT 1 FROM users WHERE email = 'sarah@innovacx.net')
   );
 COMMIT;
 
--- =============================================================================
 -- BACKFILL: Ensure all ticket priority_assigned_at is set (for SLA computation)
--- =============================================================================
 BEGIN;
 UPDATE tickets
 SET priority_assigned_at = created_at
 WHERE priority_assigned_at IS NULL;
 
--- =============================================================================
 -- BACKFILL: Disable MFA for all seed users so they can log in without TOTP
--- =============================================================================
 UPDATE users
 SET mfa_enabled = FALSE, totp_secret = NULL
 WHERE email IN (

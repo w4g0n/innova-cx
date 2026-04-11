@@ -1,4 +1,3 @@
--- =============================================================================
 -- InnovaCX — Comprehensive Seed Inserts
 -- Covers all 37 tables. Safe to run on a fresh DB after init.sql +
 -- 000_analytics_prerequisites.sql have been applied.
@@ -41,14 +40,11 @@
 -- 35.  feature_outputs
 -- 36.  system_versions (agent versions)
 -- 37.  system_config_kv (additional keys)
--- =============================================================================
 
 BEGIN;
 
--- =============================================================================
 -- 1. DEPARTMENTS  (reference table — 7 rows already in init.sql seed;
 --    we add extra to give routing_outputs & tickets more variety)
--- =============================================================================
 INSERT INTO departments (name) VALUES
   ('Facilities Management'),
   ('Legal and Compliance'),
@@ -59,9 +55,7 @@ INSERT INTO departments (name) VALUES
   ('IT')
 ON CONFLICT (name) DO NOTHING;
 
--- =============================================================================
 -- 2. USERS  (18 seed users: 3 customers, 1 operator, 7 managers, 7 employees)
--- =============================================================================
 INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secret) VALUES
   -- Customers
   ('customer1@innovacx.net', crypt('Innova@2025', gen_salt('bf', 12)), 'customer',  TRUE, FALSE, NULL),
@@ -87,9 +81,7 @@ INSERT INTO users (email, password_hash, role, is_active, mfa_enabled, totp_secr
   ('sarah@innovacx.net',     crypt('Innova@2025', gen_salt('bf', 12)), 'employee',  TRUE, FALSE, NULL)
 ON CONFLICT (email) DO UPDATE SET mfa_enabled = FALSE, totp_secret = NULL;
 
--- =============================================================================
 -- 3. USER_PROFILES
--- =============================================================================
 -- Operator profile
 INSERT INTO user_profiles (user_id, full_name, phone, location, department_id, employee_code, job_title)
 SELECT u.id, 'System Operator', '+97155000001', 'Dubai',
@@ -199,9 +191,7 @@ SELECT u.id, 'Customer Three', '+971500000003', 'Sharjah'
 FROM users u WHERE u.email='customer3@innovacx.net'
 ON CONFLICT (user_id) DO NOTHING;
 
--- =============================================================================
 -- 4. USER_PREFERENCES
--- =============================================================================
 INSERT INTO user_preferences (user_id, language, dark_mode, default_complaint_type, email_notifications, in_app_notifications, status_alerts)
 SELECT u.id, 'English', FALSE, 'General', TRUE, TRUE, TRUE
 FROM users u
@@ -217,9 +207,7 @@ WHERE user_id = (SELECT id FROM users WHERE email = 'ahmed@innovacx.net');
 UPDATE user_preferences SET email_notifications = FALSE
 WHERE user_id = (SELECT id FROM users WHERE email = 'yousef@innovacx.net');
 
--- =============================================================================
 -- 5. PASSWORD_RESET_TOKENS
--- =============================================================================
 INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
 SELECT (SELECT id FROM users WHERE email='customer1@innovacx.net'),
        crypt('reset-token-cust1-abc123', gen_salt('bf', 10)),
@@ -245,9 +233,7 @@ WHERE NOT EXISTS (
   SELECT 1 FROM password_reset_tokens WHERE user_id=(SELECT id FROM users WHERE email='sarah@innovacx.net') AND used_at IS NULL
 );
 
--- =============================================================================
 -- 6. TICKETS  (20+ rows spanning all statuses, priorities, departments)
--- =============================================================================
 -- All tickets inserted with ON CONFLICT (ticket_code) DO NOTHING so safe to re-run.
 
 -- ── Active / open tickets (current month, March 2026) ──────────────────────
@@ -651,9 +637,7 @@ WHERE ticket_code IN ('CX-H001','CX-H002','CX-H003','CX-H004','CX-H005',
                       'CX-H011','CX-H012','CX-H013','CX-H014')
   AND resolved_at IS NULL;
 
--- =============================================================================
 -- 7. TICKET_ATTACHMENTS
--- =============================================================================
 INSERT INTO ticket_attachments (ticket_id, file_name, file_url, uploaded_by, uploaded_at)
 SELECT t.id, v.fname, v.furl,
   (SELECT id FROM users WHERE email = v.email),
@@ -725,9 +709,7 @@ WHERE NOT EXISTS (
   SELECT 1 FROM ticket_attachments ta WHERE ta.ticket_id = t.id AND ta.file_name = v.fname
 );
 
--- =============================================================================
 -- 8. TICKET_UPDATES  (status transitions, notes, escalations)
--- =============================================================================
 INSERT INTO ticket_updates (ticket_id, author_user_id, update_type, message, from_status, to_status, meta, created_at)
 SELECT
   (SELECT id FROM tickets WHERE ticket_code = v.tc),
@@ -845,9 +827,7 @@ WHERE NOT EXISTS (
     AND tu.created_at = v.ts::timestamptz
 );
 
--- =============================================================================
 -- 9. TICKET_WORK_STEPS
--- =============================================================================
 INSERT INTO ticket_work_steps (ticket_id, step_no, technician_user_id, notes, occurred_at)
 SELECT
   (SELECT id FROM tickets WHERE ticket_code = v.tc),
@@ -928,9 +908,7 @@ WHERE NOT EXISTS (
     AND tws.step_no = v.step_no
 );
 
--- =============================================================================
 -- 10. SUGGESTED_RESOLUTION_USAGE
--- =============================================================================
 INSERT INTO suggested_resolution_usage (
   ticket_id, employee_user_id, decision, department,
   suggested_text, final_text, used
@@ -998,9 +976,7 @@ WHERE NOT EXISTS (
     AND sru.final_text = fb.final
 );
 
--- =============================================================================
 -- 11. APPROVAL_REQUESTS
--- =============================================================================
 INSERT INTO approval_requests (
   request_code, ticket_id, request_type, current_value, requested_value,
   request_reason, submitted_by_user_id, submitted_at, status,
@@ -1057,9 +1033,7 @@ FROM (VALUES
 JOIN tickets t ON t.ticket_code = r.tc
 ON CONFLICT (request_code) DO NOTHING;
 
--- =============================================================================
 -- 12. CHAT_CONVERSATIONS
--- =============================================================================
 INSERT INTO chat_conversations (id, customer_user_id, channel, created_at, ended_at, status)
 VALUES
   ('aaaaaaaa-0001-0001-0001-000000000001'::uuid,
@@ -1124,9 +1098,7 @@ VALUES
    'web','2025-05-22 10:00:00+00','2025-05-22 10:30:00+00','closed')
 ON CONFLICT (id) DO NOTHING;
 
--- =============================================================================
 -- 13. CHAT_MESSAGES
--- =============================================================================
 INSERT INTO chat_messages (conversation_id, sender_type, sender_user_id, message_text, created_at, intent, category, sentiment_score, escalation_flag, linked_ticket_id)
 VALUES
   -- Conv 1: CX-A001 escalation
@@ -1243,9 +1215,7 @@ VALUES
    '2026-02-10 08:00:48+00','create_ticket','Security',0.20,FALSE,NULL)
 ;
 
--- =============================================================================
 -- 14. SESSIONS
--- =============================================================================
 INSERT INTO sessions (user_id, current_state, context, history, created_at, updated_at, bot_model_version, escalated_to_human, escalated_at, linked_ticket_id)
 VALUES
   ((SELECT id FROM users WHERE email='customer1@innovacx.net'),
@@ -1393,9 +1363,7 @@ VALUES
    TRUE,'2025-05-22 10:05:00+00', NULL)
 ;
 
--- =============================================================================
 -- 15. USER_CHAT_LOGS
--- =============================================================================
 INSERT INTO user_chat_logs (user_id, session_id, message, intent_detected, aggression_flag, aggression_score, created_at, sentiment_score, category, response_time_ms, ticket_id)
 SELECT
   (SELECT id FROM users WHERE email = v.email),
@@ -1479,9 +1447,7 @@ WHERE NOT EXISTS (
   LIMIT 1
 );
 
--- =============================================================================
 -- 16. BOT_RESPONSE_LOGS
--- =============================================================================
 INSERT INTO bot_response_logs (response, response_type, state_at_time, sql_query_used, kb_match_score, created_at, ticket_id)
 VALUES
   ('This sounds critical. I am escalating to an operator immediately.',
@@ -1554,9 +1520,7 @@ VALUES
    '2026-01-10 09:33:00+00', NULL)
 ;
 
--- =============================================================================
 -- 17. NOTIFICATIONS
--- =============================================================================
 INSERT INTO notifications (user_id, type, title, message, priority, ticket_id, read, created_at)
 SELECT
   (SELECT id FROM users WHERE email = v.email),
@@ -1566,11 +1530,9 @@ SELECT
   CASE WHEN v.tc IS NOT NULL THEN (SELECT id FROM tickets WHERE ticket_code = v.tc) ELSE NULL END,
   v.read_flag, v.ts::timestamptz
 FROM (VALUES
-  -- =========================================================================
   -- Manager notifications — routed to the manager who OWNS the ticket's dept.
   -- Dept→Manager: IT=hamad, HR=leen, Legal=rami, Maintenance=majid,
   --               Safety&Security=ali, Leasing=yara, FM=hana
-  -- =========================================================================
 
   -- Hamad (IT) notifications
   ('hamad@innovacx.net','ticket_assignment','Approval Requested — REQ-4007',
@@ -1773,9 +1735,7 @@ WHERE NOT EXISTS (
     AND n.title = v.title
 );
 
--- =============================================================================
 -- 18-22. EMPLOYEE REPORTS (for Ahmed, Maria, Bilal, Yousef, Khalid, Sara, Omar, Fatima)
--- =============================================================================
 INSERT INTO employee_reports (report_code, employee_user_id, month_label, subtitle, kpi_rating, kpi_resolved, kpi_sla, kpi_avg_response, model_version, generated_by, period_start, period_end)
 SELECT code, emp_id, label, sub, rating, resolved, sla, avg_resp, 'report-gen-v1.0', 'system', ps::date, pe::date
 FROM (
@@ -2088,9 +2048,7 @@ JOIN (VALUES
 ) AS d(report_code, note) ON d.report_code = er.report_code
 WHERE NOT EXISTS (SELECT 1 FROM employee_report_notes en WHERE en.report_id = er.id);
 
--- =============================================================================
 -- 23. SYSTEM_SERVICE_STATUS
--- =============================================================================
 INSERT INTO system_service_status (name, status, severity, note, checked_at)
 VALUES
   ('API Gateway',         'Healthy',   'ok',       'Normal latency — p99 under 120ms',          now()),
@@ -2116,9 +2074,7 @@ VALUES
 ON CONFLICT (name) DO UPDATE
   SET status=EXCLUDED.status, severity=EXCLUDED.severity, note=EXCLUDED.note, checked_at=now();
 
--- =============================================================================
 -- 24. SYSTEM_INTEGRATION_STATUS
--- =============================================================================
 INSERT INTO system_integration_status (name, status, severity, note, checked_at)
 VALUES
   ('Email (SES)',          'Healthy',   'ok',      'Delivery normal — bounce rate under 0.1%',    now()),
@@ -2144,9 +2100,7 @@ VALUES
 ON CONFLICT (name) DO UPDATE
   SET status=EXCLUDED.status, severity=EXCLUDED.severity, note=EXCLUDED.note, checked_at=now();
 
--- =============================================================================
 -- 25. SYSTEM_QUEUE_METRICS
--- =============================================================================
 INSERT INTO system_queue_metrics (name, value, severity, note, measured_at)
 VALUES
   ('Ticket Queue',            '18',  'ok',      'Normal throughput — processing at 22 tickets/hour',  now()),
@@ -2172,9 +2126,7 @@ VALUES
 ON CONFLICT (name) DO UPDATE
   SET value=EXCLUDED.value, severity=EXCLUDED.severity, note=EXCLUDED.note, measured_at=now();
 
--- =============================================================================
 -- 26. SYSTEM_EVENT_FEED
--- =============================================================================
 INSERT INTO system_event_feed (severity, title, description, event_time)
 VALUES
   ('critical', 'Search service degraded',
@@ -2238,9 +2190,7 @@ VALUES
    'No critical vulnerabilities found. 3 medium findings resolved. Certificate issued.',
    '2026-01-10 12:00:00+00');
 
--- =============================================================================
 -- 27. SYSTEM_VERSIONS
--- =============================================================================
 INSERT INTO system_versions (component, version, deployed_at)
 VALUES
   ('API',                 'v2.4.2',  '2026-02-28'),
@@ -2266,9 +2216,7 @@ VALUES
 ON CONFLICT (component) DO UPDATE
   SET version=EXCLUDED.version, deployed_at=EXCLUDED.deployed_at;
 
--- =============================================================================
 -- 28. SYSTEM_CONFIG_KV
--- =============================================================================
 INSERT INTO system_config_kv (key, value)
 VALUES
   ('maintenance_mode',             'false'),
@@ -2303,9 +2251,7 @@ VALUES
   ('support_email',                'support@innova.cx')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
--- =============================================================================
 -- 29. MODEL_EXECUTION_LOG  (20+ rows across all agent types and tickets)
--- =============================================================================
 INSERT INTO public.model_execution_log (
   ticket_id, agent_name, model_version, triggered_by,
   started_at, completed_at, status,
@@ -2420,9 +2366,7 @@ FROM (VALUES
        in_tok, out_tok, inf_ms, conf_score, err_flag, err_msg, infra)
 JOIN public.tickets t ON t.ticket_code = v.tc;
 
--- =============================================================================
 -- 30. SENTIMENT_OUTPUTS
--- =============================================================================
 INSERT INTO public.sentiment_outputs (
   execution_id, ticket_id, model_version,
   sentiment_label, sentiment_score, confidence_score,
@@ -2493,9 +2437,7 @@ WHERE NOT EXISTS (
   WHERE so.ticket_id = mel.ticket_id AND so.is_current = TRUE
 );
 
--- =============================================================================
 -- 31. PRIORITY_OUTPUTS
--- =============================================================================
 INSERT INTO public.priority_outputs (
   execution_id, ticket_id, model_version,
   model_priority, confidence_score, reasoning, is_current
@@ -2524,9 +2466,7 @@ WHERE NOT EXISTS (
   WHERE po.ticket_id = mel.ticket_id AND po.is_current = TRUE
 );
 
--- =============================================================================
 -- 32. ROUTING_OUTPUTS
--- =============================================================================
 INSERT INTO public.routing_outputs (
   execution_id, ticket_id, model_version,
   suggested_dept_id, suggested_dept_name, confidence_score, routing_reason, is_current
@@ -2556,9 +2496,7 @@ WHERE NOT EXISTS (
   WHERE ro.ticket_id = mel.ticket_id AND ro.is_current = TRUE
 );
 
--- =============================================================================
 -- 33. SLA_OUTPUTS
--- =============================================================================
 INSERT INTO public.sla_outputs (
   execution_id, ticket_id, model_version,
   predicted_respond_mins, predicted_resolve_mins,
@@ -2584,9 +2522,7 @@ WHERE NOT EXISTS (
   WHERE so.ticket_id = mel.ticket_id AND so.is_current = TRUE
 );
 
--- =============================================================================
 -- 34. RESOLUTION_OUTPUTS
--- =============================================================================
 INSERT INTO public.resolution_outputs (
   execution_id, ticket_id, model_version,
   suggested_resolution, suggested_text, kb_references, confidence_score, is_current
@@ -2620,9 +2556,7 @@ WHERE NOT EXISTS (
   WHERE ro.ticket_id = mel.ticket_id AND ro.is_current = TRUE
 );
 
--- =============================================================================
 -- 35. FEATURE_OUTPUTS
--- =============================================================================
 INSERT INTO public.feature_outputs (
   execution_id, ticket_id, model_version,
   asset_category, topic_labels, confidence_score, raw_features, is_current
@@ -2661,16 +2595,12 @@ WHERE NOT EXISTS (
   WHERE fo.ticket_id = mel.ticket_id AND fo.is_current = TRUE
 );
 
--- =============================================================================
 -- BACKFILL: Ensure all ticket priority_assigned_at is set (for SLA computation)
--- =============================================================================
 UPDATE tickets
 SET priority_assigned_at = created_at
 WHERE priority_assigned_at IS NULL;
 
--- =============================================================================
 -- BACKFILL: Disable MFA for all seed users
--- =============================================================================
 UPDATE users
 SET mfa_enabled = FALSE, totp_secret = NULL
 WHERE email IN (

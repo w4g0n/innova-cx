@@ -1,4 +1,3 @@
--- =============================================================================
 -- InnovaCX — Analytics Prerequisites Migration
 -- File: database/scripts/000_analytics_prerequisites.sql
 --
@@ -8,14 +7,10 @@
 --   3. analytics_mvs.sql
 --
 -- SAFE TO RE-RUN: all statements use IF NOT EXISTS / DO $$ guards.
--- =============================================================================
 
 BEGIN;
 
-
--- =============================================================================
 -- SECTION 1: ENUM TYPES
--- =============================================================================
 
 DO $$ BEGIN
     CREATE TYPE agent_name_type AS ENUM (
@@ -35,8 +30,6 @@ DO $$ BEGIN
     );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-
--- =============================================================================
 -- SECTION 2: MODEL EXECUTION LOG — MIGRATE EXISTING TABLE
 --
 -- Existing schema:
@@ -46,7 +39,6 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --
 -- The agent output tables will FK to id (the actual PK).
 -- We add all missing columns needed by analytics_mvs.sql and seed inserts.
--- =============================================================================
 
 ALTER TABLE public.model_execution_log
     ADD COLUMN IF NOT EXISTS triggered_by       trigger_source   NOT NULL DEFAULT 'ingest',
@@ -92,11 +84,8 @@ CREATE INDEX IF NOT EXISTS idx_mel_status
 CREATE INDEX IF NOT EXISTS idx_mel_started_at
     ON public.model_execution_log (started_at DESC);
 
-
--- =============================================================================
 -- SECTION 3: AGENT OUTPUT TABLES
 -- FK references public.model_execution_log(id) — the actual PK.
--- =============================================================================
 
 CREATE TABLE IF NOT EXISTS public.sentiment_outputs (
     id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -208,20 +197,14 @@ CREATE INDEX IF NOT EXISTS idx_fo_ticket_id
 CREATE INDEX IF NOT EXISTS idx_fo_is_current
     ON public.feature_outputs (ticket_id, is_current) WHERE is_current = TRUE;
 
-
--- =============================================================================
 -- SECTION 4: ADDITIVE COLUMNS ON TICKETS
--- =============================================================================
 
 ALTER TABLE public.tickets
     ADD COLUMN IF NOT EXISTS human_overridden BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS override_reason  TEXT,
     ADD COLUMN IF NOT EXISTS is_recurring     BOOLEAN NOT NULL DEFAULT FALSE;
 
-
--- =============================================================================
 -- SECTION 5: ADDITIVE COLUMNS ON SESSIONS
--- =============================================================================
 
 ALTER TABLE public.sessions
     ADD COLUMN IF NOT EXISTS bot_model_version  TEXT,
@@ -237,21 +220,15 @@ CREATE INDEX IF NOT EXISTS idx_sessions_linked_ticket
     ON public.sessions (linked_ticket_id)
     WHERE linked_ticket_id IS NOT NULL;
 
-
--- =============================================================================
 -- SECTION 6: ADDITIVE COLUMNS ON USER_CHAT_LOGS
 -- ticket_id already exists — only adding sentiment_score, category, response_time_ms
--- =============================================================================
 
 ALTER TABLE public.user_chat_logs
     ADD COLUMN IF NOT EXISTS sentiment_score  NUMERIC(4,3),
     ADD COLUMN IF NOT EXISTS category         TEXT,
     ADD COLUMN IF NOT EXISTS response_time_ms INTEGER;
 
-
--- =============================================================================
 -- SECTION 7: ADDITIVE COLUMNS ON BOT_RESPONSE_LOGS
--- =============================================================================
 
 ALTER TABLE public.bot_response_logs
     ADD COLUMN IF NOT EXISTS kb_match_score NUMERIC(5,4),
@@ -261,10 +238,7 @@ ALTER TABLE public.bot_response_logs
 CREATE INDEX IF NOT EXISTS idx_brl_ticket_id
     ON public.bot_response_logs (ticket_id);
 
-
--- =============================================================================
 -- SECTION 8: ADDITIVE COLUMNS ON EMPLOYEE_REPORTS
--- =============================================================================
 
 ALTER TABLE public.employee_reports
     ADD COLUMN IF NOT EXISTS model_version TEXT NOT NULL DEFAULT 'report-gen-v1.0',
@@ -272,10 +246,7 @@ ALTER TABLE public.employee_reports
     ADD COLUMN IF NOT EXISTS period_start  DATE,
     ADD COLUMN IF NOT EXISTS period_end    DATE;
 
-
--- =============================================================================
 -- SECTION 9: SINGLE CURRENT OUTPUT TRIGGER
--- =============================================================================
 
 CREATE OR REPLACE FUNCTION enforce_single_current_output()
 RETURNS TRIGGER AS $$
@@ -325,6 +296,5 @@ CREATE TRIGGER trg_single_current_feature
 AFTER INSERT OR UPDATE OF is_current ON public.feature_outputs
 FOR EACH ROW WHEN (NEW.is_current = TRUE)
 EXECUTE FUNCTION enforce_single_current_output();
-
 
 COMMIT;

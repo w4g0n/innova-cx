@@ -1,9 +1,8 @@
--- ============================================================
 -- Migration 006: seed_department_routing
 -- Demo data for the AI Routing Review Queue tab.
 -- All ticket codes verified to exist in init.sql.
 -- Run after: 004_ticket_status_slim, 005_department_routing
--- ============================================================
+
 
 DO $$
 DECLARE
@@ -36,7 +35,7 @@ BEGIN
     RETURN;
   END IF;
 
-  -- ── PENDING (low confidence, awaiting manager decision) ──────────────────
+  -- PENDING (low confidence, awaiting manager decision)
 
   INSERT INTO department_routing
     (ticket_id, suggested_department, confidence_score, is_confident, final_department, routed_by, manager_id)
@@ -56,7 +55,7 @@ BEGIN
     -- 61% → HR  (still below threshold)
     (t_2011, 'HR',                    61.20, FALSE, NULL, NULL, NULL);
 
-  -- ── CONFIRMED (manager agreed with AI suggestion) ─────────────────────────
+  -- CONFIRMED (manager agreed with AI suggestion)
 
   INSERT INTO department_routing
     (ticket_id, suggested_department, confidence_score, is_confident, final_department, routed_by, manager_id, updated_at)
@@ -67,7 +66,7 @@ BEGIN
     -- Manager confirmed: IT → IT
     (t_4780, 'IT',                    58.30, FALSE, 'IT',                  'manager', mgr, now() - INTERVAL '6 hours');
 
-  -- ── OVERRIDDEN (manager picked a different department) ────────────────────
+  -- OVERRIDDEN (manager picked a different department)
 
   INSERT INTO department_routing
     (ticket_id, suggested_department, confidence_score, is_confident, final_department, routed_by, manager_id, updated_at)
