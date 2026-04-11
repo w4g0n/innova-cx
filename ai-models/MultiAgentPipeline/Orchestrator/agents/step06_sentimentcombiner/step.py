@@ -24,10 +24,6 @@ def _bucket(score: float) -> str:
     return "neutral"
 
 
-def _to_display_score(score: float) -> float:
-    return max(0.0, min(1.0, (score + 1.0) / 2.0))
-
-
 async def combine_sentiment(state: dict) -> dict:
     """
     Inputs:
@@ -36,7 +32,7 @@ async def combine_sentiment(state: dict) -> dict:
 
     Outputs:
       - state["sentiment_score_numeric"] in [-1,1]
-      - state["sentiment_score_display"] in [0,1] for UI friendliness
+      - state["sentiment_score_display"] in [-1,1] for UI display consistency
       - state["sentiment_score"] in {negative, neutral, positive}
     """
     text = _normalize_unit(state.get("text_sentiment", 0.0))
@@ -54,7 +50,7 @@ async def combine_sentiment(state: dict) -> dict:
     state["text_sentiment"] = text
     state["audio_sentiment"] = float(audio_sentiment) if audio_sentiment is not None else None
     state["sentiment_score_numeric"] = combined
-    state["sentiment_score_display"] = _to_display_score(combined)
+    state["sentiment_score_display"] = combined
     state["sentiment_score"] = _bucket(combined)
     state["sentiment_combiner_mode"] = mode
     state["sentiment_combiner_source"] = "deterministic"
