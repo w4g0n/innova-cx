@@ -4041,7 +4041,7 @@ class CreateTicketRequest(BaseModel):
     email: str
     type: str
     asset_type: str
-    subject: str
+    subject: Optional[str] = None
     details: str
     has_audio: Optional[bool] = False
     audio_features: Optional[dict] = None
@@ -4090,8 +4090,6 @@ class CreateTicketRequest(BaseModel):
     @validator("subject")
     def subject_length(cls, v):
         v = (v or "").strip()
-        if not v:
-            raise ValueError("subject must not be empty.")
         if len(v) > 300:
             raise ValueError("subject exceeds maximum length of 300 characters.")
         return v
@@ -4225,7 +4223,18 @@ def create_customer_ticket(
     user: Dict[str, Any] = Depends(require_customer),
     _csrf: None = Depends(require_csrf),
 ):
-    is_recurring = predict_is_recurring(user_id=user["id"], subject=body.subject, details=body.details)
+    normalized_ticket_type = (
+        "Inquiry"
+        if str(body.type or "").strip().lower() == "inquiry"
+        else "Complaint"
+    )
+    subject = (
+        (body.subject or "").strip()
+        or (body.details or "").strip()[:120]
+        or f"Automated {normalized_ticket_type.lower()}"
+    )
+
+    is_recurring = predict_is_recurring(user_id=user["id"], subject=subject, details=body.details)
     model_suggestion = json.dumps({"is_recurring": is_recurring})
 
     # Insert ticket into database through centralized gate.
@@ -4234,16 +4243,11 @@ def create_customer_ticket(
     execution_id = None
     with db_connect() as conn:
         with conn.cursor() as cur:
-            normalized_ticket_type = (
-                "Inquiry"
-                if str(body.type or "").strip().lower() == "inquiry"
-                else "Complaint"
-            )
             created = create_ticket_via_gate(
                 cur,
                 created_by_user_id=user["id"],
                 ticket_type=normalized_ticket_type,
-                subject=body.subject,
+                subject=subject,
                 details=body.details,
                 priority=None,
                 status="Open",
@@ -4292,7 +4296,7 @@ def create_customer_ticket(
         ticket_code=ticket_code,
         details=body.details,
         ticket_type=body.type,
-        subject=body.subject,
+        subject=None,
         execution_id=execution_id,
         has_audio=bool(body.has_audio),
         audio_features=body.audio_features if isinstance(body.audio_features, dict) else None,
@@ -4312,7 +4316,7 @@ def create_customer_ticket(
         "ticket": {
             "ticketId": ticket_code,
             "ticketType": body.type,
-            "subject": body.subject,
+            "subject": "",
             "priority": created.get("priority"),
             "status": created.get("status"),
             "is_recurring": is_recurring,
@@ -7902,7 +7906,8 @@ def internal_review_verdict(body: ReviewVerdictRequest, _key: None = Depends(req
                                 no status change needed; operators are notified separately
     - approved_routing_review:  mark department_routing.is_confident=FALSE so the
                                 department manager sees it in their review queue
-    - held_operator_review:     set ticket.status='Review' so operators can inspect
+    - held_operator_review:     keep the ticket in its current visible workflow state;
+                                the pipeline queue hold is the source of truth for operator review
     """
     ticket_uuid: str | None = None
     try:
@@ -7929,11 +7934,19 @@ def internal_review_verdict(body: ReviewVerdictRequest, _key: None = Depends(req
 
                 if body.verdict == "held_operator_review":
                     cur.execute(
-                        "UPDATE tickets SET status = 'Review' WHERE id = %s::uuid",
+                        """
+                        UPDATE tickets
+                           SET status = CASE
+                               WHEN department_id IS NOT NULL THEN 'Assigned'::ticket_status
+                               ELSE 'Open'::ticket_status
+                           END,
+                               updated_at = now()
+                         WHERE id = %s::uuid
+                        """,
                         (ticket_uuid,),
                     )
                     logger.info(
-                        "review_verdict | ticket=%s verdict=held_operator_review → status=Review",
+                        "review_verdict | ticket=%s verdict=held_operator_review → status preserved_as_visible_workflow_state",
                         body.ticket_code or ticket_uuid,
                     )
 

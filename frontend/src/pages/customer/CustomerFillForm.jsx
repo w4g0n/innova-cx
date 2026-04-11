@@ -182,7 +182,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
       const result = await submitCustomerTicket({
         type:           safeInitialType,
         details,
-        subject:        "",
         asset_type:     "General",
         has_audio:      wasAudio,
         audio_features: wasAudio ? draftAudioFeatures : null,

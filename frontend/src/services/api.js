@@ -230,12 +230,15 @@ export async function submitCustomerTicket(payload = {}) {
     email: String(user.email || ""),
     type: String(payload.type || "complaint"),
     asset_type: String(payload.asset_type || "General"),
-    subject: String(payload.subject ?? ""),
     details,
     has_audio: Boolean(payload.has_audio),
     audio_features: payload.audio_features || null,
     attachments: Array.isArray(payload.attachments) ? payload.attachments : [],
   };
+
+  if (typeof payload.subject === "string" && payload.subject.trim()) {
+    body.subject = payload.subject.trim();
+  }
 
   const csrf = await getCsrfToken();
   const response = await fetch(apiUrl("/api/customer/tickets"), {
