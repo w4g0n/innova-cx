@@ -6707,26 +6707,52 @@ def get_learning_reroute(
     limit:      int           = Query(200),
     user: Dict[str, Any] = Depends(require_operator),
 ):
-    """Routing correction records from reroute_reference."""
+    """Routing correction records from reroute_reference, de-duped for UI display."""
     with db_connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             sql = """
+                WITH ranked AS (
+                    SELECT
+                        r.id,
+                        r.ticket_id,
+                        r.department,
+                        r.original_dept,
+                        r.corrected_dept,
+                        r.source_type,
+                        r.decided_by,
+                        r.created_at,
+                        t.ticket_code,
+                        t.subject,
+                        u.full_name AS decided_by_name,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY
+                                r.ticket_id,
+                                COALESCE(r.department, ''),
+                                COALESCE(r.original_dept, ''),
+                                COALESCE(r.corrected_dept, ''),
+                                COALESCE(r.source_type, ''),
+                                r.created_at
+                            ORDER BY r.created_at DESC, r.id DESC
+                        ) AS rn
+                    FROM reroute_reference r
+                    LEFT JOIN tickets t ON t.id = r.ticket_id
+                    LEFT JOIN user_profiles u ON u.user_id = r.decided_by
+                )
                 SELECT
-                    r.id, r.ticket_id, r.department,
-                    r.original_dept, r.corrected_dept,
-                    r.source_type, r.decided_by,
-                    r.created_at,
-                    t.ticket_code, t.subject,
-                    u.full_name AS decided_by_name
-                FROM reroute_reference r
-                LEFT JOIN tickets t ON t.id = r.ticket_id
-                LEFT JOIN user_profiles u ON u.user_id = r.decided_by
+                    id, ticket_id, department,
+                    original_dept, corrected_dept,
+                    source_type, decided_by,
+                    created_at,
+                    ticket_code, subject,
+                    decided_by_name
+                FROM ranked
+                WHERE rn = 1
             """
             params: list = []
             if department and department != "All Departments":
-                sql += " WHERE r.department = %s"
+                sql += " AND department = %s"
                 params.append(department)
-            sql += " ORDER BY r.created_at DESC LIMIT %s"
+            sql += " ORDER BY created_at DESC LIMIT %s"
             params.append(limit)
             cur.execute(sql, params)
             return [dict(row) for row in cur.fetchall()]
@@ -6738,26 +6764,52 @@ def get_learning_rescore(
     limit:      int           = Query(200),
     user: Dict[str, Any] = Depends(require_operator),
 ):
-    """Priority correction records from rescore_reference."""
+    """Priority correction records from rescore_reference, de-duped for UI display."""
     with db_connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             sql = """
+                WITH ranked AS (
+                    SELECT
+                        r.id,
+                        r.ticket_id,
+                        r.department,
+                        r.original_priority,
+                        r.corrected_priority,
+                        r.source_type,
+                        r.decided_by,
+                        r.created_at,
+                        t.ticket_code,
+                        t.subject,
+                        u.full_name AS decided_by_name,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY
+                                r.ticket_id,
+                                COALESCE(r.department, ''),
+                                COALESCE(r.original_priority, ''),
+                                COALESCE(r.corrected_priority, ''),
+                                COALESCE(r.source_type, ''),
+                                r.created_at
+                            ORDER BY r.created_at DESC, r.id DESC
+                        ) AS rn
+                    FROM rescore_reference r
+                    LEFT JOIN tickets t ON t.id = r.ticket_id
+                    LEFT JOIN user_profiles u ON u.user_id = r.decided_by
+                )
                 SELECT
-                    r.id, r.ticket_id, r.department,
-                    r.original_priority, r.corrected_priority,
-                    r.source_type, r.decided_by,
-                    r.created_at,
-                    t.ticket_code, t.subject,
-                    u.full_name AS decided_by_name
-                FROM rescore_reference r
-                LEFT JOIN tickets t ON t.id = r.ticket_id
-                LEFT JOIN user_profiles u ON u.user_id = r.decided_by
+                    id, ticket_id, department,
+                    original_priority, corrected_priority,
+                    source_type, decided_by,
+                    created_at,
+                    ticket_code, subject,
+                    decided_by_name
+                FROM ranked
+                WHERE rn = 1
             """
             params: list = []
             if department and department != "All Departments":
-                sql += " WHERE r.department = %s"
+                sql += " AND department = %s"
                 params.append(department)
-            sql += " ORDER BY r.created_at DESC LIMIT %s"
+            sql += " ORDER BY created_at DESC LIMIT %s"
             params.append(limit)
             cur.execute(sql, params)
             return [dict(row) for row in cur.fetchall()]
@@ -6773,25 +6825,54 @@ def get_learning_resolution(
     with db_connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             sql = """
+                WITH ranked AS (
+                    SELECT
+                        s.id,
+                        s.ticket_id,
+                        s.employee_user_id,
+                        s.decision,
+                        s.used,
+                        s.suggested_text,
+                        s.final_text,
+                        s.created_at,
+                        t.ticket_code,
+                        t.subject,
+                        t.department_id,
+                        COALESCE(NULLIF(s.department, ''), d.name, 'Unassigned') AS department,
+                        u.full_name AS employee_name,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY
+                                s.ticket_id,
+                                COALESCE(s.decision, ''),
+                                COALESCE(s.suggested_text, ''),
+                                COALESCE(s.final_text, ''),
+                                COALESCE(NULLIF(s.department, ''), d.name, 'Unassigned'),
+                                s.used,
+                                s.created_at
+                            ORDER BY s.created_at DESC, s.id DESC
+                        ) AS rn
+                    FROM suggested_resolution_usage s
+                    LEFT JOIN tickets t ON t.id = s.ticket_id
+                    LEFT JOIN departments d ON d.id = t.department_id
+                    LEFT JOIN user_profiles u ON u.user_id = s.employee_user_id
+                )
                 SELECT
-                    s.id, s.ticket_id, s.employee_user_id,
-                    s.decision, s.used,
-                    s.suggested_text, s.final_text,
-                    s.created_at,
-                    t.ticket_code, t.subject,
-                    t.department_id,
-                    d.name AS department,
-                    u.full_name AS employee_name
-                FROM suggested_resolution_usage s
-                LEFT JOIN tickets t ON t.id = s.ticket_id
-                LEFT JOIN departments d ON d.id = t.department_id
-                LEFT JOIN user_profiles u ON u.user_id = s.employee_user_id
+                    id, ticket_id, employee_user_id,
+                    decision, used,
+                    suggested_text, final_text,
+                    created_at,
+                    ticket_code, subject,
+                    department_id,
+                    department,
+                    employee_name
+                FROM ranked
+                WHERE rn = 1
             """
             params: list = []
             if department and department != "All Departments":
-                sql += " WHERE d.name = %s"
+                sql += " AND department = %s"
                 params.append(department)
-            sql += " ORDER BY s.created_at DESC LIMIT %s"
+            sql += " ORDER BY created_at DESC LIMIT %s"
             params.append(limit)
             cur.execute(sql, params)
             return [dict(row) for row in cur.fetchall()]
