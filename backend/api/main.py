@@ -7422,10 +7422,10 @@ def _sanitize_uuid(value: str, field: str = "ID") -> str:
         raise HTTPException(status_code=400, detail=f"Invalid {field}: must be a valid UUID.")
 
 
-_TICKET_CODE_RE = _re.compile(r'^CX-\d{1,10}$', _re.IGNORECASE)
+_TICKET_CODE_RE = _re.compile(r'^CX-[A-Z0-9]{1,20}$', _re.IGNORECASE)
 
 def _sanitize_ticket_code(value: str, field: str = "ticket code") -> str:
-    """Validate a ticket_code path parameter (format: CX-<digits>).
+    """Validate a ticket_code path parameter (format: CX-<alphanumeric>).
     Returns the upper-cased canonical form.
     Raises HTTP 400 on failure.
     """
