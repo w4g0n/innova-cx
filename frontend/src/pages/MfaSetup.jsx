@@ -85,6 +85,7 @@ export default function MfaSetup() {
   const [verifying,   setVerifying]   = useState(false);
   const [errorMsg,    setErrorMsg]    = useState("");
   const [shake,       setShake]       = useState(false);
+  const [trustDevice, setTrustDevice] = useState(false);
   const inputsRef     = useRef([]);
 
   // Guard: redirect if no session
@@ -142,7 +143,7 @@ export default function MfaSetup() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
-        body: JSON.stringify({ login_token: loginToken, otp_code: code, trust_device: false }),
+        body: JSON.stringify({ login_token: loginToken, otp_code: code, trust_device: trustDevice }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -150,7 +151,22 @@ export default function MfaSetup() {
       }
       const data = await res.json();
       const accessToken = sanitizeText(data.access_token, 2048);
+      const responseEmail = sanitizeText(data?.user?.email || storedUser?.email || "", 254);
+      const responseUser = {
+        ...storedUser,
+        ...(data?.user || {}),
+        email: responseEmail || storedUser?.email,
+        token_type: data.token_type,
+      };
       if (!accessToken) throw new Error("Invalid token response");
+
+      if (data.trusted_device_token && responseEmail) {
+        const key = `td_${String(responseEmail).trim().toLowerCase()}`;
+        localStorage.setItem(key, JSON.stringify({
+          token: sanitizeText(data.trusted_device_token, 128),
+          expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+        }));
+      }
 
       // Mark MFA setup complete
       const csrf2 = await getCsrfToken();
@@ -160,7 +176,7 @@ export default function MfaSetup() {
       });
 
       localStorage.setItem("access_token", accessToken);
-      localStorage.setItem("user", JSON.stringify({ ...storedUser, token_type: data.token_type }));
+      localStorage.setItem("user", JSON.stringify(responseUser));
       sessionStorage.removeItem("mfa_token");
       sessionStorage.removeItem("mfa_user");
 
@@ -405,6 +421,16 @@ export default function MfaSetup() {
                   />
                 ))}
               </div>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 18px", color: "#c4b5fd", fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={trustDevice}
+                  onChange={(e) => setTrustDevice(e.target.checked)}
+                  style={{ accentColor: "#7c3aed" }}
+                />
+                Trust this device for 30 days
+              </label>
 
               <button
                 type="submit"

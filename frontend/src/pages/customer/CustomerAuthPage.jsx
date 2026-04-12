@@ -332,11 +332,21 @@ export default function CustomerAuthPage() {
   const handleAuthSuccess = async (data) => {
     const accessToken = sanitizeText(data.access_token, 2048);
     const tokenType   = sanitizeText(data.token_type,   32);
+    const responseEmail = sanitizeText(data?.user?.email || storedUser?.email || "", 254);
+    const responseRoleRaw = sanitizeText(data?.user?.role || storedUser?.role || "", 20).toLowerCase();
+    const responseRole = ALLOWED_ROLES.includes(responseRoleRaw) ? responseRoleRaw : role;
+    const responseUser = {
+      ...storedUser,
+      ...(data?.user || {}),
+      email: responseEmail || storedUser?.email,
+      role: responseRole,
+      token_type: tokenType,
+    };
     if (!accessToken) throw new Error("Invalid token response");
 
     // Store trusted-device token in localStorage for 30 days
-    if (data.trusted_device_token && storedUser?.email) {
-      const key = `td_${String(storedUser.email).trim().toLowerCase()}`;
+    if (data.trusted_device_token && responseEmail) {
+      const key = `td_${String(responseEmail).trim().toLowerCase()}`;
       localStorage.setItem(key, JSON.stringify({
         token:     sanitizeText(data.trusted_device_token, 128),
         expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
@@ -359,12 +369,12 @@ export default function CustomerAuthPage() {
         }
 
         localStorage.setItem("access_token", accessToken);
-        localStorage.setItem("user", JSON.stringify({ ...storedUser, token_type: tokenType }));
+        localStorage.setItem("user", JSON.stringify(responseUser));
         sessionStorage.removeItem("mfa_token");
         sessionStorage.removeItem("mfa_user");
 
         navigate(
-          role === "customer" ? "/customer/dashboard" : `/${role}`,
+          responseRole === "customer" ? "/customer/dashboard" : `/${responseRole}`,
           { replace: true }
         );
       } catch (err) {
