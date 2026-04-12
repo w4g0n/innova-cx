@@ -417,22 +417,20 @@ export default function CustomerChatbot() {
                   </div>
                 </div>
               ))}
+              {actionButtons.length > 0 && (
+                <div className="custQuickTopBtns">
+                  {actionButtons.map((btn) => (
+                    <button
+                      key={btn}
+                      disabled={sending}
+                      onClick={() => handleActionButton(btn)}
+                    >
+                      {BUTTON_TEXT[btn] || btn}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-
-            {actionButtons.length > 0 && (
-              <div className="custQuickTopBtns" style={{ margin: "0 18px 12px" }}>
-                {actionButtons.map((btn) => (
-                  <button
-                    key={btn}
-                    disabled={sending}
-                    onClick={() => handleActionButton(btn)}
-                  >
-                    {/* BUTTON_TEXT lookup — key is allowlisted, value is a static constant */}
-                    {BUTTON_TEXT[btn] || btn}
-                  </button>
-                ))}
-              </div>
-            )}
 
             {(voiceStage !== "idle" || isTranscribing || voiceError) && (
               <div className="chatVoicePanel">
