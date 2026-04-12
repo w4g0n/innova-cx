@@ -1079,14 +1079,25 @@ def get_current_user(
     Cookie is checked first (preferred — not accessible to JavaScript).
     Bearer header is accepted as fallback for backward compatibility.
     """
-    token = request.cookies.get("access_token") if request else None
-    if not token and authorization:
+    cookie_token = request.cookies.get("access_token") if request else None
+    bearer_token = None
+    if authorization:
         parts = authorization.split(" ", 1)
         if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1].strip():
-            token = parts[1].strip()
-    if not token:
+            bearer_token = parts[1].strip()
+
+    if not cookie_token and not bearer_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return _validate_token_and_fetch_user(token)
+
+    if cookie_token:
+        try:
+            return _validate_token_and_fetch_user(cookie_token)
+        except HTTPException:
+            # Fall back to the explicit Bearer token if the cookie is stale or expired.
+            if not bearer_token or bearer_token == cookie_token:
+                raise
+
+    return _validate_token_and_fetch_user(bearer_token)
 
 
 def _set_auth_cookie(response, token: str) -> None:

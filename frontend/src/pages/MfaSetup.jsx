@@ -168,12 +168,9 @@ export default function MfaSetup() {
         }));
       }
 
-      // Mark MFA setup complete
-      const csrf2 = await getCsrfToken();
-      await fetch(apiUrl("/api/auth/totp-setup-complete"), {
-        method: "POST",
-        headers: { Authorization: `Bearer ${loginToken}`, ...(csrf2 ? { "X-CSRF-Token": csrf2 } : {}) },
-      });
+      // Backend /auth/totp-verify already enables MFA and sets the auth cookie.
+      // Avoid a second "setup complete" call here: it is redundant and can fail
+      // during the login handoff, which incorrectly bounces the user back out.
 
       localStorage.setItem("access_token", accessToken);
       localStorage.setItem("user", JSON.stringify(responseUser));
