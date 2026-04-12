@@ -8,7 +8,8 @@ The Recurrence Agent is step 1 of the orchestrator pipeline. It detects whether 
 |------|---------|
 | `ai-models/MultiAgentPipeline/Orchestrator/agents/step01_recurrence/step.py` | Branch logic and DB actions |
 | `ai-models/MultiAgentPipeline/Orchestrator/recurrence_encoder.py` | Transformer similarity model |
-| `ai-models/MultiAgentPipeline/Orchestrator/agents/step01_recurrence/model/` | Local sentence-transformer weights |
+| `/opt/innova-models/recurrence/all-MiniLM-L6-v2` (mounted in-container at `/app/models/recurrence/all-MiniLM-L6-v2`) | Preferred persistent sentence-transformer weights store for live deployments |
+| `ai-models/MultiAgentPipeline/Orchestrator/agents/step01_recurrence/model/` | Repo-local fallback model path |
 
 ---
 
@@ -229,5 +230,5 @@ docker exec innovacx-orchestrator python /app/test_recurrence.py
 
 | Variable | Default | Description |
 |---|---|---|
-| `RECURRENCE_ENCODER_MODEL` | `./agents/step01_recurrence/model` | HuggingFace model id or local path |
+| `RECURRENCE_ENCODER_MODEL` | `/app/models/recurrence/all-MiniLM-L6-v2` | Preferred HuggingFace model id or local path; loader falls back to the repo-local model dir, then the upstream HF model id if needed |
 | `RECURRENCE_SIMILARITY_THRESHOLD` | `0.75` | Cosine similarity threshold (0–1) |
