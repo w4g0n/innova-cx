@@ -174,8 +174,20 @@ export default function ManagerNotifications() {
       } catch { /* silently ignore */ }
     }
 
-    // Navigate AFTER state update and API call
-    if (n.ticketId) navigate(`/manager/complaints/${encodeURIComponent(n.ticketId)}`);
+    // Reroute/rescore approval requests → send manager to the approvals queue
+    const title = (n.title || "").toLowerCase();
+    const isApprovalRequest =
+      title.includes("rescoring request") ||
+      title.includes("rerouting request");
+
+    if (isApprovalRequest) {
+      navigate("/manager/approvals");
+      return;
+    }
+
+    // All other notifications → navigate to the ticket using its code (not UUID)
+    const dest = n.ticketCode || n.ticketId;
+    if (dest) navigate(`/manager/complaints/${encodeURIComponent(dest)}`);
   };
 
   return (
