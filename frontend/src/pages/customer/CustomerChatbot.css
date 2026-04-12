@@ -58,6 +58,7 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin-top: 6px;
 }
 
 .custQuickTopBtns button {

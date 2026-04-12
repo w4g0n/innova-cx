@@ -83,6 +83,9 @@ _COMPLAINT_SIGNALS = [
     "elevator", "lift", "plumbing", "electrical", "parking",
     "wifi", "wi-fi", "network", "printer", "cctv", "window",
     "door", "lock", "alarm", "cleaning", "restroom",
+    "toxic", "explod", "smoke", "fumes", "smell", "spill",
+    "overflow", "crack", "burst", "collapse", "stuck", "blocked",
+    "noise", "loud", "broken into", "vandal", "graffiti", "flood",
 ]
 
 _AGGRESSION_WORDS = {
