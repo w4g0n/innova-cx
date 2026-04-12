@@ -12,5 +12,6 @@ joblib
 scikit-learn
 torch
 transformers
+protobuf
 xgboost
 psycopg2-binary==2.9.9
