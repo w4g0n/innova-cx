@@ -706,6 +706,92 @@ def _ensure_dev_seed_users() -> None:
         logger.warning("dev_seed | failed: %s", exc)
 
 
+def _repair_employee_departments() -> None:
+    """
+    Idempotent startup repair — runs on every boot for every teammate.
+    Fixes user_profiles.department_id and stale approval_requests routing.
+    """
+    STAFF_DEPARTMENTS: Dict[str, str] = {
+        "hamad@innovacx.net": "IT",
+        "leen@innovacx.net":  "HR",
+        "rami@innovacx.net":  "Legal & Compliance",
+        "majid@innovacx.net": "Maintenance",
+        "ali@innovacx.net":   "Safety & Security",
+        "yara@innovacx.net":  "Leasing",
+        "hana@innovacx.net":  "Facilities Management",
+        "ahmed@innovacx.net":  "IT",
+        "lena@innovacx.net":   "HR",
+        "bilal@innovacx.net":  "Legal & Compliance",
+        "sameer@innovacx.net": "Maintenance",
+        "yousef@innovacx.net": "Safety & Security",
+        "talya@innovacx.net":  "Leasing",
+        "sarah@innovacx.net":  "Facilities Management",
+    }
+    try:
+        with db_connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Step 1: Fix user_profiles.department_id for all seeded staff.
+                for email, dept_name in STAFF_DEPARTMENTS.items():
+                    cur.execute(
+                        """
+                        UPDATE user_profiles up
+                        SET department_id = (
+                            SELECT id FROM departments WHERE name = %s LIMIT 1
+                        )
+                        FROM users u
+                        WHERE up.user_id = u.id
+                          AND u.email = %s
+                          AND (
+                              up.department_id IS NULL
+                              OR up.department_id <> (
+                                  SELECT id FROM departments WHERE name = %s LIMIT 1
+                              )
+                          )
+                        """,
+                        (dept_name, email, dept_name),
+                    )
+                # Step 2: Repair stale/NULL requested_to_user_id in Pending rows.
+                cur.execute(
+                    """
+                    UPDATE approval_requests ar
+                    SET requested_to_user_id = (
+                        SELECT mgr.id
+                        FROM user_profiles emp_up
+                        JOIN user_profiles mgr_up
+                            ON mgr_up.department_id = emp_up.department_id
+                        JOIN users mgr ON mgr.id = mgr_up.user_id
+                        WHERE emp_up.user_id = ar.submitted_by_user_id
+                          AND mgr.role = 'manager'
+                          AND mgr.is_active = TRUE
+                        ORDER BY (mgr_up.employee_code LIKE 'MGR-%%') DESC,
+                                 mgr_up.employee_code ASC
+                        LIMIT 1
+                    )
+                    WHERE ar.status = 'Pending'
+                      AND ar.submitted_by_user_id IN (
+                          SELECT u.id FROM users u WHERE u.email = ANY(%s)
+                      )
+                      AND (
+                          ar.requested_to_user_id IS NULL
+                          OR ar.requested_to_user_id NOT IN (
+                              SELECT mgr2.id
+                              FROM user_profiles emp_up2
+                              JOIN user_profiles mgr_up2
+                                  ON mgr_up2.department_id = emp_up2.department_id
+                              JOIN users mgr2 ON mgr2.id = mgr_up2.user_id
+                              WHERE emp_up2.user_id = ar.submitted_by_user_id
+                                AND mgr2.role = 'manager'
+                                AND mgr2.is_active = TRUE
+                          )
+                      )
+                    """,
+                    (list(STAFF_DEPARTMENTS.keys()),),
+                )
+        logger.warning("dept_repair | employee departments and approval routing verified/repaired")
+    except Exception as exc:
+        logger.warning("dept_repair | failed: %s", exc)
+
+
 @app.on_event("startup")
 async def _start_sla_heartbeat() -> None:
     global _sla_heartbeat_task, _has_sla_policy_fn
@@ -733,6 +819,12 @@ async def _start_sla_heartbeat() -> None:
                 await asyncio.sleep(2)
             else:
                 logger.warning("dev_seed | gave up after 15 attempts: %s", _e)
+
+    # Repair employee department assignments and fix stale approval routing.
+    try:
+        _repair_employee_departments()
+    except Exception as _e:
+        logger.warning("dept_repair | startup call failed: %s", _e)
 
     # ── One-time repair: fix any stale ISO week labels from pre-fix reports ────
     try:
@@ -2336,7 +2428,7 @@ def employee_resolve_ticket(
                   t.status,
                   t.suggested_resolution,
                   COALESCE(d.name, 'Unassigned') AS department_name
-                FROM tickets
+                FROM tickets t
                 LEFT JOIN departments d ON d.id = t.department_id
                 WHERE t.ticket_code = %s
                   AND t.assigned_to_user_id = %s
@@ -2415,7 +2507,7 @@ def employee_resolve_ticket(
                   final_text,
                   used
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s);
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
                 """,
                 (
                     row["id"],
@@ -2635,20 +2727,23 @@ def employee_rescore_ticket(
     current_priority = row.get("current_priority") or "Unknown"
     request_code = f"REQ-{int(time.time() * 1000) % 10000000}"
 
-    # Look up the manager of the ticket's department so the notification
-    # trigger sends to exactly the right manager — not all managers.
+    # Look up the manager of the SUBMITTING EMPLOYEE's own department.
+    # Must NOT use the ticket's department_id — tickets are routed by AI to
+    # any department, which may differ from the employee's home department.
+    # ORDER BY prefers the canonical seeded manager (employee_code LIKE 'MGR-%').
     dept_manager_row = fetch_one(
         """
-        SELECT u.id AS manager_id
-        FROM tickets t
-        JOIN user_profiles up ON up.department_id = t.department_id
-        JOIN users u ON u.id = up.user_id
-        WHERE t.id = %s
-          AND u.role = 'manager'
-          AND u.is_active = TRUE
+        SELECT mgr.id AS manager_id
+        FROM user_profiles emp_up
+        JOIN user_profiles mgr_up ON mgr_up.department_id = emp_up.department_id
+        JOIN users mgr ON mgr.id = mgr_up.user_id
+        WHERE emp_up.user_id = %s
+          AND mgr.role = 'manager'
+          AND mgr.is_active = TRUE
+        ORDER BY (mgr_up.employee_code LIKE 'MGR-%%') DESC, mgr_up.employee_code ASC
         LIMIT 1;
         """,
-        (row["id"],),
+        (user_id,),
     ) or {}
     target_manager_id = dept_manager_row.get("manager_id") or None
 
@@ -2740,20 +2835,20 @@ def employee_reroute_ticket(
     current_dept = row.get("current_dept") or "Unknown"
     request_code = f"REQ-{int(time.time() * 1000) % 10000000}"
 
-    # Look up the manager of the ticket's current department so the notification
-    # trigger sends to exactly the right manager — not all managers.
+    # Look up the manager of the SUBMITTING EMPLOYEE's own department.
     dept_manager_row = fetch_one(
         """
-        SELECT u.id AS manager_id
-        FROM tickets t
-        JOIN user_profiles up ON up.department_id = t.department_id
-        JOIN users u ON u.id = up.user_id
-        WHERE t.id = %s
-          AND u.role = 'manager'
-          AND u.is_active = TRUE
+        SELECT mgr.id AS manager_id
+        FROM user_profiles emp_up
+        JOIN user_profiles mgr_up ON mgr_up.department_id = emp_up.department_id
+        JOIN users mgr ON mgr.id = mgr_up.user_id
+        WHERE emp_up.user_id = %s
+          AND mgr.role = 'manager'
+          AND mgr.is_active = TRUE
+        ORDER BY (mgr_up.employee_code LIKE 'MGR-%%') DESC, mgr_up.employee_code ASC
         LIMIT 1;
         """,
-        (row["id"],),
+        (user_id,),
     ) or {}
     target_manager_id = dept_manager_row.get("manager_id") or None
 
@@ -4595,59 +4690,93 @@ def assign_ticket(
     if user.get("role") != "manager":
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    if body.employee_name:
-        emp = fetch_one(
-            """
-            SELECT u.id AS user_id
-            FROM user_profiles up
-            JOIN users u ON u.id = up.user_id
-            WHERE up.full_name = %s AND u.role = 'employee'
-            LIMIT 1
-            """,
-            (body.employee_name,),
-        )
-        if not emp:
-            raise HTTPException(status_code=404, detail="Employee not found")
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
 
-        execute(
-            """
-            UPDATE tickets
-            SET
-                assigned_to_user_id = %s,
-                assigned_at         = NOW(),
-                priority_assigned_at = COALESCE(priority_assigned_at, NOW()),
-                updated_at          = NOW(),
-                status              = CASE
-                                        WHEN status = 'Resolved' THEN status
-                                        ELSE 'Assigned'::ticket_status
-                                      END
-            WHERE id = %s
-            """,
-            (emp["user_id"], ticket_id),
-        )
-        return {"ticket_id": ticket_id, "assigned_to": body.employee_name, "action": "assigned"}
+            if body.employee_name:
+                # Look up employee by full name
+                cur.execute(
+                    """
+                    SELECT u.id AS user_id
+                    FROM user_profiles up
+                    JOIN users u ON u.id = up.user_id
+                    WHERE up.full_name = %s AND u.role = 'employee'
+                    LIMIT 1
+                    """,
+                    (body.employee_name,),
+                )
+                emp = cur.fetchone()
+                if not emp:
+                    raise HTTPException(status_code=404, detail="Employee not found")
 
-    else:
-        execute(
-            """
-            UPDATE tickets
-            SET
-                assigned_to_user_id = NULL,
-                assigned_at         = NULL,
-                priority_assigned_at = NULL,
-                respond_due_at = NULL,
-                resolve_due_at = NULL,
-                respond_time_left_seconds = NULL,
-                resolve_time_left_seconds = NULL,
-                respond_breached = FALSE,
-                resolve_breached = FALSE,
-                updated_at          = NOW(),
-                status              = 'Open'
-            WHERE id = %s
-            """,
-            (ticket_id,),
-        )
-        return {"ticket_id": ticket_id, "assigned_to": None, "action": "unassigned"}
+                cur.execute(
+                    """
+                    UPDATE tickets
+                    SET
+                        assigned_to_user_id  = %s,
+                        assigned_at          = NOW(),
+                        priority_assigned_at = COALESCE(priority_assigned_at, NOW()),
+                        updated_at           = NOW(),
+                        status               = CASE
+                                                 WHEN status = 'Resolved' THEN status
+                                                 ELSE 'Assigned'::ticket_status
+                                               END
+                    WHERE id = %s
+                    RETURNING id, ticket_code, status
+                    """,
+                    (emp["user_id"], ticket_id),
+                )
+                updated = cur.fetchone()
+                if not updated:
+                    raise HTTPException(status_code=404, detail="Ticket not found")
+
+                # Audit trail — makes the change verifiable in ticket_updates
+                cur.execute(
+                    """
+                    INSERT INTO ticket_updates (ticket_id, author_user_id, update_type, message)
+                    VALUES (%s, %s, 'status_change', %s)
+                    """,
+                    (
+                        ticket_id,
+                        user["id"],
+                        f"Manager assigned ticket to {body.employee_name}.",
+                    ),
+                )
+                return {"ticket_id": ticket_id, "assigned_to": body.employee_name, "action": "assigned"}
+
+            else:
+                cur.execute(
+                    """
+                    UPDATE tickets
+                    SET
+                        assigned_to_user_id       = NULL,
+                        assigned_at               = NULL,
+                        priority_assigned_at      = NULL,
+                        respond_due_at            = NULL,
+                        resolve_due_at            = NULL,
+                        respond_time_left_seconds = NULL,
+                        resolve_time_left_seconds = NULL,
+                        respond_breached          = FALSE,
+                        resolve_breached          = FALSE,
+                        updated_at                = NOW(),
+                        status                    = 'Open'
+                    WHERE id = %s
+                    RETURNING id, ticket_code, status
+                    """,
+                    (ticket_id,),
+                )
+                updated = cur.fetchone()
+                if not updated:
+                    raise HTTPException(status_code=404, detail="Ticket not found")
+
+                cur.execute(
+                    """
+                    INSERT INTO ticket_updates (ticket_id, author_user_id, update_type, message)
+                    VALUES (%s, %s, 'status_change', %s)
+                    """,
+                    (ticket_id, user["id"], "Manager unassigned ticket."),
+                )
+                return {"ticket_id": ticket_id, "assigned_to": None, "action": "unassigned"}
 class RouteTicketBody(BaseModel):
     department: str
     reason: Optional[str] = None
@@ -4676,7 +4805,7 @@ def manager_resolve_ticket(
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
-    if ticket["status"] == "Resolved":
+    if str(ticket["status"]).lower() in {"resolved", "closed"}:
         raise HTTPException(status_code=409, detail="Ticket is already resolved")
 
     from_status = ticket["status"]
@@ -4877,36 +5006,62 @@ def route_ticket_department(
     if not dept:
         raise HTTPException(status_code=404, detail=f"Department '{dept_name}' not found")
 
-    # Fetch BEFORE updating so old_dept is still the current one
-    t_info = fetch_one(
-        """
-        SELECT t.ticket_code, t.assigned_to_user_id, t.priority,
-               d_old.name AS old_dept
-        FROM tickets t
-        LEFT JOIN departments d_old ON d_old.id = t.department_id
-        WHERE t.id = %s LIMIT 1;
-        """,
-        (ticket_id,),
-    ) or {}
-
-    execute(
-        """
-        UPDATE tickets
-        SET department_id = %s,
-            updated_at    = NOW()
-        WHERE id = %s
-        """,
-        (dept["id"], ticket_id),
-    )
-
-    ticket_code  = t_info.get("ticket_code") or ticket_id
-    assigned_uid = t_info.get("assigned_to_user_id")
-    t_priority   = t_info.get("priority")
-    old_dept     = t_info.get("old_dept") or "Unknown"
     reroute_reason = (body.reason or "").strip()
 
     with db_connect() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+            # Fetch current state BEFORE updating so we have old values for audit
+            cur.execute(
+                """
+                SELECT t.ticket_code, t.assigned_to_user_id, t.priority,
+                       d_old.name AS old_dept
+                FROM tickets t
+                LEFT JOIN departments d_old ON d_old.id = t.department_id
+                WHERE t.id = %s
+                LIMIT 1;
+                """,
+                (ticket_id,),
+            )
+            t_info = cur.fetchone()
+            if not t_info:
+                raise HTTPException(status_code=404, detail="Ticket not found")
+
+            old_dept     = t_info.get("old_dept") or "Unknown"
+            ticket_code  = t_info.get("ticket_code") or ticket_id
+            assigned_uid = t_info.get("assigned_to_user_id")
+            t_priority   = t_info.get("priority")
+
+            # Update department — RETURNING confirms the row was actually changed
+            cur.execute(
+                """
+                UPDATE tickets
+                SET department_id = %s,
+                    updated_at    = NOW()
+                WHERE id = %s
+                RETURNING id, ticket_code
+                """,
+                (dept["id"], ticket_id),
+            )
+            updated = cur.fetchone()
+            if not updated:
+                raise HTTPException(status_code=404, detail="Ticket not found")
+
+            # Audit trail — verifiable in ticket_updates after the action
+            cur.execute(
+                """
+                INSERT INTO ticket_updates (ticket_id, author_user_id, update_type, message)
+                VALUES (%s, %s, 'department_change', %s)
+                """,
+                (
+                    ticket_id,
+                    user["id"],
+                    f"Manager rerouted ticket from {old_dept} to {dept_name}."
+                    + (f" Reason: {reroute_reason}" if reroute_reason else ""),
+                ),
+            )
+
+            # Notify manager who performed the action
             _insert_notification(
                 cur,
                 user_id=str(user["id"]),
@@ -4918,6 +5073,7 @@ def route_ticket_department(
                 priority=t_priority,
             )
 
+            # Notify previously assigned employee if different from acting manager
             if assigned_uid and str(assigned_uid) != str(user["id"]):
                 _insert_notification(
                     cur,
@@ -4998,8 +5154,8 @@ def get_approvals(user: Dict[str, Any] = Depends(require_manager)):
 
     # Match on either:
     #   1. The request was explicitly addressed to this manager (requested_to_user_id), OR
-    #   2. The ticket currently lives in this manager's department
-    # This ensures requests don't disappear when a ticket has no dept or was rerouted.
+    #   2. The submitting employee belongs to this manager's department.
+    # NOTE: t.department_id intentionally NOT used — AI-routed tickets cause fan-out.
     if dept_id:
         approvals = fetch_all("""
 SELECT
@@ -5021,7 +5177,10 @@ FROM approval_requests ar
 LEFT JOIN tickets t ON ar.ticket_id = t.id
 LEFT JOIN user_profiles up ON ar.submitted_by_user_id = up.user_id
 LEFT JOIN user_profiles du ON ar.decided_by_user_id = du.user_id
-WHERE (ar.requested_to_user_id = %s OR t.department_id = %s)
+WHERE (
+    ar.requested_to_user_id = %s
+    OR up.department_id = %s
+)
 ORDER BY ar.submitted_at DESC;
 """, (manager_id, dept_id))
     else:
