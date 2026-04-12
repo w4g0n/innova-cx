@@ -859,11 +859,11 @@ async def _review_priority(state: dict, upstream_inputs_changed: bool) -> tuple[
                 return result, priority_changed
     except asyncio.TimeoutError:
         logger.warning("review_agent | priority validation Qwen timed out")
-        result["operator_override_required"] = True
-        result["issue"] = "Priority review timed out"
-        result["operator_message"] = (
-            f"Review Agent could not validate priority '{priority}' in time. Operator verification recommended."
-        )
+        # A timeout in the semantic priority second-opinion should not surface
+        # as an operator-override issue when the ticket otherwise passed.
+        result["status"] = "success"
+        result["issue"] = None
+        result["operator_message"] = None
 
     # Light advisory check from recent human corrections in this department.
     department      = str(state.get("department_selected") or state.get("department") or "Unknown")

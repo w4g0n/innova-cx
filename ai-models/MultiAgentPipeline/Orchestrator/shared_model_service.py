@@ -35,7 +35,7 @@ SHARED_QWEN_MODEL_PATH: str = os.getenv(
 ).strip()
 SHARED_QWEN_MODEL_NAME: str = os.getenv(
     "SHARED_QWEN_MODEL_NAME",
-    "",
+    "Qwen2.5",
 ).strip()
 SHARED_QWEN_AUTO_DOWNLOAD: bool = False
 
