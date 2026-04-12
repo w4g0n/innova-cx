@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
-from functools import lru_cache
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -44,31 +44,47 @@ _DETAILS_TRUNCATE = 256
 
 
 # ---------------------------------------------------------------------------
-# Model singleton
+# Model singleton — retries on failure (no permanent None caching)
 # ---------------------------------------------------------------------------
 
-@lru_cache(maxsize=1)
+_encoder_lock: threading.Lock = threading.Lock()
+_encoder_instance: Optional[dict] = None
+_encoder_loaded: bool = False  # True only after a successful load
+
+
 def _load_encoder() -> Optional[dict]:
     """
-    Load the tokenizer and model once. Returns None if unavailable.
+    Load the tokenizer and model once on success; retry on failure.
+    Returns None if unavailable.
     """
-    model_name = RECURRENCE_ENCODER_MODEL
-    if not model_name:
-        logger.info("recurrence_encoder | RECURRENCE_ENCODER_MODEL is empty — encoder disabled")
-        return None
-    try:
-        import torch  # type: ignore
-        from transformers import AutoTokenizer, AutoModel  # type: ignore
+    global _encoder_instance, _encoder_loaded
 
-        logger.info("recurrence_encoder | loading model=%s", model_name)
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModel.from_pretrained(model_name)
-        model.eval()
-        logger.info("recurrence_encoder | model loaded ok")
-        return {"tokenizer": tokenizer, "model": model, "torch": torch}
-    except Exception as exc:
-        logger.warning("recurrence_encoder | failed to load model (%s) — will use heuristic fallback", exc)
-        return None
+    if _encoder_loaded:
+        return _encoder_instance
+
+    with _encoder_lock:
+        if _encoder_loaded:
+            return _encoder_instance
+
+        model_name = RECURRENCE_ENCODER_MODEL
+        if not model_name:
+            logger.info("recurrence_encoder | RECURRENCE_ENCODER_MODEL is empty — encoder disabled")
+            return None
+        try:
+            import torch  # type: ignore
+            from transformers import AutoTokenizer, AutoModel  # type: ignore
+
+            logger.info("recurrence_encoder | loading model=%s", model_name)
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = AutoModel.from_pretrained(model_name)
+            model.eval()
+            logger.info("recurrence_encoder | model loaded ok")
+            _encoder_instance = {"tokenizer": tokenizer, "model": model, "torch": torch}
+            _encoder_loaded = True
+            return _encoder_instance
+        except Exception as exc:
+            logger.warning("recurrence_encoder | failed to load model (%s) — will retry next call", exc)
+            return None
 
 
 # ---------------------------------------------------------------------------
