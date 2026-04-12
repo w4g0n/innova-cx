@@ -248,6 +248,43 @@ def db_connect():
         raise HTTPException(status_code=500, detail="A server error occurred. Please try again later.")
 
 
+def run_migrations() -> None:
+    migration_steps = [
+        ("add_google_id_column", "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT;"),
+        (
+            "create_google_id_index",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;",
+        ),
+        ("drop_password_hash_not_null", "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;"),
+    ]
+
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT EXISTS (
+                  SELECT 1
+                  FROM pg_class c
+                  JOIN pg_namespace n ON n.oid = c.relnamespace
+                  WHERE n.nspname = 'public'
+                    AND c.relname = 'users'
+                    AND c.relkind = 'r'
+                    AND pg_get_userbyid(c.relowner) = current_user
+                )
+                """
+            )
+            owns_users = bool((cur.fetchone() or [False])[0])
+            if not owns_users:
+                logger.warning("startup_migration | skipping owner-only users DDL for runtime DB role")
+                return
+            for step_name, statement in migration_steps:
+                try:
+                    cur.execute(statement)
+                except Exception:
+                    logger.exception("startup_migration | step failed: %s", step_name)
+                    raise
+
+
 def _ensure_runtime_schema_compatibility() -> None:
     """
     Keeps backend compatible with older DB volumes that skipped newer SQL scripts.
@@ -344,6 +381,45 @@ def _ensure_runtime_schema_compatibility() -> None:
                 # Ensure MFA columns exist even on older volumes
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS trusted_devices (
+                      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                      token_hash TEXT NOT NULL UNIQUE,
+                      user_agent TEXT,
+                      created_ip TEXT,
+                      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                      last_used_at TIMESTAMPTZ,
+                      expires_at TIMESTAMPTZ NOT NULL,
+                      revoked_at TIMESTAMPTZ
+                    );
+                    """
+                )
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS user_agent TEXT;")
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS created_ip TEXT;")
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();")
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_trusted_devices_user_id ON trusted_devices(user_id);")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_trusted_devices_active ON trusted_devices(user_id, expires_at) WHERE revoked_at IS NULL;")
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS mfa_reset_tokens (
+                      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                      token_hash TEXT NOT NULL UNIQUE,
+                      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                      expires_at TIMESTAMPTZ NOT NULL,
+                      used_at TIMESTAMPTZ
+                    );
+                    """
+                )
+                cur.execute("ALTER TABLE mfa_reset_tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();")
+                cur.execute("ALTER TABLE mfa_reset_tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE mfa_reset_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ;")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_mfa_reset_tokens_user_id ON mfa_reset_tokens(user_id);")
                 # password_changed_at: used by reset_password to stamp the moment
                 # a password was changed via reset flow, enabling stale-session detection.
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;")
@@ -525,6 +601,8 @@ if not _raw_jwt_secret or len(_raw_jwt_secret) < 32:
 JWT_SECRET = _raw_jwt_secret
 JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "900"))  # 15 minutes
 MFA_TEMP_TTL_SECONDS = int(os.getenv("MFA_TEMP_TTL_SECONDS", "900"))  # 15 minutes
+TRUSTED_DEVICE_TTL_SECONDS = int(os.getenv("TRUSTED_DEVICE_TTL_SECONDS", str(30 * 24 * 60 * 60)))
+MFA_RESET_TTL_SECONDS = int(os.getenv("MFA_RESET_TTL_SECONDS", "1800"))  # 30 minutes
 DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "false").lower() == "true"
 DISABLE_MFA = os.getenv("DISABLE_MFA", "false").lower() == "true"
 
@@ -574,6 +652,47 @@ def verify_jwt(token: str) -> dict:
         return payload
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def _hash_opaque_token(raw_token: str) -> str:
+    return hashlib.sha256((raw_token or "").encode()).hexdigest()
+
+
+def _issue_trusted_device_token(user_id: str, request: Optional[Request]) -> str:
+    raw_token = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
+    token_hash = _hash_opaque_token(raw_token)
+    user_agent = request.headers.get("user-agent") if request else None
+    created_ip = request.client.host if request and request.client else None
+    execute(
+        """
+        INSERT INTO trusted_devices (user_id, token_hash, user_agent, created_ip, expires_at)
+        VALUES (%s, %s, %s, %s, NOW() + (%s * interval '1 second'))
+        """,
+        (user_id, token_hash, user_agent, created_ip, TRUSTED_DEVICE_TTL_SECONDS),
+    )
+    return raw_token
+
+
+def _validate_trusted_device(user_id: str, raw_token: Optional[str]) -> bool:
+    token = (raw_token or "").strip()
+    if len(token) < 40:
+        return False
+    row = fetch_one(
+        """
+        SELECT id
+        FROM trusted_devices
+        WHERE user_id = %s
+          AND token_hash = %s
+          AND revoked_at IS NULL
+          AND expires_at > NOW()
+        LIMIT 1
+        """,
+        (user_id, _hash_opaque_token(token)),
+    )
+    if not row:
+        return False
+    execute("UPDATE trusted_devices SET last_used_at = NOW() WHERE id = %s", (row["id"],))
+    return True
 
 
 def _check_token_issued_after_password_change(payload: dict, user: dict) -> None:
@@ -795,6 +914,17 @@ def _repair_employee_departments() -> None:
 @app.on_event("startup")
 async def _start_sla_heartbeat() -> None:
     global _sla_heartbeat_task, _has_sla_policy_fn
+
+    for _migration_attempt in range(15):
+        try:
+            run_migrations()
+            break
+        except Exception as _e:
+            if _migration_attempt < 14:
+                logger.info("startup_migration | DB not ready yet (attempt %d/15), retrying in 2s...", _migration_attempt + 1)
+                await asyncio.sleep(2)
+            else:
+                logger.error("startup_migration | gave up after 15 attempts: %s", _e)
 
     # Retry db_compat and dev_seed until DB is reachable (handles startup race on first boot)
     for _boot_attempt in range(15):
@@ -1222,6 +1352,7 @@ def diff_minutes(later_dt, earlier_dt) -> Optional[int]:
 class LoginRequest(BaseModel):
     email: str
     password: str
+    trusted_device_token: Optional[str] = None
 
 
 class VerifyTOTPRequest(BaseModel):
@@ -1232,6 +1363,11 @@ class VerifyTOTPRequest(BaseModel):
 
 class SendEmailOTPRequest(BaseModel):
     login_token: str
+
+
+class TrustedDeviceExchangeRequest(BaseModel):
+    login_token: str
+    trusted_device_token: str
 
 
 class LoginResponse(BaseModel):
@@ -1379,6 +1515,24 @@ def login(request: Request, body: LoginRequest, _csrf: None = Depends(require_cs
         _set_auth_cookie(resp, access_token)
         return resp
 
+    if user.get("mfa_enabled") and _validate_trusted_device(str(user["id"]), body.trusted_device_token):
+        access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+        profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+        log_auth_event("login_success", user_id=str(user["id"]), email=email, ip=client_ip, extra={"trusted_device": True})
+        resp = JSONResponse(content={
+            "access_token": access_token,
+            "token_type": "bearer",
+            "requiresSetup": False,
+            "user": {
+                "id": str(user["id"]),
+                "email": user["email"],
+                "role": user["role"],
+                "full_name": (profile or {}).get("full_name") or user["email"],
+            },
+        })
+        _set_auth_cookie(resp, access_token)
+        return resp
+
     # Generate secret if missing
     if not user.get("totp_secret"):
         secret = pyotp.random_base32()
@@ -1450,10 +1604,12 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     # Issue real JWT valid for standard TTL
     access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
     _profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    trusted_device_token = _issue_trusted_device_token(str(user["id"]), request) if body.trust_device else None
     log_auth_event("totp_success", user_id=str(user["id"]), email=user.get("email"), ip=client_ip)
     resp = JSONResponse(content={
         "access_token": access_token,
         "token_type": "bearer",
+        **({"trusted_device_token": trusted_device_token} if trusted_device_token else {}),
         "user": {
             "id": str(user["id"]),
             "email": user["email"],
@@ -1519,14 +1675,6 @@ async def google_oauth_callback(request: Request, body: _OAuthCallbackBody, _csr
         raise HTTPException(status_code=400, detail="Google email address is not verified.")
 
     # 2. Find or create user — customers only
-    # Ensure google_id column exists (idempotent, skips on older volumes that already have it)
-    try:
-        execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT;")
-        execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;")
-        execute("ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;")
-    except Exception:
-        pass  # column already exists or concurrent migration — safe to ignore
-
     user = fetch_one(
         "SELECT id, email, role, is_active, totp_secret, mfa_enabled FROM users WHERE google_id = %s",
         (google_id,),
@@ -1652,6 +1800,41 @@ def email_otp_send(request: Request, body: SendEmailOTPRequest, _csrf: None = De
     return {"ok": True, "message": "Verification code sent"}
 
 
+@api.post("/auth/trusted-device-exchange")
+@rate_limit_auth()
+def trusted_device_exchange(request: Request, body: TrustedDeviceExchangeRequest, _csrf: None = Depends(require_csrf)):
+    payload = verify_jwt(body.login_token)
+    client_ip = request.client.host if request and request.client else None
+    user = fetch_one(
+        "SELECT id, email, role, is_active, mfa_enabled FROM users WHERE id = %s",
+        (payload.get("sub"),),
+    )
+
+    if not user or not user.get("is_active"):
+        raise HTTPException(status_code=401, detail="Invalid or expired login session")
+    if not user.get("mfa_enabled"):
+        raise HTTPException(status_code=400, detail="Trusted device bypass is only available after MFA setup.")
+    if not _validate_trusted_device(str(user["id"]), body.trusted_device_token):
+        raise HTTPException(status_code=401, detail="Trusted device not recognized.")
+
+    access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+    profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    log_auth_event("login_success", user_id=str(user["id"]), email=user["email"], ip=client_ip, extra={"trusted_device": True, "exchange": True})
+    resp = JSONResponse(content={
+        "access_token": access_token,
+        "token_type": "bearer",
+        "requiresSetup": False,
+        "user": {
+            "id": str(user["id"]),
+            "email": user["email"],
+            "role": user["role"],
+            "full_name": (profile or {}).get("full_name") or user["email"],
+        },
+    })
+    _set_auth_cookie(resp, access_token)
+    return resp
+
+
 @api.post("/auth/email-otp-verify")
 @rate_limit_auth()
 def email_otp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends(require_csrf)):
@@ -1687,10 +1870,12 @@ def email_otp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = De
 
     access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
     profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    trusted_device_token = _issue_trusted_device_token(str(user["id"]), request) if body.trust_device else None
     log_auth_event("email_otp_success", user_id=str(user["id"]), email=user["email"], ip=client_ip)
     resp = JSONResponse(content={
         "access_token": access_token,
         "token_type": "bearer",
+        **({"trusted_device_token": trusted_device_token} if trusted_device_token else {}),
         "user": {
             "id": str(user["id"]),
             "email": user["email"],
@@ -1728,6 +1913,38 @@ EMAIL_OTP_HTML = """\
       </div>
       <p style="margin:0;font-size:14px;line-height:1.6;color:rgba(255,255,255,.6);">
         This code expires in <strong style="color:#fff;">10 minutes</strong> and can only be used once.
+      </p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+MFA_RESET_EMAIL_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Confirm MFA Reset</title>
+</head>
+<body style="margin:0;padding:0;background:#0c0520;font-family:'Segoe UI',Arial,sans-serif;">
+  <div style="max-width:560px;margin:32px auto;background:#05010e;border:1px solid rgba(168,85,247,.25);border-radius:16px;overflow:hidden;">
+    <div style="padding:36px 40px;background:linear-gradient(160deg,#0e0525 0%,#1a0840 50%,#0c0320 100%);text-align:center;">
+      <div style="font-size:24px;font-weight:900;color:#fff;letter-spacing:-.04em;">Innova<span style="opacity:.55;font-weight:400;">CX</span></div>
+      <div style="margin-top:10px;font-size:22px;font-weight:800;color:#fff;">Confirm MFA Reset</div>
+    </div>
+    <div style="padding:32px 40px;">
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:rgba(255,255,255,.72);">
+        A request was made to reset multi-factor authentication for <strong style="color:#fff;">{email}</strong>.
+      </p>
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:rgba(255,255,255,.6);">
+        If you approve this request, your current authenticator setup and any trusted devices will be cleared. On your next sign-in, you will be asked to set up MFA again.
+      </p>
+      <div style="text-align:center;margin:24px 0;">
+        <a href="{confirm_link}" style="display:inline-block;padding:14px 28px;border-radius:12px;background:linear-gradient(135deg,#6d28d9,#9333ea);color:#fff;text-decoration:none;font-weight:700;">Confirm MFA Reset</a>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.6;color:rgba(255,255,255,.48);">
+        This link expires in 30 minutes. If you did not request this, you can safely ignore this email.
       </p>
     </div>
   </div>
@@ -2134,6 +2351,55 @@ def auth_logout(
 
 class ResetTokenEmailRequest(BaseModel):
     token: str
+
+
+class ConfirmMfaResetRequest(BaseModel):
+    token: str
+
+
+@api.post("/auth/confirm-mfa-reset")
+@rate_limit_auth()
+def confirm_mfa_reset(request: Request, body: ConfirmMfaResetRequest, _csrf: None = Depends(require_csrf)):
+    raw_token = (body.token or "").strip()
+    if len(raw_token) < 40:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    client_ip = request.client.host if request and request.client else None
+    token_hash = _hash_opaque_token(raw_token)
+
+    with db_connect() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT mrt.id, mrt.user_id, u.email
+                FROM mfa_reset_tokens mrt
+                JOIN users u ON u.id = mrt.user_id
+                WHERE mrt.token_hash = %s
+                  AND mrt.used_at IS NULL
+                  AND mrt.expires_at > NOW()
+                """,
+                (token_hash,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+            cur.execute(
+                """
+                UPDATE users
+                SET totp_secret = NULL,
+                    mfa_enabled = FALSE
+                WHERE id = %s
+                """,
+                (row["user_id"],),
+            )
+            cur.execute("UPDATE email_otp_codes SET used_at = NOW() WHERE user_id = %s AND used_at IS NULL", (row["user_id"],))
+            cur.execute("DELETE FROM trusted_devices WHERE user_id = %s", (row["user_id"],))
+            cur.execute("UPDATE mfa_reset_tokens SET used_at = NOW() WHERE id = %s", (row["id"],))
+        conn.commit()
+
+    log_auth_event("mfa_reset_confirmed", user_id=str(row["user_id"]), email=row["email"], ip=client_ip)
+    return {"ok": True, "message": "MFA reset confirmed. You will be prompted to set up a new authenticator on your next login."}
 
 @api.post("/auth/reset-token-email")
 @rate_limit_auth()
@@ -8269,6 +8535,69 @@ def operator_update_user_status(
         raise HTTPException(status_code=500, detail="Failed to update user status.")
 
     return {"success": True, "message": f"User {status}."}
+
+
+@api.post("/operator/users/{user_id}/reset-mfa")
+def operator_reset_user_mfa(
+    user_id: str,
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    _csrf: None = Depends(require_csrf),
+):
+    user_id = _sanitize_uuid(user_id, "user_id")
+    if current_user.get("role") != "operator":
+        raise HTTPException(status_code=403, detail="Only operators can reset MFA.")
+
+    target_user = fetch_one(
+        """
+        SELECT u.id, u.email, u.is_active, up.full_name
+        FROM users u
+        LEFT JOIN user_profiles up ON up.user_id = u.id
+        WHERE u.id = %s
+        """,
+        (user_id,),
+    )
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if not target_user.get("is_active"):
+        raise HTTPException(status_code=400, detail="Cannot reset MFA for an inactive user.")
+
+    raw_token = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
+    token_hash = _hash_opaque_token(raw_token)
+    client_ip = request.client.host if request and request.client else None
+
+    execute("UPDATE mfa_reset_tokens SET used_at = NOW() WHERE user_id = %s AND used_at IS NULL", (user_id,))
+    execute(
+        """
+        INSERT INTO mfa_reset_tokens (user_id, token_hash, expires_at)
+        VALUES (%s, %s, NOW() + (%s * interval '1 second'))
+        """,
+        (user_id, token_hash, MFA_RESET_TTL_SECONDS),
+    )
+
+    confirm_link = f"https://innovacx.net/confirm-mfa-reset#token={raw_token}"
+    resend.Emails.send({
+        "from": "no-reply@innovacx.net",
+        "to": _route_email(target_user["email"]),
+        "subject": "Confirm your InnovaCX MFA reset",
+        "html": MFA_RESET_EMAIL_HTML.format(
+            email=target_user["email"],
+            confirm_link=confirm_link,
+        ),
+    })
+
+    if DEV_LOG_RESET_TOKENS:
+        print(f"[DEV] MFA reset token for {target_user['email']}: {raw_token}")
+        print(f"[DEV] MFA reset link: {confirm_link}")
+
+    log_auth_event(
+        "mfa_reset_requested",
+        user_id=str(target_user["id"]),
+        email=target_user["email"],
+        ip=client_ip,
+        extra={"requested_by": str(current_user["id"])},
+    )
+    return {"success": True, "message": "MFA reset confirmation email sent. The user must confirm to proceed."}
 
 
 @api.delete("/operator/users/{user_id}")

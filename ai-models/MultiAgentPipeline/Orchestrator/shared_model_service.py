@@ -46,6 +46,26 @@ _qwen_lock: threading.Lock = threading.Lock()
 _qwen_instance: dict[str, Any] | None = None
 _qwen_loaded: bool = False  # True only after a successful load
 
+def _resolve_shared_qwen_model_path() -> str:
+    requested = SHARED_QWEN_MODEL_PATH.strip()
+    if requested and (Path(requested) / "config.json").exists():
+        return requested
+
+    if (_SHARED_MODEL_PATH and (Path(_SHARED_MODEL_PATH) / "config.json").exists()):
+        logger.info("shared_model_service | using shared host model path %s", _SHARED_MODEL_PATH)
+        return _SHARED_MODEL_PATH
+
+    if requested and Path(requested).exists():
+        logger.warning(
+            "shared_model_service | requested model path %s is incomplete; falling back",
+            requested,
+        )
+
+    if (Path(_LEGACY_MODEL_PATH) / "config.json").exists():
+        logger.info("shared_model_service | using legacy model path %s", _LEGACY_MODEL_PATH)
+        return _LEGACY_MODEL_PATH
+
+    return requested
 
 def _resolve_shared_qwen_model_path() -> str:
     requested = SHARED_QWEN_MODEL_PATH.strip()

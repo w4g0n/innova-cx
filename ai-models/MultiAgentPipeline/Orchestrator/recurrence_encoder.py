@@ -94,7 +94,6 @@ def _resolve_model_name() -> str:
     )
     return _DEFAULT_HF_MODEL_NAME
 
-
 def _load_encoder() -> Optional[dict]:
     """
     Load the tokenizer and model once on success; retry on failure.
