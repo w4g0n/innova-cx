@@ -47,6 +47,12 @@ _FOLLOW_UP_SIGNALS = [
     "submitted earlier", "submitted before", "raised earlier",
     "my complaint", "my inquiry", "my request", "my issue",
     "pending ticket", "open ticket", "last ticket",
+    # Past-tense references — user describing a complaint/issue they already reported
+    "had a complaint", "had an issue", "had a problem", "had a request",
+    "complaint before", "issue before", "problem before",
+    "made a complaint", "filed a complaint", "submitted a complaint",
+    "reported a problem", "reported an issue", "reported a complaint",
+    "raised a complaint", "raised an issue",
 ]
 
 _CREATE_SIGNALS = [
@@ -339,3 +345,27 @@ def is_cancellation_request(user_text: str) -> bool:
     """
     text_lower = user_text.strip().lower()
     return any(phrase in text_lower for phrase in _CANCELLATION_PHRASES)
+
+
+# Phrases that only make sense as mid-flow redirects to ticket lookup
+_FOLLOW_UP_REDIRECT_SIGNALS = [
+    "track", "follow up", "follow-up", "followup",
+    "ticket id", "my ticket", "existing ticket", "previous ticket",
+    "earlier ticket", "check on my",
+]
+
+_FLOW_REDIRECT_NEGATIONS = {"no", "nope", "nah", "actually", "wait", "sorry"}
+
+
+def is_follow_up_redirect(user_text: str) -> bool:
+    """
+    Detects when a user mid-flow (complaint/inquiry collection) is trying to
+    redirect to following up on an existing ticket instead of creating a new one.
+    Requires BOTH a negation/correction word at the start AND a clear follow-up
+    signal — narrow enough to avoid false positives on real complaint descriptions.
+    """
+    text_lower = user_text.strip().lower()
+    words = text_lower.split()
+    if not words or words[0] not in _FLOW_REDIRECT_NEGATIONS:
+        return False
+    return any(signal in text_lower for signal in _FOLLOW_UP_REDIRECT_SIGNALS)

@@ -474,7 +474,7 @@ export default function Login() {
         if (trustedDeviceToken) clearTrustedDeviceToken(normalizedEmail);
         sessionStorage.setItem("mfa_token", data.access_token);
         sessionStorage.setItem("mfa_user", JSON.stringify(userPayload));
-        navigate("/verify", { replace: true });
+        navigate(data.requiresSetup ? "/mfa-setup" : "/verify", { replace: true });
         return;
       }
 

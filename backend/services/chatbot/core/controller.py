@@ -4,12 +4,15 @@ import re
 from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression, _is_greeting
 
 try:
-    from .intent import is_human_escalation_request, is_cancellation_request
+    from .intent import is_human_escalation_request, is_cancellation_request, is_follow_up_redirect
 except ImportError:
     def is_human_escalation_request(_: str) -> bool:
         return False
 
     def is_cancellation_request(_: str) -> bool:
+        return False
+
+    def is_follow_up_redirect(_: str) -> bool:
         return False
 from .llm import generate_response
 from .logger import log_bot_response, log_user_message
@@ -226,6 +229,16 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
 
     # AWAIT SECONDARY INTENT (inquiry vs complaint)
     if state == "await_secondary_intent":
+        # User changed mind — wants to track an existing ticket instead
+        if is_follow_up_redirect(user_text):
+            transition(session, "await_ticket_id")
+            response = (
+                "No problem. Could you please provide your ticket ID? "
+                "If you do not have it, just say so and I will look up your open tickets."
+            )
+            _log_and_save(session, response, "prompt_ticket_id")
+            return _result(response, "prompt_ticket_id", session_id)
+
         intent = classify_secondary_intent(user_text, history)
 
         if intent == "inquiry":
@@ -415,6 +428,17 @@ def _handle_complaint(session: dict, user_id: str, user_text: str) -> dict:
     session_id = session["session_id"]
     context    = session["context"]
 
+    # User changed mind — wants to track an existing ticket instead
+    if is_follow_up_redirect(user_text):
+        context.clear()
+        transition(session, "await_ticket_id")
+        response = (
+            "No problem. Could you please provide your ticket ID? "
+            "If you do not have it, just say so and I will look up your open tickets."
+        )
+        _log_and_save(session, response, "prompt_ticket_id")
+        return _result(response, "prompt_ticket_id", session_id)
+
     if not context.get("deescalated", False):
         kb_context = retrieve_context(user_text, mode="complaint")
         system = (
@@ -448,6 +472,17 @@ def _handle_complaint(session: dict, user_id: str, user_text: str) -> dict:
 def _collect_ticket_fields(session: dict, user_id: str, user_text: str) -> dict:
     session_id = session["session_id"]
     context    = session["context"]
+
+    # User changed mind — wants to track an existing ticket instead
+    if is_follow_up_redirect(user_text):
+        context.clear()
+        transition(session, "await_ticket_id")
+        response = (
+            "No problem. Could you please provide your ticket ID? "
+            "If you do not have it, just say so and I will look up your open tickets."
+        )
+        _log_and_save(session, response, "prompt_ticket_id")
+        return _result(response, "prompt_ticket_id", session_id)
 
     # Step 1: collect description
     if "description" not in context:

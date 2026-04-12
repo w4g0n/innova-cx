@@ -31,7 +31,7 @@ DEPARTMENT_CANDIDATES = {
     "HR": "Human Resources for employee relations, payroll, leave, staffing, and HR issues",
     "Leasing": "Leasing for rent, pricing, tenants, lease agreements, move in, and handover issues",
     "Maintenance": "Maintenance for water leaks, plumbing, ceilings, electrical faults, HVAC, repairs, and building systems",
-    "IT": "IT for wifi, internet, network, software, login, server, device, and printer issues",
+    "IT": "IT for wifi, internet, network, software, login, server, laptop, computer, device, monitor, keyboard, and printer issues",
 }
 
 DEPARTMENT_LABELS = list(DEPARTMENT_CANDIDATES.keys())
@@ -41,7 +41,29 @@ CONFIDENCE_FLAT_BOOST = float(os.getenv("DEPARTMENT_ROUTER_CONFIDENCE_FLAT_BOOST
 CONFIDENCE_MAX_CAP = float(os.getenv("DEPARTMENT_ROUTER_CONFIDENCE_MAX_CAP", "0.98"))
 
 HEURISTIC_ROUTING_BOOSTS = {
-    "IT": ("wifi", "network", "internet", "server", "system", "software", "login", "email", "printer"),
+    "IT": (
+        "wifi",
+        "network",
+        "internet",
+        "server",
+        "system",
+        "software",
+        "login",
+        "email",
+        "printer",
+        "laptop",
+        "computer",
+        "pc",
+        "desktop",
+        "device",
+        "monitor",
+        "screen",
+        "keyboard",
+        "mouse",
+        "vpn",
+        "outlook",
+        "teams",
+    ),
     "Maintenance": (
         "leak",
         "water leak",
@@ -92,7 +114,32 @@ def _build_qwen_routing_prompt(text: str, label: str) -> str:
 
 def _heuristic_department(text: str) -> str:
     t = (text or "").lower()
-    if any(k in t for k in ("wifi", "network", "internet", "server", "system", "software", "login")):
+    if any(
+        k in t
+        for k in (
+            "wifi",
+            "network",
+            "internet",
+            "server",
+            "system",
+            "software",
+            "login",
+            "laptop",
+            "computer",
+            "pc",
+            "desktop",
+            "device",
+            "monitor",
+            "screen",
+            "keyboard",
+            "mouse",
+            "vpn",
+            "printer",
+            "email",
+            "outlook",
+            "teams",
+        )
+    ):
         return "IT"
     if any(k in t for k in ("leak", "pipe", "water", "ac", "air conditioning", "maintenance", "electrical", "power")):
         return "Maintenance"

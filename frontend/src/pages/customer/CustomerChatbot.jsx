@@ -418,7 +418,7 @@ export default function CustomerChatbot() {
                 </div>
               ))}
               {actionButtons.length > 0 && (
-                <div className="custQuickTopBtns">
+                <div className="custActionBtns">
                   {actionButtons.map((btn) => (
                     <button
                       key={btn}
