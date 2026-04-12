@@ -1465,6 +1465,140 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     return resp
 
 
+_GOOGLE_TOKEN_URL    = "https://oauth2.googleapis.com/token"
+_GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
+
+class _OAuthCallbackBody(BaseModel):
+    code: str
+    redirect_uri: str
+
+@api.post("/auth/oauth/google/callback")
+@rate_limit_auth()
+async def google_oauth_callback(request: Request, body: _OAuthCallbackBody, _csrf: None = Depends(require_csrf)):
+    """
+    Exchange a Google auth code for user identity, then find-or-create a
+    customer account and return the same token shape as /auth/login.
+    Staff accounts are blocked — they must use email + TOTP.
+    """
+    client_id     = os.getenv("GOOGLE_CLIENT_ID", "")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured on this server.")
+
+    client_ip = request.client.host if request and request.client else None
+
+    # 1. Exchange code for Google tokens + userinfo
+    try:
+        async with httpx.AsyncClient(timeout=15) as hc:
+            tok = await hc.post(_GOOGLE_TOKEN_URL, data={
+                "code":          body.code,
+                "client_id":     client_id,
+                "client_secret": client_secret,
+                "redirect_uri":  body.redirect_uri,
+                "grant_type":    "authorization_code",
+            })
+            tok.raise_for_status()
+            ui = await hc.get(_GOOGLE_USERINFO_URL,
+                              headers={"Authorization": f"Bearer {tok.json()['access_token']}"})
+            ui.raise_for_status()
+            userinfo = ui.json()
+    except httpx.HTTPStatusError as exc:
+        logger.warning("google_oauth | exchange failed: %s", exc)
+        raise HTTPException(status_code=401, detail="Google sign-in failed. Please try again.")
+    except Exception as exc:
+        logger.warning("google_oauth | error: %s", exc)
+        raise HTTPException(status_code=500, detail="Google sign-in failed. Please try again.")
+
+    google_id = userinfo.get("sub")
+    email     = (userinfo.get("email") or "").lower().strip()
+    full_name = userinfo.get("name") or userinfo.get("given_name") or email
+
+    if not google_id or not email:
+        raise HTTPException(status_code=400, detail="Google did not return a valid email address.")
+    if not userinfo.get("email_verified"):
+        raise HTTPException(status_code=400, detail="Google email address is not verified.")
+
+    # 2. Find or create user — customers only
+    # Ensure google_id column exists (idempotent, skips on older volumes that already have it)
+    try:
+        execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT;")
+        execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;")
+        execute("ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;")
+    except Exception:
+        pass  # column already exists or concurrent migration — safe to ignore
+
+    user = fetch_one(
+        "SELECT id, email, role, is_active, totp_secret, mfa_enabled FROM users WHERE google_id = %s",
+        (google_id,),
+    )
+    if not user:
+        user = fetch_one(
+            "SELECT id, email, role, is_active, totp_secret, mfa_enabled FROM users WHERE email = %s",
+            (email,),
+        )
+        if user:
+            if not user.get("is_active"):
+                raise HTTPException(status_code=403, detail="Your account has been deactivated.")
+            if user.get("role") != "customer":
+                raise HTTPException(status_code=403, detail="Staff accounts must sign in with email and password.")
+            execute("UPDATE users SET google_id = %s WHERE id = %s", (google_id, user["id"]))
+        else:
+            new_row = fetch_one(
+                "INSERT INTO users (email, password_hash, role, google_id) VALUES (%s, NULL, 'customer', %s) RETURNING id",
+                (email, google_id),
+            )
+            if not new_row:
+                raise HTTPException(status_code=500, detail="Failed to create account.")
+            execute(
+                "INSERT INTO user_profiles (user_id, full_name) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING",
+                (new_row["id"], full_name),
+            )
+            user = fetch_one(
+                "SELECT id, email, role, is_active, totp_secret, mfa_enabled FROM users WHERE id = %s",
+                (new_row["id"],),
+            )
+
+    if not user or not user.get("is_active"):
+        raise HTTPException(status_code=403, detail="Your account has been deactivated.")
+    if user.get("role") != "customer":
+        raise HTTPException(status_code=403, detail="Staff accounts must sign in with email and password.")
+
+    execute("UPDATE users SET last_login_at = NOW() WHERE id = %s", (user["id"],))
+    profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    display_name = (profile or {}).get("full_name") or full_name
+
+    log_auth_event("login_success_oauth", user_id=str(user["id"]), email=email, ip=client_ip,
+                   extra={"provider": "google"})
+
+    # 3. MFA enforcement — same as regular login
+    if DISABLE_MFA:
+        access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+        resp = JSONResponse(content={
+            "access_token": access_token,
+            "token_type": "bearer",
+            "requiresSetup": False,
+            "user": {"id": str(user["id"]), "email": user["email"],
+                     "role": user["role"], "full_name": display_name},
+        })
+        _set_auth_cookie(resp, access_token)
+        return resp
+
+    if not user.get("totp_secret"):
+        secret = pyotp.random_base32()
+        execute("UPDATE users SET totp_secret = %s WHERE id = %s", (secret, user["id"]))
+        user["totp_secret"] = secret
+
+    requires_setup = not user.get("mfa_enabled", False)
+    temp_token = create_jwt({"sub": str(user["id"]), "type": "mfa_temp"}, ttl_seconds=MFA_TEMP_TTL_SECONDS)
+    return {
+        "access_token": temp_token,
+        "token_type": "temporary",
+        "requiresSetup": requires_setup,
+        "user": {"id": str(user["id"]), "email": user["email"],
+                 "role": user["role"], "full_name": display_name},
+    }
+
+
 def _route_email(recipient: str) -> str:
     """Temporary routing rule: @innovacx.net → shared ops inbox; all others → direct."""
     if recipient.lower().endswith("@innovacx.net"):

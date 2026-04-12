@@ -871,21 +871,39 @@ function SolarSystem({ onReady }) {
       }
       animate();
 
+      let mouseMovedSincDown = false;
       const onMouseMove = (e) => {
+        // Update cursor when hovering over a planet (no card shown until click)
         const rect = mount.getBoundingClientRect();
         mouse.x =  ((e.clientX-rect.left)/rect.width)*2-1;
         mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
         raycaster.setFromCamera(mouse, camera);
         const hits = raycaster.intersectObjects(planetObjects.map(p => p.mesh), true);
         if (hits.length) {
-          const found = planetObjects.find(p => p.mesh===hits[0].object);
-          if (found) { hoveredIdx=found.idx; setHovered(AGENTS_DATA[found.idx]); mount.style.cursor="pointer"; return; }
+          mount.style.cursor = "pointer";
+        } else {
+          mount.style.cursor = isDragging ? "grabbing" : "grab";
         }
-        hoveredIdx=-1; setHovered(null);
-        mount.style.cursor = isDragging ? "grabbing" : "grab";
+        if (isDragging) mouseMovedSincDown = true;
       };
-      const onMouseDown = (e) => { isDragging=true; prevMouse={x:e.clientX,y:e.clientY}; mount.style.cursor="grabbing"; };
-      const onMouseUp   = ()    => { isDragging=false; mount.style.cursor="grab"; };
+      const onMouseDown = (e) => { isDragging=true; mouseMovedSincDown=false; prevMouse={x:e.clientX,y:e.clientY}; mount.style.cursor="grabbing"; };
+      const onMouseUp   = (e)   => {
+        isDragging=false;
+        mount.style.cursor="grab";
+        // Only treat as click if mouse didn't drag
+        if (!mouseMovedSincDown) {
+          const rect = mount.getBoundingClientRect();
+          mouse.x =  ((e.clientX-rect.left)/rect.width)*2-1;
+          mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
+          raycaster.setFromCamera(mouse, camera);
+          const hits = raycaster.intersectObjects(planetObjects.map(p => p.mesh), true);
+          if (hits.length) {
+            const found = planetObjects.find(p => p.mesh===hits[0].object);
+            if (found) { hoveredIdx=found.idx; setHovered(AGENTS_DATA[found.idx]); return; }
+          }
+          hoveredIdx=-1; setHovered(null);
+        }
+      };
       const onDrag      = (e)   => {
         if (!isDragging) return;
         autoRotY += (e.clientX-prevMouse.x)*0.004;
@@ -902,9 +920,9 @@ function SolarSystem({ onReady }) {
       };
       mount.addEventListener("mousemove", onMouseMove);
       mount.addEventListener("mousedown", onMouseDown);
+      mount.addEventListener("mouseup",   onMouseUp);
       mount.addEventListener("touchstart",onTouchStart,{passive:true});
       mount.addEventListener("touchmove", onTouchMove, {passive:true});
-      window.addEventListener("mouseup",  onMouseUp);
       window.addEventListener("mousemove",onDrag);
       window.addEventListener("resize",   onResize);
 
@@ -915,9 +933,9 @@ function SolarSystem({ onReady }) {
         if (sunLabelEl && sunLabelEl.parentNode) sunLabelEl.parentNode.removeChild(sunLabelEl);
         mount.removeEventListener("mousemove", onMouseMove);
         mount.removeEventListener("mousedown", onMouseDown);
+        mount.removeEventListener("mouseup",   onMouseUp);
         mount.removeEventListener("touchstart",onTouchStart);
         mount.removeEventListener("touchmove", onTouchMove);
-        window.removeEventListener("mouseup",  onMouseUp);
         window.removeEventListener("mousemove",onDrag);
         window.removeEventListener("resize",   onResize);
       };
@@ -972,7 +990,7 @@ function SolarSystem({ onReady }) {
           <div className="pl-pt-model">{hovered.model}</div>
         </div>
       )}
-      <p className="pl-solar-hint">Drag to rotate · hover planets</p>
+      <p className="pl-solar-hint">Drag to rotate · click planets</p>
     </div>
   );
 }
@@ -1255,11 +1273,11 @@ export default function PublicLanding() {
               </button>
               <button className="pl-btn-ghost" onClick={() => navigate("/about")}>About Us</button>
             </div>
-            <button className="pl-nova-pill" onClick={() => navigate("/login")}>
+            <a className="pl-nova-pill" href="https://pamphlet.innovacx.net" target="_blank" rel="noopener noreferrer">
               <span className="pl-nova-dot"/>
-              Chat with Nova AI
-              <span className="pl-nova-arrow">Try Now →</span>
-            </button>
+              Virtual 3D Pamphlet
+              <span className="pl-nova-arrow">View Now →</span>
+            </a>
           </div>
           <div className="pl-hero-right"><SolarSystem onReady={handleReady} /></div>
         </div>
