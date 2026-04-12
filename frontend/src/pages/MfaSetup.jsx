@@ -87,10 +87,12 @@ export default function MfaSetup() {
   const [shake,       setShake]       = useState(false);
   const [trustDevice, setTrustDevice] = useState(false);
   const inputsRef     = useRef([]);
+  const successRef    = useRef(false);
 
   // Guard: redirect if no session
   useEffect(() => {
-    if (!loginToken) { navigate("/login", { replace: true }); return; }
+    if (!loginToken && !successRef.current) { navigate("/login", { replace: true }); return; }
+    if (successRef.current) return;
 
     // Fetch QR code
     (async () => {
@@ -172,6 +174,7 @@ export default function MfaSetup() {
       // Avoid a second "setup complete" call here: it is redundant and can fail
       // during the login handoff, which incorrectly bounces the user back out.
 
+      successRef.current = true;
       localStorage.setItem("access_token", accessToken);
       localStorage.setItem("user", JSON.stringify(responseUser));
       sessionStorage.removeItem("mfa_token");
