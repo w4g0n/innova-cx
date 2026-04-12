@@ -246,6 +246,7 @@ export default function CustomerAuthPage() {
   const [loading,       setLoading]       = useState(true);
   const [errorMsg,      setErrorMsg]      = useState("");
   const [shake,         setShake]         = useState(false);
+  const [wrongAttempts, setWrongAttempts] = useState(0);
 
   // ── Trust device 
   const [trustDevice,   setTrustDevice]   = useState(false);
@@ -460,6 +461,7 @@ export default function CustomerAuthPage() {
           throw new Error(err.detail || "Verification failed");
         }
         const data = await res.json();
+        setWrongAttempts(0);
         await handleAuthSuccess(data);
       }
     } catch (err) {
@@ -469,7 +471,12 @@ export default function CustomerAuthPage() {
         : err.message || "Invalid or expired code. Please try again.");
       setShake(true);
       setTimeout(() => setShake(false), 500);
-      setVerifyCooldown(120);
+      const next = wrongAttempts + 1;
+      setWrongAttempts(next);
+      if (next >= 4) {
+        setVerifyCooldown(120);
+        setWrongAttempts(0);
+      }
       setOtp(["", "", "", "", "", ""]);
       inputsRef.current[0]?.focus();
     }

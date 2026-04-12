@@ -1465,6 +1465,13 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     return resp
 
 
+def _route_email(recipient: str) -> str:
+    """Temporary routing rule: @innovacx.net → shared ops inbox; all others → direct."""
+    if recipient.lower().endswith("@innovacx.net"):
+        return "innovacx.reset@gmail.com"
+    return recipient
+
+
 @api.post("/auth/email-otp-send")
 @rate_limit_auth()
 def email_otp_send(request: Request, body: SendEmailOTPRequest, _csrf: None = Depends(require_csrf)):
@@ -1496,7 +1503,7 @@ def email_otp_send(request: Request, body: SendEmailOTPRequest, _csrf: None = De
     if resend.api_key:
         result = resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": user["email"],
+            "to": _route_email(user["email"]),
             "subject": "Your InnovaCX verification code",
             "html": EMAIL_OTP_HTML.format(email=user["email"], otp_code=otp_code),
         })
@@ -1735,40 +1742,51 @@ PASSWORD_CHANGED_EMAIL_HTML = """\
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Password Changed — InnovaCX</title>
 <style>
-  body{{margin:0;padding:0;background:#0d0d1a;font-family:'Segoe UI',Arial,sans-serif;}}
-  .wrap{{max-width:520px;margin:40px auto;background:#13132a;border-radius:16px;overflow:hidden;border:1px solid rgba(139,92,246,.25);}}
-  .hdr{{background:linear-gradient(135deg,#1e1040 0%,#2d1b69 50%,#1a0f35 100%);padding:36px 40px 28px;text-align:center;}}
-  .logo{{font-size:22px;font-weight:700;color:#e9d5ff;letter-spacing:.5px;}}
-  .logo span{{color:#a855f7;}}
-  .body{{padding:32px 40px;}}
-  h2{{margin:0 0 12px;font-size:20px;color:#f3e8ff;}}
-  p{{margin:0 0 16px;font-size:15px;color:#c4b5fd;line-height:1.6;}}
-  .alert{{background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.3);border-radius:10px;padding:14px 16px;margin:20px 0;}}
-  .alert p{{margin:0;font-size:14px;color:#ddd6fe;}}
-  .footer{{padding:20px 40px 28px;text-align:center;border-top:1px solid rgba(139,92,246,.15);}}
-  .fc{{font-size:12px;color:#6b7280;margin:4px 0;}}
+  body{{margin:0;padding:0;background:#0c0520;font-family:'Segoe UI',Arial,sans-serif;}}
+  .ew{{width:100%;background:#0c0520;padding:40px 0;}}
+  .ec{{max-width:520px;margin:0 auto;background:#05010e;border:1px solid rgba(168,85,247,.25);border-radius:16px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.6);}}
+  .hd{{background:linear-gradient(135deg,#1e1040 0%,#2d1b69 50%,#1a0f35 100%);padding:36px 40px 28px;text-align:center;}}
+  .brand{{font-size:22px;font-weight:800;color:#e9d5ff;letter-spacing:-.02em;margin:0;}}
+  .brand span{{color:#a855f7;font-weight:400;}}
+  .htitle{{font-size:20px;font-weight:700;color:#fff;margin:10px 0 0;letter-spacing:-.02em;}}
+  .bd{{padding:32px 40px 28px;}}
+  .gr{{font-size:14.5px;color:rgba(255,255,255,.6);margin:0 0 14px;line-height:1.6;}}
+  .de{{font-size:14.5px;color:rgba(255,255,255,.55);line-height:1.7;margin:0 0 20px;}}
+  .de strong{{color:rgba(255,255,255,.85);}}
+  .wb{{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:14px 16px;margin:0 0 20px;}}
+  .wt{{font-size:13px;color:rgba(251,191,36,.75);line-height:1.55;margin:0;}}
+  .wt strong{{color:#fbbf24;}}
+  .note{{font-size:12.5px;color:rgba(255,255,255,.28);margin:0;line-height:1.6;}}
+  .ft{{background:rgba(255,255,255,.015);border-top:1px solid rgba(168,85,247,.1);padding:20px 40px;text-align:center;}}
+  .fc{{font-size:11.5px;color:rgba(168,85,247,.4);margin:0;}}
+  @media only screen and (max-width:600px){{
+    .ec{{border-radius:0;}}
+    .hd,.bd,.ft{{padding-left:24px;padding-right:24px;}}
+  }}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="hdr">
-    <div class="logo">Innova<span>CX</span></div>
+<div class="ew">
+<div class="ec">
+  <div class="hd">
+    <p class="brand">Innova<span>CX</span></p>
+    <p class="htitle">Password Changed</p>
   </div>
-  <div class="body">
-    <h2>Your password has been changed</h2>
-    <p>Hi <strong style="color:#e9d5ff">{email}</strong>,</p>
-    <p>The password for your InnovaCX account was successfully updated on <strong style="color:#e9d5ff">{changed_at} UTC</strong>.</p>
-    <div class="alert">
-      <p>&#x26A0;&#xFE0F; If you did not make this change, your account may be compromised. Please contact your system administrator or operator immediately.</p>
+  <div class="bd">
+    <p class="gr">Hi <strong style="color:#e9d5ff">{email}</strong>,</p>
+    <p class="de">The password for your InnovaCX account was successfully updated on <strong>{changed_at} UTC</strong>.</p>
+    <div class="wb">
+      <p class="wt"><strong>Did not make this change?</strong> Your account may be at risk. Contact your system administrator or operator immediately.</p>
     </div>
-    <p style="font-size:13px;color:#9ca3af;">This is an automated security notification. Please do not reply to this email.</p>
+    <p class="note">This is an automated security notification. Please do not reply to this email.</p>
   </div>
-  <div class="footer">
+  <div class="ft">
     <p class="fc">&copy; {year} InnovaCX. All rights reserved.</p>
   </div>
+</div>
 </div>
 </body>
 </html>"""
@@ -1813,7 +1831,7 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
 
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": "innovacx.reset@gmail.com",   # hardcoded until domain email is set up
+            "to": _route_email(email),
             "subject": "Reset your InnovaCX password",
             "html": RESET_EMAIL_HTML.format(
                 email=email,
@@ -1896,7 +1914,7 @@ def reset_password(request: Request, body: ResetPasswordRequest, _csrf: None = D
     try:
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": "innovacx.reset@gmail.com",
+            "to": _route_email(row["email"]),
             "subject": "Your InnovaCX password has been changed",
             "html": PASSWORD_CHANGED_EMAIL_HTML.format(
                 email=row["email"],
@@ -1936,7 +1954,7 @@ def change_password(
     try:
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": "innovacx.reset@gmail.com",
+            "to": _route_email(user.get("email", "")),
             "subject": "Your InnovaCX password has been changed",
             "html": PASSWORD_CHANGED_EMAIL_HTML.format(
                 email=user.get("email", ""),
