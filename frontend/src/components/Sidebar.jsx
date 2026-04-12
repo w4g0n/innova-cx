@@ -4,7 +4,7 @@ import "./Sidebar.css";
 import logo from "../assets/nova-logo.png";
 import ConfirmDialog from "./common/ConfirmDialog";
 
-const SIDEBAR_EXPANDED_WIDTH = "210px";
+const SIDEBAR_EXPANDED_WIDTH = "220px";
 
 /* SVG icon set */
 const Icon = {
@@ -91,14 +91,12 @@ const Icon = {
       <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   ),
-  /* Lock closed — shown when pinned (click to unpin) */
   lockClosed: (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
       <rect x="5" y="11" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="2.5" />
       <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   ),
-  /* Lock open — shown when unpinned (click to pin) */
   lockOpen: (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
       <rect x="5" y="11" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="2.5" />
@@ -142,20 +140,19 @@ const menus = {
     { label: "Complaint Trends",    to: "/manager/trends",        icon: "trends" },
   ],
   operator: [
-    { label: "Notifications",    to: "/operator/notifications",    icon: "bell" },
-    { label: "Dashboard",        to: "/operator", end: true,       icon: "dashboard" },
-    { label: "Model Health",     to: "/operator/model-health",     icon: "model" },
-    { label: "Quality Control", to: "/operator/quality-control", icon: "chatbot" },
-    { label: "Pipeline Queue",   to: "/operator/pipeline-queue",   icon: "pipeline" },
-    { label: "AI Explainability", to: "/operator/ai-explainability", icon: "reports" },
-    { label: "Manage Users",     to: "/operator/users",            icon: "users" },
+    { label: "Notifications",     to: "/operator/notifications",    icon: "bell" },
+    { label: "Dashboard",         to: "/operator", end: true,       icon: "dashboard" },
+    { label: "Model Health",      to: "/operator/model-health",     icon: "model" },
+    { label: "Quality Control",   to: "/operator/quality-control",  icon: "chatbot" },
+    { label: "Pipeline Queue",    to: "/operator/pipeline-queue",   icon: "pipeline" },
+    { label: "AI Explainability", to: "/operator/ai-explainability",icon: "reports" },
+    { label: "Manage Users",      to: "/operator/users",            icon: "users" },
   ],
 };
 
 export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, pendingRrq = 0, heldCount = 0 }) {
   const navigate = useNavigate();
 
-  /* Pinned = stays open without hover */
   const [pinned, setPinned] = useState(
     () => localStorage.getItem("sidebar-pinned") === "true"
   );
@@ -168,7 +165,6 @@ export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, p
     localStorage.setItem("sidebar-pinned", String(pinned));
   }, [pinned]);
 
-  /* Push page content as sidebar resizes */
   useEffect(() => {
     document.documentElement.style.setProperty(
       "--sidebar-current-width",
@@ -187,13 +183,9 @@ export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, p
     "/operator/pipeline-queue":  heldCount,
   };
 
-  // RRQ gets its own purple badge alongside the approvals red badge
   const rrqBadge = pendingRrq > 0 ? (pendingRrq > 99 ? "99+" : pendingRrq) : null;
 
-  /* Open logout confirmation */
   const handleLogout = () => setLogoutOpen(true);
-
-  /* Actually perform the logout */
   const doLogout = () => {
     localStorage.removeItem("user");
     navigate("/");
@@ -207,7 +199,9 @@ export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, p
     >
       {/* Brand */}
       <div className="sidebar__brand">
-        <img src={logo} alt="InnovaCX Logo" className="sidebar__logo" />
+        <div className="sidebar__logoWrap">
+          <img src={logo} alt="InnovaCX Logo" className="sidebar__logo" />
+        </div>
         <span className="sidebar__title">InnovaCX</span>
       </div>
 
@@ -271,7 +265,6 @@ export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, p
           <span className="sidebar__label">Logout</span>
         </button>
 
-        {/* Pin toggle — lock icon */}
         <button
           className={`sidebar__pinBtn${pinned ? " sidebar__pinBtn--active" : ""}`}
           type="button"

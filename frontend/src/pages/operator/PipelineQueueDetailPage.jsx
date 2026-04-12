@@ -538,7 +538,9 @@ export default function PipelineQueueDetailPage() {
   return (
     <Layout role="operator">
       <div className="pq-detail-page">
-        <PageHeader title={title} />
+        <div className="pq-detail-header">
+          <PageHeader title={title} />
+        </div>
 
         <div className="pq-detail-topbar">
           <button type="button" className="pq-back-btn" onClick={() => navigate("/operator/pipeline-queue")}>
