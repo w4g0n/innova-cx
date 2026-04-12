@@ -4,11 +4,11 @@ import { apiUrl } from "../config/apiBase";
 import { getCsrfToken } from "../services/api";
 import "./ForgotPassword.css";
 
-// FIX 6: strict token format — base64url of 32 bytes strips padding to exactly 43 chars.
+
 // Reject anything that doesn't look like a real token before hitting the server.
 const TOKEN_RE = /^[A-Za-z0-9_-]{40,}$/;
 
-// FIX 1: read token from the URL *fragment* (#token=...) instead of query param (?token=).
+
 // Fragments are never sent to the server, never logged by nginx/CDN/proxies, and are
 // not stored in server-side browser history. This keeps the 30-min credential out of logs.
 function getFragmentToken() {
@@ -261,18 +261,18 @@ function Steps({ current, mode }) {
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// Main component 
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
 
-  // FIX 1: read from fragment instead of useSearchParams/query string
+
   const [urlToken] = useState(() => getFragmentToken());
 
-  // FIX 6: validate token format strictly — 40+ base64url chars only
+
   const isResetMode = TOKEN_RE.test(urlToken);
 
-  // ── Reset-password state ───────────────────────────────────────────────────
+  // Reset-password state 
   const [newPassword, setNewPassword]         = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword]       = useState(false);
@@ -281,7 +281,7 @@ export default function ForgotPassword() {
   const [resetDone, setResetDone]             = useState(false);
   const [touchedStep2, setTouchedStep2]       = useState({ newPassword: false, confirmPassword: false });
 
-  // FIX 4: fetch email from backend so client-side "too similar to email" rule works
+
   // on the reset form, not just on the request form.
   const [resetEmail, setResetEmail] = useState("");
   useEffect(() => {
@@ -307,7 +307,7 @@ export default function ForgotPassword() {
     })();
   }, [isResetMode, urlToken]);
 
-  // ── Request-link state ─────────────────────────────────────────────────────
+  // Request-link state
   const [email, setEmail]               = useState("");
   const [sending, setSending]           = useState(false);
   const [linkSent, setLinkSent]         = useState(false);
@@ -338,7 +338,6 @@ export default function ForgotPassword() {
   }, []);
 
   const emailError           = validators.email(email);
-  // FIX 4: pass resetEmail (fetched from backend) so the "too similar" rule works
   const newPasswordError     = validators.newPassword(newPassword, resetEmail);
   const confirmPasswordError = validators.confirmPassword(confirmPassword, newPassword);
 
@@ -440,7 +439,7 @@ export default function ForgotPassword() {
             ← Back
           </button>
 
-          {/* ── RESET MODE: arrived via email link with #token= ── */}
+          {/* RESET MODE: arrived via email link with #token= ── */}
           {isResetMode ? (
             <>
               <Steps current={resetDone ? "done" : "active"} mode="reset" />

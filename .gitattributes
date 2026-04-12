@@ -1,9 +1,7 @@
-# ============================================================
 # PROD-LIVE MERGE PROTECTION
 # These paths are removed/excluded from prod-live.
 # Required one-time setup per clone: git config merge.ours.driver true
 # (The sync script runs this automatically.)
-# ============================================================
 
 # Protect this file itself — prod-live's attribute rules always win on merge
 .gitattributes        merge=ours

@@ -4,9 +4,9 @@
 const TOKEN_KEY = "access_token";
 const TEMP_TOKEN_KEY = "temp_token";
 
-// -----------------------------
+
 // Store tokens
-// -----------------------------
+
 export function setToken(token: string, temporary = false) {
   if (temporary) {
     localStorage.setItem(TEMP_TOKEN_KEY, token);
@@ -40,17 +40,17 @@ export function clearAllAuth() {
   localStorage.removeItem("temp_token");
 }
 
-// -----------------------------
+
 // Headers for API calls
-// -----------------------------
+
 export function authHeader(): Record<string, string> {
   const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// -----------------------------
+
 // Decode JWT payload
-// -----------------------------
+
 export function getUser(): { sub: string; role: string; email: string } | null {
   const token = getToken();
   if (!token) return null;
@@ -68,16 +68,16 @@ export function getUser(): { sub: string; role: string; email: string } | null {
   }
 }
 
-// -----------------------------
+
 // Helper: check if user is logged in
-// -----------------------------
+
 export function isLoggedIn(): boolean {
   return !!getToken();
 }
 
-// -----------------------------
+
 // Helper: check if user must verify MFA
-// -----------------------------
+
 export function needsMFA(): boolean {
   return !!getTempToken();
 }

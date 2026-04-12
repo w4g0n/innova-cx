@@ -203,8 +203,8 @@ function ManagerTicketModalInner({
       setResolveFiles([]);
       setResolveReviewAction("accepted");
       closeModal();
-    } catch {
-      setResolveError("Failed to resolve ticket. Please try again.");
+    } catch (err) {
+      setResolveError(err?.message || "Failed to resolve ticket. Please try again.");
       setConfirming(false);
     } finally {
       setBusy(false);
@@ -759,7 +759,13 @@ export default function ManagerComplaintDetails() {
             <button className="btn-outline" type="button" onClick={() => setModalType("reroute")}>
               Reroute
             </button>
-            <button className="btn-primary" type="button" onClick={() => setModalType("resolve")}>
+            <button
+              className="btn-primary"
+              type="button"
+              onClick={() => setModalType("resolve")}
+              disabled={ticket.status === "Resolved"}
+              title={ticket.status === "Resolved" ? "This ticket is already resolved" : undefined}
+            >
               Resolve
             </button>
           </div>
