@@ -13,16 +13,17 @@ export default function Layout({ role, children, hideSidebar = false }) {
   }
 
   const shouldHideSidebar = hideSidebar || role === "customer";
+  const isStaffView = !shouldHideSidebar;
   const [unreadCount] = useUnreadCount(shouldHideSidebar ? null : role);
   const pendingApprovals = usePendingApprovals(shouldHideSidebar ? null : role);
   const heldCount = useHeldCount(shouldHideSidebar ? null : role);
 
   return (
-    <div className={`appShell ${shouldHideSidebar ? "appShell--noSidebar" : ""}`}>
+    <div className={`appShell ${shouldHideSidebar ? "appShell--noSidebar" : ""} ${isStaffView ? `appShell--staff appShell--${role}` : ""}`}>
       {!shouldHideSidebar && (
         <Sidebar role={role} unreadCount={unreadCount} pendingApprovals={pendingApprovals} heldCount={heldCount} />
       )}
-      <main className={`appContent ${shouldHideSidebar ? "appContent--noSidebar" : ""}`}>
+      <main className={`appContent ${shouldHideSidebar ? "appContent--noSidebar" : ""} ${isStaffView ? `appContent--staff appContent--${role}` : ""}`}>
         {children}
       </main>
     </div>

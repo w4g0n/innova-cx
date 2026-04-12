@@ -33,3 +33,76 @@
     padding: 16px;
   }
 }
+
+.appShell--staff {
+  background:
+    radial-gradient(circle at top left, rgba(192, 132, 252, 0.1), transparent 28%),
+    linear-gradient(180deg, #f7f2fb 0%, #efe8f7 52%, #ece4f4 100%);
+}
+
+.appContent--staff {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(192, 132, 252, 0.18), transparent 24%),
+    radial-gradient(circle at 88% 8%, rgba(240, 180, 41, 0.12), transparent 20%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(245, 239, 251, 0.94) 100%);
+}
+
+.appContent--staff::before,
+.appContent--staff::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(10px);
+}
+
+.appContent--staff::before {
+  inset: 28px auto auto 30px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(192, 132, 252, 0.22), transparent 72%);
+}
+
+.appContent--staff::after {
+  right: 5%;
+  bottom: 4%;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(89, 36, 180, 0.09), transparent 70%);
+}
+
+.appContent--staff > * {
+  position: relative;
+  z-index: 1;
+}
+
+.appContent--staff :is(.empNotifs__empty, .ard-loading, .rrd-loading, .pq-loading, .ct-loading, .ma-tab-loading, .lrn-box__loading, .ve-empty, .opDash__moduleLoading) {
+  position: relative;
+  overflow: hidden;
+  padding: 18px 20px;
+  border: 1px solid rgba(89, 36, 180, 0.14);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(244, 237, 250, 0.92));
+  box-shadow: 0 12px 28px rgba(64, 28, 81, 0.08);
+}
+
+.appContent--staff :is(.empNotifs__empty, .ard-loading, .rrd-loading, .pq-loading, .ct-loading, .ma-tab-loading, .lrn-box__loading, .ve-empty, .opDash__moduleLoading)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.6) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: shimmer 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .appContent--staff::before,
+  .appContent--staff::after {
+    display: none;
+  }
+}

@@ -48,3 +48,106 @@
   .pageHeader { flex-direction: column; }
   .pageHeader__actions { width: 100%; }
 }
+
+.pageHeader {
+  position: relative;
+}
+
+.pageHeader__backdrop,
+.pageHeader__eyebrow {
+  display: none;
+}
+
+.pageHeader__content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.appContent--staff .pageHeader {
+  margin-bottom: 28px;
+}
+
+.appContent--staff .pageHeader__backdrop {
+  display: block;
+  position: absolute;
+  inset: 0;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at top right, rgba(192, 132, 252, 0.18), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 239, 251, 0.94));
+  border: 1px solid rgba(89, 36, 180, 0.14);
+  box-shadow:
+    0 20px 44px rgba(64, 28, 81, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.appContent--staff .pageHeader__content {
+  position: relative;
+  z-index: 1;
+  padding: 22px 24px;
+  gap: 20px;
+}
+
+.appContent--staff .pageHeader__text {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.appContent--staff .pageHeader__eyebrow {
+  display: inline-flex;
+  width: 72px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(89, 36, 180, 0.92), rgba(192, 132, 252, 0.65));
+  box-shadow: 0 10px 24px rgba(89, 36, 180, 0.16);
+}
+
+.appContent--staff .pageHeader__title {
+  font-size: clamp(28px, 3vw, 36px);
+  letter-spacing: -0.04em;
+}
+
+.appContent--staff .pageHeader__title::after {
+  margin-top: 10px;
+  width: 72px;
+  height: 4px;
+  background: linear-gradient(90deg, #5924b4, #c084fc, rgba(240, 180, 41, 0.85));
+  box-shadow: 0 8px 18px rgba(89, 36, 180, 0.15);
+}
+
+.appContent--staff .pageHeader__subtitle {
+  max-width: 70ch;
+  margin-top: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: rgba(17, 17, 17, 0.68);
+}
+
+.appContent--staff .pageHeader__actions {
+  align-self: stretch;
+  justify-content: flex-end;
+}
+
+.appContent--staff .pageHeader__actions > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 768px) {
+  .pageHeader__content { flex-direction: column; }
+
+  .appContent--staff .pageHeader__content {
+    padding: 18px;
+  }
+
+  .appContent--staff .pageHeader__title {
+    font-size: clamp(24px, 8vw, 30px);
+  }
+
+  .appContent--staff .pageHeader__actions {
+    justify-content: flex-start;
+  }
+}
