@@ -41,6 +41,7 @@ from agents.step10_router.step import get_router_diagnostics
 from agents.step05_audioanalysis.step import get_audio_analysis_diagnostics
 from agents.step09_priority.step import record_manager_feedback_from_state, get_priority_diagnostics
 from agents.step11_reviewagent.step import review_pipeline, get_review_agent_diagnostics
+from recurrence_encoder import encoder_is_available
 from shared_model_service import get_shared_qwen
 
 try:
@@ -130,6 +131,7 @@ def _log_model_mode_summary() -> None:
     feature_diag = get_feature_engineering_diagnostics()
     router_diag = get_router_diagnostics()
     priority_diag = get_priority_diagnostics()
+    recurrence_available = encoder_is_available()
 
     rows = [
         (
@@ -179,8 +181,12 @@ def _log_model_mode_summary() -> None:
         ),
         (
             "Recurrence",
-            "heuristic",
-            "heuristic recurrence logic is active; no per-agent model artifact is loaded in orchestrator",
+            "transformer" if recurrence_available else "heuristic",
+            (
+                "transformer recurrence encoder artifact present"
+                if recurrence_available
+                else "heuristic recurrence logic is active; transformer encoder unavailable"
+            ),
         ),
         (
             "FeatureEngineering",
