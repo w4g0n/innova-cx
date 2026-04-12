@@ -138,6 +138,45 @@
   border-bottom-right-radius: 4px;
 }
 
+/* In-chat action buttons (e.g. Confirm Ticket / Edit Details) */
+.custActionBtns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-start;
+  padding: 4px 0 6px 2px;
+}
+
+.custActionBtns button {
+  font-family: "Outfit", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 1px solid rgba(147, 51, 234, 0.35);
+  background: rgba(147, 51, 234, 0.12);
+  color: var(--pink, #c084fc);
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.02em;
+  min-width: 130px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.custActionBtns button:hover:not(:disabled) {
+  background: rgba(147, 51, 234, 0.25);
+  border-color: rgba(168, 85, 247, 0.6);
+  color: var(--text);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(147, 51, 234, 0.28);
+}
+
+.custActionBtns button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* typing indicator */
 .custTypingIndicator {
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 0;
