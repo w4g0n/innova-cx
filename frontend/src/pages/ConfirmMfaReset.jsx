@@ -7,6 +7,7 @@ export default function ConfirmMfaReset() {
   const navigate = useNavigate();
   const [status, setStatus]   = useState("idle"); // idle | loading | success | error
   const [message, setMessage] = useState("");
+  const [loginUrl, setLoginUrl] = useState("/login");
 
   useEffect(() => {
     // Token is in the URL fragment (#token=...) — never sent to server logs
@@ -36,8 +37,13 @@ export default function ConfirmMfaReset() {
         if (!res.ok) {
           throw new Error(data?.detail || "This link is invalid or has expired.");
         }
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("user");
+        sessionStorage.removeItem("mfa_token");
+        sessionStorage.removeItem("mfa_user");
         setStatus("success");
         setMessage(data.message || "MFA reset confirmed. You will be prompted to set up a new authenticator on your next login.");
+        setLoginUrl(data.login_url || "/login");
       } catch (err) {
         setStatus("error");
         setMessage(err.message || "Something went wrong. Please try again.");
@@ -86,7 +92,13 @@ export default function ConfirmMfaReset() {
             <h2 style={{ color: "#f3e8ff", margin: "0 0 12px" }}>MFA Reset Confirmed</h2>
             <p style={{ color: "#c4b5fd", fontSize: 15, lineHeight: 1.6, marginBottom: 28 }}>{message}</p>
             <button
-              onClick={() => navigate("/login")}
+              onClick={() => {
+                if (loginUrl.startsWith("http://") || loginUrl.startsWith("https://")) {
+                  window.location.assign(loginUrl);
+                  return;
+                }
+                navigate(loginUrl);
+              }}
               style={{
                 padding: "13px 36px",
                 background: "linear-gradient(135deg,#6d28d9,#9333ea)",

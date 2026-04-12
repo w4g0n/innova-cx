@@ -1754,6 +1754,147 @@ def _route_email(recipient: str) -> str:
     return recipient
 
 
+def _frontend_origin_for_role(role: Optional[str]) -> str:
+    normalized = str(role or "").strip().lower()
+    if normalized == "customer":
+        return os.getenv("FRONTEND_PUBLIC_URL", "https://innovacx.net").rstrip("/")
+    return os.getenv("FRONTEND_STAFF_URL", "https://staff.innovacx.net").rstrip("/")
+
+
+def _login_url_for_role(role: Optional[str]) -> str:
+    return f"{_frontend_origin_for_role(role)}/login"
+
+
+def _render_professional_email(
+    *,
+    title: str,
+    eyebrow: str,
+    intro_html: str,
+    body_html: str,
+    cta_label: Optional[str] = None,
+    cta_url: Optional[str] = None,
+    meta_html: str = "",
+) -> str:
+    cta_block = ""
+    if cta_label and cta_url:
+        cta_block = f"""
+          <tr>
+            <td style="padding:0 40px 24px 40px;text-align:center;">
+              <a href="{cta_url}" style="display:inline-block;padding:14px 28px;border-radius:12px;background:linear-gradient(135deg,#5b21b6,#7c3aed);color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">
+                {cta_label}
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 40px 24px 40px;">
+              <div style="border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;padding:14px 16px;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#6b7280;margin-bottom:8px;">Secure link</div>
+                <div style="font-size:12px;line-height:1.6;color:#4b5563;word-break:break-all;">{cta_url}</div>
+              </div>
+            </td>
+          </tr>
+        """
+
+    return f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>{title}</title>
+</head>
+<body style="margin:0;padding:0;background:#eef2ff;font-family:Arial,'Segoe UI',sans-serif;color:#111827;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2ff;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #e5e7eb;border-radius:20px;overflow:hidden;box-shadow:0 18px 48px rgba(15,23,42,0.08);">
+          <tr>
+            <td style="background:linear-gradient(135deg,#1e1b4b 0%,#4c1d95 55%,#6d28d9 100%);padding:36px 40px 28px 40px;">
+              <div style="font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,0.72);margin-bottom:14px;">{eyebrow}</div>
+              <div style="font-size:28px;font-weight:800;letter-spacing:-0.02em;color:#ffffff;margin:0 0 12px 0;">{title}</div>
+              <div style="font-size:15px;line-height:1.7;color:rgba(255,255,255,0.86);">{intro_html}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 40px 8px 40px;font-size:15px;line-height:1.7;color:#374151;">
+              {body_html}
+            </td>
+          </tr>
+          {cta_block}
+          <tr>
+            <td style="padding:0 40px 32px 40px;">
+              <div style="border-top:1px solid #e5e7eb;padding-top:18px;font-size:12px;line-height:1.7;color:#6b7280;">
+                {meta_html or "This is an automated security message from InnovaCX. If you need assistance, contact your system administrator or support team."}
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
+def _render_email_otp_email(email: str, otp_code: str) -> str:
+    return _render_professional_email(
+        title="Your Verification Code",
+        eyebrow="Authentication",
+        intro_html=f"Use this one-time verification code to continue signing in to the InnovaCX account for <strong>{email}</strong>.",
+        body_html=f"""
+          <p style="margin:0 0 18px 0;">Enter the following code in the verification screen. It expires in <strong>10 minutes</strong> and can only be used once.</p>
+          <div style="margin:0 0 20px 0;border:1px solid #ddd6fe;border-radius:16px;background:#f5f3ff;padding:18px 20px;text-align:center;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#7c3aed;margin-bottom:10px;">One-time code</div>
+            <div style="font-size:34px;font-weight:800;letter-spacing:.32em;color:#1f2937;">{otp_code}</div>
+          </div>
+          <p style="margin:0;">If you did not attempt to sign in, you can ignore this email and your account will remain secure.</p>
+        """,
+    )
+
+
+def _render_mfa_reset_email(email: str, confirm_link: str) -> str:
+    return _render_professional_email(
+        title="Confirm MFA Reset",
+        eyebrow="Account Security",
+        intro_html=f"A request was made to reset multi-factor authentication for <strong>{email}</strong>.",
+        body_html="""
+          <p style="margin:0 0 16px 0;">If you approve this request, your current authenticator pairing and any trusted devices will be cleared immediately.</p>
+          <p style="margin:0 0 16px 0;">After confirmation, the next successful sign-in will require you to set up MFA again using a new QR code.</p>
+          <p style="margin:0;">If you did not expect this request, do not click the button below and contact an operator or system administrator.</p>
+        """,
+        cta_label="Confirm MFA Reset",
+        cta_url=confirm_link,
+        meta_html="This confirmation link expires in 30 minutes. For security reasons, it can only be used once.",
+    )
+
+
+def _render_password_reset_email(email: str, reset_link: str) -> str:
+    return _render_professional_email(
+        title="Reset Your Password",
+        eyebrow="Password Recovery",
+        intro_html=f"We received a request to reset the password for the InnovaCX account associated with <strong>{email}</strong>.",
+        body_html="""
+          <p style="margin:0 0 16px 0;">Use the secure link below to choose a new password. The link expires in <strong>30 minutes</strong>.</p>
+          <p style="margin:0;">If you did not request a password reset, you can safely ignore this message. Your password will remain unchanged unless the link is used.</p>
+        """,
+        cta_label="Reset Password",
+        cta_url=reset_link,
+        meta_html="For your protection, reset links are single-use and expire automatically.",
+    )
+
+
+def _render_password_changed_email(email: str, changed_at: str) -> str:
+    return _render_professional_email(
+        title="Password Changed",
+        eyebrow="Security Notice",
+        intro_html=f"The password for <strong>{email}</strong> was successfully changed on <strong>{changed_at} UTC</strong>.",
+        body_html="""
+          <p style="margin:0 0 16px 0;">No further action is needed if you made this change.</p>
+          <p style="margin:0;">If you did not change your password, contact support or your system administrator immediately so the account can be secured.</p>
+        """,
+    )
+
+
 @api.post("/auth/email-otp-send")
 @rate_limit_auth()
 def email_otp_send(request: Request, body: SendEmailOTPRequest, _csrf: None = Depends(require_csrf)):
@@ -1787,7 +1928,7 @@ def email_otp_send(request: Request, body: SendEmailOTPRequest, _csrf: None = De
             "from": "no-reply@innovacx.net",
             "to": _route_email(user["email"]),
             "subject": "Your InnovaCX verification code",
-            "html": EMAIL_OTP_HTML.format(email=user["email"], otp_code=otp_code),
+            "html": _render_email_otp_email(user["email"], otp_code),
         })
         logger.info("email_otp_send | resend result=%s user=%s", result, user["id"])
     elif DEV_LOG_RESET_TOKENS:
@@ -2149,7 +2290,7 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
     email = sanitize_email(body.email)
     client_ip = request.client.host if request and request.client else None
     user = fetch_one(
-        "SELECT id FROM users WHERE email = %s AND is_active = TRUE",
+        "SELECT id, role FROM users WHERE email = %s AND is_active = TRUE",
         (email,),
     )
 
@@ -2178,17 +2319,13 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
         # Fragments are never sent to the server, never appear in nginx/CDN/proxy access
         # logs, and are not stored in browser history on the server side. This prevents
         # a valid 30-minute account-takeover credential from leaking into log files.
-        reset_link = f"https://innovacx.net/forgot-password#token={raw_token}"
+        reset_link = f"{_frontend_origin_for_role(user.get('role'))}/forgot-password#token={raw_token}"
 
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
             "to": _route_email(email),
             "subject": "Reset your InnovaCX password",
-            "html": RESET_EMAIL_HTML.format(
-                email=email,
-                reset_link=reset_link,
-                year=datetime.utcnow().year,
-            ),
+            "html": _render_password_reset_email(email, reset_link),
         })
 
         # DEV_LOG_RESET_TOKENS defaults to false; set to true only in local dev envs.
@@ -2267,10 +2404,9 @@ def reset_password(request: Request, body: ResetPasswordRequest, _csrf: None = D
             "from": "no-reply@innovacx.net",
             "to": _route_email(row["email"]),
             "subject": "Your InnovaCX password has been changed",
-            "html": PASSWORD_CHANGED_EMAIL_HTML.format(
-                email=row["email"],
-                changed_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
-                year=datetime.utcnow().year,
+            "html": _render_password_changed_email(
+                row["email"],
+                datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
             ),
         })
     except Exception:
@@ -2307,10 +2443,9 @@ def change_password(
             "from": "no-reply@innovacx.net",
             "to": _route_email(user.get("email", "")),
             "subject": "Your InnovaCX password has been changed",
-            "html": PASSWORD_CHANGED_EMAIL_HTML.format(
-                email=user.get("email", ""),
-                changed_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
-                year=datetime.utcnow().year,
+            "html": _render_password_changed_email(
+                user.get("email", ""),
+                datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
             ),
         })
     except Exception:
@@ -2371,7 +2506,7 @@ def confirm_mfa_reset(request: Request, body: ConfirmMfaResetRequest, _csrf: Non
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT mrt.id, mrt.user_id, u.email
+                SELECT mrt.id, mrt.user_id, u.email, u.role
                 FROM mfa_reset_tokens mrt
                 JOIN users u ON u.id = mrt.user_id
                 WHERE mrt.token_hash = %s
@@ -2399,7 +2534,11 @@ def confirm_mfa_reset(request: Request, body: ConfirmMfaResetRequest, _csrf: Non
         conn.commit()
 
     log_auth_event("mfa_reset_confirmed", user_id=str(row["user_id"]), email=row["email"], ip=client_ip)
-    return {"ok": True, "message": "MFA reset confirmed. You will be prompted to set up a new authenticator on your next login."}
+    return {
+        "ok": True,
+        "message": "MFA reset confirmed. You will be prompted to set up a new authenticator on your next login.",
+        "login_url": _login_url_for_role(row.get("role")),
+    }
 
 @api.post("/auth/reset-token-email")
 @rate_limit_auth()
@@ -8551,6 +8690,7 @@ def operator_reset_user_mfa(
     target_user = fetch_one(
         """
         SELECT u.id, u.email, u.is_active, up.full_name
+             , u.role
         FROM users u
         LEFT JOIN user_profiles up ON up.user_id = u.id
         WHERE u.id = %s
@@ -8575,15 +8715,12 @@ def operator_reset_user_mfa(
         (user_id, token_hash, MFA_RESET_TTL_SECONDS),
     )
 
-    confirm_link = f"https://innovacx.net/confirm-mfa-reset#token={raw_token}"
+    confirm_link = f"{_frontend_origin_for_role(target_user.get('role'))}/confirm-mfa-reset#token={raw_token}"
     resend.Emails.send({
         "from": "no-reply@innovacx.net",
         "to": _route_email(target_user["email"]),
         "subject": "Confirm your InnovaCX MFA reset",
-        "html": MFA_RESET_EMAIL_HTML.format(
-            email=target_user["email"],
-            confirm_link=confirm_link,
-        ),
+        "html": _render_mfa_reset_email(target_user["email"], confirm_link),
     })
 
     if DEV_LOG_RESET_TOKENS:
