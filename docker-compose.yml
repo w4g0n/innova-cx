@@ -189,7 +189,9 @@ services:
       SUBJECT_GENERATOR_MODEL_PATH: "${SUBJECT_GENERATOR_MODEL_PATH:-/app/agents/step01_subjectgeneration/model}"
       SUBJECT_GENERATOR_MODEL_NAME: "${SUBJECT_GENERATOR_MODEL_NAME:-google/flan-t5-small}"
       SUBJECT_GENERATOR_AUTO_DOWNLOAD: "${SUBJECT_GENERATOR_AUTO_DOWNLOAD:-false}"
-      RECURRENCE_ENCODER_MODEL: "${RECURRENCE_ENCODER_MODEL:-/app/agents/step01_recurrence/model}"
+      # Prefer the host-managed model store mounted at /app/models so recurrence
+      # survives container/image churn and accidental compose volume resets.
+      RECURRENCE_ENCODER_MODEL: "${RECURRENCE_ENCODER_MODEL:-/app/models/recurrence/all-MiniLM-L6-v2}"
       RECURRENCE_SIMILARITY_THRESHOLD: "${RECURRENCE_SIMILARITY_THRESHOLD:-0.75}"
       FEATURE_RUNTIME_TIMEOUT_SECONDS: "${FEATURE_RUNTIME_TIMEOUT_SECONDS:-180}"
       PIPELINE_STAGE_TIMEOUT_SECONDS: "${PIPELINE_STAGE_TIMEOUT_SECONDS:-120}"
@@ -212,7 +214,6 @@ services:
       - orchestrator_qwen_model:/app/agents/step11_reviewagent/model
       - orchestrator_sentiment_model:/app/agents/step04_sentimentanalysis/model
       - orchestrator_feature_model:/app/agents/step08_featureengineering/model
-      - orchestrator_recurrence_model:/app/agents/step01_recurrence/model
       - orchestrator_priority_model:/app/agents/step09_priority/model
     networks:
       - innovacx-network
@@ -284,7 +285,6 @@ volumes:
   orchestrator_qwen_model:
   orchestrator_sentiment_model:
   orchestrator_feature_model:
-  orchestrator_recurrence_model:
   orchestrator_priority_model:
 
 networks:
