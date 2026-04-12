@@ -1093,6 +1093,16 @@ export default function PublicLanding() {
   const readyRef = useRef(false);
   const splashDoneRef = useRef(false);
 
+  // Pamphlet popup — shown once per session
+  const [showPopup, setShowPopup] = useState(false);
+  const [popupVisible, setPopupVisible] = useState(false);
+
+  const dismissPopup = () => {
+    setPopupVisible(false);
+    setTimeout(() => setShowPopup(false), 320);
+    sessionStorage.setItem("pl_popup_seen", "1");
+  };
+
   // Minimum hold: 2.8s so text animations finish before fade-out.
   // Hard fallback at 6s: if Three.js/WebGL never fires onReady, clear splash anyway.
   useEffect(() => {
@@ -1112,6 +1122,17 @@ export default function PublicLanding() {
     readyRef.current = true;
     if (splashDoneRef.current) setReady(true);
   };
+
+  // Show popup 1.2s after the page becomes ready, once per session
+  useEffect(() => {
+    if (!ready) return;
+    if (sessionStorage.getItem("pl_popup_seen")) return;
+    const id = setTimeout(() => {
+      setShowPopup(true);
+      requestAnimationFrame(() => requestAnimationFrame(() => setPopupVisible(true)));
+    }, 1200);
+    return () => clearTimeout(id);
+  }, [ready]);
 
   useEffect(() => {
     const fn = () => setScrollY(window.scrollY);
@@ -1371,6 +1392,62 @@ export default function PublicLanding() {
         </svg>
       </a>
     </div>
+
+    {/* ── PAMPHLET POPUP ── */}
+    {showPopup && (
+      <div
+        className={`pl-popup-backdrop${popupVisible ? " pl-popup-backdrop--in" : ""}`}
+        onClick={dismissPopup}
+        aria-modal="true"
+        role="dialog"
+        aria-label="Learn more about InnovaCX"
+      >
+        <div
+          className={`pl-popup${popupVisible ? " pl-popup--in" : ""}`}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Close */}
+          <button className="pl-popup-close" onClick={dismissPopup} aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
+          </button>
+
+          {/* Icon */}
+          <div className="pl-popup-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+          </div>
+
+          {/* Copy */}
+          <p className="pl-popup-tag">Explore InnovaCX</p>
+          <h2 className="pl-popup-title">See the system in&nbsp;3D</h2>
+          <p className="pl-popup-body">
+            Want to learn more? Explore our interactive 3D pamphlet to see how InnovaCX is reshaping the way companies manage complaints and inquiries — from intake to resolution.
+          </p>
+
+          {/* CTA */}
+          <a
+            className="pl-popup-cta"
+            href="https://pamphlet.innovacx.net"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={dismissPopup}
+          >
+            View 3D Pamphlet
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+              <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </a>
+
+          <button className="pl-popup-skip" onClick={dismissPopup}>
+            Maybe later
+          </button>
+        </div>
+      </div>
+    )}
     </>
   );
 }
