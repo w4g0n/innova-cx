@@ -151,7 +151,7 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
             _log_and_save(session, response, "prompt_ticket_type")
             return _result(response, "prompt_ticket_type", session_id)
 
-        # unknown — re-prompt without changing state
+        # unknown — check for greeting, then try secondary intent before re-prompting
         normalized = user_text.strip().lower().rstrip("!.,?")
         if normalized in _GREETING_WORDS:
             response = (
@@ -159,6 +159,13 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
                 "or would you like to create a new one?"
             )
         else:
+            secondary = classify_secondary_intent(user_text, history)
+            if secondary == "complaint":
+                transition(session, "complaint")
+                return _handle_complaint(session, user_id, user_text)
+            if secondary == "inquiry":
+                transition(session, "inquiry")
+                return _handle_inquiry(session, user_text)
             response = (
                 "I did not quite catch that. Are you looking to follow up on an existing "
                 "ticket, or would you like to create a new one?"
