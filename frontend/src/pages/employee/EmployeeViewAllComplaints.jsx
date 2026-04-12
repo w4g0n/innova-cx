@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
@@ -308,10 +307,9 @@ export default function EmployeeViewAllComplaints() {
   return (
     <Layout role="employee">
       <main className="main-EV-VAC" ref={revealRef}>
-        <PageHeader
-          title="Tickets Viewer and Management"
-          subtitle="View, search, sort, and manage all complaints and requests assigned to you."
-        />
+        <div className="ev-hero">
+          <h1 className="ev-hero__title">My Tickets</h1>
+        </div>
 
         <section className="kpi-row-EV-VAC">
           <KpiCard label="Open Tickets"    value={kpiCounts.openTickets}    />

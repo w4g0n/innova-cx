@@ -4,26 +4,22 @@
   font-size: 14px;
 }
 
-.empDash__header {
-  margin-bottom: 22px;
+.empDash__hero {
+  background: linear-gradient(180deg, #4d2060 0%, var(--sidebar-bg) 100%);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 18px;
+  box-shadow: 0 10px 28px rgba(64, 28, 81, 0.14);
 }
 
-/* Page title — matches Manager PageHeader pattern */
-.empDash__title {
-  font-size: 38px;
+.empDash__heroTitle {
   margin: 0;
-  color: var(--text-dark);
-  font-weight: 750;
-  letter-spacing: 0.2px;
-}
-
-/* Subtitle — matches Manager managerIntro (14px / 0.60 opacity) */
-.empDash__subtitle {
-  margin-top: 10px;
-  font-size: 14px;
-  font-weight: 500;
-  color: rgba(17, 17, 17, 0.60);
-  line-height: 1.5;
+  font-family: var(--font-heading);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.2px;
+  line-height: 1.15;
 }
 
 /* KPI row — gap matches Manager managerKpiRow (16px) */
@@ -31,7 +27,6 @@
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 16px;
-  margin-top: 16px;
   margin-bottom: 24px;
 }
 

@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ManagerDashboard.css";
 
-import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import { apiUrl } from "../../config/apiBase";
 import useScrollReveal from "../../utils/useScrollReveal";
@@ -43,7 +42,6 @@ export default function ManagerDashboard() {
     } catch { /* ignore */ }
     return "";
   });
-  const [departmentName, setDepartmentName] = useState("");
 
   useEffect(() => {
     const token = getAuthToken();
@@ -65,7 +63,6 @@ export default function ManagerDashboard() {
         // Backend returns these from the authenticated session (get_current_user
         // now joins user_profiles, so these are always the logged-in manager's values)
         if (data.managerName) setManagerName(sanitizeText(data.managerName, 100));
-        if (data.departmentName) setDepartmentName(sanitizeText(data.departmentName, 100));
       })
       .catch((err) => {
         console.error("Failed to fetch manager KPIs:", err);
@@ -81,10 +78,9 @@ export default function ManagerDashboard() {
   return (
     <Layout role="manager">
       <div className="mgrDashboard" ref={revealRef}>
-        <PageHeader
-          title={greeting}
-          subtitle={departmentName ? `${departmentName} · Quick overview of your department's activity.` : "Quick overview of your department's activity."}
-        />
+        <div className="empNotifs__hero">
+          <h1 className="empNotifs__heroTitle">{greeting}</h1>
+        </div>
 
         <section className="managerKpiRow">
           <KpiCard label="Open Complaints" value={kpis.openComplaints} />
@@ -94,14 +90,10 @@ export default function ManagerDashboard() {
           <KpiCard label="Pending Approvals" value={kpis.pendingApprovals} />
         </section>
 
-        <p className="managerIntro">
-          Use these quick actions to move between Manager screens.
-        </p>
-
         <section className="managerBubbleGrid">
           <Link to="/manager/complaints" className="managerBubbleCard">
             <span className="managerBubbleLabel">Complaints</span>
-            <div className="managerBubbleTitle">View All Complaints</div>
+            <div className="managerBubbleTitle">Ticket Management</div>
             <div className="managerBubbleMetric">
               Handle assignments and follow up on open tickets.
             </div>

@@ -42,7 +42,9 @@
   width: 36px;
   height: 36px;
   object-fit: contain;
+  object-position: center;
   flex-shrink: 0;
+  display: block;
 }
 
 .sidebar__title {
@@ -178,6 +180,12 @@
 .sidebar:not(.sidebar--expanded) .sidebar__brand {
   justify-content: center;
   padding: 0;
+}
+
+.sidebar:not(.sidebar--expanded) .sidebar__logo {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto;
 }
 
 .sidebar:not(.sidebar--expanded) .sidebar__link {

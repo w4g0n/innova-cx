@@ -2,6 +2,60 @@
   width: 100%;
   max-width: none;
   font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.empReportsHero {
+  background: linear-gradient(180deg, #4d2060 0%, var(--sidebar-bg) 100%);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  box-shadow: 0 10px 28px rgba(64, 28, 81, 0.14);
+}
+
+.empReportsHero__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.2px;
+  line-height: 1.15;
+}
+
+.empReportsToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.empReportsToolbar__left {
+  display: flex;
+  align-items: center;
+}
+
+.empReportsMonthLabel {
+  font-size: 28px;
+  font-weight: 900;
+  color: #1a1a2e;
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+}
+
+.empReportsMonthSelect .pillSelect__select,
+.empReportsMonthSelect .pillSelect__select option {
+  color: #111111;
+}
+
+.empReportsToolbar__right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .kpiRow {
@@ -187,6 +241,15 @@
 }
 
 @media (max-width: 1100px) {
+  .empReportsToolbar {
+    justify-content: flex-start;
+  }
+
+  .empReportsToolbar__left,
+  .empReportsToolbar__right {
+    justify-content: flex-start;
+  }
+
   .kpiRow {
     grid-template-columns: repeat(2, 1fr);
   }

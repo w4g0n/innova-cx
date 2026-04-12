@@ -1494,12 +1494,13 @@ def email_otp_send(request: Request, body: SendEmailOTPRequest, _csrf: None = De
     )
 
     if resend.api_key:
-        resend.Emails.send({
+        result = resend.Emails.send({
             "from": "no-reply@innovacx.net",
             "to": user["email"],
             "subject": "Your InnovaCX verification code",
             "html": EMAIL_OTP_HTML.format(email=user["email"], otp_code=otp_code),
         })
+        logger.info("email_otp_send | resend result=%s user=%s", result, user["id"])
     elif DEV_LOG_RESET_TOKENS:
         print(f"[DEV] Email OTP for {user['email']}: {otp_code}")
     else:

@@ -136,7 +136,7 @@ const menus = {
   manager: [
     { label: "Notifications",       to: "/manager/notifications", icon: "bell" },
     { label: "Dashboard",           to: "/manager", end: true,    icon: "dashboard" },
-    { label: "View All Complaints", to: "/manager/complaints",    icon: "complaints" },
+    { label: "Ticket Management",   to: "/manager/complaints",    icon: "complaints" },
     { label: "View All Employees",  to: "/manager/employees",     icon: "employees" },
     { label: "Approvals",           to: "/manager/approvals",     icon: "approvals" },
     { label: "Complaint Trends",    to: "/manager/trends",        icon: "trends" },
