@@ -56,12 +56,15 @@ let _sessionRedirecting = false;
 const _origFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
   // Inject credentials: "include" so the httpOnly auth cookie is sent automatically.
-  // Exclude pre-MFA flows (/auth/totp-status, /auth/totp-setup) — those use a
-  // short-lived Bearer temp token and must NOT send a stale session cookie, which
-  // get_current_user would try first and reject if expired.
+  // Exclude pre-MFA flows (/auth/totp-status, /auth/totp-setup, /auth/totp-setup-complete)
+  // — those use a short-lived Bearer temp token and must NOT send a stale session cookie,
+  // which get_current_user would try first and reject if expired.
   const url = (typeof args[0] === 'string' ? args[0] : args[0]?.url) ?? '';
   const init = args[1] ?? {};
-  const isPreMfaFlow = url.includes('/auth/totp-status') || url.includes('/auth/totp-setup');
+  const isPreMfaFlow =
+    url.includes('/auth/totp-status') ||
+    url.includes('/auth/totp-setup') ||
+    url.includes('/auth/totp-setup-complete');
   if (!init.credentials && !isPreMfaFlow) {
     args = [args[0], { ...init, credentials: 'include' }];
   }

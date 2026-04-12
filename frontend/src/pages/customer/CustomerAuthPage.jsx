@@ -357,16 +357,8 @@ export default function CustomerAuthPage() {
 
     setTimeout(async () => {
       try {
-        if (needsSetup) {
-          const csrf2 = await getCsrfToken();
-          await fetch(apiUrl("/api/auth/totp-setup-complete"), {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${loginToken}`,
-              ...(csrf2 ? { "X-CSRF-Token": csrf2 } : {}),
-            },
-          });
-        }
+        // Backend /auth/totp-verify already enables MFA and sets the auth cookie
+        // on first-time setup, so skip the extra setup-complete call here.
 
         localStorage.setItem("access_token", accessToken);
         localStorage.setItem("user", JSON.stringify(responseUser));
