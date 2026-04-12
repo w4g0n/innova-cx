@@ -239,3 +239,13 @@
 .empLinkBtn:hover {
   background: rgba(89, 36, 180, 0.14);
 }
+
+/* Match operator dashboard title gradient exactly */
+.empDash__hero .empDash__heroTitle {
+  background: linear-gradient(100deg, #ffffff 30%, #c084fc 70%, #a855f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent !important;
+  display: inline-block;
+}

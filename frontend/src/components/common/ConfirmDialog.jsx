@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import "./ConfirmDialog.css";
 
 /**
@@ -27,7 +28,7 @@ export default function ConfirmDialog({
 }) {
   if (!open) return null;
 
-  return (
+  const dialog = (
     <div className="cd__overlay" onMouseDown={onCancel}>
       <div className="cd__box" onMouseDown={(e) => e.stopPropagation()}>
         {icon && (
@@ -50,4 +51,6 @@ export default function ConfirmDialog({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(dialog, document.body) : dialog;
 }

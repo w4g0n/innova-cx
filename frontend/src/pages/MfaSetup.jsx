@@ -180,8 +180,8 @@ export default function MfaSetup() {
       sessionStorage.removeItem("mfa_token");
       sessionStorage.removeItem("mfa_user");
 
-      const role = storedUser?.role || "customer";
-      navigate(role === "customer" ? "/customer/dashboard" : `/${role}`, { replace: true });
+      const responseRole = sanitizeText(responseUser?.role || storedUser?.role || "customer", 32).toLowerCase();
+      navigate(responseRole === "customer" ? "/customer/dashboard" : `/${responseRole}`, { replace: true });
     } catch {
       triggerShake();
       setErrorMsg("Invalid or expired code. Please try again.");
