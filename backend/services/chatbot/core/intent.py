@@ -193,7 +193,7 @@ def _llm_classify_primary(user_text: str, history: list) -> str:
         {"role": "user", "content": user_text},
         {"role": "assistant", "content": "Label:"},
     ]
-    output = generate_response(messages)
+    output = generate_response(messages, max_new_tokens=5, do_sample=False)
     return _extract_label(output, {"follow_up", "create_ticket", "unknown"})
 
 
@@ -218,7 +218,7 @@ def _llm_classify_secondary(user_text: str, history: list) -> str:
         {"role": "user", "content": user_text},
         {"role": "assistant", "content": "Label:"},
     ]
-    output = generate_response(messages)
+    output = generate_response(messages, max_new_tokens=5, do_sample=False)
     return _extract_label(output, {"inquiry", "complaint", "unknown"})
 
 
@@ -237,7 +237,7 @@ def _llm_detect_aggression(user_text: str, history: list) -> tuple[bool, float]:
         {"role": "user", "content": user_text},
         {"role": "assistant", "content": "Output:"},
     ]
-    raw = generate_response(messages)
+    raw = generate_response(messages, max_new_tokens=8, do_sample=False)
     return _extract_aggression(raw)
 
 
@@ -252,6 +252,14 @@ _GREETING_WORDS = {
 }
 
 
+def _is_greeting(user_text: str) -> bool:
+    normalized = user_text.strip().lower().rstrip("!.,?")
+    if normalized in _GREETING_WORDS:
+        return True
+    first_word = normalized.split()[0] if normalized.split() else ""
+    return first_word in _GREETING_WORDS
+
+
 def classify_primary_intent(user_text: str, history: list) -> str:
     """
     Classifies whether the user wants to follow up or create a ticket.
@@ -261,8 +269,7 @@ def classify_primary_intent(user_text: str, history: list) -> str:
     if result != "unknown":
         return result
     # Greetings must not reach the LLM — the small model misclassifies them.
-    normalized = user_text.strip().lower().rstrip("!.,?")
-    if normalized in _GREETING_WORDS:
+    if _is_greeting(user_text):
         return "unknown"
     # Keywords inconclusive — try LLM if available
     if llm_available():

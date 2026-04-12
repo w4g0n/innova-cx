@@ -1,7 +1,7 @@
 import logging
 import re
 
-from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression, _GREETING_WORDS
+from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression, _is_greeting
 
 try:
     from .intent import is_human_escalation_request, is_cancellation_request
@@ -152,8 +152,7 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
             return _result(response, "prompt_ticket_type", session_id)
 
         # unknown — check for greeting, then try secondary intent before re-prompting
-        normalized = user_text.strip().lower().rstrip("!.,?")
-        if normalized in _GREETING_WORDS:
+        if _is_greeting(user_text):
             response = (
                 "Hello! Are you looking to follow up on an existing ticket, "
                 "or would you like to create a new one?"
