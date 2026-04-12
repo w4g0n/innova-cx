@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
@@ -435,10 +434,9 @@ export default function Approvals() {
       <ToastStack toasts={toasts} />
       <div className="mgrApprovals" ref={revealRef} onClick={() => { setOpenOverrideFor(null); setOpenAprOverrideFor(null); }}>
 
-        <PageHeader
-          title="Approvals"
-          subtitle="Approve or reject requests for rescoring and rerouting complaints."
-        />
+        <div className="empNotifs__hero">
+          <h1 className="empNotifs__heroTitle">Approvals</h1>
+        </div>
 
         <div className="apr-tabBar">
           <TabBtn active={activeTab === "approvals"} onClick={() => setActiveTab("approvals")} badge={totals.pending}>
@@ -522,7 +520,9 @@ export default function Approvals() {
                     )}
                     {!loading && sortedFiltered.map((r) => (
                       <tr key={r.requestId} className="approvalRow" onClick={() => navigate(`/manager/approvals/${r.requestId}`)}>
-                        <td>{r.ticketId}</td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <Link className="mv-complaintLink" to={`/manager/complaints/${encodeURIComponent(r.ticketId)}`}>{r.ticketId}</Link>
+                        </td>
                         <td>
                           <span className={`apr-typePill apr-typePill--${r.type?.toLowerCase()}`}>{r.type}</span>
                         </td>

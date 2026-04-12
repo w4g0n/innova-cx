@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 import { apiUrl } from "../../config/apiBase";
 import { getCsrfToken } from "../../services/api";
 import PillSearch from "../../components/common/PillSearch";
+import PillSelect from "../../components/common/PillSelect";
+import FilterPillButton from "../../components/common/FilterPillButton";
 import PriorityPill from "../../components/common/PriorityPill";
 import {
   sanitizeId,
@@ -571,6 +572,9 @@ export default function AIExplainability() {
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState("");
   const [ticketSearch, setTicketSearch] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
 
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
@@ -935,8 +939,35 @@ export default function AIExplainability() {
     const search = ticketSearch.trim().toLowerCase();
     return [...ticketList]
       .sort(compareTicketsByDate)
-      .filter((t) => !search || String(t.ticketCode || "").toLowerCase().includes(search));
-  }, [ticketList, ticketSearch]);
+      .filter((t) => {
+        const blob = `${t.ticketCode || ""} ${t.subject || ""}`.toLowerCase();
+        return !search || blob.includes(search);
+      })
+      .filter((t) => priorityFilter === "all" || String(t.priority || "").trim().toLowerCase() === priorityFilter)
+      .filter((t) => statusFilter === "all" || String(t.status || "Completed").trim().toLowerCase() === statusFilter)
+      .filter((t) => departmentFilter === "all" || String(t.department || "").trim().toLowerCase() === departmentFilter);
+  }, [ticketList, ticketSearch, priorityFilter, statusFilter, departmentFilter]);
+
+  const priorityOptions = useMemo(() => [
+    { value: "all", label: "All Priorities" },
+    ...Array.from(new Set(ticketList.map((t) => String(t.priority || "").trim()).filter(Boolean)))
+      .sort()
+      .map((value) => ({ value: value.toLowerCase(), label: value })),
+  ], [ticketList]);
+
+  const statusOptions = useMemo(() => [
+    { value: "all", label: "All Statuses" },
+    ...Array.from(new Set(ticketList.map((t) => String(t.status || "Completed").trim()).filter(Boolean)))
+      .sort()
+      .map((value) => ({ value: value.toLowerCase(), label: value })),
+  ], [ticketList]);
+
+  const departmentOptions = useMemo(() => [
+    { value: "all", label: "All Departments" },
+    ...Array.from(new Set(ticketList.map((t) => String(t.department || "").trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b))
+      .map((value) => ({ value: value.toLowerCase(), label: value })),
+  ], [ticketList]);
 
 
   return (
@@ -944,18 +975,15 @@ export default function AIExplainability() {
       <section className="aix-wrap">
         {!detailMode && (
           <article className="aix-list">
-            <PageHeader
-              title="AI Explainability"
-              subtitle="Completed tickets only. Inspect the full finished pipeline, step-by-step, with the same stage explanations used in Queue Management."
-            />
-            <div className="aix-subtle aix-subtle--top">
-              Showing completed pipeline tickets only. In-flight tickets stay in Queue Management until the run is finished.
+            <div className="aix-hero">
+              <h1 className="aix-hero__title">AI Explainability</h1>
             </div>
 
             {listError ? <p className="aix-error">{listError}</p> : null}
 
-            <section className="search-section-EV-VAC">
+            <section className="aix-list-controls">
               <PillSearch
+                className="aix-list-search"
                 value={ticketSearch}
                 onChange={(v) => {
                   const raw = typeof v === "string" ? v : (v?.target?.value ?? "");
@@ -964,6 +992,41 @@ export default function AIExplainability() {
                 placeholder="Search by ticket code..."
                 maxLength={MAX_SEARCH_LEN}
               />
+              <div className="aix-filter-bar">
+                <PillSelect
+                  className="aix-filter-select"
+                  value={priorityFilter}
+                  onChange={setPriorityFilter}
+                  options={priorityOptions}
+                  ariaLabel="Filter by priority"
+                  minWidth={156}
+                />
+                <PillSelect
+                  className="aix-filter-select"
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  options={statusOptions}
+                  ariaLabel="Filter by status"
+                  minWidth={150}
+                />
+                <PillSelect
+                  className="aix-filter-select"
+                  value={departmentFilter}
+                  onChange={setDepartmentFilter}
+                  options={departmentOptions}
+                  ariaLabel="Filter by department"
+                  minWidth={176}
+                />
+                <FilterPillButton
+                  onClick={() => {
+                    setPriorityFilter("all");
+                    setStatusFilter("all");
+                    setDepartmentFilter("all");
+                    setTicketSearch("");
+                  }}
+                  label="Reset"
+                />
+              </div>
             </section>
 
             <div className="table-wrapper-EV-VAC">
@@ -983,9 +1046,9 @@ export default function AIExplainability() {
                 </thead>
                 <tbody>
                   {listLoading ? (
-                    <tr><td colSpan={8}>Loading tickets...</td></tr>
+                    <tr><td colSpan={9}>Loading tickets...</td></tr>
                   ) : visibleTicketList.length === 0 ? (
-                    <tr><td colSpan={8}>No completed pipeline tickets yet.</td></tr>
+                    <tr><td colSpan={9}>No completed pipeline tickets yet.</td></tr>
                   ) : (
                     visibleTicketList.map((t) => (
                         <tr key={t.ticketId}>
@@ -1022,9 +1085,16 @@ export default function AIExplainability() {
                               type="button"
                               className="aix-delete-btn"
                               title="Delete ticket"
+                              aria-label={`Delete ${t.ticketCode}`}
                               onClick={e => deleteTicket(t.ticketId, e)}
                             >
-                              Delete
+                              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
+                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                              </svg>
                             </button>
                           </td>
                         </tr>
