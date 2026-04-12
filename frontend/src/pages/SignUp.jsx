@@ -1,7 +1,7 @@
 import { useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-// ─── Google OAuth redirect ────────────────────────────────────────────────────
+// Google OAuth redirect 
 function initiateGoogleOAuth() {
   const clientId    = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const redirectUri = `${window.location.origin}/auth/callback`;
@@ -20,7 +20,7 @@ function initiateGoogleOAuth() {
   window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
-// ─── Starfield canvas ─────────────────────────────────────────────────────────
+// Starfield canvas 
 function Starfield() {
   const ref = useRef(null);
   useEffect(() => {
@@ -66,7 +66,7 @@ function Starfield() {
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// Main component 
 export default function SignUp() {
   const navigate = useNavigate();
 

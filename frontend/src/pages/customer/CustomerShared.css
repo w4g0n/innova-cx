@@ -1,7 +1,5 @@
-/* ============================================================
-   customerShared.css — Design tokens + shared components
-   Import this in every customer-facing page CSS file.
-   ============================================================ */
+/* customerShared.css — Design tokens + shared components
+   Import this in every customer-facing page CSS file. */
 
 /* COLOR TOKENS — Dark mode default */
 :root {
