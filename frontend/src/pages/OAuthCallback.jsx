@@ -3,6 +3,31 @@ import { useNavigate } from "react-router-dom";
 import { apiUrl } from "../config/apiBase";
 import { getCsrfToken } from "../services/api";
 
+function trustedDeviceStorageKey(email) {
+  return `td_${String(email || "").trim().toLowerCase()}`;
+}
+
+function getTrustedDeviceToken(email) {
+  const key = trustedDeviceStorageKey(email);
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.token || !parsed?.expiresAt || Number(parsed.expiresAt) <= Date.now()) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return parsed.token;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+function clearTrustedDeviceToken(email) {
+  localStorage.removeItem(trustedDeviceStorageKey(email));
+}
+
 /**
  * OAuthCallback — handles redirect from Google / Microsoft.
  * Route: /auth/callback
@@ -72,6 +97,35 @@ export default function OAuthCallback() {
         };
 
         if (token_type === "temporary") {
+          const trustedDeviceToken = getTrustedDeviceToken(user.email);
+          if (trustedDeviceToken && !requiresSetup) {
+            const exchangeCsrf = await getCsrfToken();
+            const exchangeRes = await fetch(apiUrl("/api/auth/trusted-device-exchange"), {
+              method: "POST",
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+                ...(exchangeCsrf ? { "X-CSRF-Token": exchangeCsrf } : {}),
+              },
+              body: JSON.stringify({
+                login_token: access_token,
+                trusted_device_token: trustedDeviceToken,
+              }),
+            });
+            if (exchangeRes.ok) {
+              const exchangeData = await exchangeRes.json();
+              localStorage.setItem("access_token", exchangeData.access_token);
+              localStorage.setItem("user", JSON.stringify({
+                ...userPayload,
+                token_type: exchangeData.token_type,
+              }));
+              const role = user.role || "customer";
+              navigate(role === "customer" ? "/customer/dashboard" : `/${role}`, { replace: true });
+              return;
+            }
+            clearTrustedDeviceToken(user.email);
+          }
+
           // Google sign-in requires app-level MFA step
           sessionStorage.setItem("mfa_token", access_token);
           sessionStorage.setItem("mfa_user",  JSON.stringify(userPayload));

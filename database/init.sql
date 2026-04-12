@@ -181,7 +181,8 @@ CREATE TABLE IF NOT EXISTS departments (
 CREATE TABLE IF NOT EXISTS users (
   id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email                    CITEXT NOT NULL UNIQUE,
-  password_hash            TEXT NOT NULL,
+  password_hash            TEXT,
+  google_id                TEXT,
   role                     user_role NOT NULL,
   is_active                BOOLEAN NOT NULL DEFAULT TRUE,
   created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -217,9 +218,15 @@ ADD COLUMN IF NOT EXISTS totp_secret TEXT;
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS google_id TEXT;
+
 -- Also safe-add the rotation column on existing volumes
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS password_last_rotated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE users
+ALTER COLUMN password_hash DROP NOT NULL;
 
 -- CREDENTIAL ROTATION: rotate_user_password()
 -- WHY THIS EXISTS:
@@ -305,12 +312,15 @@ CREATE TABLE IF NOT EXISTS trusted_devices (
   token_hash  TEXT NOT NULL UNIQUE,
   expires_at  TIMESTAMPTZ NOT NULL,
   user_agent  TEXT,
-  ip_address  TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_ip  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at TIMESTAMPTZ,
+  revoked_at  TIMESTAMPTZ
 );
 -- Partial index removed: now() is STABLE not IMMUTABLE, illegal in PG14 index predicates
 CREATE INDEX IF NOT EXISTS idx_trusted_devices_token_hash ON trusted_devices(token_hash);
 CREATE INDEX IF NOT EXISTS idx_trusted_devices_user_id    ON trusted_devices(user_id);
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_active     ON trusted_devices(user_id, expires_at) WHERE revoked_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS email_otp_codes (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -330,6 +340,8 @@ CREATE TABLE IF NOT EXISTS mfa_reset_tokens (
   used_at     TIMESTAMPTZ,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_mfa_reset_tokens_user_id ON mfa_reset_tokens(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;
 
 -- Tickets
 CREATE TABLE IF NOT EXISTS tickets (
