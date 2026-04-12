@@ -32,7 +32,7 @@ The agent only compares the new ticket against prior tickets that meet **all** o
 
 The primary path uses a sentence-transformer encoder (mean-pooled cosine similarity). The heuristic fallback uses `SequenceMatcher` ratio and token Jaccard similarity when the model cannot load.
 
-Default threshold: **0.75** (configurable via `RECURRENCE_SIMILARITY_THRESHOLD` env var).
+Default threshold: **0.70** (configurable via `RECURRENCE_SIMILARITY_THRESHOLD` env var).
 
 Only the single best match is used. If multiple tickets are similar, the highest-scoring one controls the branch/action.
 
@@ -231,4 +231,4 @@ docker exec innovacx-orchestrator python /app/test_recurrence.py
 | Variable | Default | Description |
 |---|---|---|
 | `RECURRENCE_ENCODER_MODEL` | `/app/models/recurrence/all-MiniLM-L6-v2` | Preferred HuggingFace model id or local path; loader falls back to the repo-local model dir, then the upstream HF model id if needed |
-| `RECURRENCE_SIMILARITY_THRESHOLD` | `0.75` | Cosine similarity threshold (0–1) |
+| `RECURRENCE_SIMILARITY_THRESHOLD` | `0.70` | Cosine similarity threshold (0–1) |
