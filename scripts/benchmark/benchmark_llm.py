@@ -74,9 +74,9 @@ def _summary(results: list[dict], label_key: str = "expected") -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
+
 # Task runners
-# ---------------------------------------------------------------------------
+
 
 def _run_primary_intent(cases: list[dict]) -> list[dict]:
     from core.intent import classify_primary_intent
@@ -172,9 +172,9 @@ def _run_aggression(cases: list[dict]) -> list[dict]:
     return results
 
 
-# ---------------------------------------------------------------------------
+
 # Main
-# ---------------------------------------------------------------------------
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark LLM classification tasks")
@@ -189,7 +189,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # ── Load and verify diagnostics ──────────────────────────────────────────
+    #  Load and verify diagnostics
     try:
         from core.llm import get_llm_diagnostics
         diag = get_llm_diagnostics()
@@ -204,7 +204,7 @@ def main() -> None:
         log.error("Could not load LLM diagnostics: %s", exc)
         sys.exit(1)
 
-    # ── Load test cases ───────────────────────────────────────────────────────
+    # ── Load test cases 
     test_cases_path = Path(args.test_cases)
     if not test_cases_path.exists():
         log.error("test_cases.json not found at %s", test_cases_path)
@@ -218,7 +218,7 @@ def main() -> None:
         len(data.get("aggression", [])),
     )
 
-    # ── Run tasks ─────────────────────────────────────────────────────────────
+    # ── Run tasks 
     output: dict = {
         "meta": {
             "model_diagnostics": diag,
@@ -268,14 +268,14 @@ def main() -> None:
     output["meta"]["total_elapsed_s"] = total_elapsed
     log.info("All tasks complete in %.1fs", total_elapsed)
 
-    # ── Write output ──────────────────────────────────────────────────────────
+    # ── Write output 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w") as f:
         json.dump(output, f, indent=2)
     log.info("Results written to %s", out_path)
 
-    # ── Print inline summary ──────────────────────────────────────────────────
+    # ── Print inline summary 
     print("\n=== BENCHMARK SUMMARY ===")
     print(f"Model mode : {diag.get('chatbot_mode', 'unknown')}")
     print(f"Model path : {diag.get('chatbot_model_path', 'N/A')}")

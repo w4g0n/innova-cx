@@ -421,9 +421,7 @@ export default function ComplaintTrends() {
           ))}
         </div>
 
-        {/* ══════════════════════════════════════════════════════════════════
-            SECTION A — COMPLAINT TRENDS
-        ══════════════════════════════════════════════════════════════════ */}
+        {/* SECTION A — COMPLAINT TRENDS */}
         {tab === 0 && (
           <div className="ct-section">
             {/* A — KPI row */}
@@ -532,9 +530,7 @@ export default function ComplaintTrends() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════════════════
-            SECTION B — SLA PERFORMANCE & BREACHES
-        ══════════════════════════════════════════════════════════════════ */}
+        {/* SECTION B — SLA PERFORMANCE & BREACHES */}
         {tab === 1 && B && (
           <div className="ct-section">
             {/* B1 — Headline KPIs */}
@@ -615,9 +611,7 @@ export default function ComplaintTrends() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════════════════
-            SECTION C — EMPLOYEE REPORTS
-        ══════════════════════════════════════════════════════════════════ */}
+        {/* SECTION C — EMPLOYEE REPORTS */}
         {tab === 2 && C && (
           <div className="ct-section ct-sectionC">
             {/* C1 — Team summary KPIs */}

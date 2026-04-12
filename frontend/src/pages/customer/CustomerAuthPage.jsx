@@ -9,7 +9,7 @@ import "./CustomerAuthPage.css";
 // Allowed role values — anything else redirects to "/"
 const ALLOWED_ROLES = ["customer", "employee", "manager", "operator"];
 
-// ─── Customer: dark galaxy starfield (identical to Login.jsx) ─────────────────
+// Customer: dark galaxy starfield 
 function Starfield() {
   const ref = useRef(null);
   useEffect(() => {
@@ -100,7 +100,7 @@ function Starfield() {
   return <canvas ref={ref} className="auth-starfield" />;
 }
 
-// ─── Staff: neural-network mesh background ────────────────────────────────────
+// ─── Staff: neural-network mesh background 
 function StaffBackground() {
   const ref = useRef(null);
   useEffect(() => {
@@ -219,7 +219,7 @@ function StaffBackground() {
   return <canvas ref={ref} className="auth-starfield auth-staff-canvas" />;
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main component 
 export default function CustomerAuthPage() {
   const navigate = useNavigate();
 
@@ -238,7 +238,7 @@ export default function CustomerAuthPage() {
   const rawRole = sanitizeText(storedUser?.role, 20).toLowerCase();
   const role    = ALLOWED_ROLES.includes(rawRole) ? rawRole : null;
 
-  // ── Core state ─────────────────────────────────────────────────────────────
+  // ── Core state 
   const [qrCode,        setQrCode]        = useState(null);
   const [otp,           setOtp]           = useState(["", "", "", "", "", ""]);
   const [verified,      setVerified]      = useState(false);
@@ -247,10 +247,10 @@ export default function CustomerAuthPage() {
   const [errorMsg,      setErrorMsg]      = useState("");
   const [shake,         setShake]         = useState(false);
 
-  // ── Trust device ───────────────────────────────────────────────────────────
+  // ── Trust device 
   const [trustDevice,   setTrustDevice]   = useState(false);
 
-  // ── Email OTP mode ─────────────────────────────────────────────────────────
+  // ── Email OTP mode 
   // "totp" = use authenticator app, "email" = receive code by email
   const [otpMode,       setOtpMode]       = useState("totp");
   const [emailOtpSent,  setEmailOtpSent]  = useState(false);
