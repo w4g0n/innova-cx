@@ -4,7 +4,7 @@ import { apiUrl } from "../config/apiBase";
 import { getCsrfToken } from "../services/api";
 import { safeParseUser, sanitizeText } from "./customer/sanitize";
 
-// ─── Starfield (same as Login/CustomerAuthPage) ───────────────────────────────
+// Starfield (same as Login/CustomerAuthPage)
 function Starfield() {
   const ref = useRef(null);
   useEffect(() => {
@@ -71,7 +71,7 @@ function Starfield() {
   return <canvas ref={ref} style={{ position: "fixed", inset: 0, width: "100%", height: "100%", zIndex: 0, pointerEvents: "none" }} />;
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// Main component
 export default function MfaSetup() {
   const navigate = useNavigate();
   const loginToken  = sessionStorage.getItem("mfa_token");
