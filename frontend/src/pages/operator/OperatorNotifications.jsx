@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import { apiUrl } from "../../config/apiBase";
@@ -117,10 +116,6 @@ export default function OperatorNotifications() {
     fetchNotifications();
   }, [fetchNotifications, navigate, token]);
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications]
-  );
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
@@ -183,19 +178,9 @@ export default function OperatorNotifications() {
   return (
     <Layout role="operator">
       <div className="empNotifs">
-        <PageHeader
-          title="Notifications"
-          subtitle={`You have ${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}.`}
-          actions={
-            <button
-              className="filterPillBtn empNotifs__actionBtn"
-              onClick={markAllRead}
-              disabled={loading || notifications.length === 0}
-            >
-              Mark all as read
-            </button>
-          }
-        />
+        <div className="empNotifs__hero">
+          <h1 className="empNotifs__heroTitle">Notifications</h1>
+        </div>
 
         <div className="empNotifs__controls">
           <PillSearch
@@ -209,27 +194,39 @@ export default function OperatorNotifications() {
           />
 
           <div className="empNotifs__filtersRow">
-            <PillSelect
-              value={filter}
-              onChange={(v) => { if (ALLOWED_NOTIF_FILTERS.includes(v)) setFilter(v); }}
-              ariaLabel="Filter notifications"
-              options={[
-                { value: "All",        label: "All" },
-                { value: "Users",      label: "Users" },
-                { value: "Model",      label: "Model" },
-                { value: "Escalation", label: "Escalation" },
-                { value: "Reports",    label: "Reports" },
-                { value: "System",     label: "System" },
-              ]}
-            />
+            <div className="empNotifs__filtersLeft">
+              <PillSelect
+                value={filter}
+                onChange={(v) => { if (ALLOWED_NOTIF_FILTERS.includes(v)) setFilter(v); }}
+                ariaLabel="Filter notifications"
+                options={[
+                  { value: "All",        label: "All" },
+                  { value: "Users",      label: "Users" },
+                  { value: "Model",      label: "Model" },
+                  { value: "Escalation", label: "Escalation" },
+                  { value: "Reports",    label: "Reports" },
+                  { value: "System",     label: "System" },
+                ]}
+              />
 
-            <button
-              className="filterPillBtn empNotifs__actionBtn"
-              onClick={() => setOnlyUnread((s) => !s)}
-              disabled={loading}
-            >
-              {onlyUnread ? "Showing Unread" : "Show Unread"}
-            </button>
+              <button
+                className="filterPillBtn empNotifs__actionBtn"
+                onClick={() => setOnlyUnread((s) => !s)}
+                disabled={loading}
+              >
+                {onlyUnread ? "Showing Unread" : "Show Unread"}
+              </button>
+            </div>
+
+            <div className="empNotifs__filtersRight">
+              <button
+                className="filterPillBtn empNotifs__actionBtn"
+                onClick={markAllRead}
+                disabled={loading || notifications.length === 0}
+              >
+                Mark all as read
+              </button>
+            </div>
           </div>
         </div>
 

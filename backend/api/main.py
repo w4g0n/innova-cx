@@ -1230,6 +1230,10 @@ class VerifyTOTPRequest(BaseModel):
     trust_device: bool = False
 
 
+class SendEmailOTPRequest(BaseModel):
+    login_token: str
+
+
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -1461,8 +1465,134 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     return resp
 
 
+@api.post("/auth/email-otp-send")
+@rate_limit_auth()
+def email_otp_send(request: Request, body: SendEmailOTPRequest, _csrf: None = Depends(require_csrf)):
+    payload = verify_jwt(body.login_token)
+    client_ip = request.client.host if request and request.client else None
+    user = fetch_one(
+        "SELECT id, email, role, is_active FROM users WHERE id = %s",
+        (payload.get("sub"),),
+    )
+
+    if not user or not user.get("is_active"):
+        raise HTTPException(status_code=401, detail="Invalid or expired login session")
+
+    otp_code = f"{int.from_bytes(os.urandom(4), 'big') % 1000000:06d}"
+    otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+
+    execute(
+        "UPDATE email_otp_codes SET used_at = NOW() WHERE user_id = %s AND used_at IS NULL",
+        (user["id"],),
+    )
+    execute(
+        """
+        INSERT INTO email_otp_codes (user_id, otp_hash, expires_at)
+        VALUES (%s, %s, NOW() + interval '10 minutes')
+        """,
+        (user["id"], otp_hash),
+    )
+
+    if resend.api_key:
+        result = resend.Emails.send({
+            "from": "no-reply@innovacx.net",
+            "to": user["email"],
+            "subject": "Your InnovaCX verification code",
+            "html": EMAIL_OTP_HTML.format(email=user["email"], otp_code=otp_code),
+        })
+        logger.info("email_otp_send | resend result=%s user=%s", result, user["id"])
+    elif DEV_LOG_RESET_TOKENS:
+        print(f"[DEV] Email OTP for {user['email']}: {otp_code}")
+    else:
+        logger.warning("email_otp_send | RESEND_API_KEY missing; code not delivered for user=%s", user["id"])
+        raise HTTPException(status_code=503, detail="Email delivery is not configured")
+
+    log_auth_event("email_otp_sent", user_id=str(user["id"]), email=user["email"], ip=client_ip)
+    return {"ok": True, "message": "Verification code sent"}
+
+
+@api.post("/auth/email-otp-verify")
+@rate_limit_auth()
+def email_otp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends(require_csrf)):
+    payload = verify_jwt(body.login_token)
+    client_ip = request.client.host if request and request.client else None
+    user = fetch_one(
+        "SELECT id, email, role, is_active FROM users WHERE id = %s",
+        (payload.get("sub"),),
+    )
+
+    if not user or not user.get("is_active"):
+        raise HTTPException(status_code=401, detail="Invalid or expired login session")
+
+    row = fetch_one(
+        """
+        SELECT id, otp_hash
+        FROM email_otp_codes
+        WHERE user_id = %s
+          AND used_at IS NULL
+          AND expires_at > NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (user["id"],),
+    )
+
+    provided_hash = hashlib.sha256((body.otp_code or "").encode()).hexdigest()
+    if not row or not hmac.compare_digest(str(row["otp_hash"]), provided_hash):
+        log_auth_event("email_otp_failed", user_id=str(user["id"]), email=user["email"], ip=client_ip)
+        raise HTTPException(status_code=401, detail="Invalid OTP code")
+
+    execute("UPDATE email_otp_codes SET used_at = NOW() WHERE id = %s", (row["id"],))
+
+    access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+    profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    log_auth_event("email_otp_success", user_id=str(user["id"]), email=user["email"], ip=client_ip)
+    resp = JSONResponse(content={
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user["id"]),
+            "email": user["email"],
+            "role": user["role"],
+            "full_name": (profile or {}).get("full_name") or user["email"],
+        },
+    })
+    _set_auth_cookie(resp, access_token)
+    return resp
+
+
 # Forgot Password and reset link api call
 # Routes: Password Reset
+EMAIL_OTP_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Your verification code</title>
+</head>
+<body style="margin:0;padding:0;background:#0c0520;font-family:'Segoe UI',Arial,sans-serif;">
+  <div style="max-width:560px;margin:32px auto;background:#05010e;border:1px solid rgba(168,85,247,.25);border-radius:16px;overflow:hidden;">
+    <div style="padding:36px 40px;background:linear-gradient(160deg,#0e0525 0%,#1a0840 50%,#0c0320 100%);text-align:center;">
+      <div style="font-size:24px;font-weight:900;color:#fff;letter-spacing:-.04em;">Innova<span style="opacity:.55;font-weight:400;">CX</span></div>
+      <div style="margin-top:10px;font-size:22px;font-weight:800;color:#fff;">Your verification code</div>
+    </div>
+    <div style="padding:32px 40px;">
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:rgba(255,255,255,.72);">
+        Use the code below to complete your sign-in for <strong style="color:#fff;">{email}</strong>.
+      </p>
+      <div style="margin:24px 0;padding:18px 20px;border-radius:14px;background:rgba(139,92,246,.1);border:1px solid rgba(168,85,247,.22);text-align:center;">
+        <div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#c4b5fd;margin-bottom:10px;">One-time code</div>
+        <div style="font-size:34px;font-weight:800;letter-spacing:.35em;color:#fff;">{otp_code}</div>
+      </div>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:rgba(255,255,255,.6);">
+        This code expires in <strong style="color:#fff;">10 minutes</strong> and can only be used once.
+      </p>
+    </div>
+  </div>
+</body>
+</html>"""
+
 RESET_EMAIL_HTML = """\
 <!DOCTYPE html>
 <html lang="en">

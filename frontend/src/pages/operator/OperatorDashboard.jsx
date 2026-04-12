@@ -164,10 +164,9 @@ export default function OperatorDashboard() {
   return (
     <Layout role="operator">
       <div className="opDash" ref={revealRef}>
-        <PageHeader
-          title={greeting}
-          subtitle="Metrics shown are from the last 30 days. Use each module's filters for deeper analysis."
-        />
+        <div className="opDash__headerBox">
+          <PageHeader title={greeting} />
+        </div>
 
         {/* KPI BAR */}
         <section className="opDash__kpiRow">

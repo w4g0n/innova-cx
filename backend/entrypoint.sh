@@ -66,6 +66,7 @@ migration_files = [
     "/app/database/scripts/001_employee_report_subtables.sql",
     "/app/database/scripts/002_cleanup_legacy_employee_reports.sql",
     "/app/database/scripts/003_user_cleanup_and_coverage.sql",
+    "/app/database/scripts/004_email_otp_codes.sql",
 ]
 
 for path in migration_files:
