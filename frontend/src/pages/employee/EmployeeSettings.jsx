@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 
 import {
   SettingsCard,
@@ -34,10 +33,9 @@ export default function EmployeeSettings() {
   return (
     <Layout role="employee">
       <div className="empSettingsPage">
-        <PageHeader
-          title="Settings"
-          subtitle="Manage your account preferences and basic configuration."
-        />
+        <div className="empSettingsHero">
+          <h1 className="empSettingsHero__title">Settings</h1>
+        </div>
 
         <div className="empSettingsContent">
           {/* Profile */}

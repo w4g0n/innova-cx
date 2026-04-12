@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 import "./PipelineQueuePage.css";
 import useScrollReveal from "../../utils/useScrollReveal";
 import { apiUrl } from "../../config/apiBase";
@@ -498,48 +497,45 @@ export default function PipelineQueuePage() {
   return (
     <Layout role="operator">
       <div className="pq" ref={revealRef}>
-        <PageHeader
-          title="Pipeline Queue"
-          subtitle="Override-first queue for operator intervention. Tickets that need your action stay at the top."
-          actions={
-            <div className="pq-header-actions">
-              <button
-                type="button"
-                className={`pq-refresh-btn pq-pipeline-toggle${pipelineControl?.is_paused ? " pq-pipeline-toggle--paused" : ""}`}
-                onClick={handlePipelineToggle}
-                disabled={pipelineToggleBusy}
-                title={pipelineControl?.is_paused ? "Resume pipeline" : "Pause pipeline"}
-              >
-                {pipelineToggleBusy ? (
-                  <Ico name="refresh" size={15} />
-                ) : pipelineControl?.is_paused ? (
-                  <Ico name="play" size={15} />
-                ) : (
-                  <Ico name="pause" size={15} />
-                )}
-                {pipelineToggleBusy
-                  ? (pipelineControl?.is_paused ? "Resuming…" : "Pausing…")
-                  : (pipelineControl?.is_paused ? "Resume Pipeline" : "Pause Pipeline")}
-              </button>
-              <button
-                type="button"
-                className={`pq-refresh-btn${refreshing ? " pq-refresh-btn--spinning" : ""}`}
-                onClick={handleRefresh}
-                disabled={refreshing}
-                title="Refresh"
-              >
-                <Ico name="refresh" size={15} />
-                {refreshing ? "Refreshing…" : "Refresh"}
-              </button>
-            </div>
-          }
-        />
+        <div className="pq-hero">
+          <h1 className="pq-hero__title">Pipeline Queue</h1>
+        </div>
 
         {/* Stats strip */}
         <section className="pq-stats">
           <StatCard label="Queued"     value={stats.queued}     loading={itemsLoading} />
           <StatCard label="Processing" value={stats.processing}  loading={itemsLoading} flag="amber" />
           <StatCard label="Held"       value={stats.held}        loading={itemsLoading} flag={stats.held > 0 ? "red" : undefined} />
+          <div className="pq-stats__actions">
+            <button
+              type="button"
+              className={`pq-refresh-btn pq-pipeline-toggle${pipelineControl?.is_paused ? " pq-pipeline-toggle--paused" : ""}`}
+              onClick={handlePipelineToggle}
+              disabled={pipelineToggleBusy}
+              title={pipelineControl?.is_paused ? "Resume pipeline" : "Pause pipeline"}
+            >
+              {pipelineToggleBusy ? (
+                <Ico name="refresh" size={15} />
+              ) : pipelineControl?.is_paused ? (
+                <Ico name="play" size={15} />
+              ) : (
+                <Ico name="pause" size={15} />
+              )}
+              {pipelineToggleBusy
+                ? (pipelineControl?.is_paused ? "Resuming…" : "Pausing…")
+                : (pipelineControl?.is_paused ? "Resume Pipeline" : "Pause Pipeline")}
+            </button>
+            <button
+              type="button"
+              className={`pq-refresh-btn${refreshing ? " pq-refresh-btn--spinning" : ""}`}
+              onClick={handleRefresh}
+              disabled={refreshing}
+              title="Refresh"
+            >
+              <Ico name="refresh" size={15} />
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
         </section>
 
         {!itemsLoading && pipelineControl?.is_paused && (

@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, Navigate } from "react-router-dom";
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import PriorityPill from "../../components/common/PriorityPill";
 import { apiUrl } from "../../config/apiBase";
@@ -161,10 +160,9 @@ export default function EmployeeDashboard() {
   return (
     <Layout role="employee">
       <div className="empDash" ref={revealRef}>
-        <PageHeader
-          title={greeting}
-          subtitle="Here's your activity and assigned workload."
-        />
+        <div className="empDash__hero">
+          <h1 className="empDash__heroTitle">{greeting}</h1>
+        </div>
 
         <section className="empDash__kpis">
           <KpiCard label="Tickets Assigned"    value={kpis.ticketsAssigned}   />

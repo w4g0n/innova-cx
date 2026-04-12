@@ -1,6 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 import {
   SettingsCard,
   SettingsField,
@@ -179,10 +178,9 @@ export default function ManagerSettings() {
     <Layout role="manager">
       <div className="mgrSettingsPage">
 
-        <PageHeader
-          title="Settings"
-          subtitle="Manage your account preferences and basic configuration."
-        />
+        <div className="mgrSettingsHero">
+          <h1 className="mgrSettingsHero__title">Settings</h1>
+        </div>
 
         <div className="mgrSettingsContent">
           {/* Profile */}

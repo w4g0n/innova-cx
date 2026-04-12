@@ -47,17 +47,17 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.aix-list:has(> .pageHeader) {
+.aix-list {
   background: transparent;
   border: none;
   box-shadow: none;
   padding: 0;
+  margin-bottom: 0;
 }
 
 /* Shared card */
 .aix-card,
 .aix-card-section,
-.aix-list,
 .aix-stage,
 .aix-detail-header,
 .aix-stage-menu {
@@ -67,6 +67,24 @@
   box-shadow: 0 6px 22px rgba(64,28,81,0.09);
   padding: 20px 22px;
   margin-bottom: 16px;
+}
+
+.aix-hero {
+  background: linear-gradient(180deg, #4d2060 0%, var(--sidebar-bg) 100%);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 14px;
+  box-shadow: 0 10px 28px rgba(64, 28, 81, 0.14);
+}
+
+.aix-hero__title {
+  margin: 0;
+  font-family: var(--font-heading, inherit);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.2px;
+  line-height: 1.15;
 }
 
 /* Section title */
@@ -138,6 +156,11 @@
   margin: 18px 0 16px;
   align-items: center;
 }
+.aix-filters--inline {
+  margin: 0;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
 .aix-filter {
   border: 1px solid var(--aix-border);
   background: #fff;
@@ -167,8 +190,43 @@
 .aix-filter--active span { color: var(--aix-accent); }
 
 /* Search row */
-.search-section-EV-VAC {
+.aix-list-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
   margin-bottom: 14px;
+}
+
+.aix-list-search {
+  flex: 0 1 320px;
+  max-width: 320px;
+}
+
+.aix-list-search .pillSearch {
+  max-width: 320px;
+  padding: 7px 14px;
+}
+
+.aix-list-search .pillSearch__input {
+  min-height: 24px;
+  font-size: 13px;
+}
+
+.aix-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.aix-filter-select .pillSelect__select,
+.aix-filter-bar .filterPillBtn {
+  min-height: 38px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
 }
 
 /* Table card wrapper */
@@ -178,6 +236,8 @@
   border: 1px solid var(--aix-border);
   box-shadow: var(--aix-shadow);
   overflow-x: auto;
+  width: calc(100% - 12px);
+  margin: 0 auto;
 }
 
 /* Table */
@@ -230,9 +290,9 @@
 
 /* Primary action button */
 .aix-open-btn {
-  background: linear-gradient(135deg, var(--aix-accent-deep), var(--aix-accent));
+  background: rgba(89,36,180,0.92);
   color: #fff;
-  border: none;
+  border: 1px solid rgba(64,28,81,0.14);
   border-radius: var(--aix-radius-sm);
   padding: 9px 18px;
   font-weight: 700;
@@ -242,12 +302,13 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  box-shadow: 0 2px 8px rgba(109,40,217,.28);
-  transition: box-shadow .2s, transform .15s;
+  box-shadow: 0 1px 5px rgba(64,28,81,.16);
+  transition: background .2s, box-shadow .2s, transform .15s;
   white-space: nowrap;
 }
 .aix-open-btn:hover {
-  box-shadow: 0 4px 16px rgba(109,40,217,.38);
+  background: var(--aix-accent-deep);
+  box-shadow: 0 3px 10px rgba(64,28,81,.22);
   transform: translateY(-1px);
 }
 .aix-open-btn:disabled {
@@ -293,14 +354,6 @@
   font-size: 13px;
   color: var(--aix-muted);
   line-height: 1.6;
-}
-
-.aix-subtle--top {
-  margin: 0 0 16px;
-  padding: 12px 14px;
-  border-radius: var(--aix-radius);
-  border: 1px solid var(--aix-border-light);
-  background: var(--aix-bg);
 }
 
 /* Steps */
@@ -715,6 +768,10 @@ p.aix-subtle {
   .aix-summary-grid    { grid-template-columns: repeat(2, 1fr); }
   .aix-details-grid    { grid-template-columns: 1fr; }
   .aix-controls-grid   { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+  .aix-list-controls   { flex-direction: column; align-items: stretch; }
+  .aix-list-search,
+  .aix-list-search .pillSearch { max-width: none; }
+  .aix-filter-bar { justify-content: flex-start; }
 }
 @media (max-width: 640px) {
   .aix-summary-grid  { grid-template-columns: 1fr; }
@@ -729,7 +786,6 @@ p.aix-subtle {
   display: flex;
   gap: 8px;
   margin: 22px 0 0;
-  border-bottom: 2px solid rgba(64,28,81,0.10);
   padding-bottom: 0;
   margin-bottom: 24px;
 }
@@ -1334,13 +1390,22 @@ p.aix-subtle {
 
 /* Ticket list delete button */
 .aix-delete-btn {
-  padding: 5px 10px;
-  border-radius: 6px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
   border: 1px solid var(--aix-danger-border);
   background: var(--aix-danger-bg);
   color: var(--aix-danger);
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .aix-delete-btn:hover { background: var(--aix-danger-border); }
+
+.aix-delete-btn span {
+  line-height: 1;
+}

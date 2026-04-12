@@ -14,6 +14,25 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Purple hero */
+.umHero {
+  background: linear-gradient(180deg, #4d2060 0%, var(--sidebar-bg) 100%);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 18px;
+  box-shadow: 0 10px 28px rgba(64, 28, 81, 0.14);
+}
+
+.umHero__title {
+  margin: 0;
+  font-family: var(--font-heading, "DM Sans", sans-serif);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.2px;
+  line-height: 1.15;
+}
+
 /* Toast */
 .umToast {
   display: flex;
@@ -98,11 +117,25 @@
 /* Filters row */
 .umFilters {
   display: flex;
-  gap: 8px;
+  gap: 16px;
   margin-top: 10px;
   margin-bottom: 22px;
   align-items: center;
   flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.umFilters__left {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.umFilters__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
 }
 
 /* Table card */

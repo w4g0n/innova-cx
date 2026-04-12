@@ -14,6 +14,26 @@
   margin-bottom: 0;
 }
 
+/* Purple header box */
+.opDash__headerBox {
+  background: linear-gradient(180deg, #4d2060 0%, var(--sidebar-bg) 100%);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 4px;
+}
+.opDash__headerBox .pageHeader {
+  margin-bottom: 0;
+}
+.opDash__headerBox .pageHeader__title {
+  color: #ffffff;
+}
+.opDash__headerBox .pageHeader__title::after {
+  display: none;
+}
+.opDash__headerBox .pageHeader__subtitle {
+  color: rgba(255, 255, 255, 0.7);
+}
+
 /* KPI row — 5 cards */
 .opDash__kpiRow {
   display: grid;

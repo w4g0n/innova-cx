@@ -7,6 +7,24 @@
   animation: fadeUp 0.4s var(--ease-out) both;
 }
 
+.empNotifs__hero {
+  background: linear-gradient(180deg, #4d2060 0%, var(--sidebar-bg) 100%);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 4px;
+  box-shadow: 0 10px 28px rgba(64, 28, 81, 0.14);
+}
+
+.empNotifs__heroTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.2px;
+  line-height: 1.15;
+}
+
 /* Controls row */
 .empNotifs__controls {
   display: flex;
@@ -16,9 +34,23 @@
 
 .empNotifs__filtersRow {
   display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.empNotifs__filtersLeft {
+  display: flex;
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.empNotifs__filtersRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
 }
 
 /* List */

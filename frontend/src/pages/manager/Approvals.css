@@ -1,3 +1,20 @@
+.empNotifs__hero {
+  background: linear-gradient(180deg, #4d2060 0%, var(--sidebar-bg) 100%);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 16px;
+  box-shadow: 0 10px 28px rgba(64, 28, 81, 0.14);
+}
+.empNotifs__heroTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.2px;
+  line-height: 1.15;
+}
+
 .mgrApprovals {
   width: 100%;
   max-width: none;
@@ -48,7 +65,7 @@
 }
 
 .trendsTableWrap {
-  overflow: visible;
+  overflow-x: auto;
   border-radius: 14px;
   border: 1px solid rgba(0, 0, 0, 0.06);
   margin-top: 10px;
@@ -56,7 +73,7 @@
 
 .trendsTable {
   width: 100%;
-  min-width: 860px;
+  min-width: 700px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 13px;

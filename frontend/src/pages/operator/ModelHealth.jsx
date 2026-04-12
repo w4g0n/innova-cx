@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
 
 import {
@@ -773,51 +772,52 @@ export default function ModelHealth() {
   return (
     <Layout role="operator">
       <div className="modelAnalysis" ref={revealRef}>
-        <PageHeader
-          title="Model Health"
-          actions={
-            <div className="ma-top-actions">
-              <PillSelect
-                value={timeFilter}
-                onChange={handleFilterChange((v) => { if (ALLOWED_TIME_FILTERS.includes(v)) setTimeFilter(v); })}
-                ariaLabel="Filter by time range"
-                options={[
-                  { label: "Last 7 days",  value: "last7days"  },
-                  { label: "Last 30 days", value: "last30days" },
-                  { label: "This quarter", value: "quarter"    },
-                ]}
-              />
-              <PillSelect
-                value={deptFilter}
-                onChange={handleFilterChange((v) => { if (ALLOWED_DEPARTMENTS.includes(v)) setDeptFilter(v); })}
-                ariaLabel="Filter by department"
-                options={[
-                  { label: "All Departments",       value: "All Departments"       },
-                  { label: "Facilities Management", value: "Facilities Management" },
-                  { label: "Legal & Compliance",    value: "Legal & Compliance"    },
-                  { label: "Safety & Security",     value: "Safety & Security"     },
-                  { label: "HR",                    value: "HR"                    },
-                  { label: "Leasing",               value: "Leasing"               },
-                  { label: "Maintenance",           value: "Maintenance"           },
-                  { label: "IT",                    value: "IT"                    },
-                ]}
-              />
-              <DateRangePicker dateRange={dateRange} onChange={handleDateRangeChange} />
-            </div>
-          }
-        />
+        <div className="ma-hero">
+          <div className="ma-hero__title">Model Health</div>
+        </div>
 
-        <div className="ma-nav">
-          {AGENTS.map((a) => (
-            <button
-              key={a.id}
-              className={`ma-nav__btn ${activeAgent === a.id ? "ma-nav__btn--active" : ""}`}
-              onClick={() => { if (ALLOWED_MODEL_AGENTS.includes(a.id)) setActiveAgent(a.id); }}
-              type="button"
-            >
-              {a.label}
-            </button>
-          ))}
+        <div className="ma-toolbar">
+          <div className="ma-nav">
+            {AGENTS.map((a) => (
+              <button
+                key={a.id}
+                className={`ma-nav__btn ${activeAgent === a.id ? "ma-nav__btn--active" : ""}`}
+                onClick={() => { if (ALLOWED_MODEL_AGENTS.includes(a.id)) setActiveAgent(a.id); }}
+                type="button"
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="ma-top-actions">
+            <PillSelect
+              value={timeFilter}
+              onChange={handleFilterChange((v) => { if (ALLOWED_TIME_FILTERS.includes(v)) setTimeFilter(v); })}
+              ariaLabel="Filter by time range"
+              options={[
+                { label: "Last 7 days",  value: "last7days"  },
+                { label: "Last 30 days", value: "last30days" },
+                { label: "This quarter", value: "quarter"    },
+              ]}
+            />
+            <PillSelect
+              value={deptFilter}
+              onChange={handleFilterChange((v) => { if (ALLOWED_DEPARTMENTS.includes(v)) setDeptFilter(v); })}
+              ariaLabel="Filter by department"
+              options={[
+                { label: "All Departments",       value: "All Departments"       },
+                { label: "Facilities Management", value: "Facilities Management" },
+                { label: "Legal & Compliance",    value: "Legal & Compliance"    },
+                { label: "Safety & Security",     value: "Safety & Security"     },
+                { label: "HR",                    value: "HR"                    },
+                { label: "Leasing",               value: "Leasing"               },
+                { label: "Maintenance",           value: "Maintenance"           },
+                { label: "IT",                    value: "IT"                    },
+              ]}
+            />
+            <DateRangePicker dateRange={dateRange} onChange={handleDateRangeChange} />
+          </div>
         </div>
 
         {activeAgent === "chatbot" && (
