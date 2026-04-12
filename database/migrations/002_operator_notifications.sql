@@ -176,9 +176,14 @@ CREATE OR REPLACE FUNCTION notify_operator_unassigned_backlog()
 RETURNS TRIGGER AS $$
 DECLARE
   v_count INTEGER;
+  v_prev_count INTEGER;
 BEGIN
-  -- Only relevant when the ticket is or becomes Open
+  -- Only relevant when the ticket is newly open.
   IF NEW.status <> 'Open' THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'UPDATE' AND OLD.status = 'Open' THEN
     RETURN NEW;
   END IF;
 
@@ -187,7 +192,16 @@ BEGIN
   FROM tickets
   WHERE status = 'Open';
 
-  IF v_count >= 10 THEN
+  -- This trigger only fires after a newly-open ticket has been written,
+  -- so subtract that ticket to know whether we actually crossed the threshold.
+  v_prev_count := GREATEST(v_count - 1, 0);
+
+  IF v_prev_count < 10 AND v_count >= 10 AND NOT EXISTS (
+    SELECT 1
+    FROM notifications
+    WHERE title = 'Open Ticket Backlog Alert'
+      AND created_at >= now() - interval '1 hour'
+  ) THEN
     PERFORM notify_all_operators(
       'system',
       'Open Ticket Backlog Alert',
