@@ -3,6 +3,11 @@ node_modules
 dist
 build
 
+# Capacitor / Android
+android
+.gradle
+.gradle-user-home
+
 # Vite / logs
 npm-debug.log*
 yarn-debug.log*
