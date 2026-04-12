@@ -189,6 +189,8 @@ services:
       SUBJECT_GENERATOR_MODEL_PATH: "${SUBJECT_GENERATOR_MODEL_PATH:-/app/agents/step01_subjectgeneration/model}"
       SUBJECT_GENERATOR_MODEL_NAME: "${SUBJECT_GENERATOR_MODEL_NAME:-google/flan-t5-small}"
       SUBJECT_GENERATOR_AUTO_DOWNLOAD: "${SUBJECT_GENERATOR_AUTO_DOWNLOAD:-false}"
+      SHARED_QWEN_MODEL_PATH: "${SHARED_QWEN_MODEL_PATH:-/app/models/reviewagent/qwen2.5-0.5B-Instruct}"
+      REVIEW_AGENT_MODEL_PATH: "${REVIEW_AGENT_MODEL_PATH:-/app/models/reviewagent/qwen2.5-0.5B-Instruct}"
       # Prefer the host-managed model store mounted at /app/models so recurrence
       # survives container/image churn and accidental compose volume resets.
       RECURRENCE_ENCODER_MODEL: "${RECURRENCE_ENCODER_MODEL:-/app/models/recurrence/all-MiniLM-L6-v2}"
@@ -212,7 +214,6 @@ services:
       start_period: 300s
     volumes:
       - /opt/innova-models:/app/models:ro
-      - orchestrator_qwen_model:/app/agents/step11_reviewagent/model
     networks:
       - innovacx-network
 
@@ -280,7 +281,6 @@ volumes:
   transcriber_model:
   uploads_data:
   backup_data:
-  orchestrator_qwen_model:
 
 networks:
   innovacx-network:
