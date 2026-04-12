@@ -14,7 +14,7 @@ Environment variables:
   RECURRENCE_ENCODER_MODEL       HuggingFace model id or local path
                                  Default: sentence-transformers/all-MiniLM-L6-v2
   RECURRENCE_SIMILARITY_THRESHOLD Cosine threshold for a match (0-1)
-                                 Default: 0.75
+                                 Default: 0.70
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ RECURRENCE_ENCODER_MODEL: str = os.getenv(
     _SHARED_MODEL_PATH,
 )
 RECURRENCE_SIMILARITY_THRESHOLD: float = float(
-    os.getenv("RECURRENCE_SIMILARITY_THRESHOLD", "0.75")
+    os.getenv("RECURRENCE_SIMILARITY_THRESHOLD", "0.70")
 )
 
 # Max candidates to pull from DB for comparison

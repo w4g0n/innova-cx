@@ -208,6 +208,19 @@ function getStageOutputRows(stage) {
     return rows;
   }
 
+  if (stage?.stage_name === "ClassificationAgent") {
+    const confidence = out.class_confidence ?? out.classification_confidence;
+    const classificationLabel = out.label || out.ticket_type || "—";
+    return [
+      [
+        "Class Confidence",
+        confidence !== null && confidence !== undefined ? confidence : "—",
+      ],
+      ["Classification Source", out.classification_source || "—"],
+      ["Classification Output", classificationLabel],
+    ];
+  }
+
   if (stage?.stage_name === "PrioritizationAgent") {
     const details = out.priority_details || {};
     const confidence = details?.confidence;
@@ -346,6 +359,18 @@ function getNonBlockingStageWarning(stage) {
   return null;
 }
 
+function hasPendingBackgroundSuggestedResolution(queueDetail) {
+  const stages = Array.isArray(queueDetail?.stages) ? queueDetail.stages : [];
+  return stages.some((stage) => {
+    if (stage?.stage_name !== "SuggestedResolutionAgent") return false;
+    const out = stage?.output_state || {};
+    return (
+      String(out.suggested_resolution_mode || "").toLowerCase() === "timeout_background" &&
+      !out.suggested_resolution
+    );
+  });
+}
+
 function Ico({ name, size = 15 }) {
   const p = {
     width: size, height: size, viewBox: "0 0 24 24",
@@ -388,8 +413,12 @@ export default function PipelineQueueDetailPage() {
       const res = await apiFetch(`/operator/pipeline-queue/${queueId}`);
       setQueueDetail(res);
       setCorrections(res.operator_corrections || {});
-      // Stop polling once terminal state reached
-      if (["completed", "failed", "held"].includes(res.status)) {
+      // Keep polling briefly for background suggested resolution completion so
+      // the detail view can swap the timeout snapshot for the final result.
+      if (
+        ["completed", "failed", "held"].includes(res.status) &&
+        !hasPendingBackgroundSuggestedResolution(res)
+      ) {
         clearInterval(intervalRef.current);
       }
     } catch (e) {

@@ -194,7 +194,6 @@ services:
       # Prefer the host-managed model store mounted at /app/models so recurrence
       # survives container/image churn and accidental compose volume resets.
       RECURRENCE_ENCODER_MODEL: "${RECURRENCE_ENCODER_MODEL:-/app/models/recurrence/all-MiniLM-L6-v2}"
-      RECURRENCE_SIMILARITY_THRESHOLD: "${RECURRENCE_SIMILARITY_THRESHOLD:-0.75}"
       FEATURE_RUNTIME_TIMEOUT_SECONDS: "${FEATURE_RUNTIME_TIMEOUT_SECONDS:-180}"
       PIPELINE_STAGE_TIMEOUT_SECONDS: "${PIPELINE_STAGE_TIMEOUT_SECONDS:-120}"
       SHARED_QWEN_FORCE_CPU: "${SHARED_QWEN_FORCE_CPU:-true}"

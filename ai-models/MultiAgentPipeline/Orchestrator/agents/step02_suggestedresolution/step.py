@@ -31,19 +31,19 @@ SUGGESTED_RESOLUTION_PROMPT_EXAMPLES = max(
 )
 SUGGESTED_RESOLUTION_TIMEOUT_SECONDS = max(
     1.0,
-    float(os.getenv("SUGGESTED_RESOLUTION_TIMEOUT_SECONDS", "55")),
+    float(os.getenv("SUGGESTED_RESOLUTION_TIMEOUT_SECONDS", "60")),
 )
 SUGGESTED_RESOLUTION_MAX_INPUT_CHARS = max(
     80,
-    int(os.getenv("SUGGESTED_RESOLUTION_MAX_INPUT_CHARS", "320")),
+    int(os.getenv("SUGGESTED_RESOLUTION_MAX_INPUT_CHARS", "240")),
 )
 SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS = max(
     128,
-    int(os.getenv("SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS", "512")),
+    int(os.getenv("SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS", "256")),
 )
 SUGGESTED_RESOLUTION_MAX_NEW_TOKENS = max(
     8,
-    int(os.getenv("SUGGESTED_RESOLUTION_MAX_NEW_TOKENS", "18")),
+    int(os.getenv("SUGGESTED_RESOLUTION_MAX_NEW_TOKENS", "14")),
 )
 
 logger = logging.getLogger(__name__)
@@ -377,36 +377,27 @@ def _build_generation_prompt(ticket: dict[str, Any]) -> str:
         "11. Length: 18–40 words.\n\n"
     )
 
-    learning_rules = _format_learning_rules_for_prompt(
-        min(6, max(3, SUGGESTED_RESOLUTION_PROMPT_EXAMPLES)),
-        department=department,
-    )
-    if learning_rules:
-        prompt += (
-            "Employee learning signal:\n"
-            "The lines below are employee-accepted final resolutions from past tickets.\n"
-            "Treat them as the strongest guidance in this prompt.\n"
-            "Match their level of specificity, action order, and instruction style unless the current ticket facts clearly require something different.\n\n"
-            f"{learning_rules}\n\n"
+    if SUGGESTED_RESOLUTION_PROMPT_EXAMPLES > 0:
+        learning_rules = _format_learning_rules_for_prompt(
+            min(2, SUGGESTED_RESOLUTION_PROMPT_EXAMPLES),
+            department=department,
         )
+        if learning_rules:
+            prompt += (
+                "Employee-accepted patterns:\n"
+                "Match the specificity, action order, and instruction style below unless the current ticket facts clearly require something different.\n\n"
+                f"{learning_rules}\n\n"
+            )
 
-    learned_examples = _format_examples_for_prompt(SUGGESTED_RESOLUTION_PROMPT_EXAMPLES, department=department)
-    if learned_examples:
-        prompt += (
-            "Use these past successful employee outcomes as high-priority pattern guidance:\n\n"
-            f"{learned_examples}\n\n"
+        declined_examples = _format_declined_examples_for_prompt(
+            min(1, SUGGESTED_RESOLUTION_PROMPT_EXAMPLES),
+            department=department,
         )
-
-    declined_examples = _format_declined_examples_for_prompt(
-        max(1, min(3, SUGGESTED_RESOLUTION_PROMPT_EXAMPLES)),
-        department=department,
-    )
-    if declined_examples:
-        prompt += (
-            "Hard negative learning:\n"
-            "These suggestions were rejected by employees. Do not repeat their phrasing or structure. Prefer the better outcomes shown instead.\n\n"
-            f"{declined_examples}\n\n"
-        )
+        if declined_examples:
+            prompt += (
+                "Avoid these rejected phrasing patterns; prefer the better outcomes shown instead.\n\n"
+                f"{declined_examples}\n\n"
+            )
 
     prompt += f"Ticket: {details}"
     return prompt
@@ -566,7 +557,7 @@ async def _generate_resolution_text(ticket: dict[str, Any]) -> tuple[str | None,
                 do_sample=False,
                 no_repeat_ngram_size=3,
                 repetition_penalty=1.2,
-                use_cache=torch.cuda.is_available(),
+                use_cache=True,
             )
         prompt_tokens = inputs["input_ids"].shape[1]
         generated_ids = output_ids[0][prompt_tokens:] if output_ids.shape[1] > prompt_tokens else output_ids[0]
@@ -611,6 +602,33 @@ async def _persist_suggested_resolution(state: dict) -> None:
         response.raise_for_status()
 
 
+def _write_background_stage_event(base_state: dict[str, Any], output_state: dict[str, Any]) -> None:
+    execution_id = str(base_state.get("_execution_id") or "").strip()
+    ticket_id = str(base_state.get("ticket_id") or "").strip() or None
+    ticket_code = str(base_state.get("ticket_code") or base_state.get("ticket_id") or "").strip() or None
+    if not execution_id or not ticket_code:
+        return
+
+    from execution_logger import _write_stage_event
+
+    input_snapshot = {k: v for k, v in base_state.items() if not str(k).startswith("_")}
+    output_snapshot = {k: v for k, v in output_state.items() if not str(k).startswith("_")}
+    _write_stage_event(
+        execution_id=execution_id,
+        ticket_id=ticket_id,
+        ticket_code=ticket_code,
+        agent_name="SuggestedResolutionAgent",
+        step_order=3,
+        event_type="output",
+        status="fixed",
+        input_state=input_snapshot,
+        output_state=output_snapshot,
+        inference_time_ms=None,
+        confidence_score=None,
+        error_message=None,
+    )
+
+
 async def _complete_suggested_resolution_in_background(base_state: dict[str, Any], task: asyncio.Task) -> None:
     ticket_id = str(base_state.get("ticket_id") or "").strip()
     try:
@@ -622,6 +640,7 @@ async def _complete_suggested_resolution_in_background(base_state: dict[str, Any
         background_state["suggested_resolution_model"] = model_label
         background_state["suggested_resolution_mode"] = mode
         await _persist_suggested_resolution(background_state)
+        _write_background_stage_event(base_state, background_state)
         logger.info(
             "suggested_resolution | background completion persisted ticket_id=%s model=%s",
             ticket_id,

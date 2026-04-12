@@ -6,8 +6,8 @@ output and decides per-stage: success | fixed | flagged.
 
 Stage review order:
   1. ClassificationAgent  — label validity / mock re-classification
-  2. FeatureEngineeringAgent — feature validity / Qwen consistency review / mock re-extraction
-  3. PrioritizationAgent  — deterministic priority re-run / light mismatch check from human corrections
+  2. FeatureEngineeringAgent — feature validity / mock re-extraction only
+  3. PrioritizationAgent  — deterministic priority re-run / semantic reasonableness review
   4. DepartmentRoutingAgent — routing mock re-run / confidence check / LLM second-opinion
   Non-critical: SentimentAgent, AudioAnalysisAgent, SentimentCombinerAgent — logged only
 
@@ -663,17 +663,15 @@ _FEATURE_SYSTEM = (
     '{"issue_severity":"low|medium|high","issue_urgency":"low|medium|high",'
     '"business_impact":"low|medium|high","safety_concern":true|false}'
 )
-_FEATURE_REVIEW_SYSTEM = (
-    "You review extracted ticket features for consistency with the ticket text. "
-    "Use these meanings when judging values:\n"
-    "- issue_severity: low = minor/cosmetic inconvenience; medium = meaningful but partial disruption; high = severe failure, unusable service, or unsafe condition.\n"
-    "- issue_urgency: low = can wait for scheduled handling; medium = should be resolved soon; high = immediate, same-day, or emergency response needed.\n"
-    "- business_impact: low = negligible operational impact; medium = noticeable productivity or workflow disruption; high = operations blocked, major disruption, or financial/client impact.\n"
-    "- safety_concern: true only when there is physical danger, injury risk, hazardous conditions, fire, flood, electrical risk, or similar safety exposure.\n"
+_PRIORITY_REVIEW_SYSTEM = (
+    "You review ticket priority assignments for a facilities support pipeline.\n"
+    "Use this scale:\n"
+    "- low: minor issue, can wait, limited impact.\n"
+    "- medium: meaningful issue, should be addressed soon, moderate disruption.\n"
+    "- high: severe issue, urgent response needed, major disruption or clear safety concern.\n"
+    "- critical: emergency, immediate danger, life safety, fire, flood, gas, exposed electrical risk, or severe outage requiring immediate action.\n"
     "Reply with JSON only: "
-    '{"correct": true/false, "issue_severity":"low|medium|high", '
-    '"issue_urgency":"low|medium|high", "business_impact":"low|medium|high", '
-    '"safety_concern": true|false, "reason":"one sentence"}'
+    '{"correct": true/false, "suggested":"low|medium|high|critical|null", "reason":"one sentence"}'
 )
 
 
@@ -681,7 +679,7 @@ async def _review_features(state: dict) -> tuple[dict, bool]:
     """
     Checks issue_severity, issue_urgency, business_impact, safety_concern.
     If mock or fields missing/invalid: attempts Qwen re-extraction.
-    Then asks Qwen to validate/correct the extracted feature set.
+    Valid feature values are accepted as-is.
     Returns (stage_result, features_changed).
     """
     result: dict[str, Any] = {
@@ -754,7 +752,7 @@ async def _review_features(state: dict) -> tuple[dict, bool]:
             logger.warning("review_agent | feature extraction Qwen timed out")
 
         if not fixed:
-            result["status"]           = "flagged"
+            result["status"] = "flagged"
             result["operator_message"] = (
                 f"{issue}. Cannot compute valid priority without feature fields."
             )
@@ -767,118 +765,7 @@ async def _review_features(state: dict) -> tuple[dict, bool]:
         result["operator_message"] = "Cannot review priority or routing because the feature fields are incomplete."
         return result, features_changed
 
-    if not is_mock and fields_valid and not _should_double_check_feature_values(current_values):
-        logger.info("review_agent | features accepted without Qwen review")
-        return result, features_changed
-
-    # Qwen consistency review on confirmed feature values
-    review_prompt = (
-        f"Ticket subject: {subject or 'N/A'}\n"
-        f"Ticket text: {text}\n"
-        f"Ticket type: {state.get('label', 'unknown')}\n"
-        f"Current features: severity={state.get('issue_severity')}, "
-        f"urgency={state.get('issue_urgency')}, "
-        f"business_impact={state.get('business_impact')}, "
-        f"safety_concern={state.get('safety_concern')}\n"
-    )
-    if rubric_hint:
-        review_prompt += f"\nUse the same feature-engineering rubric below when judging/correcting values:\n{rubric_hint}\n"
-    review_prompt += "Are these features correct? Reply JSON only:"
-    tie_break_needed = False
-    tie_break_reason = ""
-    try:
-        response = await asyncio.wait_for(
-            asyncio.to_thread(_qwen_generate, review_prompt, _FEATURE_REVIEW_SYSTEM, 80),
-            timeout=REVIEW_AGENT_FEATURE_TIMEOUT_SECONDS,
-        )
-        parsed = _extract_json_object(response)
-        correct = bool(parsed.get("correct", True))
-        suggested_values = _normalized_feature_values(parsed)
-        reason = str(parsed.get("reason") or "")
-
-        if not correct:
-            if suggested_values is None:
-                tie_break_needed = True
-                tie_break_reason = (
-                    f"Qwen feature review found an inconsistency but did not return valid corrected features. {reason}"
-                ).strip()
-            else:
-                modified = _apply_feature_values(state, suggested_values)
-                if modified:
-                    features_changed = True
-                    fix_note = f"qwen corrected features {modified}"
-                    if reason:
-                        fix_note += f" ({reason})"
-                    result["fix_applied"] = (
-                        f"{result['fix_applied']}; {fix_note}" if result.get("fix_applied") else fix_note
-                    )
-                    result["status"] = "fixed"
-                    logger.info("review_agent | feature corrections applied via Qwen: %s", modified)
-        current_values = _current_feature_values(state)
-        if correct and _should_double_check_feature_values(current_values):
-            retry_response = await asyncio.wait_for(
-                asyncio.to_thread(_qwen_generate, extraction_prompt, _FEATURE_SYSTEM, 60),
-                timeout=REVIEW_AGENT_FEATURE_TIMEOUT_SECONDS,
-            )
-            retry_values = _normalized_feature_values(_extract_json_object(retry_response))
-            if retry_values is None:
-                tie_break_needed = True
-                tie_break_reason = (
-                    "Escalated feature values could not be independently re-verified."
-                )
-            elif retry_values != current_values:
-                modified = _apply_feature_values(state, retry_values)
-                if modified:
-                    features_changed = True
-                    fix_note = f"independent feature check corrected {modified}"
-                    result["fix_applied"] = (
-                        f"{result['fix_applied']}; {fix_note}" if result.get("fix_applied") else fix_note
-                    )
-                    result["status"] = "fixed"
-                    logger.info(
-                        "review_agent | independent feature check corrected values: %s",
-                        modified,
-                    )
-    except asyncio.TimeoutError:
-        logger.warning("review_agent | feature validation Qwen timed out")
-        result["status"] = "flagged"
-        result["issue"] = "Feature review timed out before confirming whether the values made sense"
-        result["operator_message"] = (
-            "Review Agent could not validate the feature values in time. Manual operator review required."
-        )
-        return result, features_changed
-
-    if tie_break_needed:
-        try:
-            retry_response = await asyncio.wait_for(
-                asyncio.to_thread(_qwen_generate, extraction_prompt, _FEATURE_SYSTEM, 60),
-                timeout=REVIEW_AGENT_FEATURE_TIMEOUT_SECONDS,
-            )
-            retry_values = _normalized_feature_values(_extract_json_object(retry_response))
-            if retry_values is None:
-                result["status"] = "flagged"
-                result["issue"] = "Feature review could not confirm or reconstruct a trustworthy feature set"
-                result["operator_message"] = tie_break_reason
-                return result, features_changed
-
-            modified = _apply_feature_values(state, retry_values)
-            if modified:
-                features_changed = True
-                fix_note = f"feature tie-break re-extracted {modified}"
-                result["fix_applied"] = (
-                    f"{result['fix_applied']}; {fix_note}" if result.get("fix_applied") else fix_note
-                )
-                result["status"] = "fixed"
-                logger.info("review_agent | feature tie-break corrections applied: %s", modified)
-            else:
-                logger.info("review_agent | feature tie-break confirmed existing values")
-        except asyncio.TimeoutError:
-            logger.warning("review_agent | feature tie-break Qwen timed out")
-            result["status"] = "flagged"
-            result["issue"] = "Feature review timed out and tie-break extraction also timed out"
-            result["operator_message"] = tie_break_reason or "Feature review could not confirm the feature values."
-            return result, features_changed
-
+    logger.info("review_agent | features accepted without semantic review")
     return result, features_changed
 
 
@@ -932,6 +819,52 @@ async def _review_priority(state: dict, upstream_inputs_changed: bool) -> tuple[
         result["issue"]            = f"priority_label='{priority}' is not a valid value after re-run"
         result["operator_message"] = f"Invalid priority '{priority}' — could not be resolved."
         return result, priority_changed
+
+    priority_review_prompt = (
+        f"Ticket subject: {str(state.get('subject') or '').strip() or 'N/A'}\n"
+        f"Ticket text: {str(state.get('text') or '')[:700]}\n"
+        f"Ticket type: {state.get('label', 'unknown')}\n"
+        f"Features: severity={state.get('issue_severity')}, urgency={state.get('issue_urgency')}, "
+        f"business_impact={state.get('business_impact')}, safety_concern={state.get('safety_concern')}\n"
+        f"Assigned priority: {priority}\n"
+        "Does this priority make sense? Reply JSON only:"
+    )
+    try:
+        response = await asyncio.wait_for(
+            asyncio.to_thread(_qwen_generate, priority_review_prompt, _PRIORITY_REVIEW_SYSTEM, 50),
+            timeout=REVIEW_AGENT_CLASSIFICATION_TIMEOUT_SECONDS,
+        )
+        parsed = _extract_json_object(response)
+        correct = bool(parsed.get("correct", True))
+        suggested = str(parsed.get("suggested") or "").strip().lower() or None
+        reason = str(parsed.get("reason") or "").strip()
+        if not correct:
+            if suggested in _VALID_PRIORITIES and suggested != priority:
+                state["priority_label"] = suggested.title()
+                result["status"] = "fixed"
+                result["operator_override_required"] = True
+                result["issue"] = f"Priority '{priority}' did not make sense to Review Agent"
+                result["operator_message"] = (
+                    f"Review Agent changed priority from '{priority}' to '{suggested}'."
+                    + (f" {reason}" if reason else "")
+                )
+                result["fix_applied"] = f"priority corrected to '{suggested}'"
+                priority_changed = True
+                priority = suggested
+            else:
+                result["status"] = "flagged"
+                result["issue"] = f"Priority '{priority}' failed Review Agent validation"
+                result["operator_message"] = (
+                    f"Priority '{priority}' did not make sense to Review Agent and no valid corrected priority was returned."
+                )
+                return result, priority_changed
+    except asyncio.TimeoutError:
+        logger.warning("review_agent | priority validation Qwen timed out")
+        result["operator_override_required"] = True
+        result["issue"] = "Priority review timed out"
+        result["operator_message"] = (
+            f"Review Agent could not validate priority '{priority}' in time. Operator verification recommended."
+        )
 
     # Light advisory check from recent human corrections in this department.
     department      = str(state.get("department_selected") or state.get("department") or "Unknown")
