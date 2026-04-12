@@ -7,8 +7,11 @@ Single in-process Qwen2.5-0.5B-Instruct instance shared across:
   - DepartmentRoutingAgent (step10) — routing via generation
   - ReviewAgent (step11) — consistency check + routing validation
 
-Model weights live in the ReviewAgent's model directory:
-  /app/agents/step11_reviewagent/model  (gitignored)
+Model weights preferably live in the shared host model store:
+  /app/models/reviewagent/qwen2.5-0.5B-Instruct
+
+Legacy fallback during migration:
+  /app/agents/step11_reviewagent/model
 
 All callers import get_shared_qwen() from here.
 """
@@ -23,9 +26,12 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_SHARED_MODEL_PATH = "/app/models/reviewagent/qwen2.5-0.5B-Instruct"
+_LEGACY_MODEL_PATH = "/app/agents/step11_reviewagent/model"
+
 SHARED_QWEN_MODEL_PATH: str = os.getenv(
     "SHARED_QWEN_MODEL_PATH",
-    "/app/agents/step11_reviewagent/model",
+    _SHARED_MODEL_PATH,
 ).strip()
 SHARED_QWEN_MODEL_NAME: str = os.getenv(
     "SHARED_QWEN_MODEL_NAME",
@@ -40,6 +46,26 @@ _qwen_lock: threading.Lock = threading.Lock()
 _qwen_instance: dict[str, Any] | None = None
 _qwen_loaded: bool = False  # True only after a successful load
 
+def _resolve_shared_qwen_model_path() -> str:
+    requested = SHARED_QWEN_MODEL_PATH.strip()
+    if requested and (Path(requested) / "config.json").exists():
+        return requested
+
+    if (_SHARED_MODEL_PATH and (Path(_SHARED_MODEL_PATH) / "config.json").exists()):
+        logger.info("shared_model_service | using shared host model path %s", _SHARED_MODEL_PATH)
+        return _SHARED_MODEL_PATH
+
+    if requested and Path(requested).exists():
+        logger.warning(
+            "shared_model_service | requested model path %s is incomplete; falling back",
+            requested,
+        )
+
+    if (Path(_LEGACY_MODEL_PATH) / "config.json").exists():
+        logger.info("shared_model_service | using legacy model path %s", _LEGACY_MODEL_PATH)
+        return _LEGACY_MODEL_PATH
+
+    return requested
 
 def get_shared_qwen() -> dict[str, Any] | None:
     """
@@ -62,16 +88,18 @@ def get_shared_qwen() -> dict[str, Any] | None:
         if _qwen_loaded:
             return _qwen_instance
 
-        if not SHARED_QWEN_MODEL_PATH:
+        model_path_str = _resolve_shared_qwen_model_path()
+
+        if not model_path_str:
             logger.info("shared_model_service | SHARED_QWEN_MODEL_PATH is empty, model disabled")
             return None
 
-        model_path = Path(SHARED_QWEN_MODEL_PATH)
+        model_path = Path(model_path_str)
 
         if not (model_path / "config.json").exists():
             logger.info(
                 "shared_model_service | no local model at %s, model disabled",
-                SHARED_QWEN_MODEL_PATH,
+                model_path_str,
             )
             return None
 
@@ -84,15 +112,15 @@ def get_shared_qwen() -> dict[str, Any] | None:
 
             logger.info(
                 "shared_model_service | loading model=%s device=%s",
-                SHARED_QWEN_MODEL_PATH,
+                model_path_str,
                 device,
             )
             tokenizer = AutoTokenizer.from_pretrained(
-                SHARED_QWEN_MODEL_PATH,
+                model_path_str,
                 trust_remote_code=True,
             )
             model = AutoModelForCausalLM.from_pretrained(
-                SHARED_QWEN_MODEL_PATH,
+                model_path_str,
                 trust_remote_code=True,
                 torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
                 low_cpu_mem_usage=True,
@@ -109,10 +137,11 @@ def get_shared_qwen() -> dict[str, Any] | None:
 
 
 def get_shared_qwen_diagnostics() -> dict[str, object]:
-    model_path = Path(SHARED_QWEN_MODEL_PATH) if SHARED_QWEN_MODEL_PATH else None
+    resolved_path = _resolve_shared_qwen_model_path()
+    model_path = Path(resolved_path) if resolved_path else None
     model_exists = bool(model_path and (model_path / "config.json").exists())
     return {
-        "shared_qwen_model_path": SHARED_QWEN_MODEL_PATH or None,
+        "shared_qwen_model_path": resolved_path or None,
         "shared_qwen_model_name": SHARED_QWEN_MODEL_NAME or None,
         "shared_qwen_auto_download": SHARED_QWEN_AUTO_DOWNLOAD,
         "shared_qwen_model_exists": model_exists,

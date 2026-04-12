@@ -34,7 +34,7 @@ _PRIORITY_ORDER = ["Low", "Medium", "High", "Critical"]
 _OPEN_STATUSES = {"Open", "Assigned", "In Progress", "Escalated", "Overdue", "Reopened"}
 
 # Threshold used by the heuristic fallback (imported by recurrence_encoder)
-SIMILARITY_RECURRENCE_THRESHOLD = 0.75
+SIMILARITY_RECURRENCE_THRESHOLD = 0.70
 
 
 def _normalize_text(value: str) -> str:

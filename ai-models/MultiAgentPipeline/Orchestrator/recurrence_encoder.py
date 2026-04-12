@@ -14,7 +14,7 @@ Environment variables:
   RECURRENCE_ENCODER_MODEL       HuggingFace model id or local path
                                  Default: sentence-transformers/all-MiniLM-L6-v2
   RECURRENCE_SIMILARITY_THRESHOLD Cosine threshold for a match (0-1)
-                                 Default: 0.75
+                                 Default: 0.70
 """
 
 from __future__ import annotations
@@ -26,15 +26,17 @@ from pathlib import Path
 from typing import Optional
 
 _LOCAL_MODEL_PATH = str(Path(__file__).parent / "agents" / "step01_recurrence" / "model")
+_SHARED_MODEL_PATH = "/app/models/recurrence/all-MiniLM-L6-v2"
+_DEFAULT_HF_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 logger = logging.getLogger(__name__)
 
 RECURRENCE_ENCODER_MODEL: str = os.getenv(
     "RECURRENCE_ENCODER_MODEL",
-    _LOCAL_MODEL_PATH,
+    _SHARED_MODEL_PATH,
 )
 RECURRENCE_SIMILARITY_THRESHOLD: float = float(
-    os.getenv("RECURRENCE_SIMILARITY_THRESHOLD", "0.75")
+    os.getenv("RECURRENCE_SIMILARITY_THRESHOLD", "0.70")
 )
 
 # Max candidates to pull from DB for comparison
@@ -52,6 +54,45 @@ _encoder_instance: Optional[dict] = None
 _encoder_loaded: bool = False  # True only after a successful load
 
 
+def _is_local_model_dir(path_str: str) -> bool:
+    path = Path(path_str)
+    if not path.is_dir():
+        return False
+    return (
+        (path / "config.json").exists()
+        and (path / "tokenizer_config.json").exists()
+        and ((path / "tokenizer.json").exists() or (path / "vocab.txt").exists())
+    )
+
+
+def _resolve_model_name() -> str:
+    """
+    Prefer a stable host-mounted model path, then the repo-local path, then
+    fall back to the upstream Hugging Face model id for manual recovery.
+    """
+    requested = RECURRENCE_ENCODER_MODEL.strip()
+    if requested and _is_local_model_dir(requested):
+        return requested
+
+    if _is_local_model_dir(_SHARED_MODEL_PATH):
+        logger.info("recurrence_encoder | using shared host model path %s", _SHARED_MODEL_PATH)
+        return _SHARED_MODEL_PATH
+
+    if requested and Path(requested).exists():
+        logger.warning(
+            "recurrence_encoder | requested local model path %s is incomplete; falling back",
+            requested,
+        )
+
+    if _is_local_model_dir(_LOCAL_MODEL_PATH):
+        logger.info("recurrence_encoder | using repo-local model path %s", _LOCAL_MODEL_PATH)
+        return _LOCAL_MODEL_PATH
+
+    logger.warning(
+        "recurrence_encoder | no complete local model dir found; falling back to HF model id %s",
+        _DEFAULT_HF_MODEL_NAME,
+    )
+    return _DEFAULT_HF_MODEL_NAME
 def _load_encoder() -> Optional[dict]:
     """
     Load the tokenizer and model once on success; retry on failure.
@@ -66,7 +107,7 @@ def _load_encoder() -> Optional[dict]:
         if _encoder_loaded:
             return _encoder_instance
 
-        model_name = RECURRENCE_ENCODER_MODEL
+        model_name = _resolve_model_name()
         if not model_name:
             logger.info("recurrence_encoder | RECURRENCE_ENCODER_MODEL is empty — encoder disabled")
             return None
