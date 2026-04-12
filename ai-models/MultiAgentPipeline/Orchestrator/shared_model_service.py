@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
-from functools import lru_cache
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -33,58 +33,79 @@ SHARED_QWEN_MODEL_NAME: str = os.getenv(
 ).strip()
 SHARED_QWEN_AUTO_DOWNLOAD: bool = False
 
+# Module-level singleton — only set on successful load.
+# None means "not yet loaded" or "load failed" (retry is allowed).
+# Using a lock so that concurrent pipeline runs don't attempt parallel loads.
+_qwen_lock: threading.Lock = threading.Lock()
+_qwen_instance: dict[str, Any] | None = None
+_qwen_loaded: bool = False  # True only after a successful load
 
-@lru_cache(maxsize=1)
+
 def get_shared_qwen() -> dict[str, Any] | None:
     """
-    Load and cache the shared Qwen model.
+    Load and return the shared Qwen model.
     Returns {"tokenizer", "model", "device"} or None if unavailable.
 
-    The lru_cache keeps the model resident for the lifetime of the process.
-    Do NOT call cache_clear() — the shared instance is never unloaded.
+    Successful loads are cached permanently (singleton).
+    Failed loads are NOT cached — each call retries until the model is ready.
+    This prevents lru_cache from permanently locking out the model after a
+    transient failure (OOM at startup, model not yet downloaded, etc.).
     """
-    if not SHARED_QWEN_MODEL_PATH:
-        logger.info("shared_model_service | SHARED_QWEN_MODEL_PATH is empty, model disabled")
-        return None
+    global _qwen_instance, _qwen_loaded
 
-    model_path = Path(SHARED_QWEN_MODEL_PATH)
+    # Fast path — already loaded successfully.
+    if _qwen_loaded:
+        return _qwen_instance
 
-    if not (model_path / "config.json").exists():
-        logger.info(
-            "shared_model_service | no local model at %s, model disabled",
-            SHARED_QWEN_MODEL_PATH,
-        )
-        return None
+    with _qwen_lock:
+        # Re-check inside the lock (another thread may have loaded it).
+        if _qwen_loaded:
+            return _qwen_instance
 
-    try:
-        import torch  # type: ignore
-        from transformers import AutoModelForCausalLM, AutoTokenizer  # type: ignore
+        if not SHARED_QWEN_MODEL_PATH:
+            logger.info("shared_model_service | SHARED_QWEN_MODEL_PATH is empty, model disabled")
+            return None
 
-        force_cpu = os.getenv("SHARED_QWEN_FORCE_CPU", "false").lower() in {"1", "true", "yes"}
-        device = "cpu" if force_cpu else ("cuda" if torch.cuda.is_available() else "cpu")
+        model_path = Path(SHARED_QWEN_MODEL_PATH)
 
-        logger.info(
-            "shared_model_service | loading model=%s device=%s",
-            SHARED_QWEN_MODEL_PATH,
-            device,
-        )
-        tokenizer = AutoTokenizer.from_pretrained(
-            SHARED_QWEN_MODEL_PATH,
-            trust_remote_code=True,
-        )
-        model = AutoModelForCausalLM.from_pretrained(
-            SHARED_QWEN_MODEL_PATH,
-            trust_remote_code=True,
-            torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
-            low_cpu_mem_usage=True,
-        )
-        model = model.to(device)
-        model.eval()
-        logger.info("shared_model_service | model loaded successfully on %s", device)
-        return {"tokenizer": tokenizer, "model": model, "device": device}
-    except Exception as exc:
-        logger.warning("shared_model_service | model load failed (%s), model disabled", exc)
-        return None
+        if not (model_path / "config.json").exists():
+            logger.info(
+                "shared_model_service | no local model at %s, model disabled",
+                SHARED_QWEN_MODEL_PATH,
+            )
+            return None
+
+        try:
+            import torch  # type: ignore
+            from transformers import AutoModelForCausalLM, AutoTokenizer  # type: ignore
+
+            force_cpu = os.getenv("SHARED_QWEN_FORCE_CPU", "false").lower() in {"1", "true", "yes"}
+            device = "cpu" if force_cpu else ("cuda" if torch.cuda.is_available() else "cpu")
+
+            logger.info(
+                "shared_model_service | loading model=%s device=%s",
+                SHARED_QWEN_MODEL_PATH,
+                device,
+            )
+            tokenizer = AutoTokenizer.from_pretrained(
+                SHARED_QWEN_MODEL_PATH,
+                trust_remote_code=True,
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                SHARED_QWEN_MODEL_PATH,
+                trust_remote_code=True,
+                torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
+                low_cpu_mem_usage=True,
+            )
+            model = model.to(device)
+            model.eval()
+            logger.info("shared_model_service | model loaded successfully on %s", device)
+            _qwen_instance = {"tokenizer": tokenizer, "model": model, "device": device}
+            _qwen_loaded = True
+            return _qwen_instance
+        except Exception as exc:
+            logger.warning("shared_model_service | model load failed (%s), will retry next call", exc)
+            return None
 
 
 def get_shared_qwen_diagnostics() -> dict[str, object]:
@@ -95,5 +116,5 @@ def get_shared_qwen_diagnostics() -> dict[str, object]:
         "shared_qwen_model_name": SHARED_QWEN_MODEL_NAME or None,
         "shared_qwen_auto_download": SHARED_QWEN_AUTO_DOWNLOAD,
         "shared_qwen_model_exists": model_exists,
-        "shared_qwen_cached": get_shared_qwen.cache_info().currsize > 0,
+        "shared_qwen_cached": _qwen_loaded,
     }

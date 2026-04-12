@@ -4464,7 +4464,9 @@ class CreateTicketRequest(BaseModel):
     def email_format(cls, v):
         import re as _r
         v = (v or "").strip().lower()
-        if not _r.match(r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-.]+$', v):
+        # Email is not used server-side (user identity comes from JWT).
+        # Allow empty — only validate format when a non-empty value is provided.
+        if v and not _r.match(r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-.]+$', v):
             raise ValueError("Invalid email address.")
         if len(v) > 254:
             raise ValueError("Email address too long.")
