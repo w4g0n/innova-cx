@@ -348,7 +348,7 @@ export default function Approvals() {
   // ── FIX: decide() now re-fetches the full approvals list from the server
   //    after a successful PATCH so the UI always reflects the persisted state.
   //    Optimistic update is kept as a fast visual hint while the re-fetch is in flight.
-  const decide = async (requestId, decision, selectedDepartment = undefined, overrideValue = undefined) => {
+  const decide = async (requestId, decision, _selectedDepartment = undefined, overrideValue = undefined) => {
     if (!token) { navigate("/login"); return; }
     const safeRequestId  = sanitizeId(requestId);
     const safeOverride   = overrideValue ? sanitizeText(overrideValue, 200) : undefined;
