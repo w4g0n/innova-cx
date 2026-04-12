@@ -248,6 +248,26 @@ def db_connect():
         raise HTTPException(status_code=500, detail="A server error occurred. Please try again later.")
 
 
+def run_migrations() -> None:
+    migration_steps = [
+        ("add_google_id_column", "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT;"),
+        (
+            "create_google_id_index",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;",
+        ),
+        ("drop_password_hash_not_null", "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;"),
+    ]
+
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            for step_name, statement in migration_steps:
+                try:
+                    cur.execute(statement)
+                except Exception:
+                    logger.exception("startup_migration | step failed: %s", step_name)
+                    raise
+
+
 def _ensure_runtime_schema_compatibility() -> None:
     """
     Keeps backend compatible with older DB volumes that skipped newer SQL scripts.
@@ -795,6 +815,17 @@ def _repair_employee_departments() -> None:
 @app.on_event("startup")
 async def _start_sla_heartbeat() -> None:
     global _sla_heartbeat_task, _has_sla_policy_fn
+
+    for _migration_attempt in range(15):
+        try:
+            run_migrations()
+            break
+        except Exception as _e:
+            if _migration_attempt < 14:
+                logger.info("startup_migration | DB not ready yet (attempt %d/15), retrying in 2s...", _migration_attempt + 1)
+                await asyncio.sleep(2)
+            else:
+                logger.error("startup_migration | gave up after 15 attempts: %s", _e)
 
     # Retry db_compat and dev_seed until DB is reachable (handles startup race on first boot)
     for _boot_attempt in range(15):
@@ -1519,14 +1550,6 @@ async def google_oauth_callback(request: Request, body: _OAuthCallbackBody, _csr
         raise HTTPException(status_code=400, detail="Google email address is not verified.")
 
     # 2. Find or create user — customers only
-    # Ensure google_id column exists (idempotent, skips on older volumes that already have it)
-    try:
-        execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT;")
-        execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;")
-        execute("ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;")
-    except Exception:
-        pass  # column already exists or concurrent migration — safe to ignore
-
     user = fetch_one(
         "SELECT id, email, role, is_active, totp_secret, mfa_enabled FROM users WHERE google_id = %s",
         (google_id,),
