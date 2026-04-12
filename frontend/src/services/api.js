@@ -6,6 +6,20 @@
 import { API_BASE_URL, apiUrl } from "../config/apiBase";
 
 function inferServiceBase(port, fallbackLocalhost) {
+  if (
+    typeof window !== "undefined" &&
+    window.Capacitor?.isNativePlatform &&
+    typeof window.Capacitor.isNativePlatform === "function"
+  ) {
+    try {
+      if (window.Capacitor.isNativePlatform()) {
+        const backendUrl = new URL(API_BASE_URL);
+        return `${backendUrl.protocol}//${backendUrl.hostname}:${port}`;
+      }
+    } catch {
+      // Fall through to browser-style inference below.
+    }
+  }
   if (typeof window !== "undefined" && window.location?.hostname) {
     const protocol = window.location.protocol === "https:" ? "https" : "http";
     return `${protocol}://${window.location.hostname}:${port}`;
