@@ -12,7 +12,10 @@
   --ease:    cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Back button — identical to Login page */
+/* ═══════════════════════════════════════════════════════════════
+   BACK BUTTON
+   ═══════════════════════════════════════════════════════════════ */
+
 .backBtn {
   position: absolute;
   top: 20px;
@@ -31,7 +34,6 @@
   transform: translateX(-2px);
 }
 
-/* Staff theme override for back button */
 .auth-page--staff .backBtn {
   color: rgba(17,24,39,0.5);
 }
@@ -55,7 +57,6 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* Canvas fills the whole viewport behind everything */
 .auth-starfield {
   position: fixed;
   inset: 0;
@@ -65,14 +66,11 @@
   pointer-events: none;
 }
 
-/* Staff canvas — light blend so it sits on the white background */
 .auth-staff-canvas {
   opacity: 0.55;
   mix-blend-mode: multiply;
 }
 
-/* Customer nebula blobs — rendered as divs so they don't clash
-   with the ::before/::after pseudo-elements used for staff blobs  */
 .auth-neb {
   position: fixed;
   border-radius: 50%;
@@ -93,7 +91,8 @@
   background: radial-gradient(circle, rgba(232,121,249,.14), transparent 70%);
 }
 
-/* Card */
+/* ─── Card ─────────────────────────────────────────────────── */
+
 .auth-card {
   position: relative;
   z-index: 10;
@@ -110,7 +109,8 @@
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
-/* Shared elements */
+/* ─── Shared typography ────────────────────────────────────── */
+
 .auth-header-tag {
   font-family: "JetBrains Mono", monospace;
   font-size: 10px;
@@ -146,6 +146,8 @@
   animation: fadeUp .6s .26s var(--ease) both;
 }
 
+/* ─── QR setup ─────────────────────────────────────────────── */
+
 .auth-qr-section {
   position: relative;
   z-index: 1;
@@ -167,6 +169,8 @@
   background: rgba(255,255,255,.96);
 }
 
+/* ─── OTP inputs ───────────────────────────────────────────── */
+
 .otp-group {
   display: flex;
   justify-content: center;
@@ -179,16 +183,18 @@
 
 .otp-input {
   width: 46px;
-  height: 56px;
+  height: 54px;
   text-align: center;
   font-family: "JetBrains Mono", monospace;
   font-size: 20px;
   font-weight: 600;
-  border-radius: 13px;
+  border-radius: 8px;
   border: 1.5px solid transparent;
   outline: none;
   transition: border-color .25s, box-shadow .25s, background .25s;
 }
+
+/* ─── Error ────────────────────────────────────────────────── */
 
 .auth-error {
   display: flex;
@@ -213,6 +219,8 @@
   font-size: 13px;
   flex-shrink: 0;
 }
+
+/* ─── Primary button ───────────────────────────────────────── */
 
 .auth-primary-btn {
   position: relative;
@@ -261,6 +269,8 @@
 }
 
 @keyframes btnShimmer { to { left: 160%; } }
+
+/* ─── Success state ────────────────────────────────────────── */
 
 .auth-success {
   position: relative;
@@ -312,7 +322,6 @@
   background: var(--void);
 }
 
-/* Centre glow halo (no nebula divs needed — those are .auth-neb divs) */
 .auth-page--customer::after {
   content: "";
   position: fixed;
@@ -335,7 +344,6 @@
     0 0 80px rgba(147,51,234,.18);
 }
 
-/* Inner corner glow */
 .auth-page--customer .auth-card::before {
   content: "";
   position: absolute;
@@ -373,11 +381,11 @@
 
 .auth-page--customer .otp-input:focus {
   border-color: var(--orchid);
-  background: rgba(147,51,234,.07);
+  background: rgba(168,85,247,.09);
   box-shadow:
-    0 0 0 3px rgba(147,51,234,.12),
-    0 0 20px rgba(147,51,234,.12),
-    inset 0 0 12px rgba(147,51,234,.04);
+    0 0 0 3px rgba(168,85,247,.18),
+    0 0 20px rgba(147,51,234,.14),
+    inset 0 0 12px rgba(147,51,234,.05);
 }
 
 .auth-page--customer .otp-input:not(:placeholder-shown):not(:focus) {
@@ -414,14 +422,12 @@
 
 /* ═══════════════════════════════════════════════════════════════
    STAFF THEME — white + rich purple
-   Mirrors loginBg--staff from login.css
    ═══════════════════════════════════════════════════════════════ */
 
 .auth-page--staff {
   background: #f0ebff;
 }
 
-/* Soft blob — top left */
 .auth-page--staff::before {
   content: "";
   position: fixed;
@@ -434,7 +440,6 @@
   filter: blur(10px);
 }
 
-/* Soft blob — bottom right */
 .auth-page--staff::after {
   content: "";
   position: fixed;
@@ -458,7 +463,6 @@
     0 80px 160px rgba(0,0,0,.12);
 }
 
-/* Inner card corner glow */
 .auth-page--staff .auth-card::before {
   content: "";
   position: absolute;
@@ -550,67 +554,85 @@
 
 
 /* ═══════════════════════════════════════════════════════════════
-   MODE TOGGLE (Authenticator App / Email Code)
+   MODE TOGGLE — one rectangle split in two by a centre line
    ═══════════════════════════════════════════════════════════════ */
 
 .auth-mode-toggle {
   display: flex;
-  gap: 6px;
-  justify-content: center;
-  margin-bottom: 16px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 20px;
   position: relative;
   z-index: 1;
   animation: fadeUp .6s .22s var(--ease) both;
 }
 
 .auth-mode-btn {
+  flex: 1;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border-radius: 999px;
-  border: 1.5px solid transparent;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 0;
   font-family: "Outfit", sans-serif;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background .2s, border-color .2s, color .2s, box-shadow .2s;
+  transition: background .25s, color .25s, box-shadow .25s;
+  position: relative;
 }
 
-/* Customer theme */
+/* ── Customer (dark galaxy) ── */
+.auth-page--customer .auth-mode-toggle {
+  border: 1px solid rgba(168,85,247,.25);
+}
+
 .auth-page--customer .auth-mode-btn {
-  background: rgba(255,255,255,.05);
-  border-color: rgba(255,255,255,.1);
-  color: rgba(255,255,255,.5);
-}
-.auth-page--customer .auth-mode-btn:hover {
-  background: rgba(255,255,255,.09);
-  border-color: rgba(168,85,247,.35);
-  color: rgba(255,255,255,.8);
-}
-.auth-page--customer .auth-mode-btn.active {
-  background: rgba(147,51,234,.18);
-  border-color: rgba(168,85,247,.55);
-  color: #e9d5ff;
-  box-shadow: 0 0 14px rgba(147,51,234,.25);
+  background: rgba(255,255,255,.03);
+  color: rgba(255,255,255,.35);
 }
 
-/* Staff theme */
+/* the single centre divider — same colour as the outer border */
+.auth-page--customer .auth-mode-btn:first-child {
+  border-right: 1px solid rgba(168,85,247,.25);
+}
+
+.auth-page--customer .auth-mode-btn:hover:not(.active) {
+  background: rgba(168,85,247,.09);
+  color: rgba(255,255,255,.65);
+}
+
+.auth-page--customer .auth-mode-btn.active {
+  background: rgba(124,58,237,.26);
+  color: #e9d5ff;
+  box-shadow: inset 0 0 20px rgba(147,51,234,.2);
+}
+
+/* ── Staff (light) ── */
+.auth-page--staff .auth-mode-toggle {
+  border: 1px solid rgba(89,36,180,.2);
+}
+
 .auth-page--staff .auth-mode-btn {
-  background: rgba(89,36,180,.06);
-  border-color: rgba(89,36,180,.15);
-  color: rgba(15,5,32,.5);
+  background: rgba(89,36,180,.03);
+  color: rgba(15,5,32,.38);
 }
-.auth-page--staff .auth-mode-btn:hover {
-  background: rgba(89,36,180,.1);
-  border-color: rgba(89,36,180,.35);
-  color: #0f0520;
+
+.auth-page--staff .auth-mode-btn:first-child {
+  border-right: 1px solid rgba(89,36,180,.2);
 }
+
+.auth-page--staff .auth-mode-btn:hover:not(.active) {
+  background: rgba(89,36,180,.07);
+  color: rgba(15,5,32,.7);
+}
+
 .auth-page--staff .auth-mode-btn.active {
   background: rgba(89,36,180,.14);
-  border-color: rgba(89,36,180,.5);
   color: #3b0764;
-  box-shadow: 0 0 10px rgba(89,36,180,.12);
+  box-shadow: inset 0 0 14px rgba(89,36,180,.12);
 }
 
 
@@ -649,10 +671,6 @@
 .auth-page--customer .auth-trust-text { color: rgba(255,255,255,.45); }
 .auth-page--staff    .auth-trust-text { color: rgba(15,5,32,.5); }
 
-.auth-trust-label:hover .auth-trust-text {
-  color: inherit;
-  opacity: 1;
-}
 .auth-page--customer .auth-trust-label:hover .auth-trust-text { color: rgba(255,255,255,.75); }
 .auth-page--staff    .auth-trust-label:hover .auth-trust-text { color: #0f0520; }
 
@@ -681,9 +699,7 @@
   transition: color .2s, background .2s;
 }
 
-.auth-page--customer .auth-resend-btn {
-  color: #a855f7;
-}
+.auth-page--customer .auth-resend-btn { color: #a855f7; }
 .auth-page--customer .auth-resend-btn:hover:not(:disabled) {
   color: #c084fc;
   background: rgba(168,85,247,.08);
@@ -693,9 +709,7 @@
   cursor: not-allowed;
 }
 
-.auth-page--staff .auth-resend-btn {
-  color: #5924b4;
-}
+.auth-page--staff .auth-resend-btn { color: #5924b4; }
 .auth-page--staff .auth-resend-btn:hover:not(:disabled) {
   color: #3b0764;
   background: rgba(89,36,180,.08);
@@ -703,6 +717,47 @@
 .auth-page--staff .auth-resend-btn:disabled {
   color: rgba(15,5,32,.3);
   cursor: not-allowed;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   RATE-LIMIT COOLDOWN
+   ═══════════════════════════════════════════════════════════════ */
+
+.auth-cooldown-msg {
+  font-size: 12.5px;
+  color: rgba(251,146,60,.85);
+  background: rgba(251,146,60,.07);
+  border: 1px solid rgba(251,146,60,.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 10px 0 0;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.auth-cooldown-msg strong {
+  color: #fb923c;
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   SHAKE ANIMATION
+   ═══════════════════════════════════════════════════════════════ */
+
+@keyframes authCardShake {
+  0%,100% { transform: translateX(0); }
+  15%     { transform: translateX(-7px); }
+  30%     { transform: translateX(7px); }
+  45%     { transform: translateX(-5px); }
+  60%     { transform: translateX(5px); }
+  75%     { transform: translateX(-3px); }
+  90%     { transform: translateX(3px); }
+}
+
+.auth-card--shake {
+  animation: authCardShake .5s ease both;
 }
 
 
@@ -716,35 +771,5 @@
   .auth-title { font-size: 24px; }
   .otp-group  { gap: 8px; }
   .otp-input  { width: 40px; height: 50px; font-size: 18px; }
-}
-
-/* Rate-limit cooldown message */
-.auth-cooldown-msg {
-  font-size: 12.5px;
-  color: rgba(251,146,60,.85);
-  background: rgba(251,146,60,.07);
-  border: 1px solid rgba(251,146,60,.2);
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin: 10px 0 0;
-  text-align: center;
-  line-height: 1.5;
-}
-.auth-cooldown-msg strong {
-  color: #fb923c;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Shake animation for wrong OTP */
-@keyframes authCardShake {
-  0%,100% { transform: translateX(0); }
-  15%     { transform: translateX(-7px); }
-  30%     { transform: translateX(7px); }
-  45%     { transform: translateX(-5px); }
-  60%     { transform: translateX(5px); }
-  75%     { transform: translateX(-3px); }
-  90%     { transform: translateX(3px); }
-}
-.auth-card--shake {
-  animation: authCardShake .5s ease both;
+  .auth-mode-btn { font-size: 12px; padding: 9px 8px; gap: 5px; }
 }
