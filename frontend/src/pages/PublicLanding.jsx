@@ -871,21 +871,39 @@ function SolarSystem({ onReady }) {
       }
       animate();
 
+      let mouseMovedSincDown = false;
       const onMouseMove = (e) => {
+        // Update cursor when hovering over a planet (no card shown until click)
         const rect = mount.getBoundingClientRect();
         mouse.x =  ((e.clientX-rect.left)/rect.width)*2-1;
         mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
         raycaster.setFromCamera(mouse, camera);
         const hits = raycaster.intersectObjects(planetObjects.map(p => p.mesh), true);
         if (hits.length) {
-          const found = planetObjects.find(p => p.mesh===hits[0].object);
-          if (found) { hoveredIdx=found.idx; setHovered(AGENTS_DATA[found.idx]); mount.style.cursor="pointer"; return; }
+          mount.style.cursor = "pointer";
+        } else {
+          mount.style.cursor = isDragging ? "grabbing" : "grab";
         }
-        hoveredIdx=-1; setHovered(null);
-        mount.style.cursor = isDragging ? "grabbing" : "grab";
+        if (isDragging) mouseMovedSincDown = true;
       };
-      const onMouseDown = (e) => { isDragging=true; prevMouse={x:e.clientX,y:e.clientY}; mount.style.cursor="grabbing"; };
-      const onMouseUp   = ()    => { isDragging=false; mount.style.cursor="grab"; };
+      const onMouseDown = (e) => { isDragging=true; mouseMovedSincDown=false; prevMouse={x:e.clientX,y:e.clientY}; mount.style.cursor="grabbing"; };
+      const onMouseUp   = (e)   => {
+        isDragging=false;
+        mount.style.cursor="grab";
+        // Only treat as click if mouse didn't drag
+        if (!mouseMovedSincDown) {
+          const rect = mount.getBoundingClientRect();
+          mouse.x =  ((e.clientX-rect.left)/rect.width)*2-1;
+          mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
+          raycaster.setFromCamera(mouse, camera);
+          const hits = raycaster.intersectObjects(planetObjects.map(p => p.mesh), true);
+          if (hits.length) {
+            const found = planetObjects.find(p => p.mesh===hits[0].object);
+            if (found) { hoveredIdx=found.idx; setHovered(AGENTS_DATA[found.idx]); return; }
+          }
+          hoveredIdx=-1; setHovered(null);
+        }
+      };
       const onDrag      = (e)   => {
         if (!isDragging) return;
         autoRotY += (e.clientX-prevMouse.x)*0.004;
@@ -902,9 +920,9 @@ function SolarSystem({ onReady }) {
       };
       mount.addEventListener("mousemove", onMouseMove);
       mount.addEventListener("mousedown", onMouseDown);
+      mount.addEventListener("mouseup",   onMouseUp);
       mount.addEventListener("touchstart",onTouchStart,{passive:true});
       mount.addEventListener("touchmove", onTouchMove, {passive:true});
-      window.addEventListener("mouseup",  onMouseUp);
       window.addEventListener("mousemove",onDrag);
       window.addEventListener("resize",   onResize);
 
@@ -915,9 +933,9 @@ function SolarSystem({ onReady }) {
         if (sunLabelEl && sunLabelEl.parentNode) sunLabelEl.parentNode.removeChild(sunLabelEl);
         mount.removeEventListener("mousemove", onMouseMove);
         mount.removeEventListener("mousedown", onMouseDown);
+        mount.removeEventListener("mouseup",   onMouseUp);
         mount.removeEventListener("touchstart",onTouchStart);
         mount.removeEventListener("touchmove", onTouchMove);
-        window.removeEventListener("mouseup",  onMouseUp);
         window.removeEventListener("mousemove",onDrag);
         window.removeEventListener("resize",   onResize);
       };
@@ -972,7 +990,7 @@ function SolarSystem({ onReady }) {
           <div className="pl-pt-model">{hovered.model}</div>
         </div>
       )}
-      <p className="pl-solar-hint">Drag to rotate · hover planets</p>
+      <p className="pl-solar-hint">Drag to rotate · click planets</p>
     </div>
   );
 }
@@ -1075,6 +1093,16 @@ export default function PublicLanding() {
   const readyRef = useRef(false);
   const splashDoneRef = useRef(false);
 
+  // Pamphlet popup — shown once per session
+  const [showPopup, setShowPopup] = useState(false);
+  const [popupVisible, setPopupVisible] = useState(false);
+
+  const dismissPopup = () => {
+    setPopupVisible(false);
+    setTimeout(() => setShowPopup(false), 320);
+    sessionStorage.setItem("pl_popup_seen", "1");
+  };
+
   // Minimum hold: 2.8s so text animations finish before fade-out.
   // Hard fallback at 6s: if Three.js/WebGL never fires onReady, clear splash anyway.
   useEffect(() => {
@@ -1094,6 +1122,17 @@ export default function PublicLanding() {
     readyRef.current = true;
     if (splashDoneRef.current) setReady(true);
   };
+
+  // Show popup 1.2s after the page becomes ready, once per session
+  useEffect(() => {
+    if (!ready) return;
+    if (sessionStorage.getItem("pl_popup_seen")) return;
+    const id = setTimeout(() => {
+      setShowPopup(true);
+      requestAnimationFrame(() => requestAnimationFrame(() => setPopupVisible(true)));
+    }, 1200);
+    return () => clearTimeout(id);
+  }, [ready]);
 
   useEffect(() => {
     const fn = () => setScrollY(window.scrollY);
@@ -1255,11 +1294,11 @@ export default function PublicLanding() {
               </button>
               <button className="pl-btn-ghost" onClick={() => navigate("/about")}>About Us</button>
             </div>
-            <button className="pl-nova-pill" onClick={() => navigate("/login")}>
+            <a className="pl-nova-pill" href="https://pamphlet.innovacx.net" target="_blank" rel="noopener noreferrer">
               <span className="pl-nova-dot"/>
-              Chat with Nova AI
-              <span className="pl-nova-arrow">Try Now →</span>
-            </button>
+              Virtual 3D Pamphlet
+              <span className="pl-nova-arrow">View Now →</span>
+            </a>
           </div>
           <div className="pl-hero-right"><SolarSystem onReady={handleReady} /></div>
         </div>
@@ -1353,6 +1392,62 @@ export default function PublicLanding() {
         </svg>
       </a>
     </div>
+
+    {/* ── PAMPHLET POPUP ── */}
+    {showPopup && (
+      <div
+        className={`pl-popup-backdrop${popupVisible ? " pl-popup-backdrop--in" : ""}`}
+        onClick={dismissPopup}
+        aria-modal="true"
+        role="dialog"
+        aria-label="Learn more about InnovaCX"
+      >
+        <div
+          className={`pl-popup${popupVisible ? " pl-popup--in" : ""}`}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Close */}
+          <button className="pl-popup-close" onClick={dismissPopup} aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
+          </button>
+
+          {/* Icon */}
+          <div className="pl-popup-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+          </div>
+
+          {/* Copy */}
+          <p className="pl-popup-tag">Explore InnovaCX</p>
+          <h2 className="pl-popup-title">See the system in&nbsp;3D</h2>
+          <p className="pl-popup-body">
+            Want to learn more? Explore our interactive 3D pamphlet to see how InnovaCX is reshaping the way companies manage complaints and inquiries — from intake to resolution.
+          </p>
+
+          {/* CTA */}
+          <a
+            className="pl-popup-cta"
+            href="https://pamphlet.innovacx.net"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={dismissPopup}
+          >
+            View 3D Pamphlet
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+              <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </a>
+
+          <button className="pl-popup-skip" onClick={dismissPopup}>
+            Maybe later
+          </button>
+        </div>
+      </div>
+    )}
     </>
   );
 }

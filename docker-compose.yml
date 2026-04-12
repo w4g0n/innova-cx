@@ -205,6 +205,10 @@ services:
       timeout: 10s
       retries: 10
       start_period: 300s
+    volumes:
+      - orchestrator_qwen_model:/app/agents/step11_reviewagent/model
+      - orchestrator_sentiment_model:/app/agents/step04_sentimentanalysis/model
+      - orchestrator_feature_model:/app/agents/step08_featureengineering/model
     networks:
       - innovacx-network
 
@@ -272,6 +276,9 @@ volumes:
   transcriber_model:
   uploads_data:
   backup_data:
+  orchestrator_qwen_model:
+  orchestrator_sentiment_model:
+  orchestrator_feature_model:
 
 networks:
   innovacx-network:

@@ -1465,6 +1465,147 @@ def totp_verify(request: Request, body: VerifyTOTPRequest, _csrf: None = Depends
     return resp
 
 
+_GOOGLE_TOKEN_URL    = "https://oauth2.googleapis.com/token"
+_GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
+
+class _OAuthCallbackBody(BaseModel):
+    code: str
+    redirect_uri: str
+
+@api.post("/auth/oauth/google/callback")
+@rate_limit_auth()
+async def google_oauth_callback(request: Request, body: _OAuthCallbackBody, _csrf: None = Depends(require_csrf)):
+    """
+    Exchange a Google auth code for user identity, then find-or-create a
+    customer account and return the same token shape as /auth/login.
+    Staff accounts are blocked — they must use email + TOTP.
+    """
+    client_id     = os.getenv("GOOGLE_CLIENT_ID", "")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured on this server.")
+
+    client_ip = request.client.host if request and request.client else None
+
+    # 1. Exchange code for Google tokens + userinfo
+    try:
+        async with httpx.AsyncClient(timeout=15) as hc:
+            tok = await hc.post(_GOOGLE_TOKEN_URL, data={
+                "code":          body.code,
+                "client_id":     client_id,
+                "client_secret": client_secret,
+                "redirect_uri":  body.redirect_uri,
+                "grant_type":    "authorization_code",
+            })
+            tok.raise_for_status()
+            ui = await hc.get(_GOOGLE_USERINFO_URL,
+                              headers={"Authorization": f"Bearer {tok.json()['access_token']}"})
+            ui.raise_for_status()
+            userinfo = ui.json()
+    except httpx.HTTPStatusError as exc:
+        logger.warning("google_oauth | exchange failed: %s", exc)
+        raise HTTPException(status_code=401, detail="Google sign-in failed. Please try again.")
+    except Exception as exc:
+        logger.warning("google_oauth | error: %s", exc)
+        raise HTTPException(status_code=500, detail="Google sign-in failed. Please try again.")
+
+    google_id = userinfo.get("sub")
+    email     = (userinfo.get("email") or "").lower().strip()
+    full_name = userinfo.get("name") or userinfo.get("given_name") or email
+
+    if not google_id or not email:
+        raise HTTPException(status_code=400, detail="Google did not return a valid email address.")
+    if not userinfo.get("email_verified"):
+        raise HTTPException(status_code=400, detail="Google email address is not verified.")
+
+    # 2. Find or create user — customers only
+    # Ensure google_id column exists (idempotent, skips on older volumes that already have it)
+    try:
+        execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT;")
+        execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;")
+        execute("ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;")
+    except Exception:
+        pass  # column already exists or concurrent migration — safe to ignore
+
+    user = fetch_one(
+        "SELECT id, email, role, is_active, totp_secret, mfa_enabled FROM users WHERE google_id = %s",
+        (google_id,),
+    )
+    if not user:
+        user = fetch_one(
+            "SELECT id, email, role, is_active, totp_secret, mfa_enabled FROM users WHERE email = %s",
+            (email,),
+        )
+        if user:
+            if not user.get("is_active"):
+                raise HTTPException(status_code=403, detail="Your account has been deactivated.")
+            if user.get("role") != "customer":
+                raise HTTPException(status_code=403, detail="Staff accounts must sign in with email and password.")
+            execute("UPDATE users SET google_id = %s WHERE id = %s", (google_id, user["id"]))
+        else:
+            new_row = fetch_one(
+                "INSERT INTO users (email, password_hash, role, google_id) VALUES (%s, NULL, 'customer', %s) RETURNING id",
+                (email, google_id),
+            )
+            if not new_row:
+                raise HTTPException(status_code=500, detail="Failed to create account.")
+            execute(
+                "INSERT INTO user_profiles (user_id, full_name) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING",
+                (new_row["id"], full_name),
+            )
+            user = fetch_one(
+                "SELECT id, email, role, is_active, totp_secret, mfa_enabled FROM users WHERE id = %s",
+                (new_row["id"],),
+            )
+
+    if not user or not user.get("is_active"):
+        raise HTTPException(status_code=403, detail="Your account has been deactivated.")
+    if user.get("role") != "customer":
+        raise HTTPException(status_code=403, detail="Staff accounts must sign in with email and password.")
+
+    execute("UPDATE users SET last_login_at = NOW() WHERE id = %s", (user["id"],))
+    profile = fetch_one("SELECT full_name FROM user_profiles WHERE user_id = %s", (user["id"],))
+    display_name = (profile or {}).get("full_name") or full_name
+
+    log_auth_event("login_success_oauth", user_id=str(user["id"]), email=email, ip=client_ip,
+                   extra={"provider": "google"})
+
+    # 3. MFA enforcement — same as regular login
+    if DISABLE_MFA:
+        access_token = create_jwt({"sub": str(user["id"])}, ttl_seconds=JWT_TTL_SECONDS)
+        resp = JSONResponse(content={
+            "access_token": access_token,
+            "token_type": "bearer",
+            "requiresSetup": False,
+            "user": {"id": str(user["id"]), "email": user["email"],
+                     "role": user["role"], "full_name": display_name},
+        })
+        _set_auth_cookie(resp, access_token)
+        return resp
+
+    if not user.get("totp_secret"):
+        secret = pyotp.random_base32()
+        execute("UPDATE users SET totp_secret = %s WHERE id = %s", (secret, user["id"]))
+        user["totp_secret"] = secret
+
+    requires_setup = not user.get("mfa_enabled", False)
+    temp_token = create_jwt({"sub": str(user["id"]), "type": "mfa_temp"}, ttl_seconds=MFA_TEMP_TTL_SECONDS)
+    return {
+        "access_token": temp_token,
+        "token_type": "temporary",
+        "requiresSetup": requires_setup,
+        "user": {"id": str(user["id"]), "email": user["email"],
+                 "role": user["role"], "full_name": display_name},
+    }
+
+
+def _route_email(recipient: str) -> str:
+    """Temporary routing rule: @innovacx.net → shared ops inbox; all others → direct."""
+    if recipient.lower().endswith("@innovacx.net"):
+        return "innovacx.reset@gmail.com"
+    return recipient
+
+
 @api.post("/auth/email-otp-send")
 @rate_limit_auth()
 def email_otp_send(request: Request, body: SendEmailOTPRequest, _csrf: None = Depends(require_csrf)):
@@ -1496,7 +1637,7 @@ def email_otp_send(request: Request, body: SendEmailOTPRequest, _csrf: None = De
     if resend.api_key:
         result = resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": user["email"],
+            "to": _route_email(user["email"]),
             "subject": "Your InnovaCX verification code",
             "html": EMAIL_OTP_HTML.format(email=user["email"], otp_code=otp_code),
         })
@@ -1735,40 +1876,51 @@ PASSWORD_CHANGED_EMAIL_HTML = """\
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Password Changed — InnovaCX</title>
 <style>
-  body{{margin:0;padding:0;background:#0d0d1a;font-family:'Segoe UI',Arial,sans-serif;}}
-  .wrap{{max-width:520px;margin:40px auto;background:#13132a;border-radius:16px;overflow:hidden;border:1px solid rgba(139,92,246,.25);}}
-  .hdr{{background:linear-gradient(135deg,#1e1040 0%,#2d1b69 50%,#1a0f35 100%);padding:36px 40px 28px;text-align:center;}}
-  .logo{{font-size:22px;font-weight:700;color:#e9d5ff;letter-spacing:.5px;}}
-  .logo span{{color:#a855f7;}}
-  .body{{padding:32px 40px;}}
-  h2{{margin:0 0 12px;font-size:20px;color:#f3e8ff;}}
-  p{{margin:0 0 16px;font-size:15px;color:#c4b5fd;line-height:1.6;}}
-  .alert{{background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.3);border-radius:10px;padding:14px 16px;margin:20px 0;}}
-  .alert p{{margin:0;font-size:14px;color:#ddd6fe;}}
-  .footer{{padding:20px 40px 28px;text-align:center;border-top:1px solid rgba(139,92,246,.15);}}
-  .fc{{font-size:12px;color:#6b7280;margin:4px 0;}}
+  body{{margin:0;padding:0;background:#0c0520;font-family:'Segoe UI',Arial,sans-serif;}}
+  .ew{{width:100%;background:#0c0520;padding:40px 0;}}
+  .ec{{max-width:520px;margin:0 auto;background:#05010e;border:1px solid rgba(168,85,247,.25);border-radius:16px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.6);}}
+  .hd{{background:linear-gradient(135deg,#1e1040 0%,#2d1b69 50%,#1a0f35 100%);padding:36px 40px 28px;text-align:center;}}
+  .brand{{font-size:22px;font-weight:800;color:#e9d5ff;letter-spacing:-.02em;margin:0;}}
+  .brand span{{color:#a855f7;font-weight:400;}}
+  .htitle{{font-size:20px;font-weight:700;color:#fff;margin:10px 0 0;letter-spacing:-.02em;}}
+  .bd{{padding:32px 40px 28px;}}
+  .gr{{font-size:14.5px;color:rgba(255,255,255,.6);margin:0 0 14px;line-height:1.6;}}
+  .de{{font-size:14.5px;color:rgba(255,255,255,.55);line-height:1.7;margin:0 0 20px;}}
+  .de strong{{color:rgba(255,255,255,.85);}}
+  .wb{{background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:14px 16px;margin:0 0 20px;}}
+  .wt{{font-size:13px;color:rgba(251,191,36,.75);line-height:1.55;margin:0;}}
+  .wt strong{{color:#fbbf24;}}
+  .note{{font-size:12.5px;color:rgba(255,255,255,.28);margin:0;line-height:1.6;}}
+  .ft{{background:rgba(255,255,255,.015);border-top:1px solid rgba(168,85,247,.1);padding:20px 40px;text-align:center;}}
+  .fc{{font-size:11.5px;color:rgba(168,85,247,.4);margin:0;}}
+  @media only screen and (max-width:600px){{
+    .ec{{border-radius:0;}}
+    .hd,.bd,.ft{{padding-left:24px;padding-right:24px;}}
+  }}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="hdr">
-    <div class="logo">Innova<span>CX</span></div>
+<div class="ew">
+<div class="ec">
+  <div class="hd">
+    <p class="brand">Innova<span>CX</span></p>
+    <p class="htitle">Password Changed</p>
   </div>
-  <div class="body">
-    <h2>Your password has been changed</h2>
-    <p>Hi <strong style="color:#e9d5ff">{email}</strong>,</p>
-    <p>The password for your InnovaCX account was successfully updated on <strong style="color:#e9d5ff">{changed_at} UTC</strong>.</p>
-    <div class="alert">
-      <p>&#x26A0;&#xFE0F; If you did not make this change, your account may be compromised. Please contact your system administrator or operator immediately.</p>
+  <div class="bd">
+    <p class="gr">Hi <strong style="color:#e9d5ff">{email}</strong>,</p>
+    <p class="de">The password for your InnovaCX account was successfully updated on <strong>{changed_at} UTC</strong>.</p>
+    <div class="wb">
+      <p class="wt"><strong>Did not make this change?</strong> Your account may be at risk. Contact your system administrator or operator immediately.</p>
     </div>
-    <p style="font-size:13px;color:#9ca3af;">This is an automated security notification. Please do not reply to this email.</p>
+    <p class="note">This is an automated security notification. Please do not reply to this email.</p>
   </div>
-  <div class="footer">
+  <div class="ft">
     <p class="fc">&copy; {year} InnovaCX. All rights reserved.</p>
   </div>
+</div>
 </div>
 </body>
 </html>"""
@@ -1813,7 +1965,7 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
 
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": "innovacx.reset@gmail.com",   # hardcoded until domain email is set up
+            "to": _route_email(email),
             "subject": "Reset your InnovaCX password",
             "html": RESET_EMAIL_HTML.format(
                 email=email,
@@ -1896,7 +2048,7 @@ def reset_password(request: Request, body: ResetPasswordRequest, _csrf: None = D
     try:
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": "innovacx.reset@gmail.com",
+            "to": _route_email(row["email"]),
             "subject": "Your InnovaCX password has been changed",
             "html": PASSWORD_CHANGED_EMAIL_HTML.format(
                 email=row["email"],
@@ -1936,7 +2088,7 @@ def change_password(
     try:
         resend.Emails.send({
             "from": "no-reply@innovacx.net",
-            "to": "innovacx.reset@gmail.com",
+            "to": _route_email(user.get("email", "")),
             "subject": "Your InnovaCX password has been changed",
             "html": PASSWORD_CHANGED_EMAIL_HTML.format(
                 email=user.get("email", ""),

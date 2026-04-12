@@ -499,7 +499,7 @@ export default function Login() {
         <section className="loginRight">
           <button
             className="backBtn"
-            onClick={() => navigate(-1)}
+            onClick={() => navigate("/")}
           >
             ← Back
           </button>

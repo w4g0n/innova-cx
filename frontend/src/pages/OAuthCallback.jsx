@@ -117,27 +117,41 @@ export default function OAuthCallback() {
 
         {!error ? (
           <>
-            <div style={{ fontSize: 36, marginBottom: 16 }}>⏳</div>
-            <h2 style={{ color: "#f3e8ff", margin: "0 0 10px" }}>Signing you in…</h2>
-            <p style={{ color: "#9ca3af", fontSize: 14 }}>Completing authentication, please wait.</p>
+            <div style={{ width: 48, height: 48, margin: "0 auto 20px", borderRadius: "50%", background: "rgba(168,85,247,.1)", border: "1.5px solid rgba(168,85,247,.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+            <h2 style={{ color: "#f3e8ff", margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>Signing you in</h2>
+            <p style={{ color: "rgba(196,181,253,.7)", fontSize: 14, margin: 0 }}>Completing authentication, please wait.</p>
           </>
         ) : (
           <>
-            <div style={{ fontSize: 36, marginBottom: 16 }}>❌</div>
-            <h2 style={{ color: "#f3e8ff", margin: "0 0 10px" }}>Sign-in Failed</h2>
-            <p style={{ color: "#c4b5fd", fontSize: 14, marginBottom: 24 }}>{error}</p>
+            <div style={{ width: 48, height: 48, margin: "0 auto 20px", borderRadius: "50%", background: "rgba(239,68,68,.08)", border: "1.5px solid rgba(239,68,68,.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </div>
+            <h2 style={{ color: "#f3e8ff", margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>Sign-in Failed</h2>
+            <p style={{ color: "rgba(196,181,253,.8)", fontSize: 14, marginBottom: 24 }}>{error}</p>
             <button
-              onClick={() => window.location.href = "/signup"}
+              onClick={() => window.location.href = "/login"}
               style={{
-                padding: "12px 28px",
+                display: "block", width: "100%", padding: "12px 0",
                 background: "linear-gradient(135deg,#6d28d9,#9333ea)",
-                color: "#fff", border: "none",
-                borderRadius: 12, fontSize: 14,
-                fontWeight: 600, cursor: "pointer",
+                color: "#fff", border: "none", borderRadius: 12,
+                fontSize: 14, fontWeight: 600, cursor: "pointer",
+                marginBottom: 12,
               }}
             >
               Try Again
             </button>
+            <a
+              href="/login"
+              style={{ display: "block", textAlign: "center", fontSize: 13, color: "rgba(255,255,255,.35)", textDecoration: "none" }}
+            >
+              Back to Login
+            </a>
           </>
         )}
       </div>

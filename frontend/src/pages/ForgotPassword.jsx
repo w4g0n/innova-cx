@@ -350,7 +350,6 @@ export default function ForgotPassword() {
     if (emailError) return;
     if (resendCooldown > 0) return;
     setSending(true); setStep1Error("");
-    setResendCooldown(120);
     try {
       const csrf = await getCsrfToken();
       const res = await fetch(apiUrl("/api/auth/forgot-password"), {
@@ -364,6 +363,7 @@ export default function ForgotPassword() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.detail || "Request failed");
       setLinkSent(true);
+      setResendCooldown(120);
     } catch (err) {
       setStep1Error(err.message || "Something went wrong. Try again.");
     } finally {
@@ -640,13 +640,8 @@ export default function ForgotPassword() {
                       </div>
                     )}
 
-                    {resendCooldown > 0 && (
-                      <div className="fp-cooldown-msg" role="status">
-                        Please wait <strong>{resendCooldown}s</strong> before requesting another link.
-                      </div>
-                    )}
                     <button className="fpBtn" type="submit" disabled={sending || resendCooldown > 0}>
-                      {resendCooldown > 0 ? `Wait ${resendCooldown}s` : sending ? "Sending…" : "Send Reset Link"}
+                      {sending ? "Sending…" : "Send Reset Link"}
                     </button>
                   </form>
                 </>
