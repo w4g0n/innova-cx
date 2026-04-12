@@ -824,8 +824,6 @@ async def _review_priority(state: dict, upstream_inputs_changed: bool) -> tuple[
         f"Ticket subject: {str(state.get('subject') or '').strip() or 'N/A'}\n"
         f"Ticket text: {str(state.get('text') or '')[:700]}\n"
         f"Ticket type: {state.get('label', 'unknown')}\n"
-        f"Features: severity={state.get('issue_severity')}, urgency={state.get('issue_urgency')}, "
-        f"business_impact={state.get('business_impact')}, safety_concern={state.get('safety_concern')}\n"
         f"Assigned priority: {priority}\n"
         "Does this priority make sense? Reply JSON only:"
     )
@@ -841,16 +839,17 @@ async def _review_priority(state: dict, upstream_inputs_changed: bool) -> tuple[
         if not correct:
             if suggested in _VALID_PRIORITIES and suggested != priority:
                 state["priority_label"] = suggested.title()
-                result["status"] = "fixed"
-                result["operator_override_required"] = True
+                result["status"] = "flagged"
                 result["issue"] = f"Priority '{priority}' did not make sense to Review Agent"
                 result["operator_message"] = (
                     f"Review Agent changed priority from '{priority}' to '{suggested}'."
                     + (f" {reason}" if reason else "")
+                    + " Manual operator review required."
                 )
                 result["fix_applied"] = f"priority corrected to '{suggested}'"
                 priority_changed = True
                 priority = suggested
+                return result, priority_changed
             else:
                 result["status"] = "flagged"
                 result["issue"] = f"Priority '{priority}' failed Review Agent validation"
