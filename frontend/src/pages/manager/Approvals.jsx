@@ -348,7 +348,7 @@ export default function Approvals() {
   // ── FIX: decide() now re-fetches the full approvals list from the server
   //    after a successful PATCH so the UI always reflects the persisted state.
   //    Optimistic update is kept as a fast visual hint while the re-fetch is in flight.
-  const decide = async (requestId, decision, _selectedDepartment = undefined, overrideValue = undefined) => {
+  const decide = async (requestId, decision, overrideValue = undefined) => {
     if (!token) { navigate("/login"); return; }
     const safeRequestId  = sanitizeId(requestId);
     const safeOverride   = overrideValue ? sanitizeText(overrideValue, 200) : undefined;
@@ -805,7 +805,7 @@ export default function Approvals() {
           : "Are you sure you want to reject this request? This cannot be undone."}
         variant={confirm.decision === "Approved" ? "success" : "danger"}
         confirmLabel={confirm.decision === "Approved" ? "Yes, Approve" : "Yes, Reject"}
-        onConfirm={() => { const { requestId, decision, selectedDepartment } = confirm; closeConfirm(); decide(requestId, decision, selectedDepartment); }}
+        onConfirm={() => { const { requestId, decision } = confirm; closeConfirm(); decide(requestId, decision); }}
         onCancel={closeConfirm}
       />
       <ConfirmDialog
@@ -819,7 +819,7 @@ export default function Approvals() {
         onConfirm={() => {
           const { requestId, overrideValue } = aprOverride;
           closeAprOverride();
-          decide(requestId, "Approved", undefined, overrideValue);
+          decide(requestId, "Approved", overrideValue);
         }}
         onCancel={closeAprOverride}
       />
