@@ -1348,7 +1348,7 @@ def get_review_agent_diagnostics() -> dict[str, object]:
         from shared_model_service import SHARED_QWEN_MODEL_PATH
         model_path = Path(SHARED_QWEN_MODEL_PATH) if SHARED_QWEN_MODEL_PATH else None
     except Exception:
-        model_path = Path(os.getenv("REVIEW_AGENT_MODEL_PATH", "/app/agents/step11_reviewagent/model"))
+        model_path = Path(os.getenv("REVIEW_AGENT_MODEL_PATH", "/app/models/reviewagent/qwen2.5-0.5B-Instruct"))
     model_exists = bool(model_path and (model_path / "config.json").exists())
     return {
         "review_agent_model_exists":      model_exists,
