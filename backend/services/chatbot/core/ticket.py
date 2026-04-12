@@ -38,7 +38,7 @@ def create_ticket(
         title = str(title).strip()
 
     api_base = os.environ.get("BACKEND_API_URL", "http://backend:8000")
-    local_fallback = os.environ.get("BACKEND_API_URL_LOCAL", "http://localhost:8000")
+    internal_key = os.environ.get("INTERNAL_API_KEY", "").strip()
 
     payload = {
         "created_by_user_id": user_id,
@@ -49,9 +49,11 @@ def create_ticket(
     }
     payload_bytes = json.dumps(payload).encode("utf-8")
     headers = {"Content-Type": "application/json"}
+    if internal_key:
+        headers["X-Internal-Key"] = internal_key
 
     last_error = None
-    for base in (api_base, local_fallback):
+    for base in (api_base,):
         req = urllib.request.Request(
             f"{base}/api/internal/tickets/create",
             data=payload_bytes,

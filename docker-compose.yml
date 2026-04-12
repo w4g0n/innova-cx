@@ -114,6 +114,7 @@ services:
       ORCHESTRATOR_URL_LOCAL: "${ORCHESTRATOR_URL_LOCAL:-http://localhost:8004}"
       BACKEND_API_URL: "${BACKEND_API_URL:-http://backend:8000}"
       BACKEND_API_URL_LOCAL: "${BACKEND_API_URL_LOCAL:-http://localhost:8000}"
+      INTERNAL_API_KEY: "${INTERNAL_API_KEY:-}"
     volumes:
       - hf_cache:/app/hf_cache
       - chatbot_models:/app/models

@@ -1,7 +1,7 @@
 import logging
 import re
 
-from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression
+from .intent import classify_primary_intent, classify_secondary_intent, detect_aggression, _GREETING_WORDS
 
 try:
     from .intent import is_human_escalation_request, is_cancellation_request
@@ -136,6 +136,13 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
             return _result(response, "prompt_ticket_id", session_id)
 
         if intent == "create_ticket":
+            secondary = classify_secondary_intent(user_text, history)
+            if secondary == "complaint":
+                transition(session, "complaint")
+                return _handle_complaint(session, user_id, user_text)
+            if secondary == "inquiry":
+                transition(session, "inquiry")
+                return _handle_inquiry(session, user_text)
             transition(session, "await_secondary_intent")
             response = (
                 "Of course. To help you better, is this an inquiry (you have a question) "
@@ -145,10 +152,17 @@ def handle_message(session_id: str, user_id: str, user_text: str) -> dict:
             return _result(response, "prompt_ticket_type", session_id)
 
         # unknown — re-prompt without changing state
-        response = (
-            "I did not quite catch that. Are you looking to follow up on an existing "
-            "ticket, or would you like to create a new one?"
-        )
+        normalized = user_text.strip().lower().rstrip("!.,?")
+        if normalized in _GREETING_WORDS:
+            response = (
+                "Hello! Are you looking to follow up on an existing ticket, "
+                "or would you like to create a new one?"
+            )
+        else:
+            response = (
+                "I did not quite catch that. Are you looking to follow up on an existing "
+                "ticket, or would you like to create a new one?"
+            )
         _log_and_save(session, response, "clarify")
         return _result(response, "clarify", session_id)
 
