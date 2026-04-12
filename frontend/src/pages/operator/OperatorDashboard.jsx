@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
@@ -62,21 +62,57 @@ function ModuleCard({ tag, title, desc, to, rows, loading }) {
   );
 }
 
+function LiveClock() {
+  const [now, setNow] = useState(() => new Date());
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    let last = -1;
+    const tick = () => {
+      const d = new Date();
+      if (d.getSeconds() !== last) {
+        last = d.getSeconds();
+        setNow(new Date(d));
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  const dateStr = now.toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+  });
+
+  return (
+    <div className="opDash__clock">
+      <div className="opDash__clockTime">
+        {hh}:{mm}
+        <span className="opDash__clockSeconds">:{ss}</span>
+      </div>
+      <div className="opDash__clockDate">{dateStr}</div>
+    </div>
+  );
+}
+
 export default function OperatorDashboard() {
   const revealRef = useScrollReveal();
 
-  const [chatbot,          setChatbot]          = useState(null);
-  const [chatbotLoading,   setChatbotLoading]   = useState(true);
-  const [sentiment,        setSentiment]        = useState(null);
-  const [sentimentLoading, setSentimentLoading] = useState(true);
-  const [qcAccept,         setQcAccept]         = useState(null);
-  const [qcAcceptLoading,  setQcAcceptLoading]  = useState(true);
-  const [qcRescore,        setQcRescore]        = useState(null);
-  const [qcRescoreLoading, setQcRescoreLoading] = useState(true);
-  const [users,            setUsers]            = useState(null);
-  const [usersLoading,     setUsersLoading]     = useState(true);
-  const [queueStats,       setQueueStats]       = useState(null);
-  const [queueStatsLoading,setQueueStatsLoading]= useState(true);
+  const [chatbot,           setChatbot]           = useState(null);
+  const [chatbotLoading,    setChatbotLoading]    = useState(true);
+  const [sentiment,         setSentiment]         = useState(null);
+  const [sentimentLoading,  setSentimentLoading]  = useState(true);
+  const [qcAccept,          setQcAccept]          = useState(null);
+  const [qcAcceptLoading,   setQcAcceptLoading]   = useState(true);
+  const [qcRescore,         setQcRescore]         = useState(null);
+  const [qcRescoreLoading,  setQcRescoreLoading]  = useState(true);
+  const [users,             setUsers]             = useState(null);
+  const [usersLoading,      setUsersLoading]      = useState(true);
+  const [queueStats,        setQueueStats]        = useState(null);
+  const [queueStatsLoading, setQueueStatsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,12 +122,12 @@ export default function OperatorDashboard() {
         .catch(()  => {})
         .finally(() => { if (!cancelled) setLoading(false); });
     };
-    load("/operator/analytics/model-health/chatbot?timeRange=last30days",  setChatbot,   setChatbotLoading);
-    load("/operator/analytics/model-health/sentiment?timeRange=last30days", setSentiment, setSentimentLoading);
-    load("/operator/analytics/qc/acceptance?timeRange=last30days",          setQcAccept,  setQcAcceptLoading);
-    load("/operator/analytics/qc/rescoring?timeRange=last30days",           setQcRescore, setQcRescoreLoading);
-    load("/operator/users",                                                  setUsers,     setUsersLoading);
-    load("/operator/pipeline-queue/stats",                                   setQueueStats,setQueueStatsLoading);
+    load("/operator/analytics/model-health/chatbot?timeRange=last30days",  setChatbot,    setChatbotLoading);
+    load("/operator/analytics/model-health/sentiment?timeRange=last30days", setSentiment,  setSentimentLoading);
+    load("/operator/analytics/qc/acceptance?timeRange=last30days",          setQcAccept,   setQcAcceptLoading);
+    load("/operator/analytics/qc/rescoring?timeRange=last30days",           setQcRescore,  setQcRescoreLoading);
+    load("/operator/users",                                                  setUsers,      setUsersLoading);
+    load("/operator/pipeline-queue/stats",                                   setQueueStats, setQueueStatsLoading);
     return () => { cancelled = true; };
   }, []);
 
@@ -111,10 +147,10 @@ export default function OperatorDashboard() {
   }, [users]);
 
   const topKpis = [
-    { label: "Escalation Rate",  value: chatbot?.kpis?.escalationRate      != null ? `${chatbot.kpis.escalationRate}%`           : chatbotLoading   ? "…" : "—" },
-    { label: "Avg Sentiment",    value: sentiment?.kpis?.avgSentimentScore  != null ? sentiment.kpis.avgSentimentScore.toFixed(2) : sentimentLoading  ? "…" : "—" },
-    { label: "QC Acceptance",    value: qcAccept?.kpis?.acceptanceRate     != null ? `${qcAccept.kpis.acceptanceRate}%`          : qcAcceptLoading   ? "…" : "—" },
-    { label: "Rescore Rate",     value: qcRescore?.kpis?.rescoreRate       != null ? `${qcRescore.kpis.rescoreRate}%`            : qcRescoreLoading  ? "…" : "—" },
+    { label: "Escalation Rate", value: chatbot?.kpis?.escalationRate     != null ? `${chatbot.kpis.escalationRate}%`           : chatbotLoading   ? "…" : "—" },
+    { label: "Avg Sentiment",   value: sentiment?.kpis?.avgSentimentScore != null ? sentiment.kpis.avgSentimentScore.toFixed(2) : sentimentLoading  ? "…" : "—" },
+    { label: "QC Acceptance",   value: qcAccept?.kpis?.acceptanceRate    != null ? `${qcAccept.kpis.acceptanceRate}%`          : qcAcceptLoading   ? "…" : "—" },
+    { label: "Rescore Rate",    value: qcRescore?.kpis?.rescoreRate      != null ? `${qcRescore.kpis.rescoreRate}%`            : qcRescoreLoading  ? "…" : "—" },
   ];
 
   const modules = [
@@ -166,16 +202,15 @@ export default function OperatorDashboard() {
       <div className="opDash" ref={revealRef}>
         <div className="opDash__headerBox">
           <PageHeader title={greeting} />
+          <LiveClock />
         </div>
 
-        {/* KPI BAR */}
         <section className="opDash__kpiRow">
           {topKpis.map((k) => (
             <KpiCard key={k.label} label={k.label} value={k.value} />
           ))}
         </section>
 
-        {/* MODULE CARDS — 3 equal columns filling full width */}
         <div className="opDash__moduleCol">
           {modules.map((m) => (
             <ModuleCard key={m.title} {...m} />

@@ -125,3 +125,6 @@ ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/test_inputs/*
 ai-models/Trainings/PrioritzationAgentTraining/output/*
 ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/runtime/*.json
 ai-models/legacy/MultiAgentPipeline/PrioritizationAgent/runtime/*.csv
+
+frontend/android/.gradle-user-home/
+frontend/android/.gradle/

@@ -48,6 +48,18 @@ SUGGESTED_RESOLUTION_MAX_NEW_TOKENS = max(
 
 logger = logging.getLogger(__name__)
 _BACKGROUND_SUGGESTED_RESOLUTION_TASKS: set[asyncio.Task] = set()
+_PROMPT_LEAKAGE_FRAGMENTS: tuple[str, ...] = (
+    "employee-accepted patterns",
+    "employee-accepted outcome",
+    "tone of each pattern",
+    "reply json only",
+    "ticket subject:",
+    "ticket text:",
+    "preferred instruction style:",
+    "avoid these rejected phrasing patterns",
+    "rejected example",
+    "better outcome:",
+)
 
 
 def _utc_now_iso() -> str:
@@ -102,8 +114,20 @@ def _clean_generated_resolution(text: str, ticket: dict[str, Any]) -> str:
         return ""
     cleaned = cleaned.splitlines()[0].strip()
     cleaned = re.sub(r"^(suggested resolution|resolution)\s*:\s*", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'(?:^|\s)(?:subject|details|ticket|input|output)\s*:\s*.*$', "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"(?:^|\s)(?:subject|details|ticket|ticket subject|ticket text|input|output)\s*:\s*.*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
     return cleaned.strip(" -")
+
+
+def _contains_prompt_leakage(text: str) -> bool:
+    cleaned = str(text or "").strip().lower()
+    if not cleaned:
+        return False
+    return any(fragment in cleaned for fragment in _PROMPT_LEAKAGE_FRAGMENTS)
 
 
 def _looks_like_past_tense_resolution(text: str) -> bool:
@@ -135,6 +159,8 @@ def _looks_like_past_tense_resolution(text: str) -> bool:
 def _is_low_quality_resolution(text: str) -> bool:
     cleaned = str(text or "").strip().lower()
     if not cleaned:
+        return True
+    if _contains_prompt_leakage(cleaned):
         return True
     banned_phrases = (
         "investigate issue",
@@ -375,6 +401,8 @@ def _build_generation_prompt(ticket: dict[str, Any]) -> str:
         "9. Describe what the employee should do next, not what has already been done.\n"
         "10. If there are multiple actions, connect them in one sentence with \"then\" or \"and\".\n"
         "11. Length: 18–40 words.\n\n"
+        "12. Return only the final resolution sentence.\n"
+        "13. Do not output prompt headers, examples, labels, JSON, or notes.\n\n"
     )
 
     if SUGGESTED_RESOLUTION_PROMPT_EXAMPLES > 0:
@@ -472,7 +500,7 @@ def get_suggested_resolution_diagnostics() -> dict[str, object]:
     try:
         from shared_model_service import SHARED_QWEN_MODEL_PATH
         model_path = Path(SHARED_QWEN_MODEL_PATH) if SHARED_QWEN_MODEL_PATH else None
-        model_name = os.getenv("SHARED_QWEN_MODEL_NAME", "Qwen/Qwen2.5-0.5B-Instruct")
+        model_name = os.getenv("SHARED_QWEN_MODEL_NAME", "Qwen2.5")
     except Exception:
         model_path = None
         model_name = None
@@ -526,7 +554,8 @@ async def _generate_resolution_text(ticket: dict[str, Any]) -> tuple[str | None,
                 "role": "system",
                 "content": (
                     "You generate one suggested resolution for the employee handling the ticket. "
-                    "Return plain text only."
+                    "Return plain text only. "
+                    "Output exactly one actionable sentence and never repeat prompt sections, labels, examples, or ticket headers."
                 ),
             },
             {"role": "user", "content": prompt},
@@ -566,15 +595,15 @@ async def _generate_resolution_text(ticket: dict[str, Any]) -> tuple[str | None,
         if text and not _is_low_quality_resolution(text):
             try:
                 from shared_model_service import SHARED_QWEN_MODEL_NAME
-                model_label = SHARED_QWEN_MODEL_NAME or "local_causal_lm"
+                model_label = SHARED_QWEN_MODEL_NAME or "Qwen2.5"
             except Exception:
-                model_label = "local_causal_lm"
-            return text, model_label, "local_model"
-        logger.warning("suggested_resolution | generated low-quality output, returning null")
+                model_label = "Qwen2.5"
+            return text, model_label, "qwen"
+        logger.warning("suggested_resolution | generated low-quality output, using deterministic fallback")
     except Exception as exc:
-        logger.warning("suggested_resolution | inference failed (%s), returning null", exc)
+        logger.warning("suggested_resolution | inference failed (%s), using deterministic fallback", exc)
 
-    return None, None, "unavailable"
+    return fallback_resolution_suggestion(ticket), "deterministic_template", "template_fallback"
 
 
 async def _generate_resolution_text_in_thread(ticket: dict[str, Any]) -> tuple[str, str, str]:
