@@ -23,6 +23,31 @@ function initiateGoogleOAuth() {
   window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
+function trustedDeviceStorageKey(email) {
+  return `td_${String(email || "").trim().toLowerCase()}`;
+}
+
+function getTrustedDeviceToken(email) {
+  const key = trustedDeviceStorageKey(email);
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.token || !parsed?.expiresAt || Number(parsed.expiresAt) <= Date.now()) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return parsed.token;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
+}
+
+function clearTrustedDeviceToken(email) {
+  localStorage.removeItem(trustedDeviceStorageKey(email));
+}
+
 const validators = {
   email: (val) => {
     if (!val) return "Email is required.";
@@ -383,6 +408,8 @@ export default function Login() {
     setLoading(true);
 
     try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const trustedDeviceToken = getTrustedDeviceToken(normalizedEmail);
       const csrf = await getCsrfToken();
       const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
@@ -391,7 +418,11 @@ export default function Login() {
           "Content-Type": "application/json",
           ...(csrf ? { "X-CSRF-Token": csrf } : {}),
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email,
+          password,
+          ...(trustedDeviceToken ? { trusted_device_token: trustedDeviceToken } : {}),
+        }),
       });
 
       if (!res.ok) {
@@ -440,6 +471,7 @@ export default function Login() {
       };
 
       if (data.token_type === "temporary") {
+        if (trustedDeviceToken) clearTrustedDeviceToken(normalizedEmail);
         sessionStorage.setItem("mfa_token", data.access_token);
         sessionStorage.setItem("mfa_user", JSON.stringify(userPayload));
         navigate("/verify", { replace: true });

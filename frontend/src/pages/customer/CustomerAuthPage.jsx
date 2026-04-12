@@ -336,7 +336,7 @@ export default function CustomerAuthPage() {
 
     // Store trusted-device token in localStorage for 30 days
     if (data.trusted_device_token && storedUser?.email) {
-      const key = `td_${storedUser.email}`;
+      const key = `td_${String(storedUser.email).trim().toLowerCase()}`;
       localStorage.setItem(key, JSON.stringify({
         token:     sanitizeText(data.trusted_device_token, 128),
         expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,

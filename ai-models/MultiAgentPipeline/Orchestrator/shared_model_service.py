@@ -46,7 +46,6 @@ _qwen_lock: threading.Lock = threading.Lock()
 _qwen_instance: dict[str, Any] | None = None
 _qwen_loaded: bool = False  # True only after a successful load
 
-
 def _resolve_shared_qwen_model_path() -> str:
     requested = SHARED_QWEN_MODEL_PATH.strip()
     if requested and (Path(requested) / "config.json").exists():
@@ -67,7 +66,6 @@ def _resolve_shared_qwen_model_path() -> str:
         return _LEGACY_MODEL_PATH
 
     return requested
-
 
 def get_shared_qwen() -> dict[str, Any] | None:
     """
