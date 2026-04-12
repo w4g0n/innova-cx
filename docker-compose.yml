@@ -166,20 +166,20 @@ services:
       # Runtime DB connection uses innovacx_app (least-privilege role),
       # NOT the superuser innovacx_admin.
       DATABASE_URL: postgresql://${APP_DB_USER:-innovacx_app}:${APP_DB_PASSWORD:?APP_DB_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-complaints_db}
-      SENTIMENT_MODEL_DIR: "${SENTIMENT_MODEL_DIR:-/app/agents/step04_sentimentanalysis/model}"
-      CLASSIFIER_MODEL_DIR: "${CLASSIFIER_MODEL_DIR:-/app/agents/step03_classifier/model}"
+      SENTIMENT_MODEL_DIR: "${SENTIMENT_MODEL_DIR:-/app/models/sentiment_analysis_model_v7}"
+      CLASSIFIER_MODEL_DIR: "${CLASSIFIER_MODEL_DIR:-/app/models/classification_model_v7}"
       CLASSIFIER_MODEL_PATH: "${CLASSIFIER_MODEL_PATH:-}"
       CLASSIFIER_VECTORIZER_PATH: "${CLASSIFIER_VECTORIZER_PATH:-}"
       PRIORITY_USE_MOCK: "${PRIORITY_USE_MOCK:-false}"
-      PRIORITY_MODEL_DIR: "${PRIORITY_MODEL_DIR:-/app/agents/step09_priority/model}"
+      PRIORITY_MODEL_DIR: "${PRIORITY_MODEL_DIR:-/app/models/prioritization}"
       SUGGESTED_RESOLUTION_MODEL_NAME: "${SUGGESTED_RESOLUTION_MODEL_NAME:-google/flan-t5-small}"
       SUGGESTED_RESOLUTION_MODEL_PATH: "${SUGGESTED_RESOLUTION_MODEL_PATH:-}"
       SUGGESTED_RESOLUTION_AUTO_DOWNLOAD: "${SUGGESTED_RESOLUTION_AUTO_DOWNLOAD:-false}"
       CHATBOT_STARTUP_TIMEOUT_SECONDS: "${CHATBOT_STARTUP_TIMEOUT_SECONDS:-0}"
-      FEATURE_LABELER_MODEL_PATH: "${FEATURE_LABELER_MODEL_PATH:-/app/agents/step08_featureengineering/model}"
+      FEATURE_LABELER_MODEL_PATH: "${FEATURE_LABELER_MODEL_PATH:-/app/models/feature_engineering}"
       FEATURE_LABELER_MODEL_NAME: "${FEATURE_LABELER_MODEL_NAME:-MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli}"
       FEATURE_LABELER_AUTO_DOWNLOAD: "${FEATURE_LABELER_AUTO_DOWNLOAD:-false}"
-      FEATURE_ENGINEERING_STATE_DIR: "${FEATURE_ENGINEERING_STATE_DIR:-/app/agents/step08_featureengineering/model}"
+      FEATURE_ENGINEERING_STATE_DIR: "${FEATURE_ENGINEERING_STATE_DIR:-/app/models/feature_engineering}"
       FEATURE_LABELER_FORCE_CPU: "${FEATURE_LABELER_FORCE_CPU:-false}"
       DEPARTMENT_ROUTER_MODEL_PATH: "${DEPARTMENT_ROUTER_MODEL_PATH:-/app/agents/step10_router/model}"
       DEPARTMENT_ROUTER_MODEL_NAME: "${DEPARTMENT_ROUTER_MODEL_NAME:-MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli}"
@@ -211,10 +211,8 @@ services:
       retries: 10
       start_period: 300s
     volumes:
+      - /opt/innova-models:/app/models:ro
       - orchestrator_qwen_model:/app/agents/step11_reviewagent/model
-      - orchestrator_sentiment_model:/app/agents/step04_sentimentanalysis/model
-      - orchestrator_feature_model:/app/agents/step08_featureengineering/model
-      - orchestrator_priority_model:/app/agents/step09_priority/model
     networks:
       - innovacx-network
 
@@ -283,9 +281,6 @@ volumes:
   uploads_data:
   backup_data:
   orchestrator_qwen_model:
-  orchestrator_sentiment_model:
-  orchestrator_feature_model:
-  orchestrator_priority_model:
 
 networks:
   innovacx-network:
