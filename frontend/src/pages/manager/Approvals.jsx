@@ -151,6 +151,24 @@ function TabBtn({ active, onClick, children, badge }) {
   );
 }
 
+// Helper: normalize raw approval row from API into local state shape
+function normalizeApproval(a) {
+  return {
+    requestId:       sanitizeId(a.requestId),
+    ticketId:        sanitizeId(a.ticketCode),
+    ticketUuid:      sanitizeId(a.ticketId),
+    type:            sanitizeText(a.type, 50),
+    source:          sanitizeText(a.source || "employee", 50),
+    current:         sanitizeText(a.current, 200),
+    requested:       sanitizeText(a.requested, 200),
+    submittedBy:     sanitizeText(a.submittedBy, 100),
+    modelConfidence: a.modelConfidence,
+    submittedOn:     new Date(a.submittedOn).toLocaleString(),
+    submittedOnRaw:  new Date(a.submittedOn).getTime(),
+    status:          sanitizeText(a.status, 50),
+  };
+}
+
 export default function Approvals() {
   const revealRef = useScrollReveal();
   const navigate  = useNavigate();
@@ -192,29 +210,24 @@ export default function Approvals() {
   const token   = getAuthToken();
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
-  useEffect(() => {
+  // ── FIX: Extract fetchApprovals into a stable callback so it can be called
+  //    both on mount and after a successful decide() to keep the list fresh.
+  const fetchApprovals = useCallback(() => {
     if (!token) { navigate("/login"); return; }
     setLoading(true);
     fetch(apiUrl("/api/manager/approvals"), { headers })
-      .then((res) => { if (res.status === 401) navigate("/login"); return res.json(); })
+      .then((res) => { if (res.status === 401) { navigate("/login"); return null; } return res.json(); })
       .then((data) => {
-        setRows(data.map((a) => ({
-          requestId:       sanitizeId(a.requestId),
-          ticketId:        sanitizeId(a.ticketCode),
-          ticketUuid:      sanitizeId(a.ticketId),
-          type:            sanitizeText(a.type, 50),
-          source:          sanitizeText(a.source || "employee", 50),
-          current:         sanitizeText(a.current, 200),
-          requested:       sanitizeText(a.requested, 200),
-          submittedBy:     sanitizeText(a.submittedBy, 100),
-          modelConfidence: a.modelConfidence,
-          submittedOn:     new Date(a.submittedOn).toLocaleString(),
-          submittedOnRaw:  new Date(a.submittedOn).getTime(),
-          status:          sanitizeText(a.status, 50),
-        })));
+        if (!data) return;
+        setRows(data.map(normalizeApproval));
       })
       .catch((err) => console.error("Error fetching approvals:", err))
       .finally(() => setLoading(false));
+  }, [token, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!token) { navigate("/login"); return; }
+    fetchApprovals();
 
     fetch(apiUrl("/api/manager/departments"), { headers })
       .then((res) => res.json())
@@ -223,7 +236,7 @@ export default function Approvals() {
         setDepartments(list);
       })
       .catch(() => setDepartments(DEPT_FALLBACK));
-  }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [navigate, fetchApprovals]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchRrq = useCallback(() => {
     setRrqLoading(true);
@@ -332,26 +345,35 @@ export default function Approvals() {
     return arr;
   }, [rrqFiltered, rrqSort.sortCol, rrqSort.sortDir]);
 
+  // ── FIX: decide() now re-fetches the full approvals list from the server
+  //    after a successful PATCH so the UI always reflects the persisted state.
+  //    Optimistic update is kept as a fast visual hint while the re-fetch is in flight.
   const decide = async (requestId, decision, selectedDepartment = undefined, overrideValue = undefined) => {
     if (!token) { navigate("/login"); return; }
     const safeRequestId  = sanitizeId(requestId);
     const safeOverride   = overrideValue ? sanitizeText(overrideValue, 200) : undefined;
 
-    // Optimistically update UI
+    // Optimistically update UI for immediate feedback
     setRows((prev) => prev.map((r) => {
       if (r.requestId !== safeRequestId) return r;
-      if (safeOverride) return { ...r, status: "Overridden", overriddenValue: safeOverride };
+      if (safeOverride) return { ...r, status: "Approved", overriddenValue: safeOverride };
       return { ...r, status: decision };
     }));
 
     try {
-      const body = { decision: "Approved" };
+      // ── FIX: Build the body correctly for all three paths:
+      //    • Normal approve:  { decision: "Approved" }
+      //    • Normal reject:   { decision: "Rejected" }
+      //    • Override:        { decision: "Approved", override_value: "<value>" }
+      const body = {};
       if (safeOverride) {
-        body.override_value = safeOverride;
+        body.decision        = "Approved";
+        body.override_value  = safeOverride;
       } else if (decision === "Rejected") {
         body.decision = "Rejected";
-      } else if (selectedDepartment) {
-        // Normal reroute approve
+      } else {
+        // Normal approve (including reroute approve)
+        body.decision = "Approved";
       }
 
       const csrf = await getCsrfToken();
@@ -368,7 +390,12 @@ export default function Approvals() {
           : decision === "Approved" ? "Request approved ✓" : "Request rejected",
         decision === "Rejected" ? "error" : "success"
       );
+
+      // ── FIX: Re-fetch the full list from the server so the row reflects
+      //    the backend-persisted state (decided_at, decided_by, final status).
+      fetchApprovals();
     } catch {
+      // Roll back optimistic update on failure
       setRows((prev) => prev.map((r) =>
         r.requestId === safeRequestId ? { ...r, status: "Pending", overriddenValue: undefined } : r
       ));
@@ -376,6 +403,8 @@ export default function Approvals() {
     }
   };
 
+  // ── FIX: decideRrq() now re-fetches the routing review queue after a
+  //    successful decision so the queue reflects the backend-persisted state.
   const decideRrq = async (reviewId, decision, department) => {
     setRrqRows((prev) => prev.map((r) => (r.reviewId === reviewId ? { ...r, status: decision } : r)));
     try {
@@ -386,6 +415,9 @@ export default function Approvals() {
       });
       if (!res.ok) { throw new Error(`Failed (${res.status})`); }
       pushToast(decision === "Approved" ? "AI routing confirmed ✓" : decision === "Denied" ? "Routing request denied" : `Routing overridden → ${sanitizeText(department, 100)}`, decision === "Denied" ? "error" : "success");
+
+      // ── FIX: Re-fetch the routing review queue so the row reflects persisted state.
+      fetchRrq();
     } catch {
       setRrqRows((prev) => prev.map((r) => (r.reviewId === reviewId ? { ...r, status: "Pending" } : r)));
       pushToast("Failed to save decision. Please try again.", "error");
