@@ -116,10 +116,6 @@ export default function OperatorNotifications() {
     fetchNotifications();
   }, [fetchNotifications, navigate, token]);
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications]
-  );
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();

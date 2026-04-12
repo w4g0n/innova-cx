@@ -103,7 +103,6 @@ export default function ManagerNotifications() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();

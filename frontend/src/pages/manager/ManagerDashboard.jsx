@@ -42,7 +42,6 @@ export default function ManagerDashboard() {
     } catch { /* ignore */ }
     return "";
   });
-  const [departmentName, setDepartmentName] = useState("");
 
   useEffect(() => {
     const token = getAuthToken();
@@ -64,7 +63,6 @@ export default function ManagerDashboard() {
         // Backend returns these from the authenticated session (get_current_user
         // now joins user_profiles, so these are always the logged-in manager's values)
         if (data.managerName) setManagerName(sanitizeText(data.managerName, 100));
-        if (data.departmentName) setDepartmentName(sanitizeText(data.departmentName, 100));
       })
       .catch((err) => {
         console.error("Failed to fetch manager KPIs:", err);
