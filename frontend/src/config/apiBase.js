@@ -14,11 +14,28 @@ function inferDefaultBaseUrl() {
   return "http://localhost:8000";
 }
 
+function isNativeApp() {
+  if (typeof window === "undefined") return false;
+  if (window.Capacitor?.isNativePlatform && typeof window.Capacitor.isNativePlatform === "function") {
+    try {
+      return window.Capacitor.isNativePlatform();
+    } catch {
+      return false;
+    }
+  }
+  return window.location?.protocol === "capacitor:";
+}
+
 const configuredBase =
   import.meta.env.VITE_BACKEND_BASE_URL || import.meta.env.VITE_API_BASE_URL || "";
 
+const mobileConfiguredBase =
+  import.meta.env.VITE_MOBILE_BACKEND_BASE_URL || import.meta.env.VITE_CAPACITOR_BACKEND_BASE_URL || "";
+
 export const API_BASE_URL = trimTrailingSlash(
-  stripApiSuffix(configuredBase.trim()) || inferDefaultBaseUrl()
+  stripApiSuffix(
+    ((isNativeApp() ? mobileConfiguredBase : configuredBase) || "").trim()
+  ) || inferDefaultBaseUrl()
 );
 
 export function apiUrl(path = "") {

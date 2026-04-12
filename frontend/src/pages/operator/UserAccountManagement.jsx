@@ -187,10 +187,12 @@ export default function UserAccountManagement() {
   return (
     <Layout role="operator">
       <div className="uamPage">
-        <PageHeader
-          title="Create User"
-          subtitle="Create a new user account. Customers do not require a department."
-        />
+        <div className="uamHeaderBox">
+          <PageHeader
+            title="Create User"
+            subtitle="Create a new user account. Customers do not require a department."
+          />
+        </div>
 
         {toast.message && (
           <div className={`uamToast ${toast.type === "success" ? "success" : "error"}`}>
