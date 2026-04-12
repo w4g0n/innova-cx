@@ -1,6 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 import KpiCard from "../../components/common/KpiCard";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
@@ -692,15 +691,9 @@ export default function UsersManagement() {
   return (
     <Layout role="operator">
       <div className="umPage">
-        <PageHeader
-          title="User Management"
-          subtitle="View, search, filter, and manage all users — customers, employees, managers, and operators."
-          actions={
-            <button className="filterPillBtn" onClick={openCreate}>
-              + Create New User
-            </button>
-          }
-        />
+        <div className="umHero">
+          <h1 className="umHero__title">User Management</h1>
+        </div>
 
         {loadingUsers && (
           <div
@@ -771,29 +764,36 @@ export default function UsersManagement() {
         </div>
 
         <div className="umFilters">
-          <PillSelect
-            value={statusFilter}
-            onChange={(v) => { if (ALLOWED_STATUSES.includes(v)) setStatusFilter(v); }}
-            ariaLabel="Filter by status"
-            options={[
-              { value: "all", label: "All Status" },
-              { value: "active", label: "Active" },
-              { value: "inactive", label: "Inactive" },
-            ]}
-          />
-          <PillSelect
-            value={roleFilter}
-            onChange={(v) => { if (ALLOWED_ROLE_FILTERS.includes(v)) setRoleFilter(v); }}
-            ariaLabel="Filter by role"
-            options={[
-              { value: "all",      label: "All Roles" },
-              { value: "customer", label: "Customer" },
-              { value: "employee", label: "Employee" },
-              { value: "manager",  label: "Manager" },
-              { value: "operator", label: "Operator" },
-            ]}
-          />
-          <FilterPillButton onClick={resetFilters} label="Reset" />
+          <div className="umFilters__left">
+            <PillSelect
+              value={statusFilter}
+              onChange={(v) => { if (ALLOWED_STATUSES.includes(v)) setStatusFilter(v); }}
+              ariaLabel="Filter by status"
+              options={[
+                { value: "all", label: "All Status" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ]}
+            />
+            <PillSelect
+              value={roleFilter}
+              onChange={(v) => { if (ALLOWED_ROLE_FILTERS.includes(v)) setRoleFilter(v); }}
+              ariaLabel="Filter by role"
+              options={[
+                { value: "all",      label: "All Roles" },
+                { value: "customer", label: "Customer" },
+                { value: "employee", label: "Employee" },
+                { value: "manager",  label: "Manager" },
+                { value: "operator", label: "Operator" },
+              ]}
+            />
+            <FilterPillButton onClick={resetFilters} label="Reset" />
+          </div>
+          <div className="umFilters__right">
+            <button className="filterPillBtn" onClick={openCreate}>
+              + Create New User
+            </button>
+          </div>
         </div>
 
         <div className="umTableCard">

@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -612,50 +611,52 @@ export default function QualityControl() {
   return (
     <Layout role="operator">
       <div className="modelAnalysis" ref={revealRef}>
-        <PageHeader
-          title="Quality Control"
-          actions={
-            <div className="ma-top-actions">
-              <PillSelect
-                value={timeFilter}
-                onChange={handleFilterChange((v) => { if (ALLOWED_TIME_FILTERS.includes(v)) setTimeFilter(v); })}
-                ariaLabel="Filter by time range"
-                options={[
-                  { label: "Last 7 days",  value: "last7days"  },
-                  { label: "Last 30 days", value: "last30days" },
-                  { label: "This quarter", value: "quarter"    },
-                ]}
-              />
-              <PillSelect
-                value={deptFilter}
-                onChange={handleFilterChange((v) => { if (ALLOWED_DEPARTMENTS.includes(v)) setDeptFilter(v); })}
-                ariaLabel="Filter by department"
-                options={[
-                  { label: "All Departments",       value: "All Departments"       },
-                  { label: "Facilities Management", value: "Facilities Management" },
-                  { label: "Legal & Compliance",    value: "Legal & Compliance"    },
-                  { label: "Safety & Security",     value: "Safety & Security"     },
-                  { label: "HR",                    value: "HR"                    },
-                  { label: "Leasing",               value: "Leasing"               },
-                  { label: "Maintenance",           value: "Maintenance"           },
-                  { label: "IT",                    value: "IT"                    },
-                ]}
-              />
-              <DateRangePicker dateRange={dateRange} onChange={handleDateRangeChange} />
-            </div>
-          }
-        />
-        <div className="ma-nav">
-          {QC_SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              className={`ma-nav__btn ${activeSection === s.id ? "ma-nav__btn--active" : ""}`}
-              onClick={() => { if (ALLOWED_QC_SECTIONS.includes(s.id)) setActiveSection(s.id); }}
-              type="button"
-            >
-              {s.label}
-            </button>
-          ))}
+        <div className="ma-hero">
+          <h1 className="ma-hero__title">Quality Control</h1>
+        </div>
+
+        <div className="ma-toolbar">
+          <div className="ma-nav">
+            {QC_SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                className={`ma-nav__btn ${activeSection === s.id ? "ma-nav__btn--active" : ""}`}
+                onClick={() => { if (ALLOWED_QC_SECTIONS.includes(s.id)) setActiveSection(s.id); }}
+                type="button"
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="ma-top-actions">
+            <PillSelect
+              value={timeFilter}
+              onChange={handleFilterChange((v) => { if (ALLOWED_TIME_FILTERS.includes(v)) setTimeFilter(v); })}
+              ariaLabel="Filter by time range"
+              options={[
+                { label: "Last 7 days",  value: "last7days"  },
+                { label: "Last 30 days", value: "last30days" },
+                { label: "This quarter", value: "quarter"    },
+              ]}
+            />
+            <PillSelect
+              value={deptFilter}
+              onChange={handleFilterChange((v) => { if (ALLOWED_DEPARTMENTS.includes(v)) setDeptFilter(v); })}
+              ariaLabel="Filter by department"
+              options={[
+                { label: "All Departments",       value: "All Departments"       },
+                { label: "Facilities Management", value: "Facilities Management" },
+                { label: "Legal & Compliance",    value: "Legal & Compliance"    },
+                { label: "Safety & Security",     value: "Safety & Security"     },
+                { label: "HR",                    value: "HR"                    },
+                { label: "Leasing",               value: "Leasing"               },
+                { label: "Maintenance",           value: "Maintenance"           },
+                { label: "IT",                    value: "IT"                    },
+              ]}
+            />
+            <DateRangePicker dateRange={dateRange} onChange={handleDateRangeChange} />
+          </div>
         </div>
 
         {activeSection === "acceptance" && (

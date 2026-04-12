@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import Layout from "../../components/Layout";
-import PageHeader from "../../components/common/PageHeader";
 
 import {
   SettingsCard,
@@ -26,10 +25,9 @@ export default function OperatorSettings() {
   return (
     <Layout role="operator">
       <div className="opSettingsPage">
-        <PageHeader
-          title="Settings"
-          subtitle="Manage your account preferences and basic configuration."
-        />
+        <div className="opSettingsHero">
+          <h1 className="opSettingsHero__title">Settings</h1>
+        </div>
 
         <div className="opSettingsContent">
           {/* Profile */}

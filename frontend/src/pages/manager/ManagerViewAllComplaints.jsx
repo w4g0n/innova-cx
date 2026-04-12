@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ManagerViewAllComplaints.css";
 
-import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
@@ -335,10 +334,9 @@ export default function ManagerViewComplaints() {
       <Toast toasts={toasts} />
       <main className="mv-main" ref={revealRef} onClick={closeMenu}>
         <section className="mv-header">
-          <PageHeader
-            title="View All Complaints"
-            subtitle="Monitor all complaints, filter by status/priority, and open tickets for details."
-          />
+          <div className="empNotifs__hero">
+            <h1 className="empNotifs__heroTitle">Ticket Management</h1>
+          </div>
         </section>
 
         {/* KPI cards — clickable to filter */}

@@ -2,7 +2,6 @@ import Layout from "../../components/Layout";
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { pdf } from "@react-pdf/renderer";
-import PageHeader from "../../components/common/PageHeader";
 import PillSearch from "../../components/common/PillSearch";
 import KpiCard from "../../components/common/KpiCard";
 import EmployeeReportPDF from "../employee/EmployeeReportPDF";
@@ -212,10 +211,9 @@ export default function ManagerViewEmployees() {
   return (
     <Layout role="manager">
       <main className="ve-main">
-        <PageHeader
-          title="View Employees"
-          subtitle="Search employees and access their auto-generated reports."
-        />
+        <div className="empNotifs__hero">
+          <h1 className="empNotifs__heroTitle">View Employees</h1>
+        </div>
 
         {loading && <div className="ve-empty">Loading employees...</div>}
         {error && <div className="ve-empty">{error}</div>}

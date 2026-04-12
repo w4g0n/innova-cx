@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import "./ComplaintTrends.css";
-import PageHeader from "../../components/common/PageHeader";
 import PillSelect from "../../components/common/PillSelect";
 import KpiCard from "../../components/common/KpiCard";
 import FilterPillButton from "../../components/common/FilterPillButton";
@@ -384,10 +383,9 @@ export default function ComplaintTrends() {
   return (
     <Layout role="manager">
       <div className="mgrTrends" ref={revealRef}>
-        <PageHeader
-          title="Manager Analytics"
-          subtitle="Complaint trends, SLA accountability, and employee performance."
-        />
+        <div className="empNotifs__hero">
+          <h1 className="empNotifs__heroTitle">Manager Analytics</h1>
+        </div>
 
         {(() => {
           const ALLOWED_TIME_RANGES = ["Last 7 Days", "Last 30 Days", "This Month", "Last 3 Months", "Last 6 Months", "Last 12 Months"];
