@@ -260,6 +260,23 @@ def run_migrations() -> None:
 
     with db_connect() as conn:
         with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT EXISTS (
+                  SELECT 1
+                  FROM pg_class c
+                  JOIN pg_namespace n ON n.oid = c.relnamespace
+                  WHERE n.nspname = 'public'
+                    AND c.relname = 'users'
+                    AND c.relkind = 'r'
+                    AND pg_get_userbyid(c.relowner) = current_user
+                )
+                """
+            )
+            owns_users = bool((cur.fetchone() or [False])[0])
+            if not owns_users:
+                logger.warning("startup_migration | skipping owner-only users DDL for runtime DB role")
+                return
             for step_name, statement in migration_steps:
                 try:
                     cur.execute(statement)
@@ -379,6 +396,12 @@ def _ensure_runtime_schema_compatibility() -> None:
                     );
                     """
                 )
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS user_agent TEXT;")
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS created_ip TEXT;")
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();")
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_trusted_devices_user_id ON trusted_devices(user_id);")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_trusted_devices_active ON trusted_devices(user_id, expires_at) WHERE revoked_at IS NULL;")
                 cur.execute(
@@ -393,6 +416,9 @@ def _ensure_runtime_schema_compatibility() -> None:
                     );
                     """
                 )
+                cur.execute("ALTER TABLE mfa_reset_tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();")
+                cur.execute("ALTER TABLE mfa_reset_tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;")
+                cur.execute("ALTER TABLE mfa_reset_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ;")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_mfa_reset_tokens_user_id ON mfa_reset_tokens(user_id);")
                 # password_changed_at: used by reset_password to stamp the moment
                 # a password was changed via reset flow, enabling stale-session detection.
