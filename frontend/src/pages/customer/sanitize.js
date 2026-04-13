@@ -109,22 +109,17 @@ export function safeParseUser(raw) {
  * @param {*} val
  * @returns {Date|null}
  */
-const DUBAI_TZ = "Asia/Dubai";
-
 export function safeDate(val) {
   if (!val) return null;
-  // Treat naive datetime strings (no Z / offset) as UTC so parsing is
-  // consistent regardless of the browser's local timezone.
-  const str = typeof val === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(val) && !/[Z+-]\d*$/.test(val.slice(10))
-    ? val + "Z"
-    : val;
-  const d = new Date(str);
+  const d = new Date(val);
   return isNaN(d.getTime()) ? null : d;
 }
 
 /**
  * Format an ISO date string as a "time ago" label.
- * Always displays in Dubai time (Asia/Dubai) regardless of browser locale.
+ * Falls back to empty string on bad input (no Invalid Date bleeding into UI).
+ * @param {*} isoString
+ * @returns {string}
  */
 export function formatTimeAgo(isoString) {
   const d = safeDate(isoString);
@@ -134,24 +129,11 @@ export function formatTimeAgo(isoString) {
   if (diff < 3600)   return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400)  return `${Math.floor(diff / 3600)}h ago`;
   if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
-  return d.toLocaleDateString("en-GB", { timeZone: DUBAI_TZ, day: "numeric", month: "short", year: "numeric" });
+  return d.toLocaleDateString();
 }
 
-/** Maximum characters allowed in customer free-text inputs. */
-export const MAX_TEXT_CHARS = 1000;
-
-/** @deprecated use MAX_TEXT_CHARS */
-export const MAX_TEXT_WORDS = MAX_TEXT_CHARS;
-
-export function countChars(val) {
-  if (val === null || val === undefined) return 0;
-  return String(val).length;
-}
-
-export function limitChars(val, max = MAX_TEXT_CHARS) {
-  if (val === null || val === undefined) return "";
-  return String(val).slice(0, max);
-}
+/** Maximum words allowed in customer free-text inputs. */
+export const MAX_TEXT_WORDS = 250;
 
 /** Safety character cap for sanitized ticket description / message bodies. */
 export const MAX_DESCRIPTION_LEN = 20000;

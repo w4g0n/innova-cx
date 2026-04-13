@@ -3,8 +3,8 @@ Shared Qwen Model Service
 =========================
 Single in-process Qwen2.5-0.5B-Instruct instance shared across:
   - SubjectGenerationAgent (step01) — in-process fallback
-  - SuggestedResolutionAgent (step10) — final-context suggestion / inquiry answer
-  - DepartmentRoutingAgent (step09) — routing via generation
+  - SuggestedResolutionAgent (step02) — primary inference
+  - DepartmentRoutingAgent (step10) — routing via generation
   - ReviewAgent (step11) — consistency check + routing validation
 
 Model weights preferably live in the shared host model store:
