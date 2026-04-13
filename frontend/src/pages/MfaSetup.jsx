@@ -524,7 +524,7 @@ export default function MfaSetup() {
                       border: `1px solid ${copied ? (isStaff ? "rgba(22,163,74,.3)" : "rgba(34,197,94,.3)") : (isStaff ? "rgba(109,40,217,.2)" : "rgba(139,92,246,.2)")}`,
                       borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 600,
                       color: copied ? (isStaff ? "#15803d" : "#86efac") : (isStaff ? "#6d28d9" : "#c4b5fd"),
-                      cursor: "pointer", transition: "all .2s", background: "none",
+                      cursor: "pointer", transition: "all .2s",
                     }}
                   >
                     {copied ? (
