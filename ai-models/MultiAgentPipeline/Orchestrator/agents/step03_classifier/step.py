@@ -100,7 +100,7 @@ def _load_optional_model():
 
             tokenizer = RobertaTokenizer.from_pretrained(model_dir)
             model = CallClassifier()
-            model.load_state_dict(torch.load(pt_model_path, map_location="cpu"))
+            model.load_state_dict(torch.load(pt_model_path, map_location="cpu", weights_only=True))
             model = model.to("cpu")
             model.eval()
             logger.info("classifier | loaded torch checkpoint from %s", pt_model_path)

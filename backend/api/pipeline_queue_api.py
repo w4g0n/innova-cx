@@ -48,7 +48,9 @@ def _get_dsn() -> str:
     port = os.getenv("DB_PORT", "5432")
     name = os.getenv("DB_NAME", "complaints_db")
     user = os.getenv("DB_USER", "innovacx_app")
-    pw   = os.getenv("DB_PASSWORD", "changeme123")
+    pw = os.getenv("DB_PASSWORD")
+    if not pw:
+        raise RuntimeError("DB_PASSWORD env var must be set")
     return f"host={host} port={port} dbname={name} user={user} password={pw}"
 
 

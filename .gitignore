@@ -36,6 +36,8 @@ htmlcov/
 .env.local
 .env.*.local
 *.env
+.env.backup*
+.env.backup.*
 
 # Runtime / temp
 uploads/

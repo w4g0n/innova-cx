@@ -158,13 +158,7 @@ def _parse_allowed_origins() -> List[str]:
     configured = os.getenv("ALLOWED_ORIGINS", "").strip()
     if configured:
         return [origin.strip() for origin in configured.split(",") if origin.strip()]
-    return [
-        "http://innovacx.net",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
+    return ["http://innovacx.net"]
 
 
 ALLOWED_ORIGINS = _parse_allowed_origins()
@@ -232,7 +226,9 @@ def build_default_dsn() -> str:
     port = os.getenv("DB_PORT", "5432")
     name = os.getenv("DB_NAME", "complaints_db")
     user = os.getenv("DB_USER", "innovacx_app")
-    password = os.getenv("DB_PASSWORD", "changeme123")
+    password = os.getenv("DB_PASSWORD")
+    if not password:
+        raise RuntimeError("DB_PASSWORD env var must be set — refusing to start without a database password")
     return f"postgresql://{user}:{password}@{host}:{port}/{name}"
 
 
@@ -603,10 +599,9 @@ JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", "900"))  # 15 minutes
 MFA_TEMP_TTL_SECONDS = int(os.getenv("MFA_TEMP_TTL_SECONDS", "900"))  # 15 minutes
 TRUSTED_DEVICE_TTL_SECONDS = int(os.getenv("TRUSTED_DEVICE_TTL_SECONDS", str(30 * 24 * 60 * 60)))
 MFA_RESET_TTL_SECONDS = int(os.getenv("MFA_RESET_TTL_SECONDS", "1800"))  # 30 minutes
-DEV_LOG_RESET_TOKENS = os.getenv("DEV_LOG_RESET_TOKENS", "false").lower() == "true"
 DISABLE_MFA = os.getenv("DISABLE_MFA", "false").lower() == "true"
 
-DEV_SEED_USERS = os.getenv("DEV_SEED_USERS", "true").lower() == "true"
+DEV_SEED_USERS = os.getenv("DEV_SEED_USERS", "false").lower() == "true"
 DEV_SEED_PASSWORD = os.getenv("DEV_SEED_PASSWORD", "Innova@2025")
 
 
@@ -1951,8 +1946,6 @@ def email_otp_send(request: Request, body: SendEmailOTPRequest, _csrf: None = De
             "html": _render_email_otp_email(user["email"], otp_code),
         })
         logger.info("email_otp_send | resend result=%s user=%s", result, user["id"])
-    elif DEV_LOG_RESET_TOKENS:
-        print(f"[DEV] Email OTP for {user['email']}: {otp_code}")
     else:
         logger.warning("email_otp_send | RESEND_API_KEY missing; code not delivered for user=%s", user["id"])
         raise HTTPException(status_code=503, detail="Email delivery is not configured")
@@ -2348,11 +2341,6 @@ def forgot_password(request: Request, body: ForgotPasswordRequest, _csrf: None =
             "html": _render_password_reset_email(email, reset_link),
         })
 
-        # DEV_LOG_RESET_TOKENS defaults to false; set to true only in local dev envs.
-        # Never enable in production — tokens grant full account takeover.
-        if DEV_LOG_RESET_TOKENS:
-            print(f"[DEV] Password reset token for {email}: {raw_token}")
-            print(f"[DEV] Reset link: {reset_link}")
         log_auth_event("password_reset_requested", user_id=str(user["id"]), email=email, ip=client_ip)
     else:
         log_auth_event("password_reset_requested", email=email, ip=client_ip, extra={"user_exists": False})
@@ -8743,10 +8731,6 @@ def operator_reset_user_mfa(
         "html": _render_mfa_reset_email(target_user["email"], confirm_link),
     })
 
-    if DEV_LOG_RESET_TOKENS:
-        print(f"[DEV] MFA reset token for {target_user['email']}: {raw_token}")
-        print(f"[DEV] MFA reset link: {confirm_link}")
-
     log_auth_event(
         "mfa_reset_requested",
         user_id=str(target_user["id"]),
@@ -9083,6 +9067,12 @@ def operator_delete_ticket(
 
 # Attach router LAST
 app.include_router(api)
+
+# Top-level health check — accessible at /health (not /api/health) for
+# Docker healthchecks and load balancer probes.
+@app.get("/health", include_in_schema=False)
+def app_health():
+    return {"ok": True}
 
 # Serve uploaded files at GET /uploads/<path>
 # Using FileResponse instead of StaticFiles to avoid the

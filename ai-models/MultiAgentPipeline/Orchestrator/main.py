@@ -64,11 +64,18 @@ app = FastAPI(title="InnovaCX Orchestrator", version="1.0.0")
 
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
 
+# CORS: restrict to backend origin only. Override via ALLOWED_ORIGINS env var
+# (comma-separated). Wildcard is not permitted.
+_cors_origins = [
+    o.strip()
+    for o in os.getenv("ALLOWED_ORIGINS", BACKEND_URL).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_methods=["POST", "GET", "OPTIONS"],
+    allow_headers=["Content-Type", "X-Internal-Key"],
 )
 
 class PriorityRelearnRequest(BaseModel):

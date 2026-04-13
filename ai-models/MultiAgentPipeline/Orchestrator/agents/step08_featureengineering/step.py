@@ -206,7 +206,7 @@ def _load_multitask_feature_labeler(model_dir: Path):
 
     tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
     model = MultiTaskDeBERTa(base_model_name, num_labels_per_task).to("cpu")
-    model.load_state_dict(torch.load(model_pt, map_location="cpu"))
+    model.load_state_dict(torch.load(model_pt, map_location="cpu", weights_only=True))
     model = model.to(dtype=torch.float32)
     model.eval()
     logger.info("feature_engineering | loaded multitask checkpoint from %s", model_pt)

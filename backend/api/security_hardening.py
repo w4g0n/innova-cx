@@ -4,7 +4,7 @@
 # Controls implemented here:
 #   [S1]  Password complexity (length, upper, lower, digit, special)
 #   [S2]  Account lockout — 5 failures → 15-min lock, keyed by email
-#   [S3]  Rate limiting via slowapi (optional dep — graceful fallback)
+#   [S3]  Rate limiting via slowapi (required dep)
 #   [S4]  SecurityHeadersMiddleware — CSP, HSTS, X-Frame, etc.
 #   [S5]  File upload validation — magic bytes, size cap, MIME allowlist
 #   [S6]  Auth event logging — structured, never logs credentials
@@ -196,56 +196,36 @@ def clear_failed_logins(email: str) -> None:
 
 
 # [S3] Rate limiting via slowapi
-#      slowapi is an optional dependency — all callers check
-#      SLOWAPI_AVAILABLE before using the limiter.
-SLOWAPI_AVAILABLE: bool = False
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+SLOWAPI_AVAILABLE: bool = True
 _limiter_instance: Any = None
+_DEFAULT_AUTH_RATE = os.getenv("AUTH_RATE_LIMIT", "20/minute")
 
-try:
-    from slowapi import Limiter
-    from slowapi.util import get_remote_address
 
-    _DEFAULT_AUTH_RATE = os.getenv("AUTH_RATE_LIMIT", "20/minute")
+def get_limiter() -> Limiter:
+    global _limiter_instance
+    if _limiter_instance is None:
+        _limiter_instance = Limiter(key_func=get_remote_address)
+    return _limiter_instance
 
-    def get_limiter() -> "Limiter":  # type: ignore[name-defined]
-        global _limiter_instance
-        if _limiter_instance is None:
-            _limiter_instance = Limiter(key_func=get_remote_address)
-        return _limiter_instance
 
-    def rate_limit_auth(limit: str = _DEFAULT_AUTH_RATE):
-        """
-        Decorator factory for auth endpoints.
+def rate_limit_auth(limit: str = _DEFAULT_AUTH_RATE):
+    """
+    Decorator factory for auth endpoints.
 
-        Usage:
-            @api.post("/auth/login")
-            @rate_limit_auth()
-            def login(request: Request, body: LoginRequest):
-                ...
+    Usage:
+        @api.post("/auth/login")
+        @rate_limit_auth()
+        def login(request: Request, body: LoginRequest):
+            ...
 
-        The decorated function MUST have `request: Request` as a parameter
-        so slowapi can extract the client IP.
-        """
-        limiter = get_limiter()
-        return limiter.limit(limit)
-
-    SLOWAPI_AVAILABLE = True
-    logger.info("security_hardening | slowapi available — rate limiting active")
-
-except ImportError:
-    logger.warning(
-        "security_hardening | slowapi not installed — rate limiting disabled. "
-        "Add 'slowapi' to requirements.txt to enable it."
-    )
-
-    def get_limiter() -> None:  # type: ignore[misc]
-        return None
-
-    def rate_limit_auth(limit: str = ""):  # type: ignore[misc]
-        """No-op decorator when slowapi is absent."""
-        def decorator(func: Callable) -> Callable:
-            return func
-        return decorator
+    The decorated function MUST have `request: Request` as a parameter
+    so slowapi can extract the client IP.
+    """
+    limiter = get_limiter()
+    return limiter.limit(limit)
 
 
 # [S4] Security headers middleware
