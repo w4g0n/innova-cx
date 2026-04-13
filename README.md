@@ -73,7 +73,66 @@ All authenticated routes are protected by `ProtectedRoute` — unauthenticated u
 
 ## Getting Started
 
-### Frontend
+### Run with Docker (Recommended)
+
+**Step 1 — Clone the repository**
+```bash
+git clone https://github.com/w4g0n/innova-cx.git
+cd innova-cx
+```
+
+**Step 2 — Configure environment variables**
+```bash
+cp .env.install .env
+```
+
+All values are pre-filled with safe development defaults — no editing required.
+
+**Step 3 — Start the application**
+```bash
+docker compose --profile frontend up --build
+```
+
+Wait for `Application startup complete` before opening the browser.
+
+**Step 4 — Open in your browser**
+
+| URL | Service |
+|---|---|
+| http://localhost:5173 | Frontend |
+| http://localhost:8000 | Backend API |
+| http://localhost:8000/docs | API Docs (Swagger) |
+
+**Default login credentials**
+
+| Role | Email | Password |
+|---|---|---|
+| Customer | customer1@innovacx.net | Innova@2025 |
+| Employee | ahmed@innovacx.net | Innova@2025 |
+| Manager | hamad@innovacx.net | Innova@2025 |
+| Operator | operator@innovacx.net | Innova@2025 |
+
+> For production deployment, use `.env.example` as your template — it documents all required variables with no defaults.
+
+---
+
+### Docker Compose Profiles
+
+| Profile | Services Started | Use When |
+|---|---|---|
+| `frontend` | frontend, backend, postgres | UI and API development |
+| `pipeline` | orchestrator, backend, postgres | ML pipeline testing |
+| `live` | all services | Full integration or production |
+
+```bash
+docker compose --profile [profile-name] up --build
+```
+
+---
+
+### Local Development (without Docker)
+
+**Frontend**
 ```bash
 cd frontend
 npm install
@@ -82,23 +141,18 @@ npm run build     # production build
 npm run preview   # preview production build
 ```
 
-### Backend
+**Backend**
 ```bash
 cd backend
 pip install -r requirements.txt
 # see backend/README.md for env vars and DB setup
 ```
 
-### AI Models
+**AI Models**
 ```bash
 cd ai-models
 pip install -r requirements.txt
 # see ai-models/README.md for model setup
-```
-
-### Docker (all services)
-```bash
-docker-compose up
 ```
 
 ---
