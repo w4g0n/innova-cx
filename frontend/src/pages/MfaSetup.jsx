@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiUrl } from "../config/apiBase";
 import { getCsrfToken } from "../services/api";
 import { safeParseUser, sanitizeText } from "./customer/sanitize";
+import { isStaffHost } from "../utils/hostUtils";
 
 // Starfield (same as Login/CustomerAuthPage)
 function Starfield() {
@@ -74,6 +75,7 @@ function Starfield() {
 // Main component
 export default function MfaSetup() {
   const navigate = useNavigate();
+  const isStaff  = isStaffHost() === true;
   const loginToken  = sessionStorage.getItem("mfa_token");
   const storedUser  = safeParseUser(sessionStorage.getItem("mfa_user"));
 
@@ -192,7 +194,94 @@ export default function MfaSetup() {
     }
   };
 
-  const s = {
+  const s = isStaff ? {
+    // ── Staff white theme ────────────────────────────────────────────────────
+    page: {
+      minHeight: "100vh", background: "#f0ebff", display: "flex", alignItems: "center",
+      justifyContent: "center", padding: "40px 16px", position: "relative", overflow: "hidden",
+      fontFamily: "'Segoe UI', Arial, sans-serif",
+    },
+    neb1: {
+      position: "fixed", width: 700, height: 700, top: "-280px", left: "-220px",
+      borderRadius: "50%", background: "radial-gradient(circle,rgba(89,36,180,.13),transparent 65%)",
+      pointerEvents: "none", zIndex: 0, filter: "blur(10px)",
+    },
+    neb2: {
+      position: "fixed", width: 500, height: 500, bottom: "-180px", right: "-130px",
+      borderRadius: "50%", background: "radial-gradient(circle,rgba(124,58,237,.1),transparent 65%)",
+      pointerEvents: "none", zIndex: 0, filter: "blur(10px)",
+    },
+    card: {
+      position: "relative", zIndex: 10, width: "min(480px,100%)",
+      background: "#ffffff", border: "1px solid rgba(89,36,180,.14)",
+      borderRadius: 24, padding: "40px 36px 44px",
+      boxShadow: "0 0 0 1px rgba(89,36,180,.1), 0 2px 4px rgba(89,36,180,.06), 0 12px 40px rgba(89,36,180,.12)",
+      animation: "mfaSetupEnter .65s cubic-bezier(.22,1,.36,1) both",
+    },
+    stepBadge: {
+      display: "inline-flex", alignItems: "center", gap: 6,
+      background: "rgba(109,40,217,.08)", border: "1px solid rgba(109,40,217,.2)",
+      borderRadius: 20, padding: "4px 14px", fontSize: 12, color: "#6d28d9",
+      fontWeight: 600, letterSpacing: ".04em", marginBottom: 20,
+    },
+    title: { margin: "0 0 8px", fontSize: 22, fontWeight: 800, color: "#1e0a4a", letterSpacing: "-.02em" },
+    sub: { margin: "0 0 28px", fontSize: 14, color: "#6b7280", lineHeight: 1.6 },
+    emailBox: {
+      background: "rgba(109,40,217,.05)", border: "1px solid rgba(109,40,217,.15)",
+      borderRadius: 12, padding: "16px 18px", marginBottom: 24,
+      display: "flex", alignItems: "center", gap: 12,
+    },
+    emailIcon: { width: 36, height: 36, borderRadius: "50%", background: "rgba(109,40,217,.1)",
+      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+    emailText: { fontSize: 13, color: "#5b21b6", lineHeight: 1.5 },
+    activeBadge: {
+      display: "inline-flex", alignItems: "center", gap: 4,
+      background: "rgba(22,163,74,.1)", border: "1px solid rgba(22,163,74,.25)",
+      borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#15803d", fontWeight: 600,
+    },
+    warning: {
+      background: "rgba(234,179,8,.06)", border: "1px solid rgba(234,179,8,.25)",
+      borderRadius: 12, padding: "14px 16px", marginBottom: 24,
+    },
+    warningText: { margin: 0, fontSize: 13, color: "#92400e", lineHeight: 1.55 },
+    qrWrap: { textAlign: "center", marginBottom: 24 },
+    qrImg: { borderRadius: 12, border: "2px solid rgba(109,40,217,.2)", background: "#fff", padding: 6 },
+    secretBox: {
+      background: "rgba(109,40,217,.04)", border: "1px solid rgba(109,40,217,.15)",
+      borderRadius: 8, padding: "10px 14px", marginBottom: 20, textAlign: "center",
+    },
+    secretKey: { fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: "#5b21b6", letterSpacing: ".1em", wordBreak: "break-all" },
+    otpGroup: { display: "flex", gap: 10, justifyContent: "center", marginBottom: 20 },
+    otpInput: {
+      width: 46, height: 56, borderRadius: 10, border: "2px solid rgba(109,40,217,.25)",
+      background: "rgba(109,40,217,.04)", color: "#1e0a4a", fontSize: 22, fontWeight: 700,
+      textAlign: "center", outline: "none", transition: "border-color .2s, box-shadow .2s",
+    },
+    error: {
+      background: "rgba(220,38,38,.06)", border: "1px solid rgba(220,38,38,.2)",
+      borderRadius: 10, padding: "10px 14px", marginBottom: 16,
+      color: "#b91c1c", fontSize: 13,
+    },
+    btn: {
+      width: "100%", padding: "14px", background: "linear-gradient(135deg,#6d28d9,#9333ea,#a855f7)",
+      color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700,
+      cursor: "pointer", transition: "opacity .2s, transform .15s",
+      boxShadow: "0 4px 20px rgba(109,40,217,.3)",
+    },
+    btnSecondary: {
+      width: "100%", padding: "12px", background: "transparent",
+      color: "#7c3aed", border: "1px solid rgba(109,40,217,.25)",
+      borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: "pointer",
+      marginTop: 12, transition: "color .2s, border-color .2s",
+    },
+    stepper: { display: "flex", gap: 8, marginBottom: 28 },
+    stepDot: (active, done) => ({
+      flex: 1, height: 4, borderRadius: 4,
+      background: done ? "#7c3aed" : active ? "rgba(109,40,217,.4)" : "rgba(109,40,217,.12)",
+      transition: "background .4s",
+    }),
+  } : {
+    // ── Customer dark / galaxy theme (unchanged) ─────────────────────────────
     page: {
       minHeight: "100vh", background: "#03010a", display: "flex", alignItems: "center",
       justifyContent: "center", padding: "40px 16px", position: "relative", overflow: "hidden",
@@ -282,9 +371,10 @@ export default function MfaSetup() {
   if (loading) {
     return (
       <div style={s.page}>
-        <Starfield />
+        {!isStaff && <Starfield />}
+        <div style={{ ...s.neb1 }} /><div style={{ ...s.neb2 }} />
         <div style={{ ...s.card, textAlign: "center" }}>
-          <p style={{ color: "#c4b5fd", fontSize: 15 }}>Loading setup…</p>
+          <p style={{ color: isStaff ? "#5b21b6" : "#c4b5fd", fontSize: 15 }}>Loading setup…</p>
         </div>
       </div>
     );
@@ -310,7 +400,7 @@ export default function MfaSetup() {
         .mfa-btn-sec:hover { color: #c4b5fd !important; border-color: rgba(139,92,246,.5) !important; }
       `}</style>
 
-      <Starfield />
+      {!isStaff && <Starfield />}
       <div style={{ ...s.neb1 }} />
       <div style={{ ...s.neb2 }} />
 
@@ -378,9 +468,9 @@ export default function MfaSetup() {
 
             <div style={s.warning}>
               <p style={s.warningText}>
-                <strong style={{ color: "#fbbf24" }}>Save this now.</strong> This QR code will not be shown again after setup.
+                <strong style={{ color: isStaff ? "#92400e" : "#fbbf24" }}>Save this now.</strong> This QR code will not be shown again after setup.
                 If you lose access to your authenticator app, contact{" "}
-                <span style={{ color: "#a855f7" }}>support@innovacx.net</span>.
+                <span style={{ color: "#7c3aed" }}>support@innovacx.net</span>.
               </p>
             </div>
 

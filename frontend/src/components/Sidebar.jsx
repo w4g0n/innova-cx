@@ -3,6 +3,9 @@ import { useState, useEffect } from "react";
 import "./Sidebar.css";
 import logo from "../assets/nova-logo.png";
 import ConfirmDialog from "./common/ConfirmDialog";
+import { apiUrl } from "../config/apiBase";
+import { getCsrfToken } from "../services/api";
+import { clearAllAuth } from "../utils/auth";
 
 const SIDEBAR_EXPANDED_WIDTH = "220px";
 
@@ -186,8 +189,16 @@ export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, p
   const rrqBadge = pendingRrq > 0 ? (pendingRrq > 99 ? "99+" : pendingRrq) : null;
 
   const handleLogout = () => setLogoutOpen(true);
-  const doLogout = () => {
-    localStorage.removeItem("user");
+  const doLogout = async () => {
+    try {
+      const csrf = await getCsrfToken();
+      await fetch(apiUrl("/api/auth/logout"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
+      });
+    } catch {} // best-effort; local cleanup always runs regardless
+    clearAllAuth();
     navigate("/");
   };
 

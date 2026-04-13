@@ -38,6 +38,9 @@ export function clearAllAuth() {
   localStorage.removeItem("user");
   localStorage.removeItem("token");
   localStorage.removeItem("temp_token");
+  // Also clear MFA temp session so a subsequent user's login gets a fresh flow
+  sessionStorage.removeItem("mfa_token");
+  sessionStorage.removeItem("mfa_user");
 }
 
 
