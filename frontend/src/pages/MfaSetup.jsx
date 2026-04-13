@@ -225,71 +225,71 @@ export default function MfaSetup() {
       pointerEvents: "none", zIndex: 0, filter: "blur(10px)",
     },
     card: {
-      position: "relative", zIndex: 10, width: "min(460px,100%)",
+      position: "relative", zIndex: 10, width: "min(480px,100%)",
       background: "#ffffff", border: "1px solid rgba(89,36,180,.14)",
-      borderRadius: 20, padding: "24px 28px 28px",
+      borderRadius: 24, padding: "32px 32px 36px",
       boxShadow: "0 0 0 1px rgba(89,36,180,.1), 0 2px 4px rgba(89,36,180,.06), 0 12px 40px rgba(89,36,180,.12)",
       animation: "mfaSetupEnter .65s cubic-bezier(.22,1,.36,1) both",
     },
     stepBadge: {
-      display: "inline-flex", alignItems: "center", gap: 5,
+      display: "inline-flex", alignItems: "center", gap: 6,
       background: "rgba(109,40,217,.08)", border: "1px solid rgba(109,40,217,.2)",
-      borderRadius: 20, padding: "3px 12px", fontSize: 11, color: "#6d28d9",
-      fontWeight: 600, letterSpacing: ".04em", marginBottom: 10,
+      borderRadius: 20, padding: "4px 14px", fontSize: 12, color: "#6d28d9",
+      fontWeight: 600, letterSpacing: ".04em", marginBottom: 14,
     },
-    title: { margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#1e0a4a", letterSpacing: "-.02em" },
-    sub: { margin: "0 0 12px", fontSize: 13, color: "#6b7280", lineHeight: 1.5 },
+    title: { margin: "0 0 6px", fontSize: 22, fontWeight: 800, color: "#1e0a4a", letterSpacing: "-.02em" },
+    sub: { margin: "0 0 14px", fontSize: 14, color: "#6b7280", lineHeight: 1.6 },
     emailBox: {
       background: "rgba(109,40,217,.05)", border: "1px solid rgba(109,40,217,.15)",
-      borderRadius: 10, padding: "12px 14px", marginBottom: 14,
-      display: "flex", alignItems: "center", gap: 10,
+      borderRadius: 12, padding: "16px 18px", marginBottom: 24,
+      display: "flex", alignItems: "center", gap: 12,
     },
-    emailIcon: { width: 32, height: 32, borderRadius: "50%", background: "rgba(109,40,217,.1)",
+    emailIcon: { width: 36, height: 36, borderRadius: "50%", background: "rgba(109,40,217,.1)",
       display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-    emailText: { fontSize: 13, color: "#5b21b6", lineHeight: 1.4 },
+    emailText: { fontSize: 13, color: "#5b21b6", lineHeight: 1.5 },
     activeBadge: {
       display: "inline-flex", alignItems: "center", gap: 4,
       background: "rgba(22,163,74,.1)", border: "1px solid rgba(22,163,74,.25)",
-      borderRadius: 20, padding: "2px 8px", fontSize: 11, color: "#15803d", fontWeight: 600,
+      borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#15803d", fontWeight: 600,
     },
     warning: {
       background: "rgba(234,179,8,.06)", border: "1px solid rgba(234,179,8,.25)",
-      borderRadius: 10, padding: "10px 14px", marginBottom: 12,
+      borderRadius: 12, padding: "12px 16px", marginBottom: 14,
     },
-    warningText: { margin: 0, fontSize: 12, color: "#92400e", lineHeight: 1.5 },
-    qrWrap: { textAlign: "center", marginBottom: 10 },
-    qrImg: { borderRadius: 10, border: "2px solid rgba(109,40,217,.2)", background: "#fff", padding: 5 },
+    warningText: { margin: 0, fontSize: 13, color: "#92400e", lineHeight: 1.55 },
+    qrWrap: { textAlign: "center", marginBottom: 14 },
+    qrImg: { borderRadius: 12, border: "2px solid rgba(109,40,217,.2)", background: "#fff", padding: 6 },
     secretBox: {
       background: "rgba(109,40,217,.04)", border: "1px solid rgba(109,40,217,.15)",
-      borderRadius: 8, padding: "8px 12px", marginBottom: 10,
+      borderRadius: 8, padding: "10px 14px", marginBottom: 12,
     },
-    secretKey: { fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "#5b21b6", letterSpacing: ".08em", wordBreak: "break-all" },
-    otpGroup: { display: "flex", gap: 8, justifyContent: "center", marginBottom: 12 },
+    secretKey: { fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: "#5b21b6", letterSpacing: ".1em", wordBreak: "break-all" },
+    otpGroup: { display: "flex", gap: 10, justifyContent: "center", marginBottom: 14 },
     otpInput: {
-      width: 42, height: 50, borderRadius: 10, border: "2px solid rgba(109,40,217,.25)",
-      background: "rgba(109,40,217,.04)", color: "#1e0a4a", fontSize: 20, fontWeight: 700,
+      width: 46, height: 56, borderRadius: 10, border: "2px solid rgba(109,40,217,.25)",
+      background: "rgba(109,40,217,.04)", color: "#1e0a4a", fontSize: 22, fontWeight: 700,
       textAlign: "center", outline: "none", transition: "border-color .2s, box-shadow .2s",
     },
     error: {
       background: "rgba(220,38,38,.06)", border: "1px solid rgba(220,38,38,.2)",
-      borderRadius: 8, padding: "8px 12px", marginBottom: 12,
-      color: "#b91c1c", fontSize: 12,
+      borderRadius: 10, padding: "10px 14px", marginBottom: 16,
+      color: "#b91c1c", fontSize: 13,
     },
     btn: {
-      width: "100%", padding: "12px", background: "linear-gradient(135deg,#6d28d9,#9333ea,#a855f7)",
-      color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700,
+      width: "100%", padding: "14px", background: "linear-gradient(135deg,#6d28d9,#9333ea,#a855f7)",
+      color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700,
       cursor: "pointer", transition: "opacity .2s, transform .15s",
       boxShadow: "0 4px 20px rgba(109,40,217,.3)",
     },
     btnSecondary: {
-      width: "100%", padding: "10px", background: "transparent",
+      width: "100%", padding: "12px", background: "transparent",
       color: "#7c3aed", border: "1px solid rgba(109,40,217,.25)",
-      borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer",
-      marginTop: 8, transition: "color .2s, border-color .2s",
+      borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: "pointer",
+      marginTop: 12, transition: "color .2s, border-color .2s",
     },
-    stepper: { display: "flex", gap: 8, marginBottom: 20 },
+    stepper: { display: "flex", gap: 8, marginBottom: 28 },
     stepDot: (active, done) => ({
-      flex: 1, height: 3, borderRadius: 4,
+      flex: 1, height: 4, borderRadius: 4,
       background: done ? "#7c3aed" : active ? "rgba(109,40,217,.4)" : "rgba(109,40,217,.12)",
       transition: "background .4s",
     }),
@@ -311,71 +311,71 @@ export default function MfaSetup() {
       pointerEvents: "none", zIndex: 1,
     },
     card: {
-      position: "relative", zIndex: 10, width: "min(460px,100%)",
+      position: "relative", zIndex: 10, width: "min(480px,100%)",
       background: "rgba(13,5,32,0.96)", border: "1px solid rgba(139,92,246,.28)",
-      borderRadius: 20, padding: "24px 28px 28px",
+      borderRadius: 24, padding: "32px 32px 36px",
       boxShadow: "0 0 0 1px rgba(168,85,247,.12), 0 8px 40px rgba(0,0,0,.6), 0 0 80px rgba(147,51,234,.12)",
       animation: "mfaSetupEnter .65s cubic-bezier(.22,1,.36,1) both",
     },
     stepBadge: {
-      display: "inline-flex", alignItems: "center", gap: 5,
+      display: "inline-flex", alignItems: "center", gap: 6,
       background: "rgba(139,92,246,.12)", border: "1px solid rgba(139,92,246,.25)",
-      borderRadius: 20, padding: "3px 12px", fontSize: 11, color: "#c4b5fd",
-      fontWeight: 600, letterSpacing: ".04em", marginBottom: 10,
+      borderRadius: 20, padding: "4px 14px", fontSize: 12, color: "#c4b5fd",
+      fontWeight: 600, letterSpacing: ".04em", marginBottom: 14,
     },
-    title: { margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#f3e8ff", letterSpacing: "-.02em" },
-    sub: { margin: "0 0 12px", fontSize: 13, color: "#9ca3af", lineHeight: 1.5 },
+    title: { margin: "0 0 6px", fontSize: 22, fontWeight: 800, color: "#f3e8ff", letterSpacing: "-.02em" },
+    sub: { margin: "0 0 14px", fontSize: 14, color: "#9ca3af", lineHeight: 1.6 },
     emailBox: {
       background: "rgba(139,92,246,.08)", border: "1px solid rgba(139,92,246,.2)",
-      borderRadius: 10, padding: "12px 14px", marginBottom: 14,
-      display: "flex", alignItems: "center", gap: 10,
+      borderRadius: 12, padding: "16px 18px", marginBottom: 24,
+      display: "flex", alignItems: "center", gap: 12,
     },
-    emailIcon: { width: 32, height: 32, borderRadius: "50%", background: "rgba(139,92,246,.2)",
+    emailIcon: { width: 36, height: 36, borderRadius: "50%", background: "rgba(139,92,246,.2)",
       display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-    emailText: { fontSize: 13, color: "#c4b5fd", lineHeight: 1.4 },
+    emailText: { fontSize: 13, color: "#c4b5fd", lineHeight: 1.5 },
     activeBadge: {
       display: "inline-flex", alignItems: "center", gap: 4,
       background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.25)",
-      borderRadius: 20, padding: "2px 8px", fontSize: 11, color: "#86efac", fontWeight: 600,
+      borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#86efac", fontWeight: 600,
     },
     warning: {
       background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.2)",
-      borderRadius: 10, padding: "10px 14px", marginBottom: 12,
+      borderRadius: 12, padding: "12px 16px", marginBottom: 14,
     },
-    warningText: { margin: 0, fontSize: 12, color: "rgba(251,191,36,.8)", lineHeight: 1.5 },
-    qrWrap: { textAlign: "center", marginBottom: 10 },
-    qrImg: { borderRadius: 10, border: "2px solid rgba(139,92,246,.3)", background: "#fff", padding: 5 },
+    warningText: { margin: 0, fontSize: 13, color: "rgba(251,191,36,.8)", lineHeight: 1.55 },
+    qrWrap: { textAlign: "center", marginBottom: 14 },
+    qrImg: { borderRadius: 12, border: "2px solid rgba(139,92,246,.3)", background: "#fff", padding: 6 },
     secretBox: {
       background: "rgba(0,0,0,.3)", border: "1px solid rgba(139,92,246,.2)",
-      borderRadius: 8, padding: "8px 12px", marginBottom: 10,
+      borderRadius: 8, padding: "10px 14px", marginBottom: 12,
     },
-    secretKey: { fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "#c4b5fd", letterSpacing: ".08em", wordBreak: "break-all" },
-    otpGroup: { display: "flex", gap: 8, justifyContent: "center", marginBottom: 12 },
+    secretKey: { fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: "#c4b5fd", letterSpacing: ".1em", wordBreak: "break-all" },
+    otpGroup: { display: "flex", gap: 10, justifyContent: "center", marginBottom: 14 },
     otpInput: {
-      width: 42, height: 50, borderRadius: 10, border: "2px solid rgba(139,92,246,.3)",
-      background: "rgba(139,92,246,.08)", color: "#f3e8ff", fontSize: 20, fontWeight: 700,
+      width: 46, height: 56, borderRadius: 12, border: "2px solid rgba(139,92,246,.3)",
+      background: "rgba(139,92,246,.08)", color: "#f3e8ff", fontSize: 22, fontWeight: 700,
       textAlign: "center", outline: "none", transition: "border-color .2s, box-shadow .2s",
     },
     error: {
       background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.25)",
-      borderRadius: 8, padding: "8px 12px", marginBottom: 12,
-      color: "#fca5a5", fontSize: 12,
+      borderRadius: 10, padding: "10px 14px", marginBottom: 16,
+      color: "#fca5a5", fontSize: 13,
     },
     btn: {
-      width: "100%", padding: "12px", background: "linear-gradient(135deg,#6d28d9,#9333ea,#a855f7)",
-      color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700,
+      width: "100%", padding: "14px", background: "linear-gradient(135deg,#6d28d9,#9333ea,#a855f7)",
+      color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700,
       cursor: "pointer", transition: "opacity .2s, transform .15s",
       boxShadow: "0 4px 20px rgba(147,51,234,.4)",
     },
     btnSecondary: {
-      width: "100%", padding: "10px", background: "transparent",
+      width: "100%", padding: "12px", background: "transparent",
       color: "rgba(196,181,253,.6)", border: "1px solid rgba(139,92,246,.2)",
-      borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer",
-      marginTop: 8, transition: "color .2s, border-color .2s",
+      borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: "pointer",
+      marginTop: 12, transition: "color .2s, border-color .2s",
     },
-    stepper: { display: "flex", gap: 8, marginBottom: 20 },
+    stepper: { display: "flex", gap: 8, marginBottom: 28 },
     stepDot: (active, done) => ({
-      flex: 1, height: 3, borderRadius: 4,
+      flex: 1, height: 4, borderRadius: 4,
       background: done ? "#9333ea" : active ? "rgba(147,51,234,.5)" : "rgba(139,92,246,.15)",
       transition: "background .4s",
     }),
@@ -486,18 +486,18 @@ export default function MfaSetup() {
         {/* ── STEP 2: TOTP QR setup ── */}
         {step === 2 && (
           <>
-            <div style={s.stepBadge}>
+            <div style={{ ...s.stepBadge, fontSize: 11, padding: "3px 12px", marginBottom: 10 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
               Step 2 of 2 — Authenticator Setup
             </div>
-            <h1 style={s.title}>Scan QR code</h1>
-            <p style={s.sub}>
+            <h1 style={{ ...s.title, fontSize: 20, margin: "0 0 4px" }}>Scan QR code</h1>
+            <p style={{ ...s.sub, fontSize: 13, margin: "0 0 10px", lineHeight: 1.5 }}>
               Open Google Authenticator, Authy, or any TOTP app and scan the code below.
               Then enter the 6-digit code it shows.
             </p>
 
-            <div style={s.warning}>
-              <p style={s.warningText}>
+            <div style={{ ...s.warning, padding: "10px 14px", marginBottom: 10 }}>
+              <p style={{ ...s.warningText, fontSize: 12 }}>
                 <strong style={{ color: isStaff ? "#92400e" : "#fbbf24" }}>Save this now.</strong> This QR code will not be shown again after setup.
                 If you lose access to your authenticator app, contact{" "}
                 <span style={{ color: "#7c3aed" }}>support@innovacx.net</span>.
@@ -505,14 +505,14 @@ export default function MfaSetup() {
             </div>
 
             {qrCode && (
-              <div style={s.qrWrap}>
-                <img src={qrCode} alt="QR code for authenticator setup" width={180} height={180} style={s.qrImg} />
+              <div style={{ ...s.qrWrap, marginBottom: 10 }}>
+                <img src={qrCode} alt="QR code for authenticator setup" width={160} height={160} style={s.qrImg} />
               </div>
             )}
 
             {secretKey && (
-              <div style={s.secretBox}>
-                <div style={{ fontSize: 11, color: isStaff ? "#6b7280" : "#6b7280", marginBottom: 5, letterSpacing: ".08em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ ...s.secretBox, padding: "8px 12px", marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 5, letterSpacing: ".08em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span>Manual setup key</span>
                   <button
                     type="button"
@@ -524,7 +524,7 @@ export default function MfaSetup() {
                       border: `1px solid ${copied ? (isStaff ? "rgba(22,163,74,.3)" : "rgba(34,197,94,.3)") : (isStaff ? "rgba(109,40,217,.2)" : "rgba(139,92,246,.2)")}`,
                       borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 600,
                       color: copied ? (isStaff ? "#15803d" : "#86efac") : (isStaff ? "#6d28d9" : "#c4b5fd"),
-                      cursor: "pointer", transition: "all .2s",
+                      cursor: "pointer", transition: "all .2s", background: "none",
                     }}
                   >
                     {copied ? (
@@ -534,17 +534,17 @@ export default function MfaSetup() {
                     )}
                   </button>
                 </div>
-                <div style={s.secretKey}>{secretKey}</div>
+                <div style={{ ...s.secretKey, fontSize: 12, letterSpacing: ".08em" }}>{secretKey}</div>
               </div>
             )}
 
-            {errorMsg && <div style={s.error}>{errorMsg}</div>}
+            {errorMsg && <div style={{ ...s.error, padding: "8px 12px", marginBottom: 10, fontSize: 12 }}>{errorMsg}</div>}
 
             <form onSubmit={handleVerifyTotp}>
-              <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 8, textAlign: "center" }}>
+              <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 8, textAlign: "center" }}>
                 Enter the 6-digit code from your app
               </div>
-              <div style={s.otpGroup} role="group" aria-label="One-time password">
+              <div style={{ ...s.otpGroup, gap: 8, marginBottom: 10 }} role="group" aria-label="One-time password">
                 {otp.map((digit, index) => (
                   <input
                     key={index}
@@ -553,7 +553,7 @@ export default function MfaSetup() {
                     inputMode="numeric"
                     maxLength={1}
                     className="mfa-otp-input"
-                    style={s.otpInput}
+                    style={{ ...s.otpInput, width: 42, height: 50, fontSize: 20 }}
                     value={digit}
                     onChange={(e) => handleChange(e.target.value, index)}
                     onKeyDown={(e) => handleKeyDown(e, index)}
@@ -563,7 +563,7 @@ export default function MfaSetup() {
                 ))}
               </div>
 
-              <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 10px", color: "#c4b5fd", fontSize: 13 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 10px", color: isStaff ? "#5b21b6" : "#c4b5fd", fontSize: 13 }}>
                 <input
                   type="checkbox"
                   checked={trustDevice}
@@ -576,14 +576,14 @@ export default function MfaSetup() {
               <button
                 type="submit"
                 className="mfa-btn"
-                style={{ ...s.btn, opacity: otp.some((d) => d === "") ? 0.5 : 1 }}
+                style={{ ...s.btn, padding: "12px", fontSize: 14, opacity: otp.some((d) => d === "") ? 0.5 : 1 }}
                 disabled={verifying || otp.some((d) => d === "")}
               >
                 {verifying ? "Verifying…" : "Complete Setup →"}
               </button>
             </form>
 
-            <button className="mfa-btn-sec" style={s.btnSecondary} onClick={() => setStep(1)}>
+            <button className="mfa-btn-sec" style={{ ...s.btnSecondary, padding: "10px", fontSize: 13, marginTop: 8 }} onClick={() => setStep(1)}>
               ← Back
             </button>
           </>
