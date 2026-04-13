@@ -265,6 +265,13 @@ export async function submitCustomerTicket(payload = {}) {
     body: JSON.stringify(body),
   });
 
+  if (response.status === 409) {
+    const data = await response.json().catch(() => ({}));
+    const err = new Error(String(data?.detail || "duplicate"));
+    err.status = 409;
+    throw err;
+  }
+
   if (!response.ok) {
     throw new Error(
       "We could not submit your request right now. Please try again in a moment."

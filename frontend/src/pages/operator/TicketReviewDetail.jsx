@@ -52,7 +52,7 @@ const C = {
   muted: "rgba(26,26,46,0.55)", border: "rgba(64,28,81,0.12)",
 };
 
-const fmtTs  = (ts) => ts ? new Date(ts).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "—";
+const fmtTs  = (ts) => ts ? new Date(ts).toLocaleString("en-GB", { timeZone: "Asia/Dubai", dateStyle: "medium", timeStyle: "short" }) : "—";
 const fmtDur = (ms) => !ms ? "—" : ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 
 const PRIORITY_COLOR  = { Critical: "danger", High: "red", Medium: "amber", Low: "green" };

@@ -79,6 +79,24 @@ export function isLoggedIn(): boolean {
 }
 
 
+// Helper: check if the stored JWT has passed its exp claim.
+// Returns true (expired) when no token is present, the token is malformed,
+// or the current time is at or past the exp timestamp.
+
+export function isTokenExpired(): boolean {
+  const token = getToken();
+  if (!token) return true;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (!payload.exp) return true;
+    // exp is Unix seconds; Date.now() is milliseconds
+    return Date.now() >= payload.exp * 1000;
+  } catch {
+    return true;
+  }
+}
+
+
 // Helper: check if user must verify MFA
 
 export function needsMFA(): boolean {

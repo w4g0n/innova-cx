@@ -5056,6 +5056,29 @@ def create_customer_ticket(
         if str(body.type or "").strip().lower() == "inquiry"
         else "Complaint"
     )
+
+    # Reject exact duplicates: same user, same type, identical details (case-
+    # insensitive, whitespace-normalised) submitted within the last 24 hours.
+    dup = fetch_one(
+        """
+        SELECT ticket_code
+        FROM tickets
+        WHERE created_by_user_id = %s
+          AND ticket_type         = %s::ticket_type
+          AND LOWER(TRIM(REGEXP_REPLACE(details, '\\s+', ' ', 'g')))
+              = LOWER(TRIM(REGEXP_REPLACE(%s,   '\\s+', ' ', 'g')))
+          AND created_at >= NOW() - INTERVAL '24 hours'
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (user["id"], normalized_ticket_type, body.details),
+    )
+    if dup:
+        raise HTTPException(
+            status_code=409,
+            detail=f"duplicate:{dup['ticket_code']}",
+        )
+
     is_recurring = predict_is_recurring(user_id=user["id"], subject="", details=body.details)
     model_suggestion = json.dumps({"is_recurring": is_recurring})
 

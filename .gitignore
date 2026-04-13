@@ -74,6 +74,9 @@ data/synthesizerv7/models/classifier/deberta-v3-base-mnli-fever-anli/
 *.swo
 *~
 
+# Claude Code
+.claude/settings.local.json
+
 # Docker
 docker-compose.override.yml
 
