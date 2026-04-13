@@ -118,7 +118,11 @@ Wait for `Application startup complete` before opening the browser.
 
 Login is two-step for all accounts:
 
-- **Customers** — after entering email + password, a one-time code is requested. In dev mode (`DEV_LOG_RESET_TOKENS=true` in `.env.install`) no email is sent — the code is printed directly to the backend Docker logs. Run `docker compose logs backend` and look for:
+- **Customers** — after entering email + password, a one-time code is requested. In dev mode (`DEV_LOG_RESET_TOKENS=true` in `.env.install`) no email is sent — the code is printed to the backend logs. Look at the terminal where Docker is running, or open a second terminal and run:
+  ```bash
+  docker compose logs backend
+  ```
+  Find the line:
   ```
   [DEV] Email OTP for customer1@innovacx.net: 123456
   ```
