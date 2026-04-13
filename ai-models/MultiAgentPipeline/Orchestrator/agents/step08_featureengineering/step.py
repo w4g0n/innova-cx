@@ -432,7 +432,15 @@ def get_feature_engineering_diagnostics() -> dict[str, object]:
 
 async def engineer_features(state: dict) -> dict:
     if state.get("label") != "complaint":
-        logger.info("feature_engineering | skipped (label=%s)", state.get("label"))
+        if str(state.get("label") or "").strip().lower() == "inquiry":
+            state["issue_severity"] = "low"
+            state["issue_urgency"] = "low"
+            state["business_impact"] = "low"
+            state["safety_concern"] = False
+            state["feature_labeler_mode"] = "inquiry_defaults"
+            logger.info("feature_engineering | inquiry defaults applied")
+        else:
+            logger.info("feature_engineering | skipped (label=%s)", state.get("label"))
         return state
 
     text = str(state.get("text") or "").strip()

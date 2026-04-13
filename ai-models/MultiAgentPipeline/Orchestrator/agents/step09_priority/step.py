@@ -96,10 +96,9 @@ async def score_priority(state: dict) -> dict:
             "; ".join(result.get("modifiers_applied", [])),
         )
     except Exception as exc:
-        logger.warning("priority | runtime unavailable/failed (%s) — defaulting medium", exc)
-        state["priority_mode"] = "mock"
-        state["priority_label"] = "medium"
-        state["priority_score"] = 3
+        logger.warning("priority | runtime unavailable/failed (%s) — priority left unset", exc)
+        state["priority_mode"] = "unavailable"
+        # priority_label / priority_score intentionally not set
 
     return state
 

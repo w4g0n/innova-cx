@@ -15,11 +15,12 @@ const QUICK_REPLIES_EMPLOYEE = [
 function formatTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleString([], {
+  return d.toLocaleString("en-GB", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Asia/Dubai",
   });
 }
 
@@ -93,7 +94,7 @@ const TicketChat = memo(function TicketChat({ ticketId, role, authHeader, disabl
     }
   }, [messages]);
 
-  const send = async (content = sanitizeText(text.trim(), 5000)) => {
+  const send = async (content = sanitizeText(text.trim(), 1000)) => {
     if (!content || sending || disabled) return;
     setError("");
     setSending(true);

@@ -111,7 +111,14 @@ export function safeParseUser(raw) {
  */
 export function safeDate(val) {
   if (!val) return null;
-  const d = new Date(val);
+  const str = String(val);
+  // Treat naive ISO timestamps (no Z or +/- timezone offset) as UTC
+  // to prevent browser-locale clock skew (e.g. "11h ago" bug).
+  const normalised =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(str) && !/[Z+-]\d*$/.test(str.slice(10))
+      ? str + "Z"
+      : str;
+  const d = new Date(normalised);
   return isNaN(d.getTime()) ? null : d;
 }
 
@@ -129,11 +136,11 @@ export function formatTimeAgo(isoString) {
   if (diff < 3600)   return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400)  return `${Math.floor(diff / 3600)}h ago`;
   if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
-  return d.toLocaleDateString();
+  return d.toLocaleDateString("en-GB", { timeZone: "Asia/Dubai" });
 }
 
-/** Maximum words allowed in customer free-text inputs. */
-export const MAX_TEXT_WORDS = 250;
+/** Maximum characters allowed in customer free-text inputs (description, chatbot). */
+export const MAX_CHARS = 1000;
 
 /** Safety character cap for sanitized ticket description / message bodies. */
 export const MAX_DESCRIPTION_LEN = 20000;

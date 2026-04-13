@@ -81,8 +81,8 @@ def _timeout_fallback_state(agent_name: str, state: dict) -> dict:
         out["issue_urgency"] = out.get("issue_urgency") or "medium"
         out["feature_labeler_mode"] = "timeout_fallback"
     elif name == "PrioritizationAgent":
-        out["priority_label"] = out.get("priority_label") or "Medium"
         out["priority_mode"] = "timeout_fallback"
+        # priority_label intentionally not injected on timeout
     elif name == "DepartmentRoutingAgent":
         out["department_routing_source"] = "timeout_fallback"
 

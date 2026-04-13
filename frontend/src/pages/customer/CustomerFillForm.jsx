@@ -8,16 +8,13 @@ import {
   sanitizeFilename,
   sanitizeId,
   sanitizeTicketType,
-  countWords,
-  limitWords,
-  sanitizeTextByWords,
   MAX_DESCRIPTION_LEN,
-  MAX_TEXT_WORDS,
+  MAX_CHARS,
 } from "./sanitize";
 import "./CustomerFillForm.css";
 
 // File upload constraints
-const MAX_ATTACHMENT_COUNT  = 10;
+const MAX_ATTACHMENT_COUNT  = 3;
 const MAX_ATTACHMENT_BYTES  = 10 * 1024 * 1024; // 10 MB per file
 const ALLOWED_MIME_PREFIXES = ["image/", "application/pdf"];
 const ALLOWED_EXTENSIONS    = [".doc", ".docx", ".xls", ".xlsx", ".txt"];
@@ -157,8 +154,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
       newErrors.message = "Please describe your issue before submitting.";
     } else if (details.length < 10) {
       newErrors.message = "Please provide more detail (at least 10 characters).";
-    } else if (countWords(details) > MAX_TEXT_WORDS) {
-      newErrors.message = `Description must be ${MAX_TEXT_WORDS.toLocaleString()} words or fewer.`;
+    } else if (details.length > MAX_CHARS) {
+      newErrors.message = `Description must be ${MAX_CHARS.toLocaleString()} characters or fewer.`;
     }
 
     setErrors(newErrors);
@@ -647,7 +644,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
 
             {/* Word counter */}
             <div style={{ textAlign: "right", fontSize: "0.75rem", color: "var(--color-text-tertiary, #888)", marginTop: 2 }}>
-              {countWords(message)} / {MAX_TEXT_WORDS.toLocaleString()} words
+              {message.length} / {MAX_CHARS.toLocaleString()} chars
             </div>
 
             {errors.message && (
