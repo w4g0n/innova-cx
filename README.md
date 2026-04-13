@@ -47,16 +47,18 @@ Open http://localhost:5173 in your browser.
 | Manager | hamad@innovacx.net | Innova@2025 |
 | Operator | operator@innovacx.net | Innova@2025 |
 
-**OTP / MFA**
+---
 
-- **Customers** — check the Docker logs for the one-time code:
-  ```bash
-  docker compose logs backend
-  # [DEV] Email OTP for customer1@innovacx.net: 123456
-  ```
-- **Staff** — scan the QR code shown after login with any authenticator app (Google Authenticator, Authy, etc.)
+## Skip MFA (after trying it once)
 
-> For production deployment, use `.env.example` as your template — it documents all required variables with no defaults.
+To disable MFA and log in with just email + password:
+
+Press `Ctrl+C` to stop the app, then run:
+
+```bash
+echo "DISABLE_MFA=true" >> .env
+docker compose --profile frontend up
+```
 
 ---
 
