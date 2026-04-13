@@ -197,7 +197,7 @@ export default function Sidebar({ role, unreadCount = 0, pendingApprovals = 0, p
         credentials: "include",
         headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
       });
-    } catch {} // best-effort; local cleanup always runs
+    } catch { /* best-effort; local cleanup always runs */ }
     clearAllAuth();
     navigate("/");
   };

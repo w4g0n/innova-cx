@@ -338,7 +338,7 @@ export default function CustomerLanding() {
         credentials: "include",
         headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
       });
-    } catch {} // best-effort; local cleanup always runs
+    } catch { /* best-effort; local cleanup always runs */ }
     resetSession();
     setIsOpen(false);
     setIsExpanded(false);
