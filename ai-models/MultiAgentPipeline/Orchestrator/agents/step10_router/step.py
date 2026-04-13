@@ -322,7 +322,7 @@ def _build_orchestrator_payload(
         "transcript": state["text"],
         "sentiment": state.get("text_sentiment", 0.0),
         "audio_sentiment": state.get("audio_sentiment", 0.0),
-        "priority": state.get("priority_score"),
+        "priority": state.get("priority_score", 3),
         "department": predicted_department,
         "department_candidate": top_department,
         "keywords": state.get("keywords", []),

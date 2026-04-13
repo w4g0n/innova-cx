@@ -639,6 +639,7 @@ export default function AIExplainability() {
     const stageOrder = [
       "RecurrenceAgent",
       "SubjectGenerationAgent",
+      "SuggestedResolutionAgent",
       "ClassificationAgent",
       "SentimentAgent",
       "AudioAnalysisAgent",
@@ -646,8 +647,6 @@ export default function AIExplainability() {
       "FeatureEngineeringAgent",
       "PrioritizationAgent",
       "DepartmentRoutingAgent",
-      "SuggestedResolutionAgent",
-      "ReviewAgent",
     ];
     for (const s of stages) {
       const key = String(s.stageName || "");
@@ -1072,7 +1071,7 @@ export default function AIExplainability() {
                           <td>{t.priority ? <PriorityPill priority={t.priority} /> : "—"}</td>
                           <td>{t.department}</td>
                           <td>{t.assignedTo}</td>
-                          <td>{t.pipelineCompletedAt ? new Date(t.pipelineCompletedAt).toLocaleString("en-GB", { timeZone: "Asia/Dubai", dateStyle: "medium", timeStyle: "short" }) : (t.createdAt ? new Date(t.createdAt).toLocaleString("en-GB", { timeZone: "Asia/Dubai", dateStyle: "medium", timeStyle: "short" }) : "—")}</td>
+                          <td>{t.pipelineCompletedAt ? new Date(t.pipelineCompletedAt).toLocaleString() : (t.createdAt ? new Date(t.createdAt).toLocaleString() : "—")}</td>
                           <td>
                             <button
                               type="button"

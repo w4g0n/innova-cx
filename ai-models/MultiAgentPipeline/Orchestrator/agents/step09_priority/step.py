@@ -64,24 +64,12 @@ async def score_priority(state: dict) -> dict:
             float(state.get("sentiment_score_numeric", 0.0) or 0.0)
         )
 
-    issue_severity = str(state.get("issue_severity") or "").strip().lower()
-    issue_urgency = str(state.get("issue_urgency") or "").strip().lower()
-    business_impact = str(state.get("business_impact") or "").strip().lower()
+    issue_severity = str(state.get("issue_severity", "medium")).strip().lower()
+    issue_urgency = str(state.get("issue_urgency", "medium")).strip().lower()
+    business_impact = str(state.get("business_impact", "medium")).strip().lower()
     safety_concern = bool(state.get("safety_concern", False))
     is_recurring = bool(state.get("is_recurring", False))
     ticket_type = str(state.get("label", "complaint")).strip().lower()
-    if {issue_severity, issue_urgency, business_impact} - {"low", "medium", "high"}:
-        logger.warning(
-            "priority | missing/invalid feature inputs severity=%r urgency=%r impact=%r; leaving priority unset",
-            issue_severity,
-            issue_urgency,
-            business_impact,
-        )
-        state["priority_mode"] = "invalid_input"
-        state["priority_label"] = None
-        state["priority_score"] = None
-        state["priority_details"] = None
-        return state
 
     try:
         if not _PRIORITY_MODEL_AVAILABLE or model_prioritize is None:
@@ -108,11 +96,10 @@ async def score_priority(state: dict) -> dict:
             "; ".join(result.get("modifiers_applied", [])),
         )
     except Exception as exc:
-        logger.warning("priority | runtime unavailable/failed (%s) — leaving priority unset", exc)
+        logger.warning("priority | runtime unavailable/failed (%s) — defaulting medium", exc)
         state["priority_mode"] = "mock"
-        state["priority_label"] = None
-        state["priority_score"] = None
-        state["priority_details"] = None
+        state["priority_label"] = "medium"
+        state["priority_score"] = 3
 
     return state
 
