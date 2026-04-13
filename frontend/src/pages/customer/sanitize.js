@@ -115,7 +115,7 @@ export function safeDate(val) {
   if (!val) return null;
   // Treat naive datetime strings (no Z / offset) as UTC so parsing is
   // consistent regardless of the browser's local timezone.
-  const str = typeof val === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(val) && !/[Z+\-]\d*$/.test(val.slice(10))
+  const str = typeof val === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(val) && !/[Z+-]\d*$/.test(val.slice(10))
     ? val + "Z"
     : val;
   const d = new Date(str);
