@@ -114,11 +114,14 @@ export function sanitizeTicketSource(value) {
  * Safely format an ISO date string for display.
  * Returns "" instead of "Invalid Date" for bad inputs.
  */
+const DUBAI_TZ = "Asia/Dubai";
+
 export function safeFormatDate(isoString) {
   if (!isoString) return "";
   const d = new Date(isoString);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString("en-GB", {
+    timeZone: DUBAI_TZ,
     year: "numeric",
     month: "short",
     day: "2-digit",

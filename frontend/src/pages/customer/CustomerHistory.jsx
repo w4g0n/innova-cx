@@ -622,7 +622,7 @@ export default function CustomerMyTickets() {
                         <path d="M12 6v6l4 2" />
                       </svg>
                       {/* formatTimeAgo validates the date value before use */}
-                      {formatTimeAgo(t.updatedAt || t.issueDate)}
+                      {formatTimeAgo(t.updatedAt || t.createdAt || t.issueDate)}
                     </span>
                     <span className="cmyt-view-cta">
                       View details

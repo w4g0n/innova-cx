@@ -8,10 +8,10 @@ import {
   safeParseUser,
   sanitizeText,
   sanitizeId,
-  countWords,
-  limitWords,
+  countChars,
+  limitChars,
   sanitizeTextByWords,
-  MAX_TEXT_WORDS,
+  MAX_TEXT_CHARS,
 } from "./sanitize";
 import "./CustomerChatbot.css";
 
@@ -153,7 +153,7 @@ export default function CustomerChatbot() {
   const approveTranscript = () => {
     const t = (draftTranscript || "").trim();
     if (!t) { setVoiceStage("idle"); return; }
-    setText(limitWords(t, MAX_TEXT_WORDS));
+    setText(limitChars(t, MAX_TEXT_CHARS));
     setDraftTranscript("");
     setVoiceStage("idle");
   };
@@ -468,7 +468,7 @@ export default function CustomerChatbot() {
                     <textarea
                       className="chatVoiceDraft"
                       value={draftTranscript}
-                      onChange={(e) => setDraftTranscript(limitWords(e.target.value, MAX_TEXT_WORDS))}
+                      onChange={(e) => setDraftTranscript(limitChars(e.target.value, MAX_TEXT_CHARS))}
                       rows={3}
                       placeholder="Transcript will appear here…"
                     />
@@ -502,7 +502,7 @@ export default function CustomerChatbot() {
                 placeholder="Type your message…"
                 onChange={(e) => {
                   const val = e.target.value;
-                  setText(limitWords(val, MAX_TEXT_WORDS));
+                  setText(limitChars(val, MAX_TEXT_CHARS));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -513,7 +513,7 @@ export default function CustomerChatbot() {
                 disabled={sending}
               />
               <span className="custChatWordCount" aria-live="polite">
-                {countWords(text)} / {MAX_TEXT_WORDS} words
+                {countChars(text)} / {MAX_TEXT_CHARS} characters
               </span>
               <button type="submit" className="primaryPillBtn" disabled={sending}>
                 Send

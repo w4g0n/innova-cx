@@ -7,6 +7,7 @@ services:
     container_name: innovacx-db
     restart: unless-stopped
     environment:
+      TZ: Asia/Dubai
       # POSTGRES_USER is the superuser/owner used ONLY for DB initialization
       # and migrations. It is NOT used by runtime application services.
       POSTGRES_USER: ${POSTGRES_USER:-innovacx_admin}
@@ -43,6 +44,7 @@ services:
     container_name: innovacx-backend
     restart: unless-stopped
     environment:
+      TZ: Asia/Dubai
       PYTHONPATH: /app
       # Runtime DB connection uses innovacx_app (least-privilege role),
       # NOT the superuser innovacx_admin.
@@ -96,6 +98,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      TZ: Asia/Dubai
       # Runtime DB connection uses innovacx_app (least-privilege role),
       # NOT the superuser innovacx_admin.
       DATABASE_URL: postgresql://${APP_DB_USER:-innovacx_app}:${APP_DB_PASSWORD:?APP_DB_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-complaints_db}
@@ -135,6 +138,7 @@ services:
     container_name: innovacx-transcriber
     restart: unless-stopped
     environment:
+      TZ: Asia/Dubai
       WHISPER_MODEL_PATH: "${WHISPER_MODEL_PATH:-/app/model}"
       WHISPER_MODEL_NAME: "${WHISPER_MODEL_NAME:-base}"
       HF_TOKEN: "${HF_TOKEN:-}"
@@ -161,6 +165,7 @@ services:
     container_name: innovacx-orchestrator
     restart: unless-stopped
     environment:
+      TZ: Asia/Dubai
       PYTHONPATH: /app
       SYSTEM_USER_EMAIL: "${SYSTEM_USER_EMAIL:-}"
       # Runtime DB connection uses innovacx_app (least-privilege role),

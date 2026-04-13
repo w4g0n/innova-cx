@@ -1,9 +1,9 @@
 """
-Step 2 — Suggested Resolution Agent
-====================================
-Generates suggested resolution in the orchestrator using the shared Qwen
-model (loaded via shared_model_service), with a deterministic template
-fallback if unavailable.
+Step 10 — Suggested Resolution Agent
+=====================================
+Runs late in the pipeline so it can use the final classification and routed
+department context. Complaints receive an employee-facing suggested action,
+while inquiries use the chatbot knowledge base and answer path.
 
 Learning examples are read directly from the suggested_resolution_usage
 table so prompt guidance stays in SQL.
@@ -16,13 +16,13 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 import httpx
 from langchain_core.runnables import RunnableLambda
 from db import db_connect
 from backend_client import internal_backend_headers
+from .retriever import retrieve_context as retrieve_local_context
 
 BACKEND_URL = os.getenv("BACKEND_API_URL", "http://backend:8000").rstrip("/")
 SUGGESTED_RESOLUTION_PROMPT_EXAMPLES = max(
@@ -39,11 +39,11 @@ SUGGESTED_RESOLUTION_MAX_INPUT_CHARS = max(
 )
 SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS = max(
     128,
-    int(os.getenv("SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS", "256")),
+    int(os.getenv("SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS", "320")),
 )
 SUGGESTED_RESOLUTION_MAX_NEW_TOKENS = max(
     8,
-    int(os.getenv("SUGGESTED_RESOLUTION_MAX_NEW_TOKENS", "14")),
+    int(os.getenv("SUGGESTED_RESOLUTION_MAX_NEW_TOKENS", "24")),
 )
 
 logger = logging.getLogger(__name__)
@@ -106,9 +106,87 @@ def _infer_resolution_plan(ticket: dict[str, Any]) -> tuple[str, str, str]:
     return first_action, department, verify_action
 
 
+def _looks_like_inquiry(ticket: dict[str, Any]) -> bool:
+    ticket_type = str(ticket.get("ticket_type") or "").strip().lower()
+    if ticket_type == "inquiry":
+        return True
+
+    text = " ".join(
+        [
+            str(ticket.get("subject") or "").strip().lower(),
+            str(ticket.get("details") or "").strip().lower(),
+        ]
+    ).strip()
+    if not text:
+        return False
+
+    inquiry_markers = (
+        "policy",
+        "price",
+        "pricing",
+        "cost",
+        "quote",
+        "availability",
+        "available",
+        "lease",
+        "leasing",
+        "rental",
+        "rent",
+        "information",
+        "details",
+        "how much",
+        "can i",
+        "could i",
+        "i want to ask",
+        "i have a question",
+        "what is",
+        "what are",
+    )
+    issue_markers = (
+        "broken",
+        "not working",
+        "issue",
+        "problem",
+        "leak",
+        "flood",
+        "alarm",
+        "shock",
+        "sparking",
+        "repair",
+        "fix",
+        "pest",
+        "cockroach",
+        "rat",
+        "mouse",
+        "wifi down",
+        "internet down",
+    )
+
+    has_inquiry_marker = any(marker in text for marker in inquiry_markers)
+    has_issue_marker = any(marker in text for marker in issue_markers)
+    return has_inquiry_marker and not has_issue_marker
+
+
 def fallback_resolution_suggestion(ticket: dict[str, Any]) -> str:
     first_action, department, verify_action = _infer_resolution_plan(ticket)
     return f"{first_action.capitalize()}; assign to {department} and {verify_action}."
+
+
+def fallback_inquiry_answer(ticket: dict[str, Any], kb_context: str) -> str | None:
+    cleaned_lines = [
+        re.sub(r"^\s*-\s*", "", line).strip()
+        for line in str(kb_context or "").splitlines()
+        if str(line).strip()
+    ]
+    if not cleaned_lines:
+        return None
+    answer = " ".join(cleaned_lines[:2]).strip()
+    answer = re.sub(r"\s+", " ", answer)
+    if not answer:
+        return None
+    if len(answer) > 280:
+        answer = answer[:280].rsplit(" ", 1)[0].strip()
+    return answer
 
 
 def _clean_generated_resolution(text: str, ticket: dict[str, Any]) -> str:
@@ -403,7 +481,7 @@ def _build_generation_prompt(ticket: dict[str, Any]) -> str:
         "8. Do not write in past tense. Avoid phrases like \"replaced,\" \"checked,\" \"repaired,\" or \"restored.\"\n"
         "9. Describe what the employee should do next, not what has already been done.\n"
         "10. If there are multiple actions, connect them in one sentence with \"then\" or \"and\".\n"
-        "11. Length: 18–40 words.\n\n"
+        "11. Length: 18–55 words.\n\n"
         "12. Return only the final resolution sentence.\n"
         "13. Do not output prompt headers, examples, labels, JSON, or notes.\n\n"
     )
@@ -432,6 +510,23 @@ def _build_generation_prompt(ticket: dict[str, Any]) -> str:
 
     prompt += f"Ticket: {details}"
     return prompt
+
+
+def _build_inquiry_answer_prompt(ticket: dict[str, Any], kb_context: str) -> str:
+    subject = _compact_prompt_text(ticket.get("subject"), 120) or "No subject"
+    details = _compact_prompt_text(ticket.get("details"), 220) or "No details"
+    return (
+        "Answer the user's inquiry using only the provided company knowledge base context.\n\n"
+        "Rules:\n"
+        "1. Be concise and clear.\n"
+        "2. If the context directly answers the question, provide the answer plainly.\n"
+        "3. Do not invent details beyond the context.\n"
+        "4. Do not mention departments, assignments, triage, or issue resolution unless the context itself requires it.\n"
+        "5. Return only the final answer text.\n\n"
+        f"Subject: {subject}\n"
+        f"User inquiry: {details}\n\n"
+        f"Knowledge base context:\n{kb_context}"
+    )
 
 def retrain_resolution_examples_from_db(max_examples: int = 12) -> dict[str, Any]:
     """
@@ -525,7 +620,11 @@ def _ticket_context_from_state(state: dict) -> dict[str, Any]:
     return {
         "ticket_code": state.get("ticket_id"),
         "ticket_type": "Inquiry" if str(state.get("label") or "").strip().lower() == "inquiry" else "Complaint",
-        "priority": str(state.get("priority_label") or "Medium").strip().title(),
+        "priority": (
+            str(state.get("priority_label")).strip().title()
+            if state.get("priority_label") is not None
+            else None
+        ),
         "department_name": str(
             state.get("department")
             or state.get("department_selected")
@@ -541,9 +640,83 @@ def _ticket_context_from_state(state: dict) -> dict[str, Any]:
 
 async def _generate_resolution_text(ticket: dict[str, Any]) -> tuple[str | None, str | None, str]:
     """Returns (text, model_label, mode). text is None when model unavailable."""
+    ticket_type = str(ticket.get("ticket_type") or "").strip().lower()
+    if ticket_type == "inquiry":
+        kb_context = (
+            retrieve_local_context(str(ticket.get("details") or "").strip(), mode="inquiry")
+        )
+        if not kb_context:
+            return None, None, "inquiry_no_kb"
+
+        loaded = _get_model()
+        if loaded is None:
+            return fallback_inquiry_answer(ticket, kb_context), "knowledge_base", "inquiry_kb_fallback"
+
+        try:
+            import torch  # type: ignore
+
+            tokenizer = loaded["tokenizer"]
+            model = loaded["model"]
+            device = loaded["device"]
+            prompt = _build_inquiry_answer_prompt(ticket, kb_context)
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You answer customer inquiries using provided company knowledge-base context only. "
+                        "Return plain text only."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ]
+            if hasattr(tokenizer, "apply_chat_template"):
+                rendered_prompt = tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
+                inputs = tokenizer(
+                    [rendered_prompt],
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS,
+                ).to(device)
+            else:
+                inputs = tokenizer(
+                    prompt,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=SUGGESTED_RESOLUTION_MAX_PROMPT_TOKENS,
+                ).to(device)
+            with torch.no_grad():
+                output_ids = model.generate(
+                    **inputs,
+                    max_new_tokens=max(20, SUGGESTED_RESOLUTION_MAX_NEW_TOKENS * 2),
+                    do_sample=False,
+                    no_repeat_ngram_size=3,
+                    repetition_penalty=1.15,
+                    use_cache=True,
+                )
+            prompt_tokens = inputs["input_ids"].shape[1]
+            generated_ids = output_ids[0][prompt_tokens:] if output_ids.shape[1] > prompt_tokens else output_ids[0]
+            text = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+            text = _clean_generated_resolution(text, ticket)
+            if text and not _contains_prompt_leakage(text):
+                try:
+                    from shared_model_service import SHARED_QWEN_MODEL_NAME
+                    model_label = SHARED_QWEN_MODEL_NAME or "Qwen2.5"
+                except Exception:
+                    model_label = "Qwen2.5"
+                return text, model_label, "inquiry_kb_answer"
+            logger.warning("suggested_resolution | low-quality inquiry answer generated, using KB fallback")
+        except Exception as exc:
+            logger.warning("suggested_resolution | inquiry answer generation failed (%s), using KB fallback", exc)
+
+        return fallback_inquiry_answer(ticket, kb_context), "knowledge_base", "inquiry_kb_fallback"
+
     loaded = _get_model()
     if loaded is None:
-        return None, None, "unavailable"
+        return fallback_resolution_suggestion(ticket), "deterministic_template", "template_fallback"
 
     try:
         import torch  # type: ignore
@@ -650,7 +823,7 @@ def _write_background_stage_event(base_state: dict[str, Any], output_state: dict
         ticket_id=ticket_id,
         ticket_code=ticket_code,
         agent_name="SuggestedResolutionAgent",
-        step_order=3,
+        step_order=10,
         event_type="output",
         status="fixed",
         input_state=input_snapshot,
@@ -692,13 +865,8 @@ async def generate_suggested_resolution(state: dict) -> dict:
     ticket_id = str(state.get("ticket_id") or "").strip()
     if not ticket_id:
         return state
-    if str(state.get("label") or "").strip().lower() == "inquiry":
-        state["suggested_resolution"] = None
-        state["suggested_resolution_model"] = None
-        state["suggested_resolution_mode"] = "skipped"
-        return state
-
     ticket = _ticket_context_from_state(state)
+
     base_state = dict(state)
     generation_task = asyncio.create_task(_generate_resolution_text_in_thread(ticket))
     try:
