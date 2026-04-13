@@ -101,6 +101,7 @@ export default function MfaSetup() {
       try {
         const res = await fetch(apiUrl("/api/auth/totp-setup"), {
           headers: { Authorization: `Bearer ${loginToken}` },
+          cache: "no-store",
         });
         if (!res.ok) throw new Error("Failed to load setup data");
         const data = await res.json();

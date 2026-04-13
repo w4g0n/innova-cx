@@ -1071,6 +1071,15 @@ def _get_bearer_token(authorization: Optional[str]) -> str:
     return parts[1].strip()
 
 
+def _get_mfa_bearer_user(authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    """Auth dependency for MFA pre-auth endpoints (totp-status, totp-setup).
+    Deliberately ignores the httpOnly cookie and validates only the Bearer
+    token. This prevents a stale full-session cookie from a previous user
+    hijacking the MFA setup flow for a new user on the same browser."""
+    token = _get_bearer_token(authorization)
+    return _validate_token_and_fetch_user(token)
+
+
 def get_current_user(
     request: Request,
     authorization: Optional[str] = Header(default=None),
@@ -1433,7 +1442,7 @@ async def require_internal_key(x_internal_key: str = Header(None, alias="X-Inter
 
 # MFA / TOTP Setup & Verification
 @api.get("/auth/totp-status")
-def totp_status(user: Dict[str, Any] = Depends(get_current_user)):
+def totp_status(user: Dict[str, Any] = Depends(_get_mfa_bearer_user)):
     """
     Returns whether MFA is enabled for the current user.
     """
@@ -1446,7 +1455,7 @@ def totp_status(user: Dict[str, Any] = Depends(get_current_user)):
 
 
 @api.get("/auth/totp-setup")
-def totp_setup(user: Dict[str, Any] = Depends(get_current_user)):
+def totp_setup(user: Dict[str, Any] = Depends(_get_mfa_bearer_user)):
     """
     Returns a QR code URL for the user to scan in their authenticator app.
     Only generates a new secret if the user does not have one.
