@@ -9,7 +9,6 @@ FROM node:18-bullseye-slim
 RUN set -eux; \
     for i in 1 2 3; do \
       apt-get -o Acquire::Retries=5 update && \
-      apt-get install -f -y --no-install-recommends && \
       apt-get install -y --fix-missing --no-install-recommends \
         python3 \
         python3-dev \

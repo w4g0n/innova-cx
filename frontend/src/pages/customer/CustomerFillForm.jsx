@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import Layout from "../../components/Layout";
 import PageHeader from "../../components/common/PageHeader";
 import AudioReplyPlayer from "../../components/common/AudioReplyPlayer";
@@ -8,17 +8,10 @@ import {
   sanitizeFilename,
   sanitizeId,
   sanitizeTicketType,
-  countChars,
-  limitChars,
-  sanitizeTextByWords,
   MAX_DESCRIPTION_LEN,
-  MAX_TEXT_CHARS,
+  MAX_CHARS,
 } from "./sanitize";
 import "./CustomerFillForm.css";
-
-// Cooldown between any two successful submissions (milliseconds)
-const SUBMIT_COOLDOWN_MS  = 60_000; // 60 seconds
-const LAST_SUBMIT_KEY     = "lastTicketSubmitTime";
 
 // File upload constraints
 const MAX_ATTACHMENT_COUNT  = 3;
@@ -57,27 +50,9 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
   const [draftAudioFeatures, setDraftAudioFeatures] = useState(null);
 
   // Validation + submission state
-  const [errors,       setErrors]       = useState({});
-  const [submitted,    setSubmitted]    = useState(null);
-  const [showConfirm,  setShowConfirm]  = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [cooldownSecs, setCooldownSecs] = useState(() => {
-    const last = Number(localStorage.getItem(LAST_SUBMIT_KEY) || 0);
-    const remaining = Math.ceil((last + SUBMIT_COOLDOWN_MS - Date.now()) / 1000);
-    return remaining > 0 ? remaining : 0;
-  });
-
-  // Tick the cooldown counter down every second
-  useEffect(() => {
-    if (cooldownSecs <= 0) return;
-    const id = setInterval(() => {
-      setCooldownSecs((s) => {
-        if (s <= 1) { clearInterval(id); return 0; }
-        return s - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [cooldownSecs]);
+  const [errors,      setErrors]      = useState({});
+  const [submitted,   setSubmitted]   = useState(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const BYTES_PER_KB = 1024;
   const BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB;
@@ -179,8 +154,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
       newErrors.message = "Please describe your issue before submitting.";
     } else if (details.length < 10) {
       newErrors.message = "Please provide more detail (at least 10 characters).";
-    } else if (countChars(details) > MAX_TEXT_CHARS) {
-      newErrors.message = `Description must be ${MAX_TEXT_CHARS.toLocaleString()} characters or fewer.`;
+    } else if (details.length > MAX_CHARS) {
+      newErrors.message = `Description must be ${MAX_CHARS.toLocaleString()} characters or fewer.`;
     }
 
     setErrors(newErrors);
@@ -195,17 +170,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
 
   const doActualSubmit = async () => {
     setShowConfirm(false);
-
-    // Prevent double-submit from rapid confirm clicks
-    if (isSubmitting) return;
-
-    // Enforce cooldown between any two submissions
-    if (cooldownSecs > 0) {
-      setErrors({ submit: `Please wait ${cooldownSecs} second${cooldownSecs !== 1 ? "s" : ""} before submitting again.` });
-      return;
-    }
-
-    setIsSubmitting(true);
 
     // Final sanitize before sending — trim + hard cap
     const details  = sanitizeTextByWords(message);
@@ -227,7 +191,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
         })),
       });
 
-      const ticketId = result?.ticket?.ticketId
+      const ticketId  = result?.ticket?.ticketId
         ? sanitizeId(String(result.ticket.ticketId), 48)
         : null;
 
@@ -241,10 +205,6 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
         }
       }
 
-      // Record submission time so the cooldown survives page reloads
-      localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now()));
-      setCooldownSecs(Math.ceil(SUBMIT_COOLDOWN_MS / 1000));
-
       const replyText = `Your request has been successfully submitted. Ticket ID: ${ticketId ?? "N/A"}. Our team will review and respond as soon as possible.`;
 
       resetForm();
@@ -254,25 +214,10 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
         onSubmitted(result?.ticket || null);
       }
     } catch (err) {
-      // 409 → exact duplicate submitted within the last 24 hours
-      if (err.status === 409) {
-        const raw = String(err.message || "");
-        const existingCode = raw.startsWith("duplicate:")
-          ? sanitizeId(raw.slice("duplicate:".length).trim(), 48)
-          : null;
-        setErrors({
-          submit: existingCode
-            ? `You already submitted this exact complaint today (ticket ${existingCode}). Please wait for our team to respond before submitting again.`
-            : "You already submitted this exact complaint recently. Please wait for our team to respond before submitting again.",
-        });
-      } else {
-        console.error("Ticket creation failed:", err);
-        setErrors({
-          submit: "We could not submit your request right now. Please try again in a moment.",
-        });
-      }
-    } finally {
-      setIsSubmitting(false);
+      console.error("Ticket creation failed:", err);
+      setErrors({
+        submit: "We could not submit your request right now. Please try again in a moment.",
+      });
     }
   };
 
@@ -384,7 +329,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
     setMessage((prev) => {
       const combined = prev ? `${prev}\n${t}` : t;
       // Enforce the max word cap when appending a transcript.
-      return limitChars(combined, MAX_TEXT_CHARS);
+      return limitWords(combined, MAX_TEXT_WORDS);
     });
     setDraftTranscript("");
     setVoiceStage("idle");
@@ -666,7 +611,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
                       onChange={(e) => {
                         // Cap transcript edits at the same description limit.
                         const v = e.target.value;
-                        setDraftTranscript(limitChars(v, MAX_TEXT_CHARS));
+                        setDraftTranscript(limitWords(v, MAX_TEXT_WORDS));
                       }}
                       rows={3}
                       placeholder="Transcript will appear here..."
@@ -685,7 +630,7 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
                 const v = e.target.value;
                 // Enforce hard cap client-side — server also validates but this prevents
                 // oversized payloads from being sent at all
-                setMessage(limitChars(v, MAX_TEXT_CHARS));
+                setMessage(limitWords(v, MAX_TEXT_WORDS));
                 if (errors.message) setErrors((prev) => ({ ...prev, message: undefined }));
               }}
               placeholder="Describe what happened. Include time, location, or any relevant details."
@@ -697,9 +642,9 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
               }
             />
 
-            {/* Character counter */}
+            {/* Word counter */}
             <div style={{ textAlign: "right", fontSize: "0.75rem", color: "var(--color-text-tertiary, #888)", marginTop: 2 }}>
-              {countChars(message)} / {MAX_TEXT_CHARS.toLocaleString()} characters
+              {message.length} / {MAX_CHARS.toLocaleString()} chars
             </div>
 
             {errors.message && (
@@ -836,16 +781,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
           <button type="button" className="softPillBtn" onClick={handleCancel}>
             Cancel
           </button>
-          <button
-            type="submit"
-            className="primaryPillBtn"
-            disabled={isTranscribing || isSubmitting || cooldownSecs > 0}
-          >
-            {isSubmitting
-              ? "Submitting…"
-              : cooldownSecs > 0
-              ? `Please wait ${cooldownSecs}s`
-              : "Submit Request"}
+          <button type="submit" className="primaryPillBtn" disabled={isTranscribing}>
+            Submit Request
           </button>
         </div>
       </form>
@@ -897,9 +834,8 @@ export default function CustomerFillForm({ embedded = false, onCancel, onSubmitt
                 type="button"
                 className="primaryPillBtn"
                 onClick={doActualSubmit}
-                disabled={isSubmitting}
               >
-                {isSubmitting ? "Submitting…" : "Yes, submit"}
+                Yes, submit
               </button>
             </div>
           </div>
