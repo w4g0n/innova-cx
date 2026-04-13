@@ -133,20 +133,20 @@ _SUGGESTION_PREVIEW_MAX_LEN = 120
 _STAGE_STEP_ORDER = {
     "RecurrenceAgent":           1,
     "SubjectGenerationAgent":    2,
-    "SuggestedResolutionAgent":  3,
-    "ClassificationAgent":       4,
-    "SentimentAgent":            5,
-    "AudioAnalysisAgent":        6,
-    "SentimentCombinerAgent":    7,
-    "FeatureEngineeringAgent":   8,
-    "PrioritizationAgent":       9,
-    "DepartmentRoutingAgent":    10,
+    "ClassificationAgent":       3,
+    "SentimentAgent":            4,
+    "AudioAnalysisAgent":        5,
+    "SentimentCombinerAgent":    6,
+    "FeatureEngineeringAgent":   7,
+    "PrioritizationAgent":       8,
+    "DepartmentRoutingAgent":    9,
+    "SuggestedResolutionAgent":  10,
     "ReviewAgent":               11,
 }
 
 _STAGE_DESCRIPTIONS = {
     "SubjectGenerationAgent":    "Generates a short 2–4 word subject line for the ticket.",
-    "SuggestedResolutionAgent":  "Generates a suggested resolution the employee can use.",
+    "SuggestedResolutionAgent":  "Generates a final complaint suggestion or an inquiry answer using the latest ticket context.",
     "ClassificationAgent":       "Determines whether the ticket is a Complaint or an Inquiry.",
     "SentimentAgent":            "Extracts the emotional tone of the ticket text (negative / neutral / positive).",
     "AudioAnalysisAgent":        "Analyzes vocal and acoustic patterns from the audio attachment.",
@@ -260,8 +260,11 @@ def _explain_stage(stage_name: str, output_state: Dict, error_message: Optional[
         mode = str(output_state.get("suggested_resolution_mode", "") or "").strip().lower()
         if mode == "timeout_background" and not res:
             return "Suggested resolution did not finish in time for this run. No suggestion was available to the operator or employee."
-        if mode == "skipped":
+        if mode in {"skipped", "skipped_inquiry"}:
             return "Suggested resolution skipped for inquiry ticket."
+        if mode == "inquiry_kb_answer" and res:
+            preview = (res[:_SUGGESTION_PREVIEW_MAX_LEN] + "…") if len(str(res)) > _SUGGESTION_PREVIEW_MAX_LEN else res
+            return f'Inquiry answer: "{preview}"'
         preview = (res[:_SUGGESTION_PREVIEW_MAX_LEN] + "…") if len(str(res)) > _SUGGESTION_PREVIEW_MAX_LEN else res
         return f'Suggested: "{preview}"' if preview else "Resolution suggestion generated."
 

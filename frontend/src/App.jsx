@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Suspense, lazy, useEffect } from "react";
 import { isStaffHost } from "./utils/hostUtils";
 import ProtectedRoute from "./auth/ProtectedRoute";
+import { useIdleTimeout } from "./hooks/useIdleTimeout";
 
 const PublicLanding = lazy(() => import("./pages/PublicLanding"));
 const Login = lazy(() => import("./pages/Login"));
@@ -85,6 +86,8 @@ function PublicOnly({ children }) {
 }
 
 export default function App() {
+  useIdleTimeout();
+
   useEffect(() => {
     document.title = "InnovaCX";
 
