@@ -269,6 +269,7 @@ export default function CustomerAuthPage() {
       try {
         const res = await fetch(apiUrl("/api/auth/totp-status"), {
           headers: { Authorization: `Bearer ${loginToken}` },
+          cache: "no-store",
         });
         if (!res.ok) throw new Error("Failed to fetch TOTP status");
 
@@ -278,6 +279,7 @@ export default function CustomerAuthPage() {
         if (data.needsSetup) {
           const qrRes = await fetch(apiUrl("/api/auth/totp-setup"), {
             headers: { Authorization: `Bearer ${loginToken}` },
+            cache: "no-store",
           });
           if (!qrRes.ok) throw new Error("Failed to fetch QR code");
 
