@@ -89,6 +89,7 @@ export default function MfaSetup() {
   const [errorMsg,    setErrorMsg]    = useState("");
   const [shake,       setShake]       = useState(false);
   const [trustDevice, setTrustDevice] = useState(false);
+  const [copied,      setCopied]      = useState(false);
   const inputsRef     = useRef([]);
   const successRef    = useRef(false);
 
@@ -133,6 +134,14 @@ export default function MfaSetup() {
   const triggerShake = () => {
     setShake(true);
     setTimeout(() => setShake(false), 520);
+  };
+
+  const handleCopySecret = () => {
+    if (!secretKey) return;
+    navigator.clipboard.writeText(secretKey).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   const handleVerifyTotp = async (e) => {
@@ -216,71 +225,71 @@ export default function MfaSetup() {
       pointerEvents: "none", zIndex: 0, filter: "blur(10px)",
     },
     card: {
-      position: "relative", zIndex: 10, width: "min(480px,100%)",
+      position: "relative", zIndex: 10, width: "min(460px,100%)",
       background: "#ffffff", border: "1px solid rgba(89,36,180,.14)",
-      borderRadius: 24, padding: "32px 32px 36px",
+      borderRadius: 20, padding: "24px 28px 28px",
       boxShadow: "0 0 0 1px rgba(89,36,180,.1), 0 2px 4px rgba(89,36,180,.06), 0 12px 40px rgba(89,36,180,.12)",
       animation: "mfaSetupEnter .65s cubic-bezier(.22,1,.36,1) both",
     },
     stepBadge: {
-      display: "inline-flex", alignItems: "center", gap: 6,
+      display: "inline-flex", alignItems: "center", gap: 5,
       background: "rgba(109,40,217,.08)", border: "1px solid rgba(109,40,217,.2)",
-      borderRadius: 20, padding: "4px 14px", fontSize: 12, color: "#6d28d9",
-      fontWeight: 600, letterSpacing: ".04em", marginBottom: 14,
+      borderRadius: 20, padding: "3px 12px", fontSize: 11, color: "#6d28d9",
+      fontWeight: 600, letterSpacing: ".04em", marginBottom: 10,
     },
-    title: { margin: "0 0 6px", fontSize: 22, fontWeight: 800, color: "#1e0a4a", letterSpacing: "-.02em" },
-    sub: { margin: "0 0 14px", fontSize: 14, color: "#6b7280", lineHeight: 1.6 },
+    title: { margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#1e0a4a", letterSpacing: "-.02em" },
+    sub: { margin: "0 0 12px", fontSize: 13, color: "#6b7280", lineHeight: 1.5 },
     emailBox: {
       background: "rgba(109,40,217,.05)", border: "1px solid rgba(109,40,217,.15)",
-      borderRadius: 12, padding: "16px 18px", marginBottom: 24,
-      display: "flex", alignItems: "center", gap: 12,
+      borderRadius: 10, padding: "12px 14px", marginBottom: 14,
+      display: "flex", alignItems: "center", gap: 10,
     },
-    emailIcon: { width: 36, height: 36, borderRadius: "50%", background: "rgba(109,40,217,.1)",
+    emailIcon: { width: 32, height: 32, borderRadius: "50%", background: "rgba(109,40,217,.1)",
       display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-    emailText: { fontSize: 13, color: "#5b21b6", lineHeight: 1.5 },
+    emailText: { fontSize: 13, color: "#5b21b6", lineHeight: 1.4 },
     activeBadge: {
       display: "inline-flex", alignItems: "center", gap: 4,
       background: "rgba(22,163,74,.1)", border: "1px solid rgba(22,163,74,.25)",
-      borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#15803d", fontWeight: 600,
+      borderRadius: 20, padding: "2px 8px", fontSize: 11, color: "#15803d", fontWeight: 600,
     },
     warning: {
       background: "rgba(234,179,8,.06)", border: "1px solid rgba(234,179,8,.25)",
-      borderRadius: 12, padding: "12px 16px", marginBottom: 14,
+      borderRadius: 10, padding: "10px 14px", marginBottom: 12,
     },
-    warningText: { margin: 0, fontSize: 13, color: "#92400e", lineHeight: 1.55 },
-    qrWrap: { textAlign: "center", marginBottom: 14 },
-    qrImg: { borderRadius: 12, border: "2px solid rgba(109,40,217,.2)", background: "#fff", padding: 6 },
+    warningText: { margin: 0, fontSize: 12, color: "#92400e", lineHeight: 1.5 },
+    qrWrap: { textAlign: "center", marginBottom: 10 },
+    qrImg: { borderRadius: 10, border: "2px solid rgba(109,40,217,.2)", background: "#fff", padding: 5 },
     secretBox: {
       background: "rgba(109,40,217,.04)", border: "1px solid rgba(109,40,217,.15)",
-      borderRadius: 8, padding: "10px 14px", marginBottom: 12, textAlign: "center",
+      borderRadius: 8, padding: "8px 12px", marginBottom: 10,
     },
-    secretKey: { fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: "#5b21b6", letterSpacing: ".1em", wordBreak: "break-all" },
-    otpGroup: { display: "flex", gap: 10, justifyContent: "center", marginBottom: 14 },
+    secretKey: { fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "#5b21b6", letterSpacing: ".08em", wordBreak: "break-all" },
+    otpGroup: { display: "flex", gap: 8, justifyContent: "center", marginBottom: 12 },
     otpInput: {
-      width: 46, height: 56, borderRadius: 10, border: "2px solid rgba(109,40,217,.25)",
-      background: "rgba(109,40,217,.04)", color: "#1e0a4a", fontSize: 22, fontWeight: 700,
+      width: 42, height: 50, borderRadius: 10, border: "2px solid rgba(109,40,217,.25)",
+      background: "rgba(109,40,217,.04)", color: "#1e0a4a", fontSize: 20, fontWeight: 700,
       textAlign: "center", outline: "none", transition: "border-color .2s, box-shadow .2s",
     },
     error: {
       background: "rgba(220,38,38,.06)", border: "1px solid rgba(220,38,38,.2)",
-      borderRadius: 10, padding: "10px 14px", marginBottom: 16,
-      color: "#b91c1c", fontSize: 13,
+      borderRadius: 8, padding: "8px 12px", marginBottom: 12,
+      color: "#b91c1c", fontSize: 12,
     },
     btn: {
-      width: "100%", padding: "14px", background: "linear-gradient(135deg,#6d28d9,#9333ea,#a855f7)",
-      color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700,
+      width: "100%", padding: "12px", background: "linear-gradient(135deg,#6d28d9,#9333ea,#a855f7)",
+      color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700,
       cursor: "pointer", transition: "opacity .2s, transform .15s",
       boxShadow: "0 4px 20px rgba(109,40,217,.3)",
     },
     btnSecondary: {
-      width: "100%", padding: "12px", background: "transparent",
+      width: "100%", padding: "10px", background: "transparent",
       color: "#7c3aed", border: "1px solid rgba(109,40,217,.25)",
-      borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: "pointer",
-      marginTop: 12, transition: "color .2s, border-color .2s",
+      borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer",
+      marginTop: 8, transition: "color .2s, border-color .2s",
     },
-    stepper: { display: "flex", gap: 8, marginBottom: 28 },
+    stepper: { display: "flex", gap: 8, marginBottom: 20 },
     stepDot: (active, done) => ({
-      flex: 1, height: 4, borderRadius: 4,
+      flex: 1, height: 3, borderRadius: 4,
       background: done ? "#7c3aed" : active ? "rgba(109,40,217,.4)" : "rgba(109,40,217,.12)",
       transition: "background .4s",
     }),
@@ -302,71 +311,71 @@ export default function MfaSetup() {
       pointerEvents: "none", zIndex: 1,
     },
     card: {
-      position: "relative", zIndex: 10, width: "min(480px,100%)",
+      position: "relative", zIndex: 10, width: "min(460px,100%)",
       background: "rgba(13,5,32,0.96)", border: "1px solid rgba(139,92,246,.28)",
-      borderRadius: 24, padding: "32px 32px 36px",
+      borderRadius: 20, padding: "24px 28px 28px",
       boxShadow: "0 0 0 1px rgba(168,85,247,.12), 0 8px 40px rgba(0,0,0,.6), 0 0 80px rgba(147,51,234,.12)",
       animation: "mfaSetupEnter .65s cubic-bezier(.22,1,.36,1) both",
     },
     stepBadge: {
-      display: "inline-flex", alignItems: "center", gap: 6,
+      display: "inline-flex", alignItems: "center", gap: 5,
       background: "rgba(139,92,246,.12)", border: "1px solid rgba(139,92,246,.25)",
-      borderRadius: 20, padding: "4px 14px", fontSize: 12, color: "#c4b5fd",
-      fontWeight: 600, letterSpacing: ".04em", marginBottom: 14,
+      borderRadius: 20, padding: "3px 12px", fontSize: 11, color: "#c4b5fd",
+      fontWeight: 600, letterSpacing: ".04em", marginBottom: 10,
     },
-    title: { margin: "0 0 6px", fontSize: 22, fontWeight: 800, color: "#f3e8ff", letterSpacing: "-.02em" },
-    sub: { margin: "0 0 14px", fontSize: 14, color: "#9ca3af", lineHeight: 1.6 },
+    title: { margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#f3e8ff", letterSpacing: "-.02em" },
+    sub: { margin: "0 0 12px", fontSize: 13, color: "#9ca3af", lineHeight: 1.5 },
     emailBox: {
       background: "rgba(139,92,246,.08)", border: "1px solid rgba(139,92,246,.2)",
-      borderRadius: 12, padding: "16px 18px", marginBottom: 24,
-      display: "flex", alignItems: "center", gap: 12,
+      borderRadius: 10, padding: "12px 14px", marginBottom: 14,
+      display: "flex", alignItems: "center", gap: 10,
     },
-    emailIcon: { width: 36, height: 36, borderRadius: "50%", background: "rgba(139,92,246,.2)",
+    emailIcon: { width: 32, height: 32, borderRadius: "50%", background: "rgba(139,92,246,.2)",
       display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-    emailText: { fontSize: 13, color: "#c4b5fd", lineHeight: 1.5 },
+    emailText: { fontSize: 13, color: "#c4b5fd", lineHeight: 1.4 },
     activeBadge: {
       display: "inline-flex", alignItems: "center", gap: 4,
       background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.25)",
-      borderRadius: 20, padding: "2px 10px", fontSize: 11, color: "#86efac", fontWeight: 600,
+      borderRadius: 20, padding: "2px 8px", fontSize: 11, color: "#86efac", fontWeight: 600,
     },
     warning: {
       background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.2)",
-      borderRadius: 12, padding: "12px 16px", marginBottom: 14,
+      borderRadius: 10, padding: "10px 14px", marginBottom: 12,
     },
-    warningText: { margin: 0, fontSize: 13, color: "rgba(251,191,36,.8)", lineHeight: 1.55 },
-    qrWrap: { textAlign: "center", marginBottom: 14 },
-    qrImg: { borderRadius: 12, border: "2px solid rgba(139,92,246,.3)", background: "#fff", padding: 6 },
+    warningText: { margin: 0, fontSize: 12, color: "rgba(251,191,36,.8)", lineHeight: 1.5 },
+    qrWrap: { textAlign: "center", marginBottom: 10 },
+    qrImg: { borderRadius: 10, border: "2px solid rgba(139,92,246,.3)", background: "#fff", padding: 5 },
     secretBox: {
       background: "rgba(0,0,0,.3)", border: "1px solid rgba(139,92,246,.2)",
-      borderRadius: 8, padding: "10px 14px", marginBottom: 12, textAlign: "center",
+      borderRadius: 8, padding: "8px 12px", marginBottom: 10,
     },
-    secretKey: { fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: "#c4b5fd", letterSpacing: ".1em", wordBreak: "break-all" },
-    otpGroup: { display: "flex", gap: 10, justifyContent: "center", marginBottom: 14 },
+    secretKey: { fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "#c4b5fd", letterSpacing: ".08em", wordBreak: "break-all" },
+    otpGroup: { display: "flex", gap: 8, justifyContent: "center", marginBottom: 12 },
     otpInput: {
-      width: 46, height: 56, borderRadius: 12, border: "2px solid rgba(139,92,246,.3)",
-      background: "rgba(139,92,246,.08)", color: "#f3e8ff", fontSize: 22, fontWeight: 700,
+      width: 42, height: 50, borderRadius: 10, border: "2px solid rgba(139,92,246,.3)",
+      background: "rgba(139,92,246,.08)", color: "#f3e8ff", fontSize: 20, fontWeight: 700,
       textAlign: "center", outline: "none", transition: "border-color .2s, box-shadow .2s",
     },
     error: {
       background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.25)",
-      borderRadius: 10, padding: "10px 14px", marginBottom: 16,
-      color: "#fca5a5", fontSize: 13,
+      borderRadius: 8, padding: "8px 12px", marginBottom: 12,
+      color: "#fca5a5", fontSize: 12,
     },
     btn: {
-      width: "100%", padding: "14px", background: "linear-gradient(135deg,#6d28d9,#9333ea,#a855f7)",
-      color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700,
+      width: "100%", padding: "12px", background: "linear-gradient(135deg,#6d28d9,#9333ea,#a855f7)",
+      color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700,
       cursor: "pointer", transition: "opacity .2s, transform .15s",
       boxShadow: "0 4px 20px rgba(147,51,234,.4)",
     },
     btnSecondary: {
-      width: "100%", padding: "12px", background: "transparent",
+      width: "100%", padding: "10px", background: "transparent",
       color: "rgba(196,181,253,.6)", border: "1px solid rgba(139,92,246,.2)",
-      borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: "pointer",
-      marginTop: 12, transition: "color .2s, border-color .2s",
+      borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: "pointer",
+      marginTop: 8, transition: "color .2s, border-color .2s",
     },
-    stepper: { display: "flex", gap: 8, marginBottom: 28 },
+    stepper: { display: "flex", gap: 8, marginBottom: 20 },
     stepDot: (active, done) => ({
-      flex: 1, height: 4, borderRadius: 4,
+      flex: 1, height: 3, borderRadius: 4,
       background: done ? "#9333ea" : active ? "rgba(147,51,234,.5)" : "rgba(139,92,246,.15)",
       transition: "background .4s",
     }),
@@ -503,7 +512,28 @@ export default function MfaSetup() {
 
             {secretKey && (
               <div style={s.secretBox}>
-                <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6, letterSpacing: ".08em", textTransform: "uppercase" }}>Manual setup key</div>
+                <div style={{ fontSize: 11, color: isStaff ? "#6b7280" : "#6b7280", marginBottom: 5, letterSpacing: ".08em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span>Manual setup key</span>
+                  <button
+                    type="button"
+                    onClick={handleCopySecret}
+                    title="Copy secret key"
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 4,
+                      background: copied ? (isStaff ? "rgba(22,163,74,.12)" : "rgba(34,197,94,.12)") : (isStaff ? "rgba(109,40,217,.08)" : "rgba(139,92,246,.1)"),
+                      border: `1px solid ${copied ? (isStaff ? "rgba(22,163,74,.3)" : "rgba(34,197,94,.3)") : (isStaff ? "rgba(109,40,217,.2)" : "rgba(139,92,246,.2)")}`,
+                      borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 600,
+                      color: copied ? (isStaff ? "#15803d" : "#86efac") : (isStaff ? "#6d28d9" : "#c4b5fd"),
+                      cursor: "pointer", transition: "all .2s",
+                    }}
+                  >
+                    {copied ? (
+                      <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>Copied!</>
+                    ) : (
+                      <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</>
+                    )}
+                  </button>
+                </div>
                 <div style={s.secretKey}>{secretKey}</div>
               </div>
             )}
@@ -511,7 +541,7 @@ export default function MfaSetup() {
             {errorMsg && <div style={s.error}>{errorMsg}</div>}
 
             <form onSubmit={handleVerifyTotp}>
-              <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 10, textAlign: "center" }}>
+              <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 8, textAlign: "center" }}>
                 Enter the 6-digit code from your app
               </div>
               <div style={s.otpGroup} role="group" aria-label="One-time password">
@@ -533,7 +563,7 @@ export default function MfaSetup() {
                 ))}
               </div>
 
-              <label style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 12px", color: "#c4b5fd", fontSize: 13 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 10px", color: "#c4b5fd", fontSize: 13 }}>
                 <input
                   type="checkbox"
                   checked={trustDevice}
