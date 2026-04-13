@@ -9,7 +9,7 @@
  * Keeps: Unicode letters, Unicode digits, whitespace, newlines, and common
  * punctuation needed in complaint text. Everything else is stripped.
  */
-const _ALLOWED_TEXT_RE = /[^\p{L}\p{N}\s\-.,!?'"+()\u005B\u005D@/:;#%&*\n]/gu;
+const _ALLOWED_TEXT_RE = /[^\p{L}\p{N}\s.,!?'"+()\u005B\u005D@/:;#%&*\n-]/gu;
 
 /**
  * Coerce any value to a safe, trimmed string.
