@@ -141,17 +141,17 @@
 /* In-chat action buttons (e.g. Confirm Ticket / Edit Details) */
 .custActionBtns {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: flex-start;
-  padding: 4px 0 6px 2px;
+  gap: 8px;
+  padding: 10px 0 4px 0;
+  width: 100%;
 }
 
 .custActionBtns button {
+  flex: 1;
   font-family: "Outfit", sans-serif;
   font-size: 13px;
   font-weight: 700;
-  padding: 10px 20px;
+  padding: 11px 16px;
   border-radius: 10px;
   border: 1px solid rgba(147, 51, 234, 0.35);
   background: rgba(147, 51, 234, 0.12);
@@ -159,7 +159,6 @@
   cursor: pointer;
   transition: all 0.2s;
   letter-spacing: 0.02em;
-  min-width: 130px;
   text-align: center;
   white-space: nowrap;
 }
