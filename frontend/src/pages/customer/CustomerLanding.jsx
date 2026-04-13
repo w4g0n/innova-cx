@@ -743,7 +743,6 @@ export default function CustomerLanding() {
             const ticketId   = sanitizeId(recentTicket.ticketId, 48);
             const ticketType = sanitizeText(recentTicket.ticketType || recentTicket.type, 60);
             const status     = sanitizeText(recentTicket.status, 40);
-            const priority   = sanitizeText(recentTicket.priority, 20);
             const subject    = sanitizeText(
               recentTicket.subject || recentTicket.description?.subject || "",
               200
@@ -775,8 +774,6 @@ export default function CustomerLanding() {
                     <span className="cl-status-dot" />
                     {status}
                   </span>
-                  <span className="cl-ticket-dot cl-ticket-dot--spacer" />
-                  <span className="cl-ticket-priority">{priority}</span>
                 </div>
 
                 <h3 className="cl-ticket-subject">{subject}</h3>
