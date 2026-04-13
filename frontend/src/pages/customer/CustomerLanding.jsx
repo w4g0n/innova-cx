@@ -9,6 +9,7 @@ import TicketConfirmPopup from "../../components/common/TicketConfirmPopup";
 import { apiUrl } from "../../config/apiBase";
 import { getInitialsFromEmail } from "../../utils/userDisplay";
 import { getToken } from "../../utils/auth";
+import { getCsrfToken } from "../../services/api";
 import { useTheme, ThemeToggleBtn } from "./CustomerTheme";
 import {
   safeParseUser,
@@ -329,7 +330,15 @@ export default function CustomerLanding() {
 
   const openSettings  = () => { closeAllPopovers(); navigate("/customer/settings"); };
   const handleLogout  = () => { closeAllPopovers(); setShowLogoutConfirm(true); };
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
+    try {
+      const csrf = await getCsrfToken();
+      await fetch(apiUrl("/api/auth/logout"), {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
+      });
+    } catch { /* best-effort; local cleanup always runs */ }
     resetSession();
     setIsOpen(false);
     setIsExpanded(false);
@@ -337,6 +346,8 @@ export default function CustomerLanding() {
     ["user", "token", "temp_token", "access_token"].forEach((k) =>
       localStorage.removeItem(k)
     );
+    sessionStorage.removeItem("mfa_token");
+    sessionStorage.removeItem("mfa_user");
     navigate("/");
   };
 
