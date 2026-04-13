@@ -474,6 +474,8 @@ function inferStageMode(stage) {
     return "Mock";
   }
   if (
+    hint.includes("qwen") ||
+    hint.includes("generation") ||
     hint.includes("model") ||
     hint.includes("ml") ||
     hint.includes("neural") ||
@@ -510,7 +512,6 @@ function stageUsesFallback(stage) {
   return values.some(
     (value) =>
       value.includes("mock_fallback") ||
-      value.includes("timeout_background") ||
       value.includes("heuristic_fallback"),
   );
 }
