@@ -55,7 +55,7 @@ innova-cx/
 - Multi-agent pipeline (DSPy)
 - Nova chatbot agent
 
-> **Note:** Trained model files are not included in this repository (too large for Git). The `frontend` Docker profile runs without them — the chatbot uses mock mode (`CHATBOT_USE_MOCK=true`) and the ML pipeline is not started. To run the full pipeline, use the `live` profile on a machine where the model files have been pre-downloaded.
+> **Note:** Trained model files are not included in this repository. The `frontend` profile runs without them (chatbot uses mock mode). The `live` profile requires model files to be pre-downloaded on the host.
 
 ---
 
@@ -114,21 +114,14 @@ Wait for `Application startup complete` before opening the browser.
 | Manager | hamad@innovacx.net | Innova@2025 |
 | Operator | operator@innovacx.net | Innova@2025 |
 
-**Logging in — OTP steps**
+**OTP / MFA**
 
-Login is two-step for all accounts:
-
-- **Customers** — after entering email + password, a one-time code is requested. In dev mode (`DEV_LOG_RESET_TOKENS=true` in `.env.install`) no email is sent — the code is printed to the backend logs. Look at the terminal where Docker is running, or open a second terminal and run:
+- **Customers** — check the Docker logs for the one-time code:
   ```bash
   docker compose logs backend
+  # [DEV] Email OTP for customer1@innovacx.net: 123456
   ```
-  Find the line:
-  ```
-  [DEV] Email OTP for customer1@innovacx.net: 123456
-  ```
-  Enter that code to complete login.
-
-- **Staff (Employee / Manager / Operator)** — after entering email + password, a TOTP code is requested. On first login, a QR code is displayed in the browser — scan it with an authenticator app (Google Authenticator, Authy, or any RFC 6238-compatible app). On subsequent logins, enter the current 6-digit code from your app.
+- **Staff** — scan the QR code shown after login with any authenticator app (Google Authenticator, Authy, etc.)
 
 > For production deployment, use `.env.example` as your template — it documents all required variables with no defaults.
 
