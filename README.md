@@ -114,13 +114,17 @@ Wait for `Application startup complete` before opening the browser.
 | Manager | hamad@innovacx.net | Innova@2025 |
 | Operator | operator@innovacx.net | Innova@2025 |
 
-**MFA / OTP in dev mode**
+**Logging in — OTP steps**
 
-`.env.install` sets `DISABLE_MFA=true`, so login is email + password only — no OTP required.
+Login is two-step for all accounts:
 
-If you remove that flag and want to test the full MFA flow:
-- **Customers** — an email OTP is generated. With `DEV_LOG_RESET_TOKENS=true` (also set in `.env.install`) the code prints to Docker logs: look for `[DEV] Email OTP for <email>: <code>` in the backend container output.
-- **Staff (Employee / Manager / Operator)** — TOTP via an authenticator app (Google Authenticator, Authy, etc.). On first login the app shows a QR code to scan; subsequent logins require the 6-digit code from your app.
+- **Customers** — after entering email + password, a one-time code is requested. In dev mode (`DEV_LOG_RESET_TOKENS=true` in `.env.install`) no email is sent — the code is printed directly to the backend Docker logs. Run `docker compose logs backend` and look for:
+  ```
+  [DEV] Email OTP for customer1@innovacx.net: 123456
+  ```
+  Enter that code to complete login.
+
+- **Staff (Employee / Manager / Operator)** — after entering email + password, a TOTP code is requested. On first login, a QR code is displayed in the browser — scan it with an authenticator app (Google Authenticator, Authy, or any RFC 6238-compatible app). On subsequent logins, enter the current 6-digit code from your app.
 
 > For production deployment, use `.env.example` as your template — it documents all required variables with no defaults.
 
