@@ -1,7 +1,17 @@
 """
-Shared Model Service
-====================
 Provides singleton loaders for two in-process models:
+Shared Qwen Model Service
+Single in-process Qwen2.5-0.5B-Instruct instance shared across:
+  - SubjectGenerationAgent (step01) — in-process fallback
+  - SuggestedResolutionAgent (step02) — primary inference
+  - DepartmentRoutingAgent (step10) — routing via generation
+  - ReviewAgent (step11) — consistency check + routing validation
+
+Model weights preferably live in the shared host model store:
+  /app/models/reviewagent/qwen2.5-0.5B-Instruct
+
+Legacy fallback during migration:
+  /app/agents/step11_reviewagent/model
 
 Qwen2.5-0.5B-Instruct  (get_shared_qwen)
   - SubjectGenerationAgent (step02) — in-process fallback
