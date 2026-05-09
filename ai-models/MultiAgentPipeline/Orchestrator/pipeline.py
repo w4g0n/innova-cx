@@ -27,7 +27,7 @@ Flow:
 
 from langchain_core.runnables import RunnableLambda, RunnableSequence
 
-from agents.step01_subjectgeneration.step import generate_subject
+from agents.step02_subjectgeneration.step import generate_subject
 from agents.step02_suggestedresolution.step import generate_suggested_resolution
 from agents.step03_classifier.step import classify
 from agents.step04_sentimentanalysis.step import analyze_sentiment

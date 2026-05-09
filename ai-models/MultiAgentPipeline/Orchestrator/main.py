@@ -35,7 +35,7 @@ from queue_manager import (
 from agents.step04_sentimentanalysis.step import get_sentiment_diagnostics
 from agents.step03_classifier.step import get_classifier_diagnostics
 from agents.step08_featureengineering.step import get_feature_engineering_diagnostics
-from agents.step01_subjectgeneration.step import get_subject_generation_diagnostics
+from agents.step02_subjectgeneration.step import get_subject_generation_diagnostics
 from agents.step02_suggestedresolution.step import get_suggested_resolution_diagnostics
 from agents.step10_router.step import get_router_diagnostics
 from agents.step05_audioanalysis.step import get_audio_analysis_diagnostics
@@ -96,6 +96,11 @@ async def _startup():
         await asyncio.to_thread(get_shared_qwen)
     except Exception as _qwen_err:
         logger.warning('startup | shared Qwen warmup skipped: %s', _qwen_err)
+    try:
+        from shared_model_service import get_shared_deberta
+        await asyncio.to_thread(get_shared_deberta)
+    except Exception as _deberta_err:
+        logger.warning('startup | DeBERTa router warmup skipped: %s', _deberta_err)
     # Start the persistent queue background worker
     asyncio.create_task(queue_worker_loop())
 

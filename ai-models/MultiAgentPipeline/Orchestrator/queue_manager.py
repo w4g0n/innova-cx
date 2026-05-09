@@ -44,7 +44,7 @@ from db import db_connect
 from execution_logger import _write_stage_event
 from backend_client import internal_backend_headers
 
-from agents.step01_subjectgeneration.step import generate_subject
+from agents.step02_subjectgeneration.step import generate_subject
 from agents.step02_suggestedresolution.step import generate_suggested_resolution
 from agents.step03_classifier.step import classify
 from agents.step04_sentimentanalysis.step import analyze_sentiment
