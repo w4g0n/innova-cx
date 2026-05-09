@@ -35,7 +35,7 @@ DEPARTMENT_CANDIDATES = {
 }
 
 DEPARTMENT_LABELS = list(DEPARTMENT_CANDIDATES.keys())
-ROUTING_CONFIDENCE_THRESHOLD = 0.50
+ROUTING_CONFIDENCE_THRESHOLD = 0.75
 CALIBRATION_WEIGHT = float(os.getenv("DEPARTMENT_ROUTER_CALIBRATION_WEIGHT", "0.12"))
 CONFIDENCE_FLAT_BOOST = float(os.getenv("DEPARTMENT_ROUTER_CONFIDENCE_FLAT_BOOST", "0.30"))
 CONFIDENCE_MAX_CAP = float(os.getenv("DEPARTMENT_ROUTER_CONFIDENCE_MAX_CAP", "0.98"))
@@ -92,25 +92,6 @@ HEURISTIC_ROUTING_BOOSTS = {
     "Facilities Management": ("cleaning", "pest", "rat", "rodent", "cockroach", "garbage", "trash", "housekeeping"),
 }
 
-# Qwen routing prompt — numbered list, model replies with a single digit 1-7
-_ROUTING_SYSTEM = (
-    "You are a ticket routing assistant for a facilities management company. "
-    "Reply only with the number of the correct department. No explanation."
-)
-
-_DEPARTMENT_LIST = "\n".join(
-    f"{i}. {dept}" for i, dept in enumerate(DEPARTMENT_LABELS, start=1)
-)
-
-
-def _build_qwen_routing_prompt(text: str, label: str) -> str:
-    return (
-        f"Ticket: {str(text or '')[:400]}\n"
-        f"Type: {label}\n"
-        f"Departments:\n{_DEPARTMENT_LIST}\n\n"
-        "Which department number handles this ticket? Reply with one digit only:"
-    )
-
 
 def _heuristic_department(text: str) -> str:
     t = (text or "").lower()
@@ -154,15 +135,20 @@ def _heuristic_department(text: str) -> str:
     return "Facilities Management"
 
 
-def _predict_department_via_qwen(text: str, label: str) -> tuple[list[str], list[float], str]:
+_HYPOTHESIS_TEMPLATE = "This ticket should be handled by {}."
+_ENTAILMENT_IDX = 2  # softmax index for entailment in the fine-tuned DeBERTa checkpoint
+
+
+def _predict_department_via_deberta(text: str) -> tuple[list[str], list[float], str]:
     """
-    Use Qwen to select a department (numbered list).
+    Score each department using the fine-tuned DeBERTa NLI router.
+    For each department hypothesis the entailment probability is used as
+    the routing score. Falls back to heuristic if model is unavailable.
     Returns (ranked_labels, ranked_scores, source).
-    Falls back to heuristic if Qwen unavailable or response is unparseable.
     """
     try:
-        from shared_model_service import get_shared_qwen
-        loaded = get_shared_qwen()
+        from shared_model_service import get_shared_deberta
+        loaded = get_shared_deberta()
     except Exception:
         loaded = None
 
@@ -170,50 +156,32 @@ def _predict_department_via_qwen(text: str, label: str) -> tuple[list[str], list
         return _fallback_routing_result(text)
 
     try:
-        import re
-        import torch  # type: ignore
         tokenizer = loaded["tokenizer"]
         model = loaded["model"]
-        device = loaded["device"]
-        prompt = _build_qwen_routing_prompt(text, label)
-        messages = [
-            {"role": "system", "content": _ROUTING_SYSTEM},
-            {"role": "user", "content": prompt},
-        ]
-        if hasattr(tokenizer, "apply_chat_template"):
-            rendered = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
-            )
-            inputs = tokenizer([rendered], return_tensors="pt", truncation=True).to(device)
-        else:
-            inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(device)
-        with torch.no_grad():
-            output_ids = model.generate(
-                **inputs,
-                max_new_tokens=5,
-                do_sample=False,
-                use_cache=torch.cuda.is_available(),
-            )
-        prompt_len = inputs["input_ids"].shape[1]
-        generated = (
-            output_ids[0][prompt_len:]
-            if output_ids.shape[1] > prompt_len
-            else output_ids[0]
-        )
-        response = tokenizer.decode(generated, skip_special_tokens=True).strip()
+        torch = loaded["torch"]
 
-        # Extract first digit 1-7
-        m = re.search(r"[1-7]", response)
-        if m:
-            dept_index = int(m.group(0)) - 1  # 0-based
-            chosen = DEPARTMENT_LABELS[dept_index]
-            remaining = [d for d in DEPARTMENT_LABELS if d != chosen]
-            labels = [chosen] + remaining
-            # Clean match → 0.60 confidence; others split the remainder
-            scores = [0.60] + [0.40 / max(1, len(remaining))] * len(remaining)
-            return labels, scores, "qwen_generation"
+        premise = str(text or "")[:400]
+        dept_scores: list[tuple[str, float]] = []
+
+        for dept in DEPARTMENT_LABELS:
+            enc = tokenizer(
+                premise,
+                _HYPOTHESIS_TEMPLATE.format(dept),
+                max_length=256,
+                truncation=True,
+                return_tensors="pt",
+            )
+            with torch.no_grad():
+                logits = model(**enc).logits
+            probs = torch.softmax(logits, dim=-1)[0]
+            dept_scores.append((dept, float(probs[_ENTAILMENT_IDX])))
+
+        dept_scores.sort(key=lambda x: x[1], reverse=True)
+        labels = [d for d, _ in dept_scores]
+        scores = [s for _, s in dept_scores]
+        return labels, scores, "deberta_nli"
     except Exception as exc:
-        logger.warning("department_router | qwen inference failed (%s)", exc)
+        logger.warning("department_router | deberta inference failed (%s)", exc)
 
     return _fallback_routing_result(text)
 
@@ -228,21 +196,21 @@ def _fallback_routing_result(text: str) -> tuple[list[str], list[float], str]:
 
 def get_router_diagnostics() -> dict[str, object]:
     try:
-        from shared_model_service import SHARED_QWEN_MODEL_PATH, get_shared_qwen_diagnostics
-        diag = get_shared_qwen_diagnostics()
-        model_exists = bool(diag.get("shared_qwen_model_exists"))
-        model_path = SHARED_QWEN_MODEL_PATH
+        from shared_model_service import get_shared_deberta_diagnostics, DEPARTMENT_ROUTER_MODEL_PATH
+        diag = get_shared_deberta_diagnostics()
+        model_exists = bool(diag.get("deberta_model_exists"))
+        model_path = DEPARTMENT_ROUTER_MODEL_PATH
     except Exception:
         model_exists = False
         model_path = None
     return {
         "department_router_model_path": model_path,
-        "department_router_model_name": "Qwen/Qwen2.5-0.5B-Instruct",
+        "department_router_model_name": "DeBERTa-v3-base-mnli (fine-tuned)",
         "department_router_local_model_exists": model_exists,
         "department_router_threshold": ROUTING_CONFIDENCE_THRESHOLD,
         "department_router_calibration_weight": CALIBRATION_WEIGHT,
-        "department_router_runtime_mode": "qwen_generation",
-        "department_router_mode": "qwen_generation" if model_exists else "heuristic_fallback",
+        "department_router_runtime_mode": "deberta_nli",
+        "department_router_mode": "deberta_nli" if model_exists else "heuristic_fallback",
     }
 
 
@@ -341,7 +309,7 @@ async def route_and_store(state: dict) -> dict:
     data: dict = {}
 
     labels, scores, source = await asyncio.to_thread(
-        _predict_department_via_qwen, ticket_text, label
+        _predict_department_via_deberta, ticket_text
     )
     top_department = labels[0] if labels else None
     top_confidence = scores[0] if scores else 0.0
