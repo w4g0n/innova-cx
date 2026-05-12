@@ -6703,6 +6703,28 @@ def decide_routing_review(
         logger=logger,
     )
 
+
+@api.get("/internal/department-routing/calibration")
+def get_department_routing_calibration(
+    predicted: str = Query(...),
+    _key: None = Depends(require_internal_key),
+):
+    rows = fetch_all(
+        """
+        SELECT approved_department, COUNT(*) AS cnt
+        FROM department_routing_feedback
+        WHERE predicted_department = %s
+        GROUP BY approved_department
+        """,
+        (predicted,),
+    )
+    if not rows:
+        return {"probabilities": {}}
+    total = sum(int(r["cnt"]) for r in rows)
+    probs = {r["approved_department"]: round(int(r["cnt"]) / total, 6) for r in rows}
+    return {"probabilities": {predicted: probs}}
+
+
 # Operator Notifications
 
 @api.get("/operator/notifications")
