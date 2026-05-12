@@ -1,13 +1,13 @@
 """
 Step 10 — Department Routing Agent
 ===================================
-Routes tickets to one of seven departments using a fine-tuned
-DeBERTa-v3-base-mnli NLI classifier. Entailment probability against
-each department hypothesis is used as the routing score.
-All calibration layers (manager feedback, domain keywords, flat boost)
-run on top of the DeBERTa-derived scores.
+Routes tickets to one of seven departments using Qwen generation.
+A numbered list prompt is used; the model replies with a single digit.
+All calibration layers (feedback, domain keywords, flat boost) run on top
+of the Qwen-derived scores.
 
-If DeBERTa is unavailable the heuristic keyword fallback takes over.
+If Qwen is unavailable or returns an unparseable response the heuristic
+keyword fallback takes over (same logic as _mock_department_from_text).
 """
 
 from __future__ import annotations
