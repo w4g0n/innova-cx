@@ -1,0 +1,10 @@
+[Unit]
+Description=Docker weekly prune — remove unused images and build cache
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker image prune -af
+ExecStartPost=/usr/bin/docker builder prune -af
+ExecStartPost=/bin/sh -c 'echo "Docker prune complete at $(date)" >> /var/log/docker-prune.log'

@@ -4955,6 +4955,7 @@ def _dispatch_orchestrator_after_submit(
     execution_id: Optional[str],
     has_audio: bool = False,
     audio_features: Optional[dict] = None,
+    created_by_user_id: Optional[str] = None,
 ) -> None:
     ok = dispatch_ticket_to_orchestrator(
         ticket_code=ticket_code,
@@ -4966,6 +4967,7 @@ def _dispatch_orchestrator_after_submit(
         execution_id=execution_id,
         has_audio=has_audio,
         audio_features=audio_features,
+        created_by_user_id=created_by_user_id,
     )
     if not ok:
         logger.warning("orchestrator_dispatch | failed for ticket=%s", ticket_code)
@@ -5026,6 +5028,7 @@ def create_internal_ticket_via_gate(body: InternalCreateTicketRequest, _key: Non
         ticket_type=ticket_type,
         subject=subject,
         execution_id=created.get("execution_id"),
+        created_by_user_id=str(body.created_by_user_id),
     )
     if not orchestrator_dispatched:
         logger.warning(
@@ -5123,6 +5126,7 @@ def create_customer_ticket(
         execution_id=execution_id,
         has_audio=bool(body.has_audio),
         audio_features=body.audio_features if isinstance(body.audio_features, dict) else None,
+        created_by_user_id=str(user["id"]),
     )
     logger.info("orchestrator_dispatch | queued for ticket=%s", ticket_code)
     log_application_event(
@@ -6679,6 +6683,28 @@ def decide_routing_review(
         insert_notification=_insert_notification,
         logger=logger,
     )
+
+
+@api.get("/internal/department-routing/calibration")
+def get_department_routing_calibration(
+    predicted: str = Query(...),
+    _key: None = Depends(require_internal_key),
+):
+    rows = fetch_all(
+        """
+        SELECT approved_department, COUNT(*) AS cnt
+        FROM department_routing_feedback
+        WHERE predicted_department = %s
+        GROUP BY approved_department
+        """,
+        (predicted,),
+    )
+    if not rows:
+        return {"probabilities": {}}
+    total = sum(int(r["cnt"]) for r in rows)
+    probs = {r["approved_department"]: round(int(r["cnt"]) / total, 6) for r in rows}
+    return {"probabilities": {predicted: probs}}
+
 
 # Operator Notifications
 

@@ -632,7 +632,7 @@ BEGIN
     AND t.created_at >= now() - make_interval(days => p_window_days)
     AND lower(trim(COALESCE(t.subject, ''))) = normalized_subject;
 
-  IF exact_subject_count > 0 THEN
+  IF normalized_subject <> '' AND exact_subject_count > 0 THEN
     RETURN TRUE;
   END IF;
 

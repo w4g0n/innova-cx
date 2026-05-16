@@ -1,0 +1,250 @@
+{
+  "session": {
+    "date": "2026-04-10",
+    "branch": "prod-live",
+    "repo": "w4g0n/innova-cx",
+    "vm": "innovacx-vm (GCP europe-west1-b, 34.38.76.62 internal, accessed via IAP tunnel)",
+    "site": "https://innovacx.net"
+  },
+
+  "root_cause": {
+    "summary": "The GitHub Actions self-hosted CI runner runs on the same GCP VM as the live production Docker stack. Both used the same Docker Compose project name ('innova-cx'). Every CI merge-gate run executed 'docker compose down -v --remove-orphans' which wiped the live innova-cx_postgres_data volume. PostgreSQL then re-initialised with CI seed credentials (APP_DB_PASSWORD=changeme123) while the VM .env had a different password — causing all backend services to fail with 'password authentication failed for user innovacx_app' on every restart.",
+    "secondary_causes": [
+      "uvicorn --reload in production caused periodic backend restarts (~every 15s) explaining the page refresh",
+      "ML container health check start_period too short — Docker declared them unhealthy before models loaded, triggering restart loops",
+      "nginx redirect loop: GCP LB forwards all traffic (including HTTPS user requests) to the VM on port 80 as plain HTTP. nginx redirected port 80 → HTTPS, creating an infinite redirect loop",
+      "GCP LB health check (/api/health on port 80) was being routed to the frontend (port 5173) which returned 404, permanently marking the backend as unhealthy",
+      "Three.js loaded from external CDN (cdnjs.cloudflare.com) — no fallback if CDN fails or WebGL unavailable"
+    ]
+  },
+
+  "fixes": [
+    {
+      "id": 1,
+      "title": "CI isolation via COMPOSE_PROJECT_NAME",
+      "problem": "CI and live stack shared Docker project name 'innova-cx'. CI's 'down -v' wiped the live postgres_data volume on every merge-gate run.",
+      "files_changed": [
+        ".github/workflows/post-merge-docker-db-check.yml",
+        "docker-compose.ci.yml (NEW FILE)"
+      ],
+      "changes": {
+        ".github/workflows/post-merge-docker-db-check.yml": {
+          "description": "Added COMPOSE_PROJECT_NAME: innovacx-ci to both the 'Sweep all compose profiles' and 'Cleanup' env blocks. Updated all docker compose calls to use '-f docker-compose.yml -f docker-compose.ci.yml'. Updated all container name references from innovacx-* to innovacx-ci-*.",
+          "key_diff": "env block now has: COMPOSE_PROJECT_NAME: innovacx-ci (first entry, before BACKUP_PASSPHRASE). All 'docker compose' calls now include '-f docker-compose.yml -f docker-compose.ci.yml'. Container refs: innovacx-db→innovacx-ci-db, innovacx-backend→innovacx-ci-backend, innovacx-frontend→innovacx-ci-frontend, innovacx-orchestrator→innovacx-ci-orchestrator, innovacx-chatbot→innovacx-ci-chatbot, innovacx-transcriber→innovacx-ci-transcriber."
+        },
+        "docker-compose.ci.yml": {
+          "description": "New file. Overrides container_name for all services (adds -ci- prefix) and removes port mappings so CI containers never conflict with live containers.",
+          "full_content": "services:\n  postgres:\n    container_name: innovacx-ci-db\n    ports: []\n  backend:\n    container_name: innovacx-ci-backend\n    ports: []\n  chatbot:\n    container_name: innovacx-ci-chatbot\n    ports: []\n  transcriber:\n    container_name: innovacx-ci-transcriber\n    ports: []\n  orchestrator:\n    container_name: innovacx-ci-orchestrator\n    ports: []\n  frontend:\n    container_name: innovacx-ci-frontend\n    ports: []\n  backup:\n    container_name: innovacx-ci-backup"
+        }
+      },
+      "result": "CI now uses completely isolated volumes (innovacx-ci_postgres_data) and containers. Live production data can never be touched by CI teardown.",
+      "committed_to": "sprint/ml-audio-fixes (needs PR to dev, then dev to main)",
+      "important": "This fix must reach main before the next CI run — every PR triggers the merge-gate. PR the sprint branch to dev first, then dev to main (branch protection enforces this order)."
+    },
+
+    {
+      "id": 2,
+      "title": "Database recovery — clean volume wipe and reinitialisation",
+      "problem": "postgres_data volume was in a broken state. Only 17/55 tables existed. Only one rogue user (has071uow@gmail.com) in DB. The seeded accounts (customer1@innovacx.net etc) did not exist. Login returned 401 for all users.",
+      "action": "Ran: docker compose --profile live down && docker volume rm innova-cx_postgres_data. Restored all deleted database/ files via: git checkout -- database/. Then started postgres alone and waited 90s for full init.",
+      "result_verification": "55 tables in public schema. All 18 seed users present: customer1-3@innovacx.net, operator@innovacx.net, hamad/leen/rami/majid/ali/yara/hana@innovacx.net (managers), ahmed/lena/bilal/sameer/yousef/talya/sarah@innovacx.net (employees). All passwords: Innova@2025.",
+      "also_fixed": "database/pg_hba.conf had been gutted from 74 lines to 3 lines (missing superuser block rules, missing role-specific entries). database/backup/Dockerfile had been gutted from 34 lines to 2 lines. ~50 migration/seed/script files were deleted from the VM filesystem. All restored via git checkout -- database/."
+    },
+
+    {
+      "id": 3,
+      "title": "Remove uvicorn --reload from production",
+      "problem": "backend/entrypoint.sh ran uvicorn with --reload flag and docker-compose.yml set WATCHFILES_FORCE_POLLING=true. In production this caused the backend to restart every ~15 seconds (watchfiles polling triggered restarts), explaining the page refresh.",
+      "files_changed": [
+        "backend/entrypoint.sh",
+        "docker-compose.yml"
+      ],
+      "changes": {
+        "backend/entrypoint.sh": {
+          "before": "exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload",
+          "after": "exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2"
+        },
+        "docker-compose.yml": {
+          "before": "WATCHFILES_FORCE_POLLING: \"true\"",
+          "after": "removed entirely (replaced by Google OAuth env vars that were added in a recent merge)"
+        }
+      },
+      "committed_to": "prod-live (commit 104badf)",
+      "pushed_to": "origin/prod-live"
+    },
+
+    {
+      "id": 4,
+      "title": "Fix ML container health check start_period",
+      "problem": "ML containers (chatbot, transcriber, orchestrator) had start_period too short. Docker declared them unhealthy before models finished loading, triggering Docker's restart policy in a tight crash loop.",
+      "files_changed": ["docker-compose.yml"],
+      "changes": {
+        "chatbot healthcheck": {
+          "interval": "20s → 30s",
+          "timeout": "7s → 10s",
+          "retries": "5 → 10",
+          "start_period": "20s → 180s (chatbot loads Qwen 2.5 LLM, needs ~2-3min)"
+        },
+        "transcriber healthcheck": {
+          "interval": "20s → 30s",
+          "timeout": "7s → 10s",
+          "retries": "5 → 10",
+          "start_period": "30s → 60s"
+        },
+        "orchestrator healthcheck": {
+          "interval": "20s → 30s",
+          "timeout": "7s → 10s",
+          "retries": "5 → 10",
+          "start_period": "20s → 300s (orchestrator loads multiple models, needs ~5min)"
+        }
+      },
+      "committed_to": "prod-live (commit 104badf)",
+      "pushed_to": "origin/prod-live"
+    },
+
+    {
+      "id": 5,
+      "title": "Fix GCP Load Balancer health check routing",
+      "problem": "GCP LB sends 'GET /api/health HTTP/1.1' to port 80 on the VM with Host: 10.0.2.2 (internal IP, not innovacx.net). nginx had no default server block — all port 80 traffic went to the first server block which proxied everything to port 5173 (the frontend). Frontend has no /api/health endpoint → 404 → LB marks backend UNHEALTHY → serves 'no healthy upstream' to all users.",
+      "files_changed": ["/etc/nginx/sites-enabled/lb-health (NEW FILE, on VM only — not in git)"],
+      "new_file_content": "server {\n    listen 80 default_server;\n\n    location /api/health {\n        proxy_pass http://localhost:8000/api/health;\n        proxy_set_header Host localhost;\n        proxy_set_header X-Real-IP $remote_addr;\n    }\n\n    location / {\n        return 301 https://innovacx.net$request_uri;\n    }\n}",
+      "result": "LB health check now hits backend:8000 directly and gets HTTP 200. Backend marked HEALTHY within 10 seconds.",
+      "note": "This file is on the VM's nginx config only, not tracked in git. If VM is recreated it must be re-applied."
+    },
+
+    {
+      "id": 6,
+      "title": "Fix nginx redirect loop caused by GCP LB",
+      "problem": "GCP LB terminates SSL and forwards ALL traffic (including user HTTPS requests) to the VM backend on port 80 as plain HTTP. The nginx innovacx.net port 80 block was doing 'return 301 https://$host$request_uri'. The LB forwarded this 301 back to the VM as another port 80 request → infinite redirect loop → Firefox showed 'The page isn't redirecting properly'.",
+      "files_changed": ["/etc/nginx/sites-enabled/innovacx (on VM, not in git)"],
+      "before": "server { listen 80; server_name innovacx.net www.innovacx.net; return 301 https://$host$request_uri; }",
+      "after": "server { listen 80; server_name innovacx.net www.innovacx.net; [all location blocks — /api/ → 8000, /chatbot/ → 8001, /whisper/ → 3001, / → 5173] }",
+      "explanation": "With GCP LB in front, HTTPS is terminated at the LB. The VM backend only needs to serve HTTP on port 80. The LB enforces HTTPS at the edge. The VM must NOT redirect HTTP → HTTPS or it creates a loop.",
+      "note": "This file is on the VM's nginx config only, not tracked in git. If VM is recreated it must be re-applied."
+    },
+
+    {
+      "id": 7,
+      "title": "Serve Three.js locally instead of CDN",
+      "problem": "PublicLanding.jsx loaded Three.js dynamically from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'. If CDN is unreachable or slow, the solar system never initialises and the page splash screen hangs indefinitely.",
+      "files_changed": [
+        "frontend/src/pages/PublicLanding.jsx",
+        "frontend/public/three.min.js (NEW FILE — 603KB, Three.js r128)"
+      ],
+      "changes": {
+        "frontend/src/pages/PublicLanding.jsx": {
+          "before": "const THREE_CDN = \"https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js\";",
+          "after": "const THREE_CDN = \"/three.min.js\"; // served locally — no CDN dependency"
+        }
+      },
+      "committed_to": "prod-live (commit 4201345)",
+      "pushed_to": "origin/prod-live",
+      "note": "three.min.js is now in frontend/public/ and gets copied to dist/ during vite build. Served at /three.min.js by the vite preview server."
+    },
+
+    {
+      "id": 8,
+      "title": "Add splash screen fallback timeout and WebGL error handling",
+      "problem": "The PublicLanding splash screen required TWO conditions to clear: (1) 2.8s timer AND (2) Three.js WebGL fires onReady() after first animation frame. If WebGL was unavailable or Three.js failed for any reason, the splash hung forever showing a black screen.",
+      "files_changed": [
+        "frontend/src/pages/PublicLanding.jsx",
+        "frontend/src/pages/PublicLanding.css"
+      ],
+      "changes": {
+        "frontend/src/pages/PublicLanding.jsx — splash timeout": {
+          "before": "const t = setTimeout(() => { splashDoneRef.current = true; if (readyRef.current) setReady(true); }, 2800); return () => clearTimeout(t);",
+          "after": "const t = setTimeout(() => { splashDoneRef.current = true; if (readyRef.current) setReady(true); }, 2800); const fallback = setTimeout(() => { readyRef.current = true; splashDoneRef.current = true; setReady(true); }, 6000); return () => { clearTimeout(t); clearTimeout(fallback); };"
+        },
+        "frontend/src/pages/PublicLanding.jsx — WebGL error handling": {
+          "description": "Wrapped script.onload in try/catch. If THREE.WebGLRenderer throws (WebGL unavailable), adds CSS class 'pl-solar-fallback' to the canvas container and calls onReady() so the splash still clears.",
+          "before": "script.onload = init;",
+          "after": "script.onload = () => { try { init(); } catch (err) { console.warn('[SolarSystem] WebGL unavailable, using CSS fallback:', err.message); if (mount) mount.classList.add('pl-solar-fallback'); onReady && onReady(); } }; script.onerror = () => { console.warn('[SolarSystem] Failed to load three.min.js, using CSS fallback'); if (mount) mount.classList.add('pl-solar-fallback'); onReady && onReady(); };"
+        },
+        "frontend/src/pages/PublicLanding.css — WebGL fallback styles": {
+          "description": "Added .pl-solar-fallback CSS class that shows animated concentric orbit rings using box-shadow and keyframe animations. Shown only when WebGL context creation fails (e.g. hardware acceleration disabled in browser)."
+        }
+      },
+      "committed_to": "prod-live (commits f03cdd7, c0e01ae)",
+      "pushed_to": "origin/prod-live"
+    },
+
+    {
+      "id": 9,
+      "title": "Update .env.production.example",
+      "problem": "The reference env file was missing critical required variables that docker-compose.yml declares as hard-fail (:? syntax). Team members deploying fresh would not know what variables are required.",
+      "files_changed": [".env.production.example"],
+      "variables_added": [
+        "APP_DB_PASSWORD",
+        "READONLY_DB_PASSWORD",
+        "TEST_DB_PASSWORD",
+        "JWT_SECRET",
+        "CSRF_SECRET",
+        "INTERNAL_API_KEY",
+        "BACKUP_PASSPHRASE",
+        "JWT_TTL_SECONDS (set to 28800)",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "VITE_GOOGLE_CLIENT_ID"
+      ],
+      "also_fixed": [
+        "Model paths updated to use step-prefixed names matching actual container paths",
+        "SYSTEM_USER_EMAIL domain changed to @innovacx.net",
+        "SUGGESTED_RESOLUTION_USE_MOCK and SUGGESTED_RESOLUTION_PIPELINE_ONLY set to false (not true)"
+      ],
+      "committed_to": "sprint/ml-audio-fixes"
+    }
+  ],
+
+  "current_production_state": {
+    "containers": {
+      "innovacx-db": "Up (healthy) — 55 tables, 18 seed users",
+      "innovacx-backend": "Up — /api/health returns 200",
+      "innovacx-frontend": "Up — vite preview serving built app",
+      "innovacx-orchestrator": "Up (healthy)",
+      "innovacx-chatbot": "Up (healthy) — Qwen model loaded",
+      "innovacx-transcriber": "Up (healthy)",
+      "innovacx-backup": "Up"
+    },
+    "gcp_lb_health": "HEALTHY",
+    "prod_live_commits_added": [
+      "104badf — fix(prod): remove --reload, fix ML container health check start_period",
+      "f03cdd7 — fix(frontend): add 6s fallback to PublicLanding splash screen",
+      "4201345 — fix(frontend): serve Three.js locally instead of CDN",
+      "c0e01ae — fix(frontend): add WebGL fallback + error handling for solar system"
+    ]
+  },
+
+  "seed_credentials": {
+    "note": "All seeded accounts use password: Innova@2025",
+    "customers": ["customer1@innovacx.net", "customer2@innovacx.net", "customer3@innovacx.net"],
+    "managers": ["ali@innovacx.net", "hamad@innovacx.net", "leen@innovacx.net", "rami@innovacx.net", "majid@innovacx.net", "yara@innovacx.net", "hana@innovacx.net"],
+    "employees": ["ahmed@innovacx.net", "lena@innovacx.net", "bilal@innovacx.net", "sameer@innovacx.net", "yousef@innovacx.net", "talya@innovacx.net", "sarah@innovacx.net"],
+    "operator": ["operator@innovacx.net"]
+  },
+
+  "pending_actions": [
+    {
+      "priority": "CRITICAL",
+      "action": "Merge CI isolation fix to main",
+      "detail": "The COMPOSE_PROJECT_NAME fix is on branch sprint/ml-audio-fixes. It must reach main before the next CI run or the production DB will be wiped again. Branch protection requires: sprint/ml-audio-fixes → dev (PR), then dev → main (second PR). The guard-branch-direction check blocks direct PRs to main from non-dev branches."
+    },
+    {
+      "priority": "HIGH",
+      "action": "Apply nginx config to VM permanently",
+      "detail": "Two nginx config changes were made directly on the VM (/etc/nginx/sites-enabled/innovacx and /etc/nginx/sites-enabled/lb-health). These are NOT tracked in git. If the VM is recreated or nginx is reset, these configs will be lost. Consider adding them to a deployment script or the repo."
+    },
+    {
+      "priority": "MEDIUM",
+      "action": "Team member systemd service files",
+      "detail": "A team member has local-only files: deployment/systemd/innova-cx-live.service and scripts/gcp-live-up.sh. These need to be pushed to a branch and merged so the service auto-starts on VM reboot."
+    }
+  ],
+
+  "architecture_notes": {
+    "gcp_lb": "GCP Global Load Balancer at 35.244.136.89 terminates SSL. Forwards all traffic (HTTP and HTTPS) to the VM on port 80 as plain HTTP. VM nginx must NOT redirect port 80 → HTTPS or it creates a redirect loop.",
+    "firewall": "Only ports 22, 80, 443 are open externally. Ports 8000 (backend), 8001 (chatbot), 8004 (orchestrator), 5173 (frontend) are accessible only via nginx proxy on the VM.",
+    "ci_runner": "Self-hosted GitHub Actions runner runs on the same VM as production. Always use COMPOSE_PROJECT_NAME=innovacx-ci in CI workflows to isolate from the live innova-cx Docker project.",
+    "db_init": "postgres_data volume only runs init scripts on FIRST START (fresh volume). If volume already exists Docker skips init entirely. To force reinit: docker compose down, docker volume rm innova-cx_postgres_data, then bring postgres back up.",
+    "frontend_build": "Frontend runs as 'vite preview' (production static build) inside Docker. Build takes ~60s. During this time port 5173 is down and the GCP LB will mark the backend unhealthy. This is expected — the lb-health nginx block ensures /api/health still responds during frontend rebuilds."
+  }
+}

@@ -1,0 +1,361 @@
+{
+  "project": "InnovaCX",
+  "document": "Database Reference — GCP prod-live",
+  "last_updated": "2026-03-11",
+  "author": "Ali (team lead)",
+
+  "connection": {
+    "vm_name": "innovacx-vm",
+    "ip": "34.38.76.62",
+    "gcp_zone": "europe-west1-b",
+    "gcp_project": "innovacx",
+    "project_path_on_vm": "/opt/innova-cx",
+    "engine": "PostgreSQL 15",
+    "container_name": "innovacx-db",
+    "database": "complaints_db",
+    "port": 5433,
+    "port_note": "Port 5433 is NOT publicly reachable — GCP firewall blocks it. You must SSH into the VM first.",
+    "credentials": {
+      "user": "innovacx_user",
+      "password": "Sen!orProj$$ct2025",
+      "database": "complaints_db"
+    }
+  },
+
+  "ssh_access": {
+    "method": "GCP OS Login — SSH is tied to your Google account, no key management needed",
+    "username_format": "Replace '@' and '.' in your Gmail with '_' (e.g. john.doe@gmail.com → john_doe_gmail_com)",
+    "connect_via_gcloud": "gcloud compute ssh innovacx-vm --zone europe-west1-b",
+    "connect_via_ssh": "ssh YOUR_USERNAME@34.38.76.62",
+    "add_team_member": "gcloud projects add-iam-policy-binding innovacx --member='user:EMAIL' --role='roles/compute.osLogin'",
+    "first_login_setup": "sudo usermod -aG innova $(whoami) && newgrp innova"
+  },
+
+  "psql_commands": {
+    "interactive_shell": "docker exec -it innovacx-db psql -U innovacx_user -d complaints_db",
+    "run_sql_file": "docker exec -i innovacx-db psql -U innovacx_user -d complaints_db -v ON_ERROR_STOP=1 < path/to/file.sql",
+    "run_one_liner": "docker exec innovacx-db psql -U innovacx_user -d complaints_db -c \"SELECT COUNT(*) FROM tickets;\"",
+    "list_tables": "\\dt public.*",
+    "describe_table": "\\d TABLE_NAME",
+    "list_materialized_views": "\\dm",
+    "check_ticket_counts": "SELECT status, COUNT(*) FROM tickets GROUP BY status ORDER BY COUNT DESC;",
+    "refresh_analytics": "SELECT refresh_analytics_mvs();",
+    "backup": "docker exec innovacx-db pg_dump -U innovacx_user complaints_db > backup_$(date +%Y%m%d).sql",
+    "restore_WARNING_destroys_data": "docker exec -i innovacx-db psql -U innovacx_user -d complaints_db < backup_file.sql"
+  },
+
+  "docker_notes": {
+    "postgres_data_volume": "Named Docker volume 'innova-cx_postgres_data'. Persists across restarts.",
+    "fresh_db_warning": "To reset to a clean DB: docker volume rm innova-cx_postgres_data then docker compose up --build. THIS DESTROYS ALL DATA.",
+    "restart_vs_recreate": "docker compose restart does NOT reload .env. Use: docker compose up -d --force-recreate innovacx-db",
+    "full_stack_start": "cd /opt/innova-cx && docker compose --profile dev up --build -d"
+  },
+
+  "db_init_on_fresh_volume": {
+    "description": "On a fresh volume Docker auto-runs all files in database/ alphabetically via docker-entrypoint-initdb.d. Order is critical.",
+    "execution_order": [
+      {
+        "order": 1,
+        "file": "database/init.sql",
+        "description": "Core schema, enums, triggers, SLA logic, recurrence classifier, seed data. NEVER insert into ML tables here."
+      },
+      {
+        "order": 2,
+        "file": "database/seed_extra.sql",
+        "description": "Extra seed rows for core tables only. NEVER insert into ML tables here."
+      },
+      {
+        "order": 3,
+        "file": "database/zzz_analytics_mvs.sh",
+        "description": "Shell script that runs the 3 SQL steps below in order, then refreshes all MVs."
+      },
+      {
+        "order": 4,
+        "file": "database/zzz_seedV2.sql",
+        "description": "Comprehensive seed for all 37 tables, including ML pipeline data. Final refresh call included."
+      }
+    ],
+    "zzz_analytics_mvs_sh_steps": [
+      "Step 1: database/migrations/001_agent_execution_logs.sql — creates model_execution_log + agent_output_log",
+      "Step 2: database/scripts/000_analytics_prerequisites.sql — creates 6 agent output tables + additive columns",
+      "Step 3: database/scripts/analytics_mvs.sql — creates 8 analytics materialized views + refresh function",
+      "Step 4: SELECT refresh_analytics_mvs() — populates all MVs with seed data"
+    ],
+    "critical_warning": "Subdirectories (migrations/, scripts/) are NOT auto-run by Docker directly. Only the shell script at database/ root runs them. NEVER add ML table inserts to init.sql or seed_extra.sql — those tables do not exist yet at that point, causing the entire transaction to roll back and leaving the DB empty."
+  },
+
+  "applying_migrations_to_existing_volume": {
+    "description": "The VM postgres_data volume already exists — Docker will NOT re-run init scripts. Apply manually in this order:",
+    "steps": [
+      {
+        "step": 1,
+        "command": "docker exec -i innovacx-db psql -U innovacx_user -d complaints_db -v ON_ERROR_STOP=1 < database/migrations/001_agent_execution_logs.sql",
+        "description": "Creates model_execution_log + agent_output_log + 6 agent output tables"
+      },
+      {
+        "step": 2,
+        "command": "docker exec -i innovacx-db psql -U innovacx_user -d complaints_db -v ON_ERROR_STOP=1 < database/scripts/000_analytics_prerequisites.sql",
+        "description": "Adds additive columns, ensures agent output tables exist"
+      },
+      {
+        "step": 3,
+        "command": "docker exec -i innovacx-db psql -U innovacx_user -d complaints_db -v ON_ERROR_STOP=1 < database/scripts/analytics_mvs.sql",
+        "description": "Creates all 8 materialized views + refresh function"
+      },
+      {
+        "step": 4,
+        "command": "docker exec -i innovacx-db psql -U innovacx_user -d complaints_db -v ON_ERROR_STOP=1 < database/migrations/002_operator_notifications.sql",
+        "description": "Creates all operator notification triggers"
+      },
+      {
+        "step": 5,
+        "command": "docker exec -i innovacx-db psql -U innovacx_user -d complaints_db -v ON_ERROR_STOP=1 < database/migrations/003_routing_review_queue.sql",
+        "description": "Creates routing_review_queue table"
+      },
+      {
+        "step": 6,
+        "command": "docker exec innovacx-db psql -U innovacx_user -d complaints_db -c \"SELECT refresh_analytics_mvs();\"",
+        "description": "Refreshes all 8 materialized views"
+      }
+    ],
+    "idempotency": "All scripts use IF NOT EXISTS / OR REPLACE. Safe to re-run — they will be a no-op on already-applied changes."
+  },
+
+  "schema": {
+    "schema_name": "public",
+    "analytics_schema_warning": "The 'analytics' schema does NOT exist on prod-live. All materialized views are in the 'public' schema. Do not reference analytics.* in any SQL targeting the VM.",
+    "total_tables": 37,
+
+    "core_identity_tables": [
+      {
+        "table": "users",
+        "description": "All user accounts.",
+        "key_columns": ["id (UUID PK)", "email (CITEXT, unique, case-insensitive)", "password_hash", "role (user_role enum)", "is_active", "totp_secret", "mfa_enabled", "created_at", "last_login_at"]
+      },
+      {
+        "table": "user_profiles",
+        "description": "One-to-one extension of users with personal/professional details.",
+        "key_columns": ["user_id (FK → users)", "full_name", "phone", "location", "department_id (FK → departments)", "employee_code (unique)", "job_title"]
+      },
+      {
+        "table": "user_preferences",
+        "description": "Per-user UI settings.",
+        "key_columns": ["user_id (PK, FK → users)", "language", "dark_mode", "default_complaint_type", "email_notifications", "in_app_notifications", "status_alerts"]
+      },
+      {
+        "table": "password_reset_tokens",
+        "description": "Short-lived tokens for password resets.",
+        "key_columns": ["id", "user_id (FK → users)", "token_hash (unique)", "expires_at", "used_at"]
+      },
+      {
+        "table": "departments",
+        "description": "Reference table for departments. Name is unique.",
+        "key_columns": ["id (UUID PK)", "name (unique)", "created_at"]
+      },
+      {
+        "table": "sessions",
+        "description": "Chatbot sessions.",
+        "key_columns": ["id", "user_id (FK → users)", "created_at", "escalated_to_human (bool)", "escalated_at", "bot_model_version"]
+      }
+    ],
+
+    "ticket_tables": [
+      {
+        "table": "tickets",
+        "description": "Central table. Every complaint or inquiry submitted.",
+        "key_columns": [
+          "id (UUID PK)", "ticket_code (unique)", "subject", "details",
+          "ticket_type (Complaint/Inquiry)", "status (ticket_status enum)", "priority (ticket_priority enum)",
+          "department_id (FK → departments)", "created_by_user_id (FK → users)", "assigned_to_user_id (FK → users)",
+          "created_at", "updated_at", "assigned_at", "first_response_at", "resolved_at",
+          "respond_due_at", "resolve_due_at", "respond_time_left_seconds", "resolve_time_left_seconds",
+          "respond_breached (bool)", "resolve_breached (bool)",
+          "sentiment_score", "sentiment_label", "model_priority", "model_department_id", "model_confidence", "model_suggestion",
+          "ticket_source", "final_resolution", "resolved_by_user_id",
+          "suggested_resolution", "suggested_resolution_model", "suggested_resolution_generated_at",
+          "asset_type", "human_overridden (bool)", "is_recurring (bool)"
+        ],
+        "triggers": [
+          "trg_tickets_updated_at — sets updated_at on every UPDATE",
+          "trg_tickets_status_timestamps — keeps assigned_at, resolved_at, resolved_by_user_id in sync",
+          "trg_tickets_priority_sla — auto-computes respond_due_at / resolve_due_at when priority changes",
+          "trg_notify_operator_* — see operator_notification_triggers section"
+        ]
+      },
+      {
+        "table": "ticket_attachments",
+        "description": "File attachments linked to tickets.",
+        "key_columns": ["id", "ticket_id (FK → tickets)", "file info columns"]
+      },
+      {
+        "table": "ticket_resolution_feedback",
+        "description": "Employee decisions on AI-suggested resolutions.",
+        "key_columns": ["id", "ticket_id (FK → tickets)", "employee_user_id (FK → users)", "decision (accepted/declined_custom)", "suggested_resolution", "employee_resolution", "final_resolution", "model_version", "confidence_at_time"]
+      },
+      {
+        "table": "routing_review_queue",
+        "description": "Tickets where AI routing confidence was below threshold; awaiting manual department assignment.",
+        "key_columns": ["id", "ticket_id (FK → tickets)", "predicted_department", "confidence_score", "status (Pending/Approved/Overridden)", "approved_department", "decided_by_user_id", "decided_at", "decision_notes"]
+      }
+    ],
+
+    "notification_tables": [
+      {
+        "table": "notifications",
+        "description": "In-app notifications for all users.",
+        "key_columns": ["id", "user_id (FK → users)", "type (notification_type enum)", "title", "message", "priority", "ticket_id", "is_read", "created_at"]
+      }
+    ],
+
+    "sla_logic": {
+      "description": "SLA deadlines are computed automatically by the trg_tickets_priority_sla trigger when priority changes.",
+      "deadlines_by_priority": {
+        "Critical": { "respond": "30 minutes", "resolve": "6 hours" },
+        "High": { "respond": "1 hour", "resolve": "18 hours" },
+        "Medium": { "respond": "3 hours", "resolve": "2 days" },
+        "Low": { "respond": "6 hours", "resolve": "3 days" }
+      },
+      "apply_ticket_sla_policies_function": "Callable SQL function that: (1) heartbeats SLA countdown columns, (2) auto-escalates tickets at 90% of response SLA elapsed with no first_response_at, (3) marks tickets Overdue when SLA deadline passes. Call via: SELECT apply_ticket_sla_policies();"
+    },
+
+    "ml_logging_tables": [
+      {
+        "table": "model_execution_log",
+        "source_migration": "001_agent_execution_logs.sql",
+        "description": "One row per agent step per pipeline execution. Used by analytics MVs for Model Health.",
+        "key_columns": ["id", "execution_id", "ticket_id (FK → tickets)", "agent_name (agent_name_type enum)", "model_version", "triggered_by (trigger_source enum)", "started_at", "completed_at", "status (execution_status enum)", "input_token_count", "output_token_count", "inference_time_ms", "confidence_score", "error_flag", "error_message"]
+      },
+      {
+        "table": "agent_output_log",
+        "source_migration": "001_agent_execution_logs.sql",
+        "description": "Full JSON capture of each agent's input/output/state diff per execution step.",
+        "key_columns": ["id", "execution_id", "ticket_id", "agent_name", "step_order", "input_state (JSONB)", "output_state (JSONB)", "state_diff (JSONB)", "inference_time_ms", "error_flag", "error_message"]
+      }
+    ],
+
+    "ml_agent_output_tables": {
+      "description": "One table per ML pipeline agent. Each row has is_current=TRUE for the latest result per ticket. A trigger (enforce_single_current_output) automatically flips older rows to is_current=FALSE when a new one is inserted.",
+      "source_migration": "001_agent_execution_logs.sql",
+      "tables": [
+        {
+          "table": "sentiment_outputs",
+          "key_columns": ["id", "execution_id (FK → model_execution_log)", "ticket_id (FK → tickets)", "model_version", "sentiment_label", "sentiment_score", "confidence_score", "emotion_tags (TEXT[])", "raw_scores (JSONB)", "is_current (bool)"]
+        },
+        {
+          "table": "priority_outputs",
+          "key_columns": ["id", "execution_id", "ticket_id", "model_version", "model_priority (ticket_priority enum)", "confidence_score", "urgency_score", "impact_score", "feature_vector (JSONB)", "reasoning", "is_current"]
+        },
+        {
+          "table": "routing_outputs",
+          "key_columns": ["id", "execution_id", "ticket_id", "model_version", "suggested_dept_id (FK → departments)", "suggested_dept_name", "confidence_score", "routing_reason", "reasoning", "is_current"]
+        },
+        {
+          "table": "sla_outputs",
+          "key_columns": ["id", "execution_id", "ticket_id", "model_version", "sla_tier", "breach_risk_score", "response_deadline", "resolution_deadline", "predicted_respond_mins", "predicted_resolve_mins", "confidence_score", "is_current"]
+        },
+        {
+          "table": "resolution_outputs",
+          "key_columns": ["id", "execution_id", "ticket_id", "model_version", "suggested_resolution", "suggested_text", "kb_references (JSONB)", "confidence_score", "is_current"]
+        },
+        {
+          "table": "feature_outputs",
+          "key_columns": ["id", "execution_id", "ticket_id", "model_version", "asset_category", "topic_labels (TEXT[])", "confidence_score", "raw_features (JSONB)", "is_current"]
+        }
+      ]
+    },
+
+    "analytics_materialized_views": {
+      "description": "8 materialized views in the public schema. All created by database/scripts/analytics_mvs.sql.",
+      "refresh_sql": "SELECT refresh_analytics_mvs();",
+      "refresh_api": "POST /api/manager/analytics/refresh",
+      "dependency_order": [
+        { "mv": "mv_ticket_base", "sources": "tickets, departments, user_profiles", "description": "Base enriched ticket rows — all other MVs that need ticket data build from this." },
+        { "mv": "mv_daily_volume", "sources": "mv_ticket_base", "description": "Daily ticket counts by status and priority." },
+        { "mv": "mv_employee_daily", "sources": "mv_ticket_base", "description": "Per-employee daily performance metrics." },
+        { "mv": "mv_acceptance_daily", "sources": "ticket_resolution_feedback + tickets", "description": "Daily AI suggestion acceptance rate." },
+        { "mv": "mv_operator_qc_daily", "sources": "tickets + approval_requests", "description": "Daily operator QC metrics." },
+        { "mv": "mv_chatbot_daily", "sources": "sessions + user_chat_logs", "description": "Daily chatbot usage and escalation metrics." },
+        { "mv": "mv_sentiment_daily", "sources": "sentiment_outputs + tickets + departments", "description": "Daily sentiment trends by department." },
+        { "mv": "mv_feature_daily", "sources": "feature_outputs + tickets + departments", "description": "Daily feature/asset category distribution." }
+      ]
+    },
+
+    "operator_notification_triggers": {
+      "description": "DB-level triggers (migration 002) that auto-insert notifications for all active operators when system events occur.",
+      "source_migration": "002_operator_notifications.sql",
+      "helper_function": "notify_all_operators(type, title, message, priority?, ticket_id?) — inserts one notification row per active operator",
+      "triggers": [
+        { "trigger": "trg_notify_operator_acceptance_rate", "fires_on": "INSERT on ticket_resolution_feedback", "condition": "Rolling last-20 acceptance rate drops below 70%" },
+        { "trigger": "trg_notify_operator_escalation_spike", "fires_on": "INSERT on sessions", "condition": "More than 50% of last 10 sessions were escalated to human" },
+        { "trigger": "trg_notify_operator_model_confidence", "fires_on": "INSERT/UPDATE on tickets (model_confidence)", "condition": "Rolling average model confidence across last 10 tickets drops below 65%" },
+        { "trigger": "trg_notify_operator_unassigned_backlog", "fires_on": "INSERT/UPDATE on tickets (status)", "condition": "Unassigned ticket count reaches or exceeds 10" },
+        { "trigger": "trg_notify_operator_critical_unassigned", "fires_on": "UPDATE on tickets", "condition": "Any Critical+Unassigned ticket is older than 15 minutes. Deduplicates: max one alert per ticket per hour." },
+        { "trigger": "trg_notify_operator_sla_breach_rate", "fires_on": "UPDATE on tickets (respond_breached, resolve_breached)", "condition": "SLA breach rate in last 24 hours exceeds 30%" },
+        { "trigger": "trg_notify_operator_ticket_volume_surge", "fires_on": "INSERT on tickets", "condition": "More than 10 tickets created in last 2 hours. Deduplicates: max once per hour." },
+        { "trigger": "trg_notify_operator_service_status", "fires_on": "INSERT/UPDATE on system_service_status", "condition": "Service severity changes to 'warning' or 'critical'" },
+        { "trigger": "trg_notify_operator_integration_status", "fires_on": "INSERT/UPDATE on system_integration_status", "condition": "Integration severity changes to 'warning' or 'critical'" },
+        { "trigger": "trg_notify_operator_queue_backlog", "fires_on": "INSERT/UPDATE on system_queue_metrics", "condition": "Queue severity changes to 'warning' or 'critical'" },
+        { "trigger": "trg_notify_operator_user_created", "fires_on": "INSERT on users", "condition": "Always — any new user account" },
+        { "trigger": "trg_notify_operator_user_deactivated", "fires_on": "UPDATE on users (is_active)", "condition": "is_active flips from TRUE to FALSE" },
+        { "trigger": "trg_notify_operator_password_reset", "fires_on": "INSERT on password_reset_tokens", "condition": "Reset requested for employee/manager/operator roles only" },
+        { "trigger": "trg_notify_operator_report_ready", "fires_on": "INSERT on employee_reports", "condition": "Always — any monthly report generated" },
+        { "trigger": "trg_notify_operator_approval_overdue", "fires_on": "UPDATE on approval_requests", "condition": "Request still Pending after 24 hours. Deduplicates: max once per 24h per request." }
+      ]
+    }
+  },
+
+  "enums": {
+    "user_role": ["customer", "employee", "manager", "operator"],
+    "ticket_status": ["Open", "In Progress", "Unassigned", "Assigned", "Escalated", "Overdue", "Reopened", "Resolved"],
+    "ticket_priority": ["Low", "Medium", "High", "Critical"],
+    "ticket_type": ["Complaint", "Inquiry"],
+    "approval_request_type": ["Rescoring", "Rerouting"],
+    "approval_status": ["Pending", "Approved", "Rejected"],
+    "chat_sender_type": ["customer", "bot", "operator"],
+    "notification_type": ["ticket_assignment", "sla_warning", "customer_reply", "status_change", "report_ready", "system"],
+    "agent_name_type": ["sentiment", "priority", "routing", "sla", "resolution", "feature"],
+    "execution_status": ["running", "success", "failed", "skipped"],
+    "trigger_source": ["ingest", "reprocess", "manual", "scheduled"],
+    "routing_review_status": ["Pending", "Approved", "Overridden"],
+    "service_severity": ["ok", "warning", "critical"],
+    "event_severity": ["info", "warning", "critical"]
+  },
+
+  "migration_files": [
+    {
+      "file": "database/migrations/001_agent_execution_logs.sql",
+      "description": "Creates model_execution_log, agent_output_log, and all 6 agent-specific output tables. Also adds model_version and confidence_at_time columns to ticket_resolution_feedback. Defines enforce_single_current_output trigger on all 6 output tables.",
+      "idempotent": true
+    },
+    {
+      "file": "database/migrations/002_operator_notifications.sql",
+      "description": "Creates all 15 operator notification triggers. Wrapped in BEGIN/COMMIT.",
+      "idempotent": true
+    },
+    {
+      "file": "database/migrations/003_routing_review_queue.sql",
+      "description": "Creates routing_review_queue table and its indexes.",
+      "idempotent": true
+    }
+  ],
+
+  "critical_rules": [
+    "NEVER put ML table inserts in init.sql or seed_extra.sql. Those tables do not exist yet when those files run. ML inserts go in zzz_seedV2.sql ONLY.",
+    "New migrations go in database/migrations/ as 00N_name.sql and must be manually applied to the VM (Docker will not re-run them on an existing volume).",
+    "All migration scripts must be idempotent — use IF NOT EXISTS, OR REPLACE, DO $$ ... EXCEPTION WHEN duplicate_object. The VM volume is live data.",
+    "The 'analytics' schema does NOT exist on prod-live. All MVs are in the 'public' schema. Do not reference analytics.* in any SQL targeting the VM.",
+    "Port 5433 (postgres) is not internet-exposed. You cannot connect from your laptop. SSH to VM first.",
+    "postgres_data is a named Docker volume. It persists across container restarts and docker compose up. Only docker volume rm destroys it.",
+    "Never commit directly to main or prod-live. All work goes to a feature branch → PR to dev → verify end-to-end → merge to main → sync to prod-live via merge script.",
+    "prod-live never merges back to main. It is a one-way sync only."
+  ],
+
+  "branch_strategy": {
+    "dev": "Integration testing — ALL PRs merge here first. Verify end-to-end before touching main.",
+    "main": "Stable baseline — merge from dev only after dev is verified clean.",
+    "prod-live": "Live production — synced from main only via scripts/merge-main-into-prod-live.sh. Connected to real DB and real ML models. NEVER commit here directly.",
+    "prod": "Cloud testing and ML training runs.",
+    "prod_live_sync_command": "git checkout prod-live && git pull && git fetch origin main:main && ./scripts/merge-main-into-prod-live.sh && git push origin prod-live",
+    "vm_deploy_after_push": "cd /opt/innova-cx && git pull && docker compose --profile dev up --build -d"
+  }
+}
