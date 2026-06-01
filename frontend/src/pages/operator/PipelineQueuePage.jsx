@@ -41,7 +41,7 @@ async function apiFetch(path, opts = {}) {
 
 const fmtTs = (ts) =>
   ts
-    ? new Date(ts).toLocaleString("en-GB", { timeZone: "Asia/Dubai", dateStyle: "medium", timeStyle: "short" })
+    ? new Date(ts).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })
     : "—";
 
 function fmtAge(ts) {

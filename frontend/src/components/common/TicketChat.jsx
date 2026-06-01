@@ -15,8 +15,7 @@ const QUICK_REPLIES_EMPLOYEE = [
 function formatTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleString("en-GB", {
-    timeZone: "Asia/Dubai",
+  return d.toLocaleString([], {
     month: "short",
     day: "numeric",
     hour: "2-digit",

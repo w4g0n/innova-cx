@@ -157,6 +157,7 @@ def dispatch_ticket_to_orchestrator(
     execution_id: Optional[str] = None,
     has_audio: bool = False,
     audio_features: Optional[Dict[str, Any]] = None,
+    created_by_user_id: Optional[str] = None,
 ) -> bool:
     """
     Best-effort dispatch to orchestrator post-submit pipeline.
@@ -181,6 +182,8 @@ def dispatch_ticket_to_orchestrator(
         payload["subject"] = subject.strip()
     if execution_id and str(execution_id).strip():
         payload["execution_id"] = str(execution_id).strip()
+    if created_by_user_id and str(created_by_user_id).strip():
+        payload["created_by_user_id"] = str(created_by_user_id).strip()
     if has_audio and isinstance(audio_features, dict) and audio_features:
         payload["audio_features"] = json.dumps(audio_features)
 

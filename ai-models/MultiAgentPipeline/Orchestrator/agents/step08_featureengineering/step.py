@@ -155,15 +155,6 @@ def _mock_labels(text: str) -> dict[str, Any]:
     }
 
 
-def _inquiry_default_labels() -> dict[str, Any]:
-    return {
-        "issue_severity": "low",
-        "issue_urgency": "low",
-        "business_impact": "low",
-        "safety_concern": False,
-    }
-
-
 def _load_multitask_feature_labeler(model_dir: Path):
     model_pt = model_dir / "model.pt"
     model_cfg = model_dir / "model_config.json"
@@ -440,25 +431,7 @@ def get_feature_engineering_diagnostics() -> dict[str, object]:
 
 
 async def engineer_features(state: dict) -> dict:
-    label = str(state.get("label") or "").strip().lower()
-    if label == "inquiry":
-        labels = _inquiry_default_labels()
-        state["issue_severity"] = labels["issue_severity"]
-        state["issue_urgency"] = labels["issue_urgency"]
-        state["business_impact"] = labels["business_impact"]
-        state["safety_concern"] = labels["safety_concern"]
-        state["feature_labels_source"] = "inquiry_defaults"
-        state["feature_labeler_mode"] = "inquiry_defaults"
-        logger.info(
-            "feature_engineering | inquiry defaults applied severity=%s urgency=%s impact=%s safety=%s",
-            state["issue_severity"],
-            state["issue_urgency"],
-            state["business_impact"],
-            state["safety_concern"],
-        )
-        return state
-
-    if label != "complaint":
+    if state.get("label") != "complaint":
         logger.info("feature_engineering | skipped (label=%s)", state.get("label"))
         return state
 

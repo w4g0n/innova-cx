@@ -4955,6 +4955,7 @@ def _dispatch_orchestrator_after_submit(
     execution_id: Optional[str],
     has_audio: bool = False,
     audio_features: Optional[dict] = None,
+    created_by_user_id: Optional[str] = None,
 ) -> None:
     ok = dispatch_ticket_to_orchestrator(
         ticket_code=ticket_code,
@@ -4966,6 +4967,7 @@ def _dispatch_orchestrator_after_submit(
         execution_id=execution_id,
         has_audio=has_audio,
         audio_features=audio_features,
+        created_by_user_id=created_by_user_id,
     )
     if not ok:
         logger.warning("orchestrator_dispatch | failed for ticket=%s", ticket_code)
@@ -5026,6 +5028,7 @@ def create_internal_ticket_via_gate(body: InternalCreateTicketRequest, _key: Non
         ticket_type=ticket_type,
         subject=subject,
         execution_id=created.get("execution_id"),
+        created_by_user_id=str(body.created_by_user_id),
     )
     if not orchestrator_dispatched:
         logger.warning(
@@ -5056,29 +5059,6 @@ def create_customer_ticket(
         if str(body.type or "").strip().lower() == "inquiry"
         else "Complaint"
     )
-
-    # Reject exact duplicates: same user, same type, identical details (case-
-    # insensitive, whitespace-normalised) submitted within the last 24 hours.
-    dup = fetch_one(
-        """
-        SELECT ticket_code
-        FROM tickets
-        WHERE created_by_user_id = %s
-          AND ticket_type         = %s::ticket_type
-          AND LOWER(TRIM(REGEXP_REPLACE(details, '\\s+', ' ', 'g')))
-              = LOWER(TRIM(REGEXP_REPLACE(%s,   '\\s+', ' ', 'g')))
-          AND created_at >= NOW() - INTERVAL '24 hours'
-        ORDER BY created_at DESC
-        LIMIT 1
-        """,
-        (user["id"], normalized_ticket_type, body.details),
-    )
-    if dup:
-        raise HTTPException(
-            status_code=409,
-            detail=f"duplicate:{dup['ticket_code']}",
-        )
-
     is_recurring = predict_is_recurring(user_id=user["id"], subject="", details=body.details)
     model_suggestion = json.dumps({"is_recurring": is_recurring})
 
@@ -5146,6 +5126,7 @@ def create_customer_ticket(
         execution_id=execution_id,
         has_audio=bool(body.has_audio),
         audio_features=body.audio_features if isinstance(body.audio_features, dict) else None,
+        created_by_user_id=str(user["id"]),
     )
     logger.info("orchestrator_dispatch | queued for ticket=%s", ticket_code)
     log_application_event(
