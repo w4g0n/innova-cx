@@ -19,14 +19,14 @@ Key behaviours (per agreed spec):
 Stages in order:
     step  1  RecurrenceAgent             CRITICAL      (V11: first check — links recurring tickets)
     step  2  SubjectGenerationAgent      non-critical
-    step  3  ClassificationAgent         CRITICAL
-    step  4  SentimentAgent              CRITICAL
-    step  5  AudioAnalysisAgent          CRITICAL  (optional)
-    step  6  SentimentCombinerAgent      CRITICAL
-    step  7  FeatureEngineeringAgent     CRITICAL
-    step  8  PrioritizationAgent         CRITICAL
-    step  9  DepartmentRoutingAgent      CRITICAL
-    step 10  SuggestedResolutionAgent    non-critical
+    step  3  SuggestedResolutionAgent    non-critical
+    step  4  ClassificationAgent         CRITICAL
+    step  5  SentimentAgent              CRITICAL
+    step  6  AudioAnalysisAgent          CRITICAL  (optional)
+    step  7  SentimentCombinerAgent      CRITICAL
+    step  8  FeatureEngineeringAgent     CRITICAL
+    step  9  PrioritizationAgent         CRITICAL
+    step 10  DepartmentRoutingAgent      CRITICAL
     step 11  ReviewAgent                 CRITICAL
 """
 
@@ -74,14 +74,14 @@ STAGES = [
     # 4-way branch logic (A/B/C stop the pipeline; D continues with context).
     ("RecurrenceAgent",            check_recurrence,               1,  True),
     ("SubjectGenerationAgent",     generate_subject,               2,  False),
-    ("ClassificationAgent",        classify,                       3,  True),
-    ("SentimentAgent",             analyze_sentiment,              4,  True),
-    ("AudioAnalysisAgent",         analyze_audio,                  5,  True),
-    ("SentimentCombinerAgent",     combine_sentiment,              6,  True),
-    ("FeatureEngineeringAgent",    engineer_features,              7,  True),
-    ("PrioritizationAgent",        score_priority,                 8,  True),
-    ("DepartmentRoutingAgent",     route_and_store,                9,  True),
-    ("SuggestedResolutionAgent",   generate_suggested_resolution,  10, False),
+    ("SuggestedResolutionAgent",   generate_suggested_resolution,  3,  False),
+    ("ClassificationAgent",        classify,                       4,  True),
+    ("SentimentAgent",             analyze_sentiment,              5,  True),
+    ("AudioAnalysisAgent",         analyze_audio,                  6,  True),
+    ("SentimentCombinerAgent",     combine_sentiment,              7,  True),
+    ("FeatureEngineeringAgent",    engineer_features,              8,  True),
+    ("PrioritizationAgent",        score_priority,                 9,  True),
+    ("DepartmentRoutingAgent",     route_and_store,                10, True),
     # Step 11: Review Agent — automated quality gate and final release
     # is_critical=True: if this fails, ticket must not be silently released
     # without validation. Every other critical stage has the Review Agent
@@ -157,8 +157,8 @@ def _mock_output_for_stage(stage_name: str, state: dict) -> dict:
         out["safety_concern"] = out.get("safety_concern") or False
         out["feature_labeler_mode"] = "mock_fallback"
     elif name == "PrioritizationAgent":
-        out["priority_label"] = out.get("priority_label")
-        out["priority_score"] = out.get("priority_score")
+        out["priority_label"] = out.get("priority_label") or "Medium"
+        out["priority_score"] = out.get("priority_score") or 2
         out["priority_mode"] = "mock_fallback"
     elif name == "DepartmentRoutingAgent":
         out["department_routing_source"] = "mock_fallback"
@@ -1173,7 +1173,7 @@ def release_held_ticket(queue_id: str, corrections: dict) -> bool:
 
                 is_final_review_hold = (
                     str(failed_stage or "").strip() == "ReviewAgent"
-                    or int(failed_at_step or 0) >= 11
+                    or int(failed_at_step or 0) >= 12
                 )
 
                 if is_final_review_hold:
@@ -1485,7 +1485,7 @@ async def _process_queue_item(item: dict) -> None:
                 queue_id,
                 execution_id,
                 "ReviewAgent",
-                11,
+                12,
                 review_reason,
                 _safe_json(final_state),
             )

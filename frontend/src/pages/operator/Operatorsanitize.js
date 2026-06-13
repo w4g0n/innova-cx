@@ -99,14 +99,12 @@ export function safeParseUser() {
 /**
  * Format an ISO date string. Returns "—" on failure.
  */
-const DUBAI_TZ = "Asia/Dubai";
-
 export function safeFormatDate(isoString, opts) {
   if (!isoString) return "—";
   try {
     const d = new Date(isoString);
     if (Number.isNaN(d.getTime())) return "—";
-    return d.toLocaleString("en-GB", { timeZone: DUBAI_TZ, ...opts });
+    return d.toLocaleString(undefined, opts);
   } catch {
     return "—";
   }

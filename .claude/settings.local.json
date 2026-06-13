@@ -114,23 +114,7 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/api/csrf-token)",
       "Bash(curl -s http://localhost:8000/api/auth/login --head)",
       "Bash(curl -s http://localhost:8000/openapi.json)",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\([p for p in d['paths'] if 'login' in p.lower\\(\\)]\\)\")",
-      "Bash(gh repo:*)",
-      "Bash(pip3 --version)",
-      "Bash(mv step01_subjectgeneration step02_subjectgeneration)",
-      "Bash(mv step02_suggestedresolution step10_suggestedresolution)",
-      "Bash(mv step08_featureengineering step07_featureengineering)",
-      "Bash(mv step09_priority step08_priority)",
-      "Bash(mv step10_router step09_router)",
-      "Bash(mv step02_subjectgeneration step01_subjectgeneration)",
-      "Bash(mv step10_suggestedresolution step02_suggestedresolution)",
-      "Bash(mv step07_featureengineering step08_featureengineering)",
-      "Bash(mv step08_priority step09_priority)",
-      "Bash(mv step09_router step10_router)",
-      "Bash(grep -E \"\\\\.sql$\")",
-      "Bash(git rm:*)",
-      "Bash(grep -n \"compute_is_recurring_ticket\" /Users/mayood/Documents_Local/innova-cx/database/*.sql)",
-      "Bash(python3 -c ':*)"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\([p for p in d['paths'] if 'login' in p.lower\\(\\)]\\)\")"
     ]
   }
 }
