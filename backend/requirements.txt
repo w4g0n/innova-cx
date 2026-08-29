@@ -4,7 +4,7 @@ uvicorn[standard]==0.44.0
 python-multipart==0.0.24
 
 # Database
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.12
 sqlalchemy==2.0.25
 
 # Utilities
